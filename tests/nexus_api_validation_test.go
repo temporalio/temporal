@@ -54,12 +54,12 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
 	taskQueue := testcore.RandomizeStr("task-queue")
 
-	var namespace string
+	var namespace strings.Builder
 	for range 500 {
-		namespace += "namespace-is-a-very-long-string"
+		namespace.WriteString("namespace-is-a-very-long-string")
 	}
 
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace, taskQueue)
+	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace.String(), taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()

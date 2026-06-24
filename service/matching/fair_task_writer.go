@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"hash/maphash"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,7 @@ type (
 		taskIDBlock        taskIDBlock
 		currentTaskIDBlock taskIDBlock                       // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 		counters           map[subqueueIndex]counter.Counter // only used in taskWriterLoop.
+		ditherSeed         maphash.Seed                      // seed for fairness pass dither (see pickPasses).
 	}
 )
 
@@ -48,6 +50,7 @@ func newFairTaskWriter(
 
 		taskIDBlock: noTaskIDs,
 		counters:    make(map[subqueueIndex]counter.Counter),
+		ditherSeed:  maphash.MakeSeed(),
 	}
 }
 
@@ -115,6 +118,7 @@ func (w *fairTaskWriter) allocTaskIDs(reqs []*writeTaskRequest) error {
 func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel) {
 	// Fetch latest fairness weight overrides from the partition's rate limit manager via pqMgr
 	overrides := w.backlogMgr.pqMgr.GetFairnessWeightOverrides()
+	dither := w.config.FairnessPassDither()
 
 	for i, task := range tasks {
 		pri := task.taskInfo.Priority
@@ -122,6 +126,9 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		weight := getEffectiveWeight(overrides, pri)
 		inc := max(1, int64(strideFactor/weight))
 		base := bases[task.subqueue].pass
+		if dither {
+			base = ditherPass(w.ditherSeed, key, base, inc)
+		}
 		cntr := w.counters[task.subqueue]
 		if cntr == nil {
 			cntr = w.counterFactory(task.subqueue)

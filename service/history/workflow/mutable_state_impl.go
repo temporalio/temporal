@@ -3876,10 +3876,8 @@ func (ms *MutableStateImpl) addUsedDeploymentVersionToLoadedSearchAttribute(exis
 	}
 
 	// Check if already exists (deduplicate)
-	for _, existingValue := range existingValues {
-		if existingValue == deploymentVersionStr {
-			return existingValues // Already present, no change
-		}
+	if slices.Contains(existingValues, deploymentVersionStr) {
+		return existingValues // Already present, no change
 	}
 
 	// Add new deployment version to the list
@@ -4055,9 +4053,9 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 	}
 
 	// save deployment search attributes if changed
-	if !(existingDeployment == modifiedDeployment &&
-		existingVersion == modifiedVersion &&
-		existingBehavior == modifiedBehavior) {
+	if existingDeployment != modifiedDeployment ||
+		existingVersion != modifiedVersion ||
+		existingBehavior != modifiedBehavior {
 		err = ms.saveDeploymentSearchAttributes(modifiedDeployment, modifiedVersion, modifiedBehavior, maxSearchAttributeValueSize)
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
@@ -4171,27 +4169,24 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	if tsi == nil {
-		return serviceerror.NewInternal(
-			"TimeSkippingInfo is not set when applying WorkflowExecutionTimeSkippingTransitionedEvent, mutable state is corrupted",
-		)
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		return invalidTransitionError
 	}
 	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
-		return serviceerror.NewInternal(
-			"empty WorkflowExecutionTimeSkippingTransitionedEvent found, event is corrupted",
-		)
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
+		return invalidTransitionError
 	}
 
-	if tsi.GetAccumulatedSkippedDuration() == nil {
-		tsi.AccumulatedSkippedDuration = durationpb.New(0)
-	}
-	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	// update time
 	if !timeNotSet(attr.TargetTime) {
-		accumulatedSkippedDuration += attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
 	}
-	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
+	// update enabled state
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
-
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
 		tsi.FastForwardInfo.HasReached = true
 	}
@@ -7931,6 +7926,10 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 
 	if ms.executionStateUpdated {
 		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.timeSkippingInfoUpdated && ms.executionInfo.TimeSkippingInfo != nil {
+		ms.executionInfo.TimeSkippingInfo.LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.

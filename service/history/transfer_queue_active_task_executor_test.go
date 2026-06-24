@@ -2160,7 +2160,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -2506,7 +2506,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -2765,7 +2765,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -2952,7 +2952,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -3112,7 +3112,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 				s.NoError(resp.ExecutionErr)
 			} else {
 				s.Error(resp.ExecutionErr)
-				s.Assert().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+				s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
 			}
 		})
 	}

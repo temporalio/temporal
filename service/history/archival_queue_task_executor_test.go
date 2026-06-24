@@ -283,7 +283,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 	} {
-		c := c // store c in closure to prevent loop from changing it when a parallel task is accessing it
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			var p params

@@ -5349,7 +5349,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 }
 
 func (s *mutableStateSuite) TestExecutionInfoClone() {
-	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
+	newInstance := reflect.New(reflect.TypeFor[persistencespb.WorkflowExecutionInfo]()).Interface()
 	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)
 	if !ok {
 		s.T().Fatal("type assertion to *persistencespb.WorkflowExecutionInfo failed")
@@ -7463,6 +7463,13 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 // SetSpeculativeWorkflowTaskTimeoutTask, and ToRealTime all rely on this; if it panicked or
 // returned non-zero on a nil chain, every non-time-skipping workflow would break.
 func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
+	s.Run("ExecutionInfoNil", func() {
+		s.mutableState.executionInfo = nil
+		var got time.Duration
+		s.NotPanics(func() { got = s.mutableState.accumulatedSkippedDuration() })
+		s.Equal(time.Duration(0), got)
+	})
+
 	s.Run("TimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 		var got time.Duration

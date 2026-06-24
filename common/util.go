@@ -442,10 +442,7 @@ func VerifyShardIDMapping(
 		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
 			thisShardCount, thatShardCount))
 	}
-	shardCountMin := thisShardCount
-	if shardCountMin > thatShardCount {
-		shardCountMin = thatShardCount
-	}
+	shardCountMin := min(thisShardCount, thatShardCount)
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}

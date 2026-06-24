@@ -215,6 +215,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	return saveErr
 }
 
+// buildRequestHeader returns a copy of the supplied header, or a new map if nil.
 func buildRequestHeader(header map[string]string) nexus.Header {
 	if header == nil {
 		return make(nexus.Header, 2) // To set the failure support and timeout headers.

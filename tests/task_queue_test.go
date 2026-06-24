@@ -1053,7 +1053,6 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	} {
-		tqType := tqType
 		s.Eventually(func() bool {
 			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{

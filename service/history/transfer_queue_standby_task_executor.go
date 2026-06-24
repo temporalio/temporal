@@ -492,7 +492,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
-		if workflowClosed && !(childStarted && childAbandon) {
+		if workflowClosed && (!childStarted || !childAbandon) {
 			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
 			// we should continue to start the child workflow in active cluster, so standby logic also need to
 			// perform the verification. However, we can't do that due to some technial reasons.

@@ -20,6 +20,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
@@ -179,6 +180,30 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	}
 }
 
+// WithArchival enables archival on the test's cluster. This implies a dedicated
+// cluster because archival is configured at the cluster level.
+func WithArchival() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithArchivalEnabled())
+		o.dedicatedReason = "archival enabled"
+	}
+}
+
+// WithCustomArchivers configures custom history and visibility archiver factories
+// on the test's cluster. This implies a dedicated cluster because the factories are
+// configured at the cluster level.
+func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions,
+			WithCustomHistoryArchiverFactory(historyFactory),
+			WithCustomVisibilityArchiverFactory(visibilityFactory),
+		)
+		o.dedicatedReason = "custom archivers used"
+	}
+}
+
 // WithLogger sets a custom logger for the test's cluster, letting a test intercept
 // server log output. This implies a dedicated cluster, since a custom logger cannot
 // be shared across tests.
@@ -281,7 +306,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
-		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+		defer func() { dedicatedGuard = nil }()
+		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
 			t.Fatal(err)
 		}
 	})
@@ -318,14 +344,14 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 //
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
-// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+// - For global hooks: requires a dedicated cluster, except for suite-scoped legacy clusters.
 func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
@@ -446,12 +472,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 		}
 
-		var err error
-		e.sdkClient, err = sdkclient.Dial(clientOptions)
+		client, err := sdkclient.Dial(clientOptions)
 		if err != nil {
 			e.t.Fatalf("Failed to create SDK client: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkClient.Close() })
+		e.sdkClient = client
+		e.t.Cleanup(func() {
+			client.Close()
+			client = nil
+		})
 	})
 	return e.sdkClient
 }
@@ -460,11 +489,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
 	e.sdkWorkerOnce.Do(func() {
 		client := e.SdkClient() // Ensure client is initialized
-		e.sdkWorker = sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
-		if err := e.sdkWorker.Start(); err != nil {
+		worker := sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
+		if err := worker.Start(); err != nil {
 			e.t.Fatalf("Failed to start SDK worker: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkWorker.Stop() })
+		e.sdkWorker = worker
+		e.t.Cleanup(func() {
+			worker.Stop()
+			worker = nil
+		})
 	})
 	return e.sdkWorker
 }
