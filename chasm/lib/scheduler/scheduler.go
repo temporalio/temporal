@@ -101,7 +101,19 @@ const (
 
 	// Maximum number of backfillers allowed on a single scheduler.
 	maxBackfillers = 100
+
+	// Granularity to which StateSizeBytes is rounded (up) before it is published
+	// to visibility (1KB).
+	stateSizeBytesRounding = 1024
 )
+
+// roundStateSizeBytes rounds n up to the nearest stateSizeBytesRounding boundary.
+func roundStateSizeBytes(n int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	return ((n + stateSizeBytesRounding - 1) / stateSizeBytesRounding) * stateSizeBytesRounding
+}
 
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
@@ -687,7 +699,7 @@ func (s *Scheduler) Describe(
 	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
 
 	executionInfo := ctx.ExecutionInfo()
-	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
+	info.StateSizeBytes = roundStateSizeBytes(int64(executionInfo.ApproximateStateSize))
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{
@@ -1013,7 +1025,7 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
-		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
+		StateSizeBytes:    roundStateSizeBytes(int64(executionInfo.ApproximateStateSize)),
 	}
 }
 

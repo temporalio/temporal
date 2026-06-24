@@ -45,6 +45,69 @@ func TestListInfo(t *testing.T) {
 	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
 }
 
+// TestListInfo_StateSizeBytesRoundingCollapsesMemoChurn checks the published
+// value only moves across a 1 KiB boundary, not on every sub-KiB drift.
+func TestListInfo_StateSizeBytesRoundingCollapsesMemoChurn(t *testing.T) {
+	env := newTestEnv(t)
+	stateSize := func(rawSize int) int64 {
+		env.NodeBackend.HandleGetApproximatePersistedSize = func() int { return rawSize }
+		return env.Scheduler.ListInfo(env.ReadContext()).StateSizeBytes
+	}
+
+	require.Equal(t, stateSize(1100), stateSize(1500),
+		"sizes within the same 1 KiB bucket must publish the same value")
+	require.NotEqual(t, stateSize(1500), stateSize(2049),
+		"crossing a 1 KiB boundary must move the published value")
+}
+
+// TestScheduler_Describe_RoundsStateSizeBytes checks Describe rounds too, matching
+// the memo path.
+func TestScheduler_Describe_RoundsStateSizeBytes(t *testing.T) {
+	env := newTestEnv(t)
+	env.NodeBackend.HandleGetApproximatePersistedSize = func() int { return 1500 }
+
+	resp, err := env.Scheduler.Describe(env.ReadContext(), &schedulerpb.DescribeScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	}, legacyscheduler.NewSpecBuilder())
+	require.NoError(t, err)
+	require.Equal(t, int64(2048), resp.GetFrontendResponse().GetInfo().GetStateSizeBytes())
+}
+
+func TestVisibilityTasks_RoundsStateSizeBytes(t *testing.T) {
+	env := newTestEnv(t)
+	sched := env.Scheduler
+
+	setSize := func(n int) {
+		env.NodeBackend.HandleGetApproximatePersistedSize = func() int { return n }
+	}
+
+	// runDirtyTransaction dirties the tree, then closes, returning whether the
+	// close upserted visibility.
+	runDirtyTransaction := func(t *testing.T) bool {
+		sched.Generator.Get(env.MutableContext())
+		mutation, err := env.Node.CloseTransaction()
+		require.NoError(t, err)
+		_, upserted := mutation.UpdatedNodes["Visibility"]
+		return upserted
+	}
+
+	// Set a baseline size (settles to 2KB).
+	setSize(1100)
+	runDirtyTransaction(t)
+
+	setSize(1500)
+	require.False(t, runDirtyTransaction(t),
+		"state size drifting within a 1 KiB bucket must not re-upsert visibility")
+
+	setSize(2049)
+	require.True(t, runDirtyTransaction(t),
+		"state size crossing a 1 KiB boundary must re-upsert visibility")
+}
+
 func TestCreateSchedulerFromMigration(t *testing.T) {
 	now := time.Now().UTC()
 	_, _, node := setupSchedulerForTest(t)
