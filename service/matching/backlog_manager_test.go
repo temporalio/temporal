@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
@@ -925,6 +926,12 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	reader.atEnd = false
 	reader.lock.Unlock()
 
+	// Install a capturing metrics handler to verify the stuck metric fires.
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	blm.metricsHandler = metricsHandler
+
 	// Record the current DB read count before writing.
 	readCountBefore := s.taskMgr.getGetTasksCount(qkey)
 	capturedBefore := s.capturedTasksLen()
@@ -945,4 +952,9 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	// Assert that additional DB reads were triggered by the write path.
 	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
 		"DB reads should have been triggered after SpoolTask to pick up the written task")
+
+	// Assert that the stuck detection metric was emitted.
+	snap := capture.Snapshot()
+	recordings := snap[metrics.FairReaderStuckDetected.Name()]
+	s.Require().NotEmpty(recordings, "fair_reader_stuck_detected metric should have been emitted")
 }
