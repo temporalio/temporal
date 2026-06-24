@@ -193,6 +193,10 @@ func (h *CompletionHandler) Handle(
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
 	isRetryableNotFoundErr := requestID != ""
+	// emitMetrics is populated inside the Access closure and invoked only after the write
+	// transaction commits successfully, so a failed commit (which retries the completion) does not
+	// double-count the metric. See operationMetricsHandler's doc comment.
+	var emitMetrics func()
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
@@ -212,9 +216,6 @@ func (h *CompletionHandler) Handle(
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if fabricatedStart && operation.StartedTime != nil {
-			recordScheduleToStartLatency(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), operation.StartedTime.AsTime())
-		}
 
 		if opFailedError != nil {
 			err = handleOperationError(node, operation, opFailedError)
@@ -230,15 +231,23 @@ func (h *CompletionHandler) Handle(
 		if err != nil {
 			return err
 		}
-		// Emit the terminal outcome metric. The canceled vs failed split mirrors handleOperationError
-		// so the metric outcome matches the recorded transition.
-		switch {
-		case opFailedError == nil:
-			recordOperationSucceeded(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		case opFailedError.State == nexus.OperationStateCanceled:
-			recordOperationCanceled(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		default:
-			recordOperationFailed(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		namespaceName, workflowType, closeTime := node.NamespaceName(), node.WorkflowTypeName(), env.Now()
+		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
+		startedTime := operation.StartedTime
+		emitMetrics = func() {
+			if emitScheduleToStart {
+				emitScheduleToStartLatency(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, startedTime.AsTime())
+			}
+			// Emit the terminal outcome metric. The canceled vs failed split mirrors handleOperationError
+			// so the metric outcome matches the recorded transition.
+			switch {
+			case opFailedError == nil:
+				emitOperationSucceeded(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+			case opFailedError.State == nexus.OperationStateCanceled:
+				emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+			default:
+				emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+			}
 		}
 		return nil
 	})
@@ -253,5 +262,11 @@ func (h *CompletionHandler) Handle(
 		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
 		return h.Handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if emitMetrics != nil {
+		emitMetrics()
+	}
+	return nil
 }

@@ -39,35 +39,35 @@ func operationMetricsHandler(
 	return base.WithTags(tags...)
 }
 
-// recordOperationSucceeded emits the success counter and latency metrics for an operation that
+// emitOperationSucceeded emits the success counter and latency metrics for an operation that
 // completed successfully.
-func recordOperationSucceeded(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
-	recordOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, closeTime, chasmnexus.NexusOperationSuccessCount.With)
+func emitOperationSucceeded(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
+	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, closeTime, chasmnexus.NexusOperationSuccessCount.With)
 }
 
-// recordOperationFailed emits the failure counter and latency metrics for an operation that
+// emitOperationFailed emits the failure counter and latency metrics for an operation that
 // failed non-retryably.
-func recordOperationFailed(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
-	recordOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_FAILED, closeTime, chasmnexus.NexusOperationFailedCount.With)
+func emitOperationFailed(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
+	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_FAILED, closeTime, chasmnexus.NexusOperationFailedCount.With)
 }
 
-// recordOperationCanceled emits the cancel counter and latency metrics for an operation that
+// emitOperationCanceled emits the cancel counter and latency metrics for an operation that
 // completed as canceled.
-func recordOperationCanceled(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
-	recordOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_CANCELED, closeTime, chasmnexus.NexusOperationCancelCount.With)
+func emitOperationCanceled(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
+	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_CANCELED, closeTime, chasmnexus.NexusOperationCancelCount.With)
 }
 
-// recordOperationTimedOut emits the timeout counter (tagged with the timeout type) and latency
+// emitOperationTimedOut emits the timeout counter (tagged with the timeout type) and latency
 // metrics for an operation that timed out.
-func recordOperationTimedOut(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType, timeoutType string, closeTime time.Time) {
-	recordOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, closeTime, chasmnexus.NexusOperationTimeoutCount.With, metrics.TimeoutTypeTag(timeoutType))
+func emitOperationTimedOut(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType, timeoutType string, closeTime time.Time) {
+	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, closeTime, chasmnexus.NexusOperationTimeoutCount.With, metrics.TimeoutTypeTag(timeoutType))
 }
 
-// recordOperationOutcome records the terminal outcome counter and the shared latency metrics for a
+// emitOperationOutcome records the terminal outcome counter and the shared latency metrics for a
 // closed operation. The outcome-specific counter is supplied as a metric definition's With method
 // (e.g. NexusOperationSuccessCount.With), so each per-outcome recorder differs only by its counter
 // and any extra counter tags (the timeout type, for timeouts).
-func recordOperationOutcome(
+func emitOperationOutcome(
 	base metrics.Handler,
 	tagConfig chasmnexus.NexusMetricTagConfig,
 	op Operation,
@@ -79,13 +79,13 @@ func recordOperationOutcome(
 ) {
 	handler := operationMetricsHandler(base, tagConfig, op, namespaceName, workflowType)
 	withCounter(handler).Record(1, counterTags...)
-	recordCompletionLatencies(handler, op, closeTime, metrics.OutcomeTag(strings.ToLower(status.String())))
+	emitCompletionLatencies(handler, op, closeTime, metrics.OutcomeTag(strings.ToLower(status.String())))
 }
 
-// recordCompletionLatencies emits schedule-to-close plus either start-to-close (operations that
+// emitCompletionLatencies emits schedule-to-close plus either start-to-close (operations that
 // started) or schedule-to-start (sync / never-started), mirroring chasm/lib/nexusoperation's
 // emitLatencyMetrics. It is shared by the per-outcome recorders above.
-func recordCompletionLatencies(handler metrics.Handler, op Operation, closeTime time.Time, outcomeTag metrics.Tag) {
+func emitCompletionLatencies(handler metrics.Handler, op Operation, closeTime time.Time, outcomeTag metrics.Tag) {
 	if op.ScheduledTime == nil {
 		return
 	}
@@ -100,8 +100,8 @@ func recordCompletionLatencies(handler metrics.Handler, op Operation, closeTime 
 	}
 }
 
-// recordScheduleToStartLatency emits the schedule-to-start latency when an async operation starts.
-func recordScheduleToStartLatency(
+// emitScheduleToStartLatency emits the schedule-to-start latency when an async operation starts.
+func emitScheduleToStartLatency(
 	base metrics.Handler,
 	tagConfig chasmnexus.NexusMetricTagConfig,
 	op Operation,
