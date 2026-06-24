@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -78,6 +79,18 @@ message ChasmComponentAttributes {
   map<string, RequestMetadata> requests = 5;
   // Caller-supplied user metadata (summary, details) attached to this component.
   temporal.api.sdk.v1.UserMetadata user_metadata = 6;
+  // Tracks how long this component has spent paused so that Now() can be adjusted
+  // accordingly. Set when the component transitions into or out of LifecycleStatePaused.
+  ChasmPauseInfo pause_info = 7;
+}
+
+// ChasmPauseInfo tracks the accumulated pause duration for a component so that
+// Now() can return a time that does not advance while the component is paused.
+message ChasmPauseInfo {
+  // Set while the component is currently paused; cleared on unpause.
+  google.protobuf.Timestamp paused_time = 1;
+  // Total duration accumulated from all completed pause/unpause cycles.
+  google.protobuf.Duration accumulated_pause_duration = 2;
 }
 
 message ChasmDataAttributes {}

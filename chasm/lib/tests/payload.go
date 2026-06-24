@@ -215,7 +215,42 @@ func (s *PayloadStore) LifecycleState(
 	if s.State.Closed {
 		return chasm.LifecycleStateCompleted
 	}
+	if s.State.Paused {
+		return chasm.LifecycleStatePaused
+	}
 	return chasm.LifecycleStateRunning
+}
+
+func (s *PayloadStore) Pause(
+	mutableContext chasm.MutableContext,
+	_ chasm.NoValue,
+) (chasm.NoValue, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+	s.State.Paused = true
+	return nil, nil
+}
+
+func (s *PayloadStore) Unpause(
+	mutableContext chasm.MutableContext,
+	_ chasm.NoValue,
+) (chasm.NoValue, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+	s.State.Paused = false
+	return nil, nil
+}
+
+func (s *PayloadStore) GetNow(
+	chasmContext chasm.Context,
+	_ chasm.NoValue,
+) (GetNowResponse, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return GetNowResponse{}, err
+	}
+	return GetNowResponse{Now: chasmContext.Now(s)}, nil
 }
 
 func (s *PayloadStore) Terminate(

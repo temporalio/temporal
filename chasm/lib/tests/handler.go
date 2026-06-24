@@ -10,6 +10,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
+// GetNowResponse holds the result of calling ctx.Now(component) on a PayloadStore.
+type GetNowResponse struct {
+	Now time.Time
+}
+
 type (
 	NewPayloadStoreRequest struct {
 		NamespaceID      namespace.ID
@@ -250,4 +255,60 @@ func RemovePayloadHandler(
 	return RemovePayloadResponse{
 		State: state,
 	}, nil
+}
+
+func PausePayloadStoreHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).Pause,
+		nil,
+	)
+	return err
+}
+
+func UnpausePayloadStoreHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).Unpause,
+		nil,
+	)
+	return err
+}
+
+func GetNowHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) (GetNowResponse, error) {
+	return chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).GetNow,
+		nil,
+	)
 }

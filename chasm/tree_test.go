@@ -3258,6 +3258,137 @@ func (s *nodeSuite) TestContextNowStableWithinContext() {
 	s.Equal(laterTime, immutableContext.Now(component))
 }
 
+// TestContextNowFrozenWhilePaused verifies that Now(component) returns the time
+// the component entered LifecycleStatePaused and stays frozen until it is unpaused.
+func (s *nodeSuite) TestContextNowFrozenWhilePaused() {
+	root := s.testComponentTree()
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	tPause := t0.Add(time.Minute)
+	tWhilePaused := tPause.Add(time.Hour)
+	tUnpause := tWhilePaused.Add(time.Hour)
+	tAfterUnpause := tUnpause.Add(time.Minute)
+
+	s.timeSource.Update(t0)
+
+	// Load root component in a transaction so the node is deserialized.
+	mutableCtx := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableCtx, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	// Baseline: Now() before any pause is the context creation time.
+	s.Equal(t0, mutableCtx.Now(testComponent))
+
+	// Simulate the component transitioning to Paused.
+	s.timeSource.Update(tPause)
+	testComponent.Pause(mutableCtx)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Next transaction: component is paused, Now() should be frozen at tPause.
+	s.timeSource.Update(tWhilePaused)
+	mutableCtx2 := NewMutableContext(context.Background(), root)
+	component2, err := root.Component(mutableCtx2, ComponentRef{})
+	s.NoError(err)
+	testComponent2 := component2.(*TestComponent)
+	s.Equal(tPause, mutableCtx2.Now(testComponent2), "Now() must be frozen at pause time")
+
+	// Still paused: another transaction at a later time should still return tPause.
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	s.timeSource.Update(tUnpause)
+	mutableCtx3 := NewMutableContext(context.Background(), root)
+	component3, err := root.Component(mutableCtx3, ComponentRef{})
+	s.NoError(err)
+	testComponent3 := component3.(*TestComponent)
+	s.Equal(tPause, mutableCtx3.Now(testComponent3), "Now() must remain frozen while still paused")
+
+	// Unpause within this transaction.
+	testComponent3.Unpause(mutableCtx3)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// After unpause, Now() should resume from where it was logically frozen.
+	// accumulated pause = (tUnpause - tPause), so Now() = tAfterUnpause - (tUnpause - tPause) = tPause + tAfterUnpause - tUnpause.
+	s.timeSource.Update(tAfterUnpause)
+	mutableCtx4 := NewMutableContext(context.Background(), root)
+	component4, err := root.Component(mutableCtx4, ComponentRef{})
+	s.NoError(err)
+	testComponent4 := component4.(*TestComponent)
+	expectedNow := tAfterUnpause.Add(-(tUnpause.Sub(tPause)))
+	s.Equal(expectedNow, mutableCtx4.Now(testComponent4), "Now() should resume from pause time after unpause")
+}
+
+// TestContextNowMultiplePauseCycles verifies that accumulated pause duration
+// is correctly summed across multiple pause/unpause cycles.
+func (s *nodeSuite) TestContextNowMultiplePauseCycles() {
+	root := s.testComponentTree()
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	pause1At := t0.Add(10 * time.Minute)
+	unpause1At := pause1At.Add(5 * time.Minute) // paused for 5 min
+	pause2At := unpause1At.Add(3 * time.Minute)
+	unpause2At := pause2At.Add(7 * time.Minute) // paused for 7 min; total 12 min
+	checkAt := unpause2At.Add(2 * time.Minute)
+
+	s.timeSource.Update(t0)
+
+	mutableCtx := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableCtx, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	// Pause (cycle 1).
+	s.timeSource.Update(pause1At)
+	testComponent.Pause(mutableCtx)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Unpause (cycle 1).
+	s.timeSource.Update(unpause1At)
+	mutableCtx2 := NewMutableContext(context.Background(), root)
+	component2, err := root.Component(mutableCtx2, ComponentRef{})
+	s.NoError(err)
+	testComponent2 := component2.(*TestComponent)
+	testComponent2.Unpause(mutableCtx2)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Pause (cycle 2).
+	s.timeSource.Update(pause2At)
+	mutableCtx3 := NewMutableContext(context.Background(), root)
+	component3, err := root.Component(mutableCtx3, ComponentRef{})
+	s.NoError(err)
+	testComponent3 := component3.(*TestComponent)
+	testComponent3.Pause(mutableCtx3)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Unpause (cycle 2).
+	s.timeSource.Update(unpause2At)
+	mutableCtx4 := NewMutableContext(context.Background(), root)
+	component4, err := root.Component(mutableCtx4, ComponentRef{})
+	s.NoError(err)
+	testComponent4 := component4.(*TestComponent)
+	testComponent4.Unpause(mutableCtx4)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Verify: Now() = checkAt - totalPauseDuration (5 min + 7 min = 12 min).
+	s.timeSource.Update(checkAt)
+	mutableCtx5 := NewMutableContext(context.Background(), root)
+	component5, err := root.Component(mutableCtx5, ComponentRef{})
+	s.NoError(err)
+	testComponent5 := component5.(*TestComponent)
+	totalPaused := 5*time.Minute + 7*time.Minute
+	expected := checkAt.Add(-totalPaused)
+	s.Equal(expected, mutableCtx5.Now(testComponent5), "Now() should subtract total accumulated pause duration")
+}
+
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	root := s.testComponentTree()
 
