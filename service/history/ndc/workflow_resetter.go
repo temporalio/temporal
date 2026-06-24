@@ -533,6 +533,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.logger,
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
 	)
 
 	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(

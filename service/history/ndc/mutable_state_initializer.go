@@ -161,6 +161,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 		r.logger,
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
 	)
 	mutableStateRow, dbRecordVersion, dbHistorySize, existsInDB, err := r.deserializeBackfillToken(token)
 	if err != nil {

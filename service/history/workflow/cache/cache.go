@@ -63,6 +63,8 @@ type (
 		onPut                     func(wfContext *historyi.WorkflowContext)
 		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
+		// paginationLimiter limits pagination buffer size across all workflow cache contexts
+		paginationLimiter *workflow.PaginationBufferLimiter
 	}
 	cacheItem struct {
 		shardId   int32
@@ -145,6 +147,7 @@ func NewHostLevelCache(
 	return &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
+		paginationLimiter:         workflow.NewPaginationBufferLimiter(),
 	}
 }
 
@@ -289,6 +292,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
+			c.paginationLimiter,
 		)
 
 		var err error

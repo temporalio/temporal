@@ -906,6 +906,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		),
 		mutableState: mutableState,
 		snapshot:     snapshot,

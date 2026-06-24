@@ -559,6 +559,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				s.mockShard.GetLogger(),
 				s.mockShard.GetThrottledLogger(),
 				s.mockShard.GetMetricsHandler(),
+				nil,
 			)
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)

@@ -599,6 +599,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			r.logger,
 			r.shardContext.GetThrottledLogger(),
 			r.shardContext.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		)
 
 		newWorkflow = NewWorkflow(

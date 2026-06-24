@@ -1130,6 +1130,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.logger,
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
 	)
 
 	return NewWorkflow(
