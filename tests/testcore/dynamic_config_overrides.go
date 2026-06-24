@@ -38,6 +38,7 @@ var (
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():             60 * time.Second,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
 		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
 		dynamicconfig.HistoryScannerEnabled.Key():                               false,

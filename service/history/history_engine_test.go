@@ -5023,7 +5023,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.
@@ -5108,7 +5107,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.

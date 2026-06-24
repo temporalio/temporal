@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -1861,13 +1862,7 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 			// Check that only expected versions were removed
 			for k := range originalKeys {
 				_, exists := deploymentData.Versions[k]
-				shouldBeRemoved := false
-				for _, removed := range tt.wantRemoved {
-					if k == removed {
-						shouldBeRemoved = true
-						break
-					}
-				}
+				shouldBeRemoved := slices.Contains(tt.wantRemoved, k)
 				if shouldBeRemoved {
 					assert.False(t, exists, "version %s should have been removed", k)
 				} else {

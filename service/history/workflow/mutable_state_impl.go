@@ -3869,10 +3869,8 @@ func (ms *MutableStateImpl) addUsedDeploymentVersionToLoadedSearchAttribute(exis
 	}
 
 	// Check if already exists (deduplicate)
-	for _, existingValue := range existingValues {
-		if existingValue == deploymentVersionStr {
-			return existingValues // Already present, no change
-		}
+	if slices.Contains(existingValues, deploymentVersionStr) {
+		return existingValues // Already present, no change
 	}
 
 	// Add new deployment version to the list
@@ -4048,9 +4046,9 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 	}
 
 	// save deployment search attributes if changed
-	if !(existingDeployment == modifiedDeployment &&
-		existingVersion == modifiedVersion &&
-		existingBehavior == modifiedBehavior) {
+	if existingDeployment != modifiedDeployment ||
+		existingVersion != modifiedVersion ||
+		existingBehavior != modifiedBehavior {
 		err = ms.saveDeploymentSearchAttributes(modifiedDeployment, modifiedVersion, modifiedBehavior, maxSearchAttributeValueSize)
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
@@ -7920,6 +7918,10 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 
 	if ms.executionStateUpdated {
 		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
+	if ms.timeSkippingInfoUpdated && ms.executionInfo.TimeSkippingInfo != nil {
+		ms.executionInfo.TimeSkippingInfo.LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
