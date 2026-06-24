@@ -387,6 +387,8 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	// Detect stuck reader: no tasks in memory, not at end, no read goroutine running, no
 	// retry pending. In this state, written tasks go only to DB (filtered above readLevel)
 	// and nothing will trigger a read. The root cause is still under investigation.
+	// TODO: remove this once the root cause is found and fixed, or replace with a more
+	// general behavior-based health check.
 	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
 		if tr.backlogMgr.config.ForceReadTasksOnWrite() {
