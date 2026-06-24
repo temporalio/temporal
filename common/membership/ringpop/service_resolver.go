@@ -149,6 +149,10 @@ func (r *serviceResolver) Stop() {
 	}
 }
 
+func (r *serviceResolver) Done() <-chan struct{} {
+	return r.shutdownCh
+}
+
 func (r *serviceResolver) RequestRefresh() {
 	select {
 	case r.refreshChan <- struct{}{}:

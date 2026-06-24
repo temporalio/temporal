@@ -12,6 +12,8 @@ type staticResolver struct {
 	mu        sync.Mutex
 	hostInfos []membership.HostInfo
 	listeners map[string]chan<- *membership.ChangedEvent
+	done      chan struct{}
+	stopOnce  sync.Once
 
 	hashfunc func([]byte) uint32
 }
@@ -25,7 +27,16 @@ func newStaticResolver(hosts []string) *staticResolver {
 		hostInfos: hostInfos,
 		hashfunc:  farm.Fingerprint32,
 		listeners: make(map[string]chan<- *membership.ChangedEvent),
+		done:      make(chan struct{}),
 	}
+}
+
+func (s *staticResolver) Done() <-chan struct{} {
+	return s.done
+}
+
+func (s *staticResolver) stop() {
+	s.stopOnce.Do(func() { close(s.done) })
 }
 
 func (s *staticResolver) start(hosts []string) {

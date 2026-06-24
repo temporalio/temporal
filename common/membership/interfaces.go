@@ -88,6 +88,9 @@ type (
 		AvailableMembers() []HostInfo
 		// RequestRefresh requests that the membership information be refreshed.
 		RequestRefresh()
+		// Done returns a channel closed when the resolver stops, so listeners
+		// can exit.
+		Done() <-chan struct{}
 	}
 
 	HostInfoProvider interface {

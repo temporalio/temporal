@@ -74,16 +74,13 @@ func NewClient(
 	c.partitionCache.Start()
 	runtime.AddCleanup(c, func(cache *partitionCache) { cache.Stop() }, c.partitionCache)
 
-	// Evict cached clients whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
-	go watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
+	// Evict cached clients whose host leaves the ring; exits when resolver stops.
+	go watchMembershipForEviction(resolver, clients, connectionCloseDelay, logger)
 
 	return c
 }
 
 func watchMembershipForEviction(
-	ctx context.Context,
 	resolver membership.ServiceResolver,
 	clients common.ClientCache,
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
@@ -102,10 +99,11 @@ func watchMembershipForEviction(
 	evictAt := make(map[string]time.Time)
 	ticker := time.NewTicker(evictionCheckInterval)
 	defer ticker.Stop()
+	done := resolver.Done()
 	for {
 		select {
-		case <-ctx.Done():
-			return
+		case <-done:
+			return // resolver stopped
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
 				evictAt[h.GetAddress()] = time.Now().Add(connectionCloseDelay())

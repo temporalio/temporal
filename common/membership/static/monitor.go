@@ -26,7 +26,7 @@ func SingleLocalHost(host string) Hosts {
 	return Hosts{All: []string{host}, Self: host}
 }
 
-func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) membership.Monitor {
+func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) *staticMonitor {
 	resolvers := make(map[primitives.ServiceName]*staticResolver, len(hosts))
 	for service, hostList := range hosts {
 		resolvers[service] = newStaticResolver(hostList.All)
@@ -41,6 +41,13 @@ func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) membership.Monitor
 func (s *staticMonitor) Start() {
 	for service, r := range s.resolvers {
 		r.start(s.hosts[service].All)
+	}
+}
+
+// Stop closes each resolver's Done channel so listeners exit.
+func (s *staticMonitor) Stop() {
+	for _, r := range s.resolvers {
+		r.stop()
 	}
 }
 

@@ -1,9 +1,7 @@
 package history
 
 import (
-	"context"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -61,15 +59,12 @@ func NewConnectionPool[C any](
 		logger:                 logger,
 	}
 
-	// Close cached conns whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
-	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
+	// Close cached conns whose host leaves the ring; exits when resolver stops.
+	go watchMembershipForClose[C](historyServiceResolver, logger, conns, connectionCloseDelay)
 	return c
 }
 
 func watchMembershipForClose[C any](
-	ctx context.Context,
 	resolver membership.ServiceResolver,
 	logger log.Logger,
 	conns *sync.Map,
@@ -88,10 +83,11 @@ func watchMembershipForClose[C any](
 	evictAt := make(map[rpcAddress]time.Time)
 	ticker := time.NewTicker(evictionCheckInterval)
 	defer ticker.Stop()
+	done := resolver.Done()
 	for {
 		select {
-		case <-ctx.Done():
-			return
+		case <-done:
+			return // resolver stopped
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
 				evictAt[rpcAddress(h.GetAddress())] = time.Now().Add(connectionCloseDelay())

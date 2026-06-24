@@ -221,6 +221,20 @@ func (mr *MockServiceResolverMockRecorder) AvailableMembers() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMembers", reflect.TypeOf((*MockServiceResolver)(nil).AvailableMembers))
 }
 
+// Done mocks base method.
+func (m *MockServiceResolver) Done() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Done")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// Done indicates an expected call of Done.
+func (mr *MockServiceResolverMockRecorder) Done() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Done", reflect.TypeOf((*MockServiceResolver)(nil).Done))
+}
+
 // Lookup mocks base method.
 func (m *MockServiceResolver) Lookup(key string) (HostInfo, error) {
 	m.ctrl.T.Helper()

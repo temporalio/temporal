@@ -12,8 +12,10 @@ func MembershipModule(
 	hostsByService map[primitives.ServiceName]Hosts,
 ) fx.Option {
 	return fx.Options(
-		fx.Provide(func() membership.Monitor {
-			return newStaticMonitor(hostsByService)
+		fx.Provide(func(lc fx.Lifecycle) membership.Monitor {
+			m := newStaticMonitor(hostsByService)
+			lc.Append(fx.StopHook(m.Stop))
+			return m
 		}),
 		fx.Provide(func(serviceName primitives.ServiceName) membership.HostInfoProvider {
 			hosts := hostsByService[serviceName]
