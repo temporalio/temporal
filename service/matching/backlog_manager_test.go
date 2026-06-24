@@ -926,11 +926,12 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	reader.atEnd = false
 	reader.lock.Unlock()
 
-	// Install a capturing metrics handler to verify the stuck metric fires.
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-	blm.metricsHandler = metricsHandler
+	// Install a capturing metrics handler with namespace tag to verify the stuck metric
+	// is emitted with the correct namespace (as it would be in production).
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	blm.metricsHandler = captureHandler.WithTags(metrics.NamespaceTag("test-namespace"))
 
 	// Record the current DB read count before writing.
 	readCountBefore := s.taskMgr.getGetTasksCount(qkey)
@@ -953,9 +954,10 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
 		"DB reads should have been triggered after SpoolTask to pick up the written task")
 
-	// Assert that the stuck detection metric was emitted exactly once (one write while stuck).
+	// Assert that the stuck detection metric was emitted exactly once with namespace tag.
 	snap := capture.Snapshot()
 	recordings := snap[metrics.FairReaderStuckDetected.Name()]
 	s.Require().Len(recordings, 1, "fair_reader_stuck_detected metric should have been emitted exactly once")
 	s.Require().Equal(int64(1), recordings[0].Value)
+	s.Require().Equal("test-namespace", recordings[0].Tags["namespace"])
 }
