@@ -287,12 +287,13 @@ func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
 }
 
 // ValidateSideEffectTask mocks base method.
-func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, error) {
+func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, task)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ValidateSideEffectTask indicates an expected call of ValidateSideEffectTask.

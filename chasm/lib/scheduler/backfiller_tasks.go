@@ -78,11 +78,11 @@ func (b *BackfillerTaskHandler) Execute(
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
+	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	invoker := scheduler.Invoker.Get(ctx)
 
-	backfiller.EventLog.Get(ctx).LogEvent(ctx, "backfillerTask executed")
+	backfiller.getOrCreateEventLog(ctx).LogEvent(ctx, "backfillerTask executed")
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.

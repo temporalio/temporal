@@ -90,10 +90,23 @@ func (s *taskTracker) inc(n int) {
 	s.tasks.inc(n)
 }
 
-// rate returns the rate of tasks added/dispatched in a given interval
+// rate returns the rate of increments in a given interval
 func (s *taskTracker) rate() float32 {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	rate, _ := s.rateAndFullLocked()
+	return rate
+}
+
+// rateLocked returns the rate of increments in a given interval, plus whether the full
+// interval has elapsed.
+func (s *taskTracker) rateAndFull() (float32, bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.rateAndFullLocked()
+}
+
+func (s *taskTracker) rateAndFullLocked() (float32, bool) {
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the latest start interval time
@@ -101,13 +114,15 @@ func (s *taskTracker) rate() float32 {
 	s.advanceAndResetLocked(elapsed)
 	totalTasks := s.tasks.totalTasks()
 
-	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalInterval,
+	elapsedTime := min(
+		currentTime.Sub(s.bucketStartTime)+s.totalInterval,
 		currentTime.Sub(s.startTime))
 
 	if elapsedTime <= 0 {
-		return 0
+		return 0, false
 	}
 
 	// rate per second
-	return float32(totalTasks) / float32(elapsedTime.Seconds())
+	full := elapsedTime >= s.totalInterval
+	return float32(totalTasks) / float32(elapsedTime.Seconds()), full
 }

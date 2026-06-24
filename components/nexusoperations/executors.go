@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
@@ -392,7 +393,7 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		attrs := event.GetNexusOperationScheduledEventAttributes()
 		args.payload = attrs.GetInput()
-		args.header = attrs.GetNexusHeader()
+		args.header = maps.Clone(attrs.GetNexusHeader())
 		args.nexusLink = commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
@@ -759,7 +760,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			return err
 		}
 		if attrs := event.GetNexusOperationScheduledEventAttributes(); attrs != nil {
-			args.headers = attrs.GetNexusHeader()
+			args.headers = maps.Clone(attrs.GetNexusHeader())
 			args.payload = attrs.GetInput()
 		}
 		return nil
@@ -1075,7 +1076,7 @@ func (e taskExecutor) startOnHistoryService(
 		if v.Failure.GetCanceledFailureInfo() != nil {
 			state = nexus.OperationStateCanceled
 		}
-		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailure(v.Failure)
+		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailureInPlace(v.Failure)
 		if convErr != nil {
 			e.Logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
 			he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)

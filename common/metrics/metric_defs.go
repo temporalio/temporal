@@ -629,6 +629,16 @@ const (
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
+// Matching task dropped reason tag values
+const (
+	DroppedTaskReasonNotFound      = "not_found"
+	DroppedTaskReasonInternalError = "internal_error"
+	DroppedTaskReasonDataLoss      = "data_loss"
+	DroppedTaskReasonExpiredRead   = "expired_read"
+	DroppedTaskReasonExpiredMemory = "expired_memory"
+	DroppedTaskReasonInvalid       = "invalid"
+)
+
 var (
 	ServiceRequests = NewCounterDef(
 		"service_requests",
@@ -1204,7 +1214,7 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1243,6 +1253,10 @@ var (
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
+	)
+	DroppedTasksCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
 	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
@@ -1480,19 +1494,19 @@ var (
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",
-		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome."),
+		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleInvokerProcessBufferTask = NewCounterDef(
 		"schedule_invoker_process_buffer_task",
-		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleInvokerExecuteTask = NewCounterDef(
 		"schedule_invoker_execute_task",
-		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleBackfillerTask = NewCounterDef(
 		"schedule_backfiller_task",
-		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome."),
+		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
 	)
 	ScheduleBackfillerCompleted = NewCounterDef(
 		"schedule_backfiller_completed",
