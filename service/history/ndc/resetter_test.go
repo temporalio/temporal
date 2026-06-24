@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -162,7 +161,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		),
 		branchToken,
 		baseEventID,
-		util.Ptr(baseVersion),
+		new(baseVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -352,7 +351,7 @@ func (s *resetterSuite) TestResetWorkflow_RebuildError() {
 
 	resetterRebuildErr := serviceerror.NewInternal("rebuild failed")
 	s.mockStateBuilder.EXPECT().Rebuild(
-		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, new(resetterBaseVersion),
 		gomock.Any(), newBranchToken, gomock.Any(),
 	).Return(nil, RebuildStats{}, resetterRebuildErr)
 
@@ -407,7 +406,7 @@ func (s *resetterSuite) TestResetWorkflow_RefreshExpirationError() {
 		&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
-		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, new(resetterBaseVersion),
 		gomock.Any(), newBranchToken, gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
 	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
@@ -487,5 +486,5 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		incomingFirstEventID,
 		incomingFirstEventVersion,
 	)
-	s.Equal(retryErr, expectedErr)
+	s.Equal(expectedErr, retryErr)
 }

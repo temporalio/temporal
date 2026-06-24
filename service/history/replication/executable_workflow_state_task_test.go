@@ -408,7 +408,7 @@ func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
 		NamespaceId: s.task.NamespaceID,
 		WorkflowId:  s.task.WorkflowID,
 		RunId:       s.task.RunID,
-		TaskId:      s.task.ExecutableTask.TaskID(),
+		TaskId:      s.task.TaskID(),
 		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 	}, replicationTask.RawTaskInfo)
 }

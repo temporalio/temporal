@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -349,7 +348,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
@@ -441,7 +440,7 @@ func (s *stateRebuilderSuite) TestRebuild_NamespaceLookupError() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		[]byte("stateRb branch token"),
 		int64(2),
-		util.Ptr(int64(12)),
+		new(int64(12)),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		uuid.NewString(),
@@ -462,7 +461,7 @@ func (s *stateRebuilderSuite) TestRebuild_DataLossError() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		int64(2),
-		util.Ptr(int64(12)),
+		new(int64(12)),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		uuid.NewString(),
@@ -485,7 +484,7 @@ func (s *stateRebuilderSuite) TestRebuild_ReadHistoryError() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		int64(2),
-		util.Ptr(int64(12)),
+		new(int64(12)),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		uuid.NewString(),
@@ -508,7 +507,7 @@ func (s *stateRebuilderSuite) TestRebuild_VersionMismatchError() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version+100),
+		new(version+100),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		uuid.NewString(),
@@ -533,7 +532,7 @@ func (s *stateRebuilderSuite) TestRebuild_TaskRefresherError() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		uuid.NewString(),
@@ -555,7 +554,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState_NamespaceLookup
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		[]byte("stateRb branch token"),
 		int64(2),
-		util.Ptr(int64(12)),
+		new(int64(12)),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		currentMutableState,
@@ -591,7 +590,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState_TaskRefresherEr
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), "stateRb wf", uuid.NewString()),
 		[]byte("stateRb target branch token"),
 		currentMutableState,
@@ -725,7 +724,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		util.Ptr(version),
+		new(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		currentMutableState,

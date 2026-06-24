@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -204,7 +203,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 		true, // isWorkflow
@@ -270,7 +269,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 		true, // isWorkflow
@@ -312,7 +311,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -1516,7 +1515,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.baseRunID),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		resetBranchToken,
 		resetRequestID,
@@ -2205,10 +2204,10 @@ func (s *workflowResetterSuite) TestPersistToDB_ThreeRuns_ConflictResolve() {
 		int64(0),
 		baseSnapshot,
 		baseEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		currentMutation,
 		currentEventsSeq,
 		true,
@@ -2432,7 +2431,7 @@ func (s *workflowResetterSuite) TestResetWorkflow_CurrentRunning() {
 	)
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		ctx, persistence.UpdateWorkflowModeUpdateCurrent, chasm.WorkflowArchetypeID,
-		int64(0), currentMutation, currentEventsSeq, util.Ptr(int64(0)),
+		int64(0), currentMutation, currentEventsSeq, new(int64(0)),
 		gomock.Any(), gomock.Any(), true,
 	).Return(int64(0), int64(0), nil)
 
