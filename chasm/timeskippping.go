@@ -46,23 +46,17 @@ type TimeSkippingController interface {
 // When virtual time is advanced, the framework will regenerate all scheduled tasks so that their visibility timestamps
 // are updated to the new virtual time.
 //
-// The framework drives two calls per transaction, in order, at the END of CloseTransaction if the execution has
-// time skipping enabled:
-//  1. HasInflightWork — the mandatory idle gate. It must return true whenever advancing virtual time
-//     would skip past real work (e.g. a standalone activity whose attempt has been dispatched to a
-//     worker or is currently running). When it returns true the framework does not skip and does not
-//     consult NextTimePoint.
-//     HasInflightWork is kept as a distinct method (rather than folded into FindNextTargetTime) to make the
-//     idle check an explicit, mandatory part of the contract for implementors.
-//  2. FindNextTargetTime — the mandatory method to find the next target time to skip to.
-//     The input parameter is pre-seeded with the configured fast-forward target if there is a valid one.
-//     The implementation should directly call CompareAndSet to set a new possible target time point.
-//     A timeout time point is not a good target time point to skip to, but it is usually a good practice
-//     to call GateByExecutionTimeout to cap the target time point at the entire execution timeout if time skipping
-//     is not expected to jump past the execution timeout.
+// The contract is a single idle gate, consulted at the END of CloseTransaction when time skipping is enabled:
+//
+//	HasInflightWork — the mandatory idle gate. It must return true whenever advancing virtual time would
+//	skip past real work (e.g. a standalone activity whose attempt has been dispatched to a worker or is
+//	currently running). When it returns true the framework does not skip.
+//
+// The component does NOT choose where to skip to. When HasInflightWork reports the execution idle, the
+// FRAMEWORK finds the next target by scanning all scheduled (CategoryTimer) tasks across the tree — pure
+// and side-effect — and taking the earliest one that still validates (see Node.findNextTargetTime).
 type TimeSkippable interface {
 	HasInflightWork(ctx Context) bool
-	FindNextTargetTime(ctx Context, nextTargetTime *TimeSkippingTargetTime)
 }
 
 type TimeSkippingTargetTime time.Time
@@ -75,16 +69,6 @@ func (n *TimeSkippingTargetTime) CompareAndSet(other time.Time) {
 	current := n.GetTime()
 	if current.IsZero() || other.Before(current) {
 		*n = TimeSkippingTargetTime(other)
-	}
-}
-
-func (n *TimeSkippingTargetTime) GateByExecutionTimeout(executionTimeout time.Time) {
-	current := n.GetTime()
-	if current.IsZero() || executionTimeout.IsZero() {
-		return
-	}
-	if current.After(executionTimeout) {
-		*n = TimeSkippingTargetTime(executionTimeout)
 	}
 }
 
