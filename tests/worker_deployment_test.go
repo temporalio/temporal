@@ -176,7 +176,7 @@ collect:
 
 	// If the limiter were absent/broken, none of the polls would be rate limited. Requiring
 	// >0 rejections makes this test fail on regression.
-	s.Greater(rateLimited, 0,
+	s.Positive(rateLimited,
 		"expected the auto-create rate limiter to reject part of the burst of new deployment names")
 }
 
