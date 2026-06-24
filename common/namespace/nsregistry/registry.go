@@ -767,7 +767,15 @@ func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Na
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
-	return r.readthroughNamespaceLocked(name)
+	ns, err = r.getNamespaceByNamePersistence(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// update main entry if found
+	r.updateSingleNamespace(ns, false)
+
+	return ns, nil
 }
 
 // getOrReadthroughNamespaceByID retrieves the namespace information if it exists or reads through
@@ -794,26 +802,14 @@ func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Na
 	}
 
 	// readthrough to persistence layer and update readthrough cache if not found
-	return r.readthroughNamespaceByIDLocked(id)
-}
-
-func (r *registry) readthroughNamespaceLocked(name namespace.Name) (*namespace.Namespace, error) {
-	ns, err := r.getNamespaceByNamePersistence(name)
+	ns, err = r.getNamespaceByIDPersistence(id)
 	if err != nil {
 		return nil, err
 	}
-	// update main entry if found
-	r.updateSingleNamespace(ns, false)
-	return ns, nil
-}
 
-func (r *registry) readthroughNamespaceByIDLocked(id namespace.ID) (*namespace.Namespace, error) {
-	ns, err := r.getNamespaceByIDPersistence(id)
-	if err != nil {
-		return nil, err
-	}
 	// update main entry if found
 	r.updateSingleNamespace(ns, false)
+
 	return ns, nil
 }
 
