@@ -307,7 +307,8 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	a.MetricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
-		metrics.TargetClusterTag(waitRequest.RemoteCluster))
+		metrics.TargetClusterTag(waitRequest.RemoteCluster),
+		metrics.NamespaceTag(waitRequest.Namespace))
 
 	isReady := notReadyShardCount == 0
 
