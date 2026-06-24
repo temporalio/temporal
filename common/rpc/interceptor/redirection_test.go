@@ -227,7 +227,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 
 func (s *redirectionInterceptorSuite) TestAPIResultMapping() {
 	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	expectedAPIs := make(map[string]any, t.NumMethod())
 	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
 		expectedAPIs[m.Name] = m.Type.Out(0)

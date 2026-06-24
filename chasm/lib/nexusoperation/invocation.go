@@ -239,7 +239,7 @@ func (i *invocationSystem) Start(
 		if v.Failure.GetCanceledFailureInfo() != nil {
 			state = nexus.OperationStateCanceled
 		}
-		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailure(v.Failure)
+		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailureInPlace(v.Failure)
 		if convErr != nil {
 			i.logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
 			he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)

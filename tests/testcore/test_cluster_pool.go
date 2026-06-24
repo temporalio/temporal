@@ -217,6 +217,12 @@ func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	})
 }
 
+func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	_, ok := p.suiteScoped.Load(rootName)
+	return ok
+}
+
 func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if _, ok := p.suiteScoped.Load(rootName); !ok {

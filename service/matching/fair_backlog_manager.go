@@ -145,7 +145,7 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 
 	// Pass scale info back to physical tq from unversioned (default) queue.
 	// This must be done before c.initializedError.Set().
-	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() {
+	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() && !c.isDraining {
 		c.pqMgr.StartScaleManager(state.scaleState)
 	}
 

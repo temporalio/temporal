@@ -2288,10 +2288,7 @@ func (s *ContextImpl) newDetachedContext(
 	var cancel context.CancelFunc
 	deadline, ok := ctx.Deadline()
 	if ok {
-		timeout := deadline.Sub(s.GetTimeSource().Now())
-		if timeout < minContextTimeout {
-			timeout = minContextTimeout
-		}
+		timeout := max(deadline.Sub(s.GetTimeSource().Now()), minContextTimeout)
 		detachedContext, cancel = context.WithTimeout(detachedContext, timeout)
 	} else {
 		cancel = func() {}

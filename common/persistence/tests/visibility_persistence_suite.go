@@ -137,8 +137,8 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err1)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err1)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(startReq, resp.Executions[0])
 
 	closeReq := s.createClosedWorkflowRecord(
@@ -160,8 +160,8 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err3)
-	s.Equal(0, len(resp.Executions))
+	s.NoError(err3)
+	s.Empty(resp.Executions)
 
 	// ListClosedWorkflowExecutions
 	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -176,8 +176,8 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err4)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err4)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closeReq, resp.Executions[0])
 }
 
@@ -209,7 +209,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		),
 	})
 	s.NoError(err1)
-	s.Equal(1, len(resp.Executions))
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord, resp.Executions[0])
 
 	closedRecord := s.createClosedWorkflowRecord(
@@ -232,7 +232,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		),
 	})
 	s.NoError(err3)
-	s.Equal(0, len(resp.Executions))
+	s.Empty(resp.Executions)
 
 	// ListClosedWorkflowExecutions
 	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -248,7 +248,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		),
 	})
 	s.NoError(err4)
-	s.Equal(1, len(resp.Executions))
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord, resp.Executions[0])
 }
 
@@ -284,7 +284,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 		),
 	})
 	s.NoError(err3)
-	s.Equal(0, len(resp.Executions))
+	s.Empty(resp.Executions)
 
 	// ListClosedWorkflowExecutions
 	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -300,7 +300,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 		),
 	})
 	s.NoError(err4)
-	s.Equal(1, len(resp.Executions))
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord, resp.Executions[0])
 }
 
@@ -342,8 +342,8 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err2)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err2)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
 
 	// Use token to get the second one
@@ -360,8 +360,8 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 		),
 		NextPageToken: resp.NextPageToken,
 	})
-	s.Nil(err3)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err3)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
 	// It is possible to not return non empty token which is going to return empty result
@@ -380,8 +380,8 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 			),
 			NextPageToken: resp.NextPageToken,
 		})
-		s.Nil(err4)
-		s.Equal(0, len(resp.Executions))
+		s.NoError(err4)
+		s.Empty(resp.Executions)
 	}
 }
 
@@ -422,7 +422,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		),
 	})
 	s.NoError(err)
-	s.Equal(1, len(resp.Executions))
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
 
 	// List with WorkflowType filter in query string
@@ -432,8 +432,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		PageSize:    2,
 		Query:       queryStr,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
 
 	queryStr = fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, time.Now().Add(-3*time.Hour).Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano))
@@ -442,16 +442,16 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 		PageSize:    2,
 		Query:       queryStr,
 	})
-	s.Nil(err)
-	s.Equal(2, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 2)
 
 	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
 		PageSize:    2,
 		Query:       queryStr + ` AND WorkflowType = "visibility-workflow-1"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 }
 
@@ -493,8 +493,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			"visibility-workflow-1",
 		),
 	})
-	s.Nil(err2)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err2)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
 	// List with WorkflowType filter in query string
@@ -503,8 +503,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 		PageSize:    2,
 		Query:       `WorkflowType = "visibility-workflow-1"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
 	// Close both executions
@@ -530,8 +530,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			"visibility-workflow-2",
 		),
 	})
-	s.Nil(err5)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err5)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 
 	// List with WorkflowType filter in query string
@@ -540,8 +540,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 		PageSize:    2,
 		Query:       `WorkflowType = "visibility-workflow-2"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 }
 
@@ -583,8 +583,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			"visibility-filtering-test1",
 		),
 	})
-	s.Nil(err2)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err2)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
 	// List workflow with workflowID filter in query string
@@ -593,8 +593,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		PageSize:    2,
 		Query:       `WorkflowId = "visibility-filtering-test1"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
 
 	// Close both executions
@@ -620,8 +620,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			"visibility-filtering-test2",
 		),
 	})
-	s.Nil(err5)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err5)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 
 	// List workflow with workflowID filter in query string
@@ -630,8 +630,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 		PageSize:    2,
 		Query:       `WorkflowId = "visibility-filtering-test2"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
 }
 
@@ -682,8 +682,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		),
 	})
-	s.Nil(err4)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err4)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closeRecord2, resp.Executions[0])
 
 	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -691,8 +691,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 		PageSize:    5,
 		Query:       `ExecutionStatus = "Failed"`,
 	})
-	s.Nil(err)
-	s.Equal(1, len(resp.Executions))
+	s.NoError(err)
+	s.Len(resp.Executions, 1)
 	s.assertClosedExecutionEquals(closeRecord2, resp.Executions[0])
 }
 
@@ -738,8 +738,8 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err3)
-	s.Equal(closedRows, len(resp.Executions))
+	s.NoError(err3)
+	s.Len(resp.Executions, closedRows)
 
 	// Delete closed workflow
 	for _, row := range resp.Executions {
@@ -748,7 +748,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
 		})
-		s.Nil(err4)
+		s.NoError(err4)
 	}
 
 	// ListClosedWorkflowExecutions
@@ -764,8 +764,8 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		),
 	})
-	s.Nil(err5)
-	s.Equal(0, len(resp.Executions))
+	s.NoError(err5)
+	s.Empty(resp.Executions)
 
 	// ListOpenWorkflowExecutions
 	resp, err6 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
@@ -780,8 +780,8 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 		),
 		PageSize: 10,
 	})
-	s.Nil(err6)
-	s.Equal(openRows-closedRows, len(resp.Executions))
+	s.NoError(err6)
+	s.Len(resp.Executions, openRows-closedRows)
 	// Delete open workflow
 	for _, row := range resp.Executions {
 		err7 := s.VisibilityMgr.DeleteWorkflowExecution(s.ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
@@ -789,7 +789,7 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
 		})
-		s.Nil(err7)
+		s.NoError(err7)
 	}
 	resp, err8 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
@@ -801,8 +801,8 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 		),
 		PageSize: 10,
 	})
-	s.Nil(err8)
-	s.Equal(0, len(resp.Executions))
+	s.NoError(err8)
+	s.Empty(resp.Executions)
 }
 
 // TestUpsertWorkflowExecution test
@@ -1063,7 +1063,7 @@ func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID
 		PageSize:    pageSize,
 		Query:       "",
 	})
-	s.Nil(err)
+	s.NoError(err)
 	executions = append(executions, resp.Executions...)
 
 	for len(resp.NextPageToken) > 0 {
@@ -1073,7 +1073,7 @@ func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID
 			Query:         "",
 			NextPageToken: resp.NextPageToken,
 		})
-		s.Nil(err)
+		s.NoError(err)
 		executions = append(executions, resp.Executions...)
 	}
 
@@ -1101,7 +1101,7 @@ func (s *VisibilityPersistenceSuite) createClosedWorkflowRecord(
 		HistoryLength:     5,
 	}
 	err := s.VisibilityMgr.RecordWorkflowExecutionClosed(s.ctx, closeReq)
-	s.Nil(err)
+	s.NoError(err)
 	return closeReq
 }
 
@@ -1131,7 +1131,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 		},
 	}
 	err := s.VisibilityMgr.RecordWorkflowExecutionStarted(s.ctx, startReq)
-	s.Nil(err)
+	s.NoError(err)
 	return startReq
 }
 
@@ -1154,6 +1154,6 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
 	s.Equal(persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
 	s.Nil(resp.CloseTime)
-	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status)
 	s.Zero(resp.HistoryLength)
 }
