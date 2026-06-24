@@ -953,8 +953,9 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
 		"DB reads should have been triggered after SpoolTask to pick up the written task")
 
-	// Assert that the stuck detection metric was emitted.
+	// Assert that the stuck detection metric was emitted exactly once (one write while stuck).
 	snap := capture.Snapshot()
 	recordings := snap[metrics.FairReaderStuckDetected.Name()]
-	s.Require().NotEmpty(recordings, "fair_reader_stuck_detected metric should have been emitted")
+	s.Require().Len(recordings, 1, "fair_reader_stuck_detected metric should have been emitted exactly once")
+	s.Require().Equal(int64(1), recordings[0].Value)
 }
