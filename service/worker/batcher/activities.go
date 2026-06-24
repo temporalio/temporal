@@ -57,6 +57,7 @@ var (
 type batchProcessorConfig struct {
 	namespace         string
 	adjustedQuery     string
+	batchType         enumspb.BatchOperationType
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -76,13 +77,17 @@ type batchWorkerProcessor func(
 
 // page represents a page of workflow executions to be processed
 type page struct {
-	executionInfos []*workflowpb.WorkflowExecutionInfo
-	submittedCount int
-	successCount   int
-	errorCount     int
-	nextPageToken  []byte
-	pageNumber     int
-	prev, next     *page
+	// executionInfos holds workflow executions for workflow batch operations;
+	// archetypeExecutionInfo holds activity executions for activity batch
+	// operations (terminate/cancel/delete activities). Exactly one is populated.
+	executionInfos         []*workflowpb.WorkflowExecutionInfo
+	archetypeExecutionInfo []*commonpb.Execution
+	submittedCount         int
+	successCount           int
+	errorCount             int
+	nextPageToken          []byte
+	pageNumber             int
+	prev, next             *page
 }
 
 // hasNext returns true if there are more pages to fetch
@@ -90,23 +95,38 @@ func (p *page) hasNext() bool {
 	return len(p.nextPageToken) > 0
 }
 
+// length returns the number of executions in this page. For activity batch
+// operations the executions are held in archetypeExecutionInfo; for all other
+// batch types they are held in executionInfos. Only one of the two is ever
+// populated for a given page.
+func (p *page) length() int {
+	if len(p.archetypeExecutionInfo) > 0 {
+		return len(p.archetypeExecutionInfo)
+	}
+	return len(p.executionInfos)
+}
+
 // allSubmitted returns true if all executions in this page have been submitted
 func (p *page) allSubmitted() bool {
-	return p.submittedCount == len(p.executionInfos)
+	return p.submittedCount == p.length()
 }
 
 // nextTask returns the next task to be submitted from this page
 func (p *page) nextTask() task {
-	if p.submittedCount >= len(p.executionInfos) {
+	if p.submittedCount >= p.length() {
 		return task{} // No more tasks in this page
 	}
 
-	task := task{
-		executionInfo: p.executionInfos[p.submittedCount],
-		attempts:      1,
-		page:          p,
+	t := task{
+		attempts: 1,
+		page:     p,
 	}
-	return task
+	if len(p.archetypeExecutionInfo) > 0 {
+		t.archetypeExecution = p.archetypeExecutionInfo[p.submittedCount]
+	} else {
+		t.executionInfo = p.executionInfos[p.submittedCount]
+	}
+	return t
 }
 
 // done returns true if this page and all previous pages are complete
@@ -114,7 +134,7 @@ func (p *page) done() bool {
 	if p.prev != nil && !p.prev.done() {
 		return false
 	}
-	return p.successCount+p.errorCount == len(p.executionInfos)
+	return p.successCount+p.errorCount == p.length()
 }
 
 // recordCompletedPages records stats for each page that is now fully done and advances the
@@ -146,26 +166,62 @@ func fetchPage(
 		}, nil
 	}
 
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize:      int32(pageSize),
-		NextPageToken: pageToken,
-		Query:         config.adjustedQuery,
-	})
-	if err != nil {
-		var invalidArgErr *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgErr) {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+	// Terminate/Cancel/Delete Activities batch types operate on activity executions,
+	// so they are listed via ListActivityExecutions; all other batch types list workflow executions.
+	var executionInfos []*workflowpb.WorkflowExecutionInfo
+	var archetypeExecutionInfo []*commonpb.Execution
+	var nextPageToken []byte
+	if isActivityBatchType(config.batchType) {
+		resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
+			&workflowservice.ListActivityExecutionsRequest{
+				Namespace:     config.namespace,
+				PageSize:      int32(pageSize),
+				NextPageToken: pageToken,
+				Query:         config.adjustedQuery,
+			})
+		if err != nil {
+			var invalidArgErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgErr) {
+				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+			}
+			return nil, err
 		}
-		return nil, err
+
+		archetypeExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
+		for _, activityExecution := range resp.GetExecutions() {
+			archetypeExecutionInfo = append(archetypeExecutionInfo, &commonpb.Execution{
+				Archetype:  enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: activityExecution.GetActivityId(),
+				RunId:      activityExecution.GetRunId(),
+			})
+		}
+		nextPageToken = resp.NextPageToken
+	} else {
+		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			PageSize:      int32(pageSize),
+			NextPageToken: pageToken,
+			Query:         config.adjustedQuery,
+		})
+		if err != nil {
+			var invalidArgErr *serviceerror.InvalidArgument
+			if errors.As(err, &invalidArgErr) {
+				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+			}
+			return nil, err
+		}
+
+		executionInfos = make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
+		for _, wf := range resp.Executions {
+			executionInfos = append(executionInfos, wf)
+		}
+		nextPageToken = resp.NextPageToken
 	}
 
-	executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
-	executionInfos = append(executionInfos, resp.Executions...)
-
 	return &page{
-		executionInfos: executionInfos,
-		nextPageToken:  resp.NextPageToken,
-		pageNumber:     pageNumber,
+		executionInfos:         executionInfos,
+		archetypeExecutionInfo: archetypeExecutionInfo,
+		nextPageToken:          nextPageToken,
+		pageNumber:             pageNumber,
 	}, nil
 }
 
@@ -238,7 +294,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 		// waits on results instead of offering empty tasks.
 		var submitCh chan task
 		var nextTask task
-		if p.submittedCount < len(p.executionInfos) {
+		if p.submittedCount < p.length() {
 			submitCh = taskCh
 			nextTask = p.nextTask()
 		}
@@ -352,19 +408,38 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if startOver {
 		estimateCount := int64(len(executions))
 		if len(visibilityQuery) > 0 {
-			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-				Query: visibilityQuery,
-			})
+			var count int64
+			var err error
+			if isActivityBatchType(batchParams.BatchType) {
+				// Activity batch types operate on activity executions, which are
+				// counted via CountActivityExecutions rather than CountWorkflow.
+				var resp *workflowservice.CountActivityExecutionsResponse
+				resp, err = sdkClient.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: ns,
+					Query:     visibilityQuery,
+				})
+				if err == nil {
+					count = resp.GetCount()
+				}
+			} else {
+				var resp *workflowservice.CountWorkflowExecutionsResponse
+				resp, err = sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+					Query: visibilityQuery,
+				})
+				if err == nil {
+					count = resp.GetCount()
+				}
+			}
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
-				logger.Error("Failed to get estimate workflow count", tag.Error(err))
+				logger.Error("Failed to get estimate execution count", tag.Error(err))
 				var invalidArgErr *serviceerror.InvalidArgument
 				if errors.As(err, &invalidArgErr) {
 					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
 				}
 				return HeartBeatDetails{}, err
 			}
-			estimateCount = resp.GetCount()
+			estimateCount = count
 		}
 		hbd.TotalEstimate = estimateCount
 	}
@@ -373,6 +448,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	config := batchProcessorConfig{
 		namespace:         ns,
 		adjustedQuery:     visibilityQuery,
+		batchType:         batchParams.BatchType,
 		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
 		initialPageToken:  hbd.PageToken,
 		initialExecutions: executions,
@@ -464,7 +540,7 @@ func (a *activities) startTaskProcessor(
 				return
 			}
 
-			if task.executionInfo == nil {
+			if task.executionInfo == nil && task.archetypeExecution == nil {
 				continue
 			}
 
@@ -499,6 +575,40 @@ func (a *activities) processSingleTask(
 	}
 
 	switch operation := batchOperation.Request.Operation.(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
+		err = processArchetypeTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err = frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: execution.GetBusinessId(),
+					RunId:      execution.GetRunId(),
+					Identity:   operation.TerminateActivitiesOperation.GetIdentity(),
+					Reason:     operation.TerminateActivitiesOperation.GetReason(),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation:
+		err = processArchetypeTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err = frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: execution.GetBusinessId(),
+					RunId:      execution.GetRunId(),
+				})
+				return err
+			})
+	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		err = processArchetypeTask(ctx, limiter, task,
+			func(execution *commonpb.Execution) error {
+				_, err = frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+					Namespace:  namespace,
+					ActivityId: execution.GetBusinessId(),
+					RunId:      execution.GetRunId(),
+					Identity:   operation.CancelActivitiesOperation.GetIdentity(),
+					Reason:     operation.CancelActivitiesOperation.GetReason(),
+				})
+				return err
+			})
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
@@ -781,6 +891,45 @@ func processTask(
 	}
 
 	return nil
+}
+
+// processArchetypeTask is the activity-execution counterpart of processTask,
+// used by the terminate/cancel/delete activity batch operations whose tasks
+// carry an activity (archetype) execution rather than a workflow execution.
+func processArchetypeTask(
+	ctx context.Context,
+	limiter quotas.RequestRateLimiter,
+	task task,
+	procFn func(*commonpb.Execution) error,
+) error {
+	err := limiter.Wait(ctx, batchQuotaRequest)
+	if err != nil {
+		return err
+	}
+
+	err = procFn(task.archetypeExecution)
+	if err != nil {
+		// NotFound means the activity is not running or already deleted
+		if !common.IsNotFoundError(err) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// isActivityBatchType reports whether the batch operation type operates on
+// activity executions (listed via ListActivityExecutions) rather than workflow
+// executions.
+func isActivityBatchType(batchType enumspb.BatchOperationType) bool {
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		return true
+	default:
+		return false
+	}
 }
 
 func isDone(ctx context.Context) bool {
