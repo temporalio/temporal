@@ -344,14 +344,14 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 //
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
-// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+// - For global hooks: requires a dedicated cluster, except for suite-scoped legacy clusters.
 func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")

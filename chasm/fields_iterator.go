@@ -106,8 +106,8 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 		if valueT.Kind() == reflect.Pointer {
 			valueT = valueT.Elem()
 		}
-		for i := range valueT.NumField() {
-			fieldT := valueT.Field(i).Type
+		for field := range valueT.Fields() {
+			fieldT := field.Type
 			if fieldT == UnimplementedComponentT {
 				continue
 			}
@@ -117,7 +117,7 @@ func unmanagedFieldsOf(valueT reflect.Type) iter.Seq[fieldInfo] {
 				continue
 			}
 
-			fieldN := fieldName(valueT.Field(i))
+			fieldN := fieldName(field)
 			prefix := genericTypePrefix(fieldT)
 			switch prefix {
 			case chasmFieldTypePrefix,
@@ -167,8 +167,8 @@ func hasVisibilityField(componentT reflect.Type) bool {
 	if componentT.Kind() != reflect.Struct {
 		return false
 	}
-	for i := range componentT.NumField() {
-		fieldT := componentT.Field(i).Type
+	for field := range componentT.Fields() {
+		fieldT := field.Type
 		if fieldT == visibilityFieldT {
 			return true
 		}

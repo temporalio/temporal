@@ -14,8 +14,8 @@ func TestRegistryBuildCatalog_Ok(t *testing.T) {
 	r.register(newMetricDefinition("foo", WithDescription("foo description")))
 	r.register(newMetricDefinition("bar", WithDescription("bar description")))
 	c, err := r.buildCatalog()
-	require.Nil(t, err)
-	require.Equal(t, 2, len(c))
+	require.NoError(t, err)
+	require.Len(t, c, 2)
 	require.Equal(t, "foo description", c["foo"].description)
 	require.Equal(t, "bar description", c["bar"].description)
 }

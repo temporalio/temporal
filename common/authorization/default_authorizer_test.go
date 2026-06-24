@@ -173,7 +173,7 @@ func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid 
 		s.NoError(err)
 		s.NotNil(auth)
 		t := reflect.TypeOf(auth)
-		s.True(t == authorizerType)
+		s.Equal(t, authorizerType)
 	} else {
 		s.Error(err)
 		s.Nil(auth)
