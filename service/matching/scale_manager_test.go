@@ -17,12 +17,14 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -78,10 +80,18 @@ func (s *ScaleManagerSuite) TearDownTest() {
 // startManager builds and starts the scaleManager. Call this after configuring
 // EXPECTs and tweaking s.settings. Pass initial=nil to start with no prior state.
 func (s *ScaleManagerSuite) startManager(writePartitions int, initial *persistencespb.PartitionScaleState) {
+	s.startManagerWithLogger(log.NewTestLogger(), writePartitions, initial)
+}
+
+func (s *ScaleManagerSuite) startManagerWithLogger(
+	logger log.Logger,
+	writePartitions int,
+	initial *persistencespb.PartitionScaleState,
+) {
 	s.sm = newScaleManager(
 		context.Background(),
 		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		log.NewTestLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 		s.userData,
 		s.matching,
@@ -125,6 +135,30 @@ func assertNoRecv[T any](s *ScaleManagerSuite, ch <-chan T, d time.Duration, msg
 		s.FailNow("unexpected event", msg)
 	case <-time.After(d):
 	}
+}
+
+type recordingLogger struct {
+	shadowLogs chan struct{}
+}
+
+func (l *recordingLogger) Debug(string, ...tag.Tag) {}
+func (l *recordingLogger) Info(msg string, _ ...tag.Tag) {
+	if msg != "new target" {
+		return
+	}
+	select {
+	case l.shadowLogs <- struct{}{}:
+	default:
+	}
+}
+func (l *recordingLogger) Warn(string, ...tag.Tag)   {}
+func (l *recordingLogger) Error(string, ...tag.Tag)  {}
+func (l *recordingLogger) DPanic(string, ...tag.Tag) {}
+func (l *recordingLogger) Panic(msg string, _ ...tag.Tag) {
+	panic(msg)
+}
+func (l *recordingLogger) Fatal(msg string, _ ...tag.Tag) {
+	panic(msg)
 }
 
 // --- tests ---
@@ -205,6 +239,216 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	info := waitRecv(s, scaleInfos, "no ephemeral data update")
 	s.Equal(int32(4), info.Read)
 	s.Equal(int32(2), info.Write)
+}
+
+// TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
+// <= 0 uses the normal apply path.
+func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
+	s.settings.ShadowModeLogInterval = -time.Second
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NewTarget: 2})
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 1)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info })
+
+	s.startManager(4, nil)
+
+	s.sm.AddedTasks(1)
+	state := waitRecv(s, dbWrites, "no db write")
+	s.Equal(int32(2), state.Target)
+	info := waitRecv(s, scaleInfos, "no ephemeral data update")
+	s.Equal(int32(4), info.Read)
+	s.Equal(int32(2), info.Write)
+}
+
+// TestShadowDecisionDoesNotPersistOrPush verifies that shadow mode observes the
+// scaler decision without applying it.
+func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
+	s.settings.ShadowModeLogInterval = time.Minute
+
+	inputs := make(chan PartitionScalerInput, 1)
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Do(func(in PartitionScalerInput) { inputs <- in }).
+		Return(PartitionScalerDecision{NewTarget: 2})
+
+	// Start publishes the initial real state once. The shadow decision must not
+	// publish another state or write to persistence.
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 1})
+
+	s.sm.AddedTasks(1)
+	in := waitRecv(s, inputs, "shadow scaler call missing")
+	s.Equal(1, in.CurrentTarget)
+	s.Equal(int32(1), s.sm.scaleState.GetTarget())
+}
+
+// TestShadowModeUsesRealStateOnEveryCall verifies that shadow mode does not feed
+// hypothetical target or private state back into later scaler calls.
+func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryCall() {
+	s.settings.ShadowModeLogInterval = time.Minute
+	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
+	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
+	priv2 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-2"))
+
+	inputs := make(chan PartitionScalerInput, 2)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2, PrivateState: priv1}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3, PrivateState: priv2}),
+	)
+
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 1, PrivateScalerState: realPriv})
+
+	s.sm.AddedTasks(1)
+	in1 := waitRecv(s, inputs, "first shadow call missing")
+	s.Equal(1, in1.CurrentTarget)
+	s.ProtoEqual(realPriv, in1.PrivateState)
+
+	s.sm.AddedTasks(1)
+	in2 := waitRecv(s, inputs, "second shadow call missing")
+	s.Equal(1, in2.CurrentTarget)
+	s.ProtoEqual(realPriv, in2.PrivateState)
+	s.ProtoEqual(realPriv, s.sm.scaleState.GetPrivateScalerState())
+}
+
+func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
+	s.settings.ShadowModeLogInterval = time.Minute
+
+	logger := &recordingLogger{shadowLogs: make(chan struct{}, 1)}
+	inputs := make(chan PartitionScalerInput, 1)
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Do(func(in PartitionScalerInput) { inputs <- in }).
+		Return(PartitionScalerDecision{NoChange: true})
+
+	s.startManagerWithLogger(logger, 4, nil)
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "shadow scaler call missing")
+	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "NoChange decision should not log")
+}
+
+// TestShadowLoggingCadence verifies that shadow decisions are logged no more
+// frequently than the configured cadence and unchanged decisions are not logged.
+func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
+	s.settings.ShadowModeLogInterval = time.Minute
+
+	logger := &recordingLogger{shadowLogs: make(chan struct{}, 4)}
+	inputs := make(chan PartitionScalerInput, 4)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+	)
+
+	s.startManagerWithLogger(logger, 4, nil)
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "first shadow call missing")
+	waitRecv(s, logger.shadowLogs, "first shadow log missing")
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "second shadow call missing")
+	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "shadow log repeated before cadence")
+
+	s.timeSource.Advance(time.Minute)
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "third shadow call missing")
+	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "fourth shadow call missing")
+	waitRecv(s, logger.shadowLogs, "second shadow log missing")
+}
+
+func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
+	s.settings.ShadowModeLogInterval = time.Minute
+
+	logger := &recordingLogger{shadowLogs: make(chan struct{}, 1)}
+	inputs := make(chan PartitionScalerInput, 1)
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Do(func(in PartitionScalerInput) { inputs <- in }).
+		Return(PartitionScalerDecision{NewTarget: 0})
+
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+
+	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "shadow scaler call missing")
+	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "disabled scaler should not log")
+}
+
+// TestShadowModeSkipsDrain verifies that shadow mode does not change real read
+// partitions by clearing backlog bits.
+func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
+	s.settings.ShadowModeLogInterval = time.Minute
+	s.settings.BackgroundInterval = 50 * time.Millisecond
+	s.settings.DrainBufferTime = 0
+
+	inputs := make(chan PartitionScalerInput, 1)
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Do(func(in PartitionScalerInput) { inputs <- in }).
+		Return(PartitionScalerDecision{NoChange: true})
+
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:        2,
+		MaxTarget:     4,
+		TargetVersion: 0,
+		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
+	}
+	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
+		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
+		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+			"v1": {
+				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
+					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
+						{BacklogDrained: true},
+					},
+				},
+			},
+		},
+	}
+	describeCalls := make(chan struct{}, 4)
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		Do(func(context.Context, *matchingservice.DescribeTaskQueuePartitionRequest, ...grpc.CallOption) {
+			describeCalls <- struct{}{}
+		}).
+		Return(drainedResp, nil).
+		Times(4)
+
+	s.startManager(4, initial)
+	s.fireBackgroundTimer()
+	waitRecv(s, inputs, "timer did not call scaler")
+	for range 4 {
+		waitRecv(s, describeCalls, "shadow drain did not describe read partition")
+	}
+
+	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
 }
 
 // TestNoChangeDecisionSkipsWrite covers two skip paths: explicit NoChange, and
