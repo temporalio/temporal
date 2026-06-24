@@ -109,6 +109,8 @@ func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+
 	err := res.err()
 
 	// We can handle some transient errors by just putting the task back in the matcher to
@@ -137,7 +139,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.Data.CreateTime, -1)
 
 	numAcked := tr.ackTaskLocked(task.event.TaskId)
 
@@ -249,6 +251,7 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		if IsTaskExpired(t) {
 			// task expired when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 			return true
 		}
 
@@ -298,7 +301,7 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 	}
 
 	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(nil, false)
+		task.finish(taskFinishResult{})
 	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
@@ -347,12 +350,12 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
 			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 			} else if retry {
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
 				return err

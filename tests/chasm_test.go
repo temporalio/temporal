@@ -69,15 +69,8 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
 	)
 
-	chasmEngine, err := env.GetTestCluster().Host().ChasmEngine()
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(env.Context())
 	require.NoError(t, err)
-	require.NotNil(t, chasmEngine)
-
-	chasmVisibilityMgr := env.GetTestCluster().Host().ChasmVisibilityManager()
-	require.NotNil(t, chasmVisibilityMgr)
-
-	chasmCtx := chasm.NewEngineContext(env.Context(), chasmEngine)
-	chasmCtx = chasm.NewVisibilityManagerContext(chasmCtx, chasmVisibilityMgr)
 
 	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}
 }
@@ -87,7 +80,6 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 // TODO: Remove once we have fully migrated to the unified query converter.
 func (s *ChasmSuite) forBothConverters(fn func(*ChasmSuite, chasmTestEnv)) {
 	for _, unified := range []bool{false, true} {
-		unified := unified
 		s.Run(fmt.Sprintf("unified=%v", unified), func(ss *ChasmSuite) {
 			fn(ss, newChasmTestEnv(ss.T(), unified))
 		})

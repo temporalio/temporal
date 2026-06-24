@@ -30,7 +30,7 @@ func commitOrder(ctx context.Context, oldSHA string) ([]string, error) {
 	}
 
 	var commits []string
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			commits = append(commits, line)

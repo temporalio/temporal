@@ -885,7 +885,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.NoError(t, err)
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
-		protorequire.ProtoSliceEqual(t, expected, descResp.GetInfo().GetLinks())
+		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
+		protorequire.ProtoElementsMatch(t, expected, descResp.GetInfo().GetLinks())
 	})
 
 	t.Run("AttachLinksOnConflictStoresRawInput", func(t *testing.T) {

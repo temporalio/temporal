@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -215,7 +214,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		Identity:                 fmt.Sprintf("temporal-scheduler-migration-%s-%s", result.namespace, result.scheduleID),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		Memo:                     &commonpb.Memo{Fields: maps.Clone(result.memo)},
+		Memo:                     &commonpb.Memo{Fields: result.memo},
 		SearchAttributes:         sa,
 		Priority:                 &commonpb.Priority{},
 	}

@@ -71,7 +71,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.MatchingDeploymentWorkflowVersion.Key(): int(s.workflowVersion),
 
 		// Make sure we don't hit the rate limiter in tests
@@ -384,7 +384,7 @@ func (s *DeploymentVersionSuite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
-	return strings.Replace(short, ".", "|", -1)
+	return strings.ReplaceAll(short, ".", "|")
 }
 
 //nolint:forbidigo

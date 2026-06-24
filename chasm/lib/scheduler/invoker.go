@@ -51,7 +51,7 @@ func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerSta
 func (i *Invoker) EnqueueBufferedStarts(ctx chasm.MutableContext, starts []*schedulespb.BufferedStart) {
 	i.BufferedStarts = append(i.BufferedStarts, starts...)
 	if len(starts) > 0 {
-		i.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("enqueued %d buffered start(s)", len(starts)))
+		i.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("enqueued %d buffered start(s)", len(starts)))
 	}
 	i.addTasks(ctx)
 }
@@ -111,7 +111,7 @@ func (i *Invoker) recordProcessBufferResult(ctx chasm.MutableContext, result *pr
 	}
 
 	if readiedStarts > 0 || deferredStarts > 0 {
-		i.EventLog.Get(ctx).LogEvent(ctx,
+		i.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("recordProcessBufferResult readied %d starts, deferred %d starts", readiedStarts, deferredStarts))
 	}
 
@@ -217,7 +217,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		}
 	}
 
-	i.EventLog.Get(ctx).LogEvent(ctx,
+	i.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
 			newlyStarted,
 			removedStarts,
@@ -248,7 +248,7 @@ func (i *Invoker) recordCompletedAction(
 	completed *schedulespb.CompletedResult,
 	requestID string,
 ) (scheduleTime time.Time) {
-	i.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("recording completed action: %s", requestID))
+	i.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("recording completed action: %s", requestID))
 
 	// Find the BufferedStart and mark it as completed.
 	for _, start := range i.BufferedStarts {
@@ -297,12 +297,12 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	// If we have Attempt = 0 starts, generate a ProcessBufferTask immediately. If we
 	// have starts that are backing off, add a timer task for the earliest backoff time.
 	if i.hasUnprocessedStarts() {
-		i.EventLog.Get(ctx).LogEvent(ctx, "scheduled processBufferTask immediately")
+		i.getOrCreateEventLog(ctx).LogEvent(ctx, "scheduled processBufferTask immediately")
 		ctx.AddTask(i, chasm.TaskAttributes{
 			ScheduledTime: chasm.TaskScheduledTimeImmediate,
 		}, &schedulerpb.InvokerProcessBufferTask{})
 	} else if deadline := i.nextBackoffDeadline(); !deadline.IsZero() {
-		i.EventLog.Get(ctx).LogEvent(ctx,
+		i.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("scheduled processBufferTask for %s", deadline.Format(time.RFC3339)))
 		ctx.AddTask(i, chasm.TaskAttributes{
 			ScheduledTime: deadline,
@@ -314,7 +314,7 @@ func (i *Invoker) addTasks(ctx chasm.MutableContext) {
 	if len(i.GetCancelWorkflows()) > 0 ||
 		len(i.GetTerminateWorkflows()) > 0 ||
 		len(i.getEligibleBufferedStarts()) > 0 {
-		i.EventLog.Get(ctx).LogEvent(ctx, "scheduled executeTask")
+		i.getOrCreateEventLog(ctx).LogEvent(ctx, "scheduled executeTask")
 		ctx.AddTask(i, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	}
 }

@@ -704,7 +704,7 @@ func assertStructPointer(t reflect.Type) error {
 		return nil
 	}
 
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
 		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
@@ -1619,7 +1619,7 @@ func (n *Node) AddTask(
 		return
 	}
 
-	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
+	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})
@@ -3138,7 +3138,7 @@ func deserializeTask(
 	}
 
 	taskGoType := registrableTask.goType
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 	}
 	taskValue = reflect.New(taskGoType)
@@ -3194,7 +3194,7 @@ func serializeTask(
 	taskGoType := registrableTask.goType
 
 	// Handle pointer to struct.
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 		taskValue = taskValue.Elem()
 	}

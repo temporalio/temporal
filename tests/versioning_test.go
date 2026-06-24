@@ -103,7 +103,6 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 
 func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcore.TestEnv, *VersioningIntegSuite)) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		behavior := behavior
 		s.Run(behavior.Name(), func(s *VersioningIntegSuite) {
 			env := s.setupEnv(behavior.Options()...)
 			behavior.InjectHooks(env)
@@ -2251,7 +2250,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	s.validateWorkflowBuildIds(env, run.GetID(), run.GetRunID(), versions[9], true, versions[9], "", versions[:9])
 
 	activityPerVersion := make(map[string]int)
-	for _, v := range strings.Split(out, " ") {
+	for v := range strings.SplitSeq(out, " ") {
 		activityPerVersion[v]++
 	}
 

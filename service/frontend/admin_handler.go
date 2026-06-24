@@ -2596,10 +2596,7 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	case err != nil:
 		return nil, err
 	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime))
-		if sentinelIdleTimeRemaining < 0 {
-			sentinelIdleTimeRemaining = 0
-		}
+		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),
