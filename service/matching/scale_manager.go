@@ -248,7 +248,8 @@ func (sm *scaleManager) callScaler() {
 		prevTarget: prevTarget,
 		maxTarget:  newState.MaxTarget,
 	}
-	shadowMode := sm.shadowModeEnabled()
+	settings := sm.settings()
+	shadowMode := sm.shadowModeEnabled(settings)
 	if shadowMode {
 		if sm.timeSource.Now().Before(sm.nextShadowScaleLog) || // too early
 			sm.prevShadowScaleInfo.Equal(logInfo) || // only log new changes
@@ -258,7 +259,7 @@ func (sm *scaleManager) callScaler() {
 				WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 			return
 		}
-		sm.nextShadowScaleLog = sm.timeSource.Now().Add(sm.settings().ShadowModeLogInterval)
+		sm.nextShadowScaleLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowScaleInfo = logInfo
 	} else {
 		// we must successfully write to the db before making new state active
@@ -270,7 +271,7 @@ func (sm *scaleManager) callScaler() {
 		sm.setState(newState)
 	}
 
-	cooldown := time.Duration(float32(time.Second) / sm.settings().MaxRate)
+	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
 	sm.logger.Info("new target",
@@ -282,8 +283,8 @@ func (sm *scaleManager) callScaler() {
 		WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
-func (sm *scaleManager) shadowModeEnabled() bool {
-	return sm.settings().ShadowModeLogInterval > 0
+func (sm *scaleManager) shadowModeEnabled(settings dynamicconfig.PartitionScaleManagerSettings) bool {
+	return settings.ShadowModeLogInterval > 0
 }
 
 func (sm *scaleManager) scalerIsDynamic(target int32) bool {
@@ -380,14 +381,15 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 		prevRead:          info.Read,
 		drainedPartitions: toClear,
 	}
-	shadowMode := sm.shadowModeEnabled()
+	settings := sm.settings()
+	shadowMode := sm.shadowModeEnabled(settings)
 	if shadowMode {
 		if sm.timeSource.Now().Before(sm.nextShadowDrainLog) || // too early
 			sm.prevShadowDrainInfo.Equal(logInfo) || // only log new changes
 			len(toClear) == 0 { // only log if partitions were cleared
 			return
 		}
-		sm.nextShadowDrainLog = sm.timeSource.Now().Add(sm.settings().ShadowModeLogInterval)
+		sm.nextShadowDrainLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowDrainInfo = logInfo
 	} else {
 		// sync to db (must be persisted before taking effect)
