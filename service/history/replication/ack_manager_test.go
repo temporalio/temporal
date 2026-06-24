@@ -541,7 +541,7 @@ func (s *ackManagerSuite) TestNotifyNewTasks_BroadcastsToSubscribers() {
 }
 
 func (s *ackManagerSuite) TestNotifyNewTasks_Empty() {
-	s.replicationAckManager.maxTaskID = util.Ptr(int64(50))
+	s.replicationAckManager.maxTaskID = new(int64(50))
 	s.replicationAckManager.NotifyNewTasks(nil)
 	// No change since there are no tasks.
 	s.Equal(int64(50), *s.replicationAckManager.maxTaskID)

@@ -143,10 +143,10 @@ func (s *batchedTaskSuite) TestAddTask_TasksAreBatchableAndCanBatch_ReturnTrue()
 	s.True(result)
 
 	// verify individual tasks
-	s.Equal(batchResult, batchedTestTask.batchedTask)
+	s.Same(batchResult, batchedTestTask.batchedTask)
 	s.Len(batchedTestTask.individualTasks, 2)
-	s.Equal(existing, batchedTestTask.individualTasks[0])
-	s.Equal(incoming, batchedTestTask.individualTasks[1])
+	s.Same(existing, batchedTestTask.individualTasks[0])
+	s.Same(incoming, batchedTestTask.individualTasks[1])
 }
 
 func (s *batchedTaskSuite) TestAddTask_BatchWithFails_ReturnFalse() {
