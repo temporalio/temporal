@@ -307,20 +307,26 @@ var (
 	}
 
 	// Per-exec backoff owns the per-exec retry; MaximumAttempts lets a
-	// transient activity failure recover via heartbeat-resume without
-	// losing inject progress.
+	// transient activity failure (or a worker lost to a deploy) recover via
+	// heartbeat-resume without losing inject or verify progress.
 	//
 	// 10 attempts is sized for fleet rollouts: a rolling deploy of the
-	// activity workers can burn several attempts per batch (each shutdown
-	// surfaces as a retryable WorkerShutdown error). 3 was tight enough
-	// that two unlucky deploys could exhaust the budget.
+	// activity workers can burn several attempts per batch (a lost worker is
+	// detected once its heartbeats lapse and the attempt is retried
+	// elsewhere). 3 was tight enough that two unlucky deploys could exhaust
+	// the budget.
 	shardedReplicateBatchRetryPolicy = &temporal.RetryPolicy{
 		MaximumAttempts: 10,
 	}
 	shardedReplicateBatchActivityOptions = workflow.ActivityOptions{
 		StartToCloseTimeout: 24 * time.Hour,
-		HeartbeatTimeout:    time.Minute,
-		RetryPolicy:         shardedReplicateBatchRetryPolicy,
+		// 30s rather than the usual minute: a worker lost to a deploy or crash
+		// is only detected once its heartbeats lapse, and until then the shards
+		// this batch holds are stalled. The verify loop heartbeats per exec, so
+		// 30s sits comfortably above the real inter-heartbeat interval and won't
+		// false-positive on a slow pass.
+		HeartbeatTimeout: 30 * time.Second,
+		RetryPolicy:      shardedReplicateBatchRetryPolicy,
 	}
 )
 

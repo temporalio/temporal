@@ -371,6 +371,18 @@ type replicateBatchHeartbeat struct {
 	NextInjectIdx int
 	// InjectDone marks the inject phase as complete; retries skip inject.
 	InjectDone bool
+
+	// ReleasedShards lists shards already signal-released to the workflow.
+	// Carried so a retried activity neither re-verifies their (already
+	// applied) execs nor re-sends a ReleaseShards signal the workflow has
+	// already acted on. Nil during inject.
+	ReleasedShards []int32
+	// VerifiedExecs lists the flatten-order indices of execs verified on
+	// shards that are not yet released, letting a retry resume verify in
+	// place rather than re-checking every exec. Execs on ReleasedShards are
+	// implicitly verified and omitted here to keep the payload small. Nil
+	// during inject.
+	VerifiedExecs []int
 }
 
 // releaseShardsPayload is the body of the mid-flight ReleaseShards signal

@@ -51,10 +51,13 @@ func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTarget
 }
 
 // ReplicateBatch is the per-batch activity body for the sharded force
-// replication workflow. Runs inject (heartbeat-resumable via
-// NextInjectIdx/InjectDone) then verify, signal-releasing completed
+// replication workflow. Runs inject then verify, signal-releasing completed
 // shards mid-flight as their cumulative idle cost crosses IdleShardCost.
-// Returns {CompletedShards, VerifiedCount} on success.
+// Returns {CompletedShards, VerifiedCount} on success. Both phases are
+// heartbeat-resumable — inject via NextInjectIdx/InjectDone, verify via the
+// ReleasedShards/VerifiedExecs progress snapshot — so a retry (e.g. a worker
+// lost to a deploy and detected via the heartbeat timeout) resumes in place
+// rather than re-injecting or re-verifying completed work.
 func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 	// Flatten once so per-exec bookkeeping (verified[], attempts[],
 	// nextRetryAt[]) can stay index-based.
@@ -100,7 +103,7 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 		return replicateBatchResult{}, fmt.Errorf("get remote admin client for %s: %w", req.TargetClusterName, err)
 	}
 
-	return a.runVerifyPhase(ctx, req, execs, execCount, remoteAdminClient, ns)
+	return a.runVerifyPhase(ctx, req, execs, execCount, remoteAdminClient, ns, hb)
 }
 
 // runVerifyPhase is the verify-phase loop body of ReplicateBatch. It
@@ -114,30 +117,17 @@ func (a *activities) runVerifyPhase(
 	execCount int,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
+	hb replicateBatchHeartbeat,
 ) (replicateBatchResult, error) {
-	verified := make([]bool, execCount)
+	// Seed from the resumed heartbeat so a retried attempt (e.g. a worker lost
+	// to a deploy, detected via the heartbeat timeout) picks up where the last
+	// left off rather than re-verifying every exec and re-releasing shards the
+	// workflow has already freed. A fresh attempt starts from a zero hb.
+	verified, doneCount, shards := seedVerifyState(execs, hb)
 	attempts := make([]int, execCount)
 	nextRetryAt := make([]time.Time, execCount)
-	doneCount := 0
-
-	shards := newShardVerifyTracker(execs)
 
 	for {
-		// Worker shutdown short-circuits with a retryable error so the
-		// SDK reschedules on another worker. Returning here avoids the
-		// ~HeartbeatTimeout wait that silent worker death would incur
-		// before the server retries the attempt. Inject is already
-		// heartbeat-preserved (InjectDone), so retry skips it; verify
-		// re-runs from scratch but DMS reads are idempotent.
-		select {
-		case <-activity.GetWorkerStopChannel(ctx):
-			return replicateBatchResult{}, temporal.NewApplicationErrorWithOptions(
-				"worker shutdown", "WorkerShutdown",
-				temporal.ApplicationErrorOptions{NextRetryDelay: time.Second},
-			)
-		default:
-		}
-
 		passDelta, minNextRetry, vErr := a.runVerifyPass(
 			ctx, remoteAdminClient, ns, req, execs, verified, attempts, nextRetryAt, shards)
 		doneCount += passDelta
@@ -145,7 +135,7 @@ func (a *activities) runVerifyPhase(
 			return replicateBatchResult{}, vErr
 		}
 
-		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
+		activity.RecordHeartbeat(ctx, verifyHeartbeat(execs, verified, shards))
 
 		if done, result, err := a.evaluateVerifyIteration(
 			ctx, req, execs, verified, shards, doneCount, execCount); err != nil {
@@ -155,6 +145,68 @@ func (a *activities) runVerifyPhase(
 		}
 
 		waitNextTick(ctx, minNextRetry)
+	}
+}
+
+// seedVerifyState reconstructs verify-phase bookkeeping from a resumed
+// heartbeat. Execs on already-released shards are marked verified (they were
+// all applied before the shard was released) and the shards re-flagged
+// released, so the resumed attempt neither re-verifies them nor re-signals a
+// release the workflow already acted on; remaining verified execs are replayed
+// from hb.VerifiedExecs. The tracker's lastProgress is seeded at now (via
+// newShardVerifyTracker), so the no-progress backstop measures from this
+// attempt's start — resumed work gets the benefit of the doubt.
+func seedVerifyState(execs []*shardedExecutionInfo, hb replicateBatchHeartbeat) ([]bool, int, shardVerifyTracker) {
+	verified := make([]bool, len(execs))
+	shards := newShardVerifyTracker(execs)
+	now := time.Now()
+	doneCount := 0
+
+	released := make(map[int32]bool, len(hb.ReleasedShards))
+	for _, sh := range hb.ReleasedShards {
+		released[sh] = true
+	}
+	for i, ex := range execs {
+		if released[ex.Shard] {
+			verified[i] = true
+			doneCount++
+			shards.recordVerified(ex.Shard, now)
+		}
+	}
+	for _, i := range hb.VerifiedExecs {
+		if i < 0 || i >= len(execs) || verified[i] {
+			continue
+		}
+		verified[i] = true
+		doneCount++
+		shards.recordVerified(execs[i].Shard, now)
+	}
+	// markReleased after recording so the released shards land with
+	// pending==0, released==true, and doneAt cleared (no idle-cost accrual).
+	shards.markReleased(hb.ReleasedShards)
+	return verified, doneCount, shards
+}
+
+// verifyHeartbeat snapshots verify progress for the activity heartbeat so a
+// retry can resume via seedVerifyState. Released shards are recorded by ID;
+// their execs are implicitly verified and omitted from VerifiedExecs to keep
+// the payload compact.
+func verifyHeartbeat(execs []*shardedExecutionInfo, verified []bool, shards shardVerifyTracker) replicateBatchHeartbeat {
+	released := shards.releasedShards()
+	releasedSet := make(map[int32]bool, len(released))
+	for _, sh := range released {
+		releasedSet[sh] = true
+	}
+	var verifiedExecs []int
+	for i, ex := range execs {
+		if verified[i] && !releasedSet[ex.Shard] {
+			verifiedExecs = append(verifiedExecs, i)
+		}
+	}
+	return replicateBatchHeartbeat{
+		InjectDone:     true,
+		ReleasedShards: released,
+		VerifiedExecs:  verifiedExecs,
 	}
 }
 
@@ -261,7 +313,7 @@ func (a *activities) runVerifyPass(
 			minNextRetry = earliest(minNextRetry, nextRetryAt[i])
 		}
 
-		activity.RecordHeartbeat(ctx, replicateBatchHeartbeat{InjectDone: true})
+		activity.RecordHeartbeat(ctx, verifyHeartbeat(execs, verified, shards))
 	}
 	return verifiedDelta, minNextRetry, nil
 }
@@ -499,6 +551,14 @@ func (t shardVerifyTracker) awaitingRelease() []int32 {
 func (t shardVerifyTracker) allCompleted() []int32 {
 	return t.completedShards(func(sv shardVerify) bool {
 		return sv.released || !sv.doneAt.IsZero()
+	})
+}
+
+// releasedShards returns the shards already signal-released this run, ascending
+// so the heartbeat snapshot is deterministic across replays.
+func (t shardVerifyTracker) releasedShards() []int32 {
+	return t.completedShards(func(sv shardVerify) bool {
+		return sv.released
 	})
 }
 

@@ -152,6 +152,103 @@ func TestNewShardVerifyTracker_SeedsAllShards(t *testing.T) {
 	require.False(t, sv1.lastProgress.IsZero(), "lastProgress must be seeded")
 }
 
+// seedTestExecs builds a fixed five-exec flattened slice spanning shards
+// 0 (indices 0,1), 1 (indices 2,3), and 2 (index 4) — the layout shared by
+// the seed/heartbeat round-trip tests below.
+func seedTestExecs() []*shardedExecutionInfo {
+	return []*shardedExecutionInfo{
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-a", RunID: "r0"}, Shard: 0},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-b", RunID: "r1"}, Shard: 0},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-c", RunID: "r2"}, Shard: 1},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-d", RunID: "r3"}, Shard: 1},
+		{ExecutionInfo: &ExecutionInfo{BusinessID: "wf-e", RunID: "r4"}, Shard: 2},
+	}
+}
+
+// TestSeedVerifyState_Fresh: a zero heartbeat (first attempt) yields nothing
+// verified and a fresh tracker with full pending counts.
+func TestSeedVerifyState_Fresh(t *testing.T) {
+	execs := seedTestExecs()
+	verified, doneCount, shards := seedVerifyState(execs, replicateBatchHeartbeat{})
+
+	require.Equal(t, []bool{false, false, false, false, false}, verified)
+	require.Equal(t, 0, doneCount)
+	require.Empty(t, shards.releasedShards())
+	require.Equal(t, 2, shards[0].pending)
+	require.Equal(t, 2, shards[1].pending)
+	require.Equal(t, 1, shards[2].pending)
+}
+
+// TestSeedVerifyState_ResumesReleasedAndVerified: a resumed heartbeat marks
+// every exec on a released shard verified (without listing them), replays the
+// listed per-exec progress, and flags the released shard so it is neither
+// re-verified nor re-released.
+func TestSeedVerifyState_ResumesReleasedAndVerified(t *testing.T) {
+	execs := seedTestExecs()
+	hb := replicateBatchHeartbeat{
+		InjectDone:     true,
+		ReleasedShards: []int32{0},
+		VerifiedExecs:  []int{2},
+	}
+
+	verified, doneCount, shards := seedVerifyState(execs, hb)
+
+	require.Equal(t, []bool{true, true, true, false, false}, verified)
+	require.Equal(t, 3, doneCount)
+
+	// Shard 0 is released: pending drained, released flagged, doneAt cleared so
+	// it accrues no idle cost and isn't offered for release again.
+	require.Equal(t, 0, shards[0].pending)
+	require.True(t, shards[0].released)
+	require.True(t, shards[0].doneAt.IsZero())
+	require.Equal(t, []int32{0}, shards.releasedShards())
+	require.NotContains(t, shards.awaitingRelease(), int32(0), "released shard must not be re-offered")
+
+	// Shard 1 has one of two execs verified; shard 2 is untouched.
+	require.Equal(t, 1, shards[1].pending)
+	require.True(t, shards[1].verifiedAny)
+	require.Equal(t, 1, shards[2].pending)
+	require.False(t, shards[2].verifiedAny)
+}
+
+// TestSeedVerifyState_IgnoresOutOfRangeIndices: a VerifiedExecs index past the
+// exec slice is skipped rather than panicking (defends against tracker/slice
+// drift across a resume).
+func TestSeedVerifyState_IgnoresOutOfRangeIndices(t *testing.T) {
+	execs := seedTestExecs()
+	hb := replicateBatchHeartbeat{InjectDone: true, VerifiedExecs: []int{2, 99, -1}}
+
+	verified, doneCount, _ := seedVerifyState(execs, hb)
+
+	require.Equal(t, []bool{false, false, true, false, false}, verified)
+	require.Equal(t, 1, doneCount)
+}
+
+// TestVerifyHeartbeat_RoundTrip: a heartbeat snapshot omits released shards'
+// execs from VerifiedExecs, and seeding from it reconstructs the same verified
+// set and done count.
+func TestVerifyHeartbeat_RoundTrip(t *testing.T) {
+	execs := seedTestExecs()
+
+	// Verify state: shard 0 fully done + released, one exec on shard 1 done.
+	verified := []bool{true, true, true, false, false}
+	now := time.Now()
+	shards := newShardVerifyTracker(execs)
+	shards.recordVerified(0, now)
+	shards.recordVerified(0, now)
+	shards.recordVerified(1, now)
+	shards.markReleased([]int32{0})
+
+	hb := verifyHeartbeat(execs, verified, shards)
+	require.Equal(t, []int32{0}, hb.ReleasedShards)
+	require.Equal(t, []int{2}, hb.VerifiedExecs, "released shard execs must be omitted")
+	require.True(t, hb.InjectDone)
+
+	gotVerified, gotDone, _ := seedVerifyState(execs, hb)
+	require.Equal(t, verified, gotVerified)
+	require.Equal(t, 3, gotDone)
+}
+
 // TestEffectiveMaxExecsPerShard: effectiveMaxExecsPerShard returns the full
 // MaxExecsPerShard outside a handover phase, and max(cap/2, 1) while in handover.
 func TestEffectiveMaxExecsPerShard(t *testing.T) {
