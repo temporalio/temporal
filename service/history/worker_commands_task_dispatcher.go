@@ -157,7 +157,7 @@ func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 		return fmt.Errorf("failed to dispatch worker commands to control queue %s: %w", task.Destination, err)
 	}
 
-	nexusErr := commonnexus.DispatchResponseToError(resp)
+	nexusErr := commonnexus.MatchingDispatchResponseToError(resp)
 	if nexusErr == nil {
 		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(1, metrics.OutcomeTag("success"))
 		return nil
@@ -170,7 +170,7 @@ func (d *workerCommandsTaskDispatcher) handleError(nexusErr error, task *tasks.W
 	var handlerErr *nexus.HandlerError
 	if errors.As(nexusErr, &handlerErr) {
 		// Handler-level error (transport, timeout, internal). These are constructed by
-		// DispatchResponseToError for non-worker-returned failures.
+		// MatchingDispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
 			d.logger.Warn("No worker polling control queue",
 				tag.NewStringTag("control_queue", task.Destination))

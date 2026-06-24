@@ -7,14 +7,14 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
-// DispatchResponseToError converts a DispatchNexusTaskResponse proto into a Go error.
+// MatchingDispatchResponseToError converts a DispatchNexusTaskResponse proto into a Go error.
 // Returns nil if the response indicates success.
 //
 // For failure cases (worker explicitly returned an error), the Temporal SDK's failure
 // converter is used to produce standard Go errors (ApplicationError, CanceledError).
 // For transport-level issues (timeout, internal), a nexus.HandlerError is returned
 // so the caller can check Retryable().
-func DispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) error {
+func MatchingDispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) error {
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		// Worker received the task and explicitly failed it (via RespondNexusTaskFailed).
