@@ -61,7 +61,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.False(t, root.Dirty())
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 0, len(opLog))
+	require.Empty(t, opLog)
 
 	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		d.SetState(hsmtest.State2)
@@ -75,7 +75,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.True(t, root.Dirty())
 	opLog, err = root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 
 	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
@@ -131,7 +131,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, int64(1), transOp.Output.TransitionCount)
@@ -675,7 +675,7 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 		case hsm.TransitionOperation:
 			transitionCount++
 			pathLen := len(o.Path())
-			require.True(t, pathLen <= 3, "should not see transitions for deleted nodes")
+			require.LessOrEqual(t, pathLen, 3, "should not see transitions for deleted nodes")
 		case hsm.DeleteOperation:
 			deletionCount++
 		}

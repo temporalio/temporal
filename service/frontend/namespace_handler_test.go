@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -112,7 +111,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v2",
 	}, out)
 }
@@ -127,7 +126,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Adding() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v0",
 		"k1": "v2",
 	}, out)
@@ -144,7 +143,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Merging() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
@@ -159,7 +158,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
@@ -199,7 +198,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
 	}
-	assert.Equal(s.T(), out.String(), expected.String())
+	s.Equal(out.String(), expected.String())
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
@@ -331,7 +330,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		})
 		s.NoError(err)
 		token = resp.NextPageToken
-		s.True(len(resp.Namespaces) <= int(pagesize))
+		s.LessOrEqual(len(resp.Namespaces), int(pagesize))
 		if len(resp.Namespaces) > 0 {
 			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
@@ -1004,7 +1003,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_AllDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1054,7 +1053,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 			s.Equal(description, request.Namespace.GetInfo().GetDescription())
 			s.Equal(email, request.Namespace.GetInfo().GetOwner())
 			s.Equal(data, request.Namespace.GetInfo().GetData())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(activeClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{activeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1231,7 +1230,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(true, request.IsGlobalNamespace)
+			s.True(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1285,7 +1284,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(true, request.IsGlobalNamespace)
+			s.True(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1457,7 +1456,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NotMaster() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1910,14 +1909,14 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	rules, err := s.handler.ListWorkflowRules(context.Background(), namespaceName)
 	s.NoError(err)
 	s.NotNil(rules)
-	s.Equal(2, len(rules))
+	s.Len(rules, 2)
 
 	// config is nil
 	nsConfig.WorkflowRules = nil
 	rules, err = s.handler.ListWorkflowRules(context.Background(), namespaceName)
 	s.NoError(err)
 	s.NotNil(rules)
-	s.Equal(0, len(rules))
+	s.Empty(rules)
 }
 
 func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
@@ -1955,7 +1954,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 		oldLens := len(tt.rules)
 		s.handler.removeOldestExpiredWorkflowRule("", tt.rules)
 		if len(tt.deletedRule) == 0 {
-			s.Equal(oldLens, len(tt.rules))
+			s.Len(tt.rules, oldLens)
 		} else {
 			if _, exists := tt.rules[tt.deletedRule]; exists {
 				s.True(false, "Rule was not deleted")
