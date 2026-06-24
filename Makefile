@@ -111,9 +111,15 @@ INTERNAL_BINPB := $(PROTO_ROOT)/image.bin
 CHASM_BINPB := $(PROTO_ROOT)/chasm.bin
 PROTO_OUT := api
 
-ALL_SRC         := $(shell find . -name "*.go")
+# Paths pruned from source/test discovery, e.g. .claude/worktrees agent checkouts
+# that contain full copies of the repo. Add more entries (relative to repo root)
+# as needed.
+EXCLUDED_PATHS  := ./.claude
+# find(1) prune expression built from EXCLUDED_PATHS: \( -path A -o -path B -o -false \) -prune -o
+EXCLUDE_FIND_EXPR := \( $(patsubst %,-path % -o,$(EXCLUDED_PATHS)) -false \) -prune -o
+ALL_SRC         := $(shell find . $(EXCLUDE_FIND_EXPR) -name "*.go" -print)
 ALL_SRC         += go.mod
-ALL_SCRIPTS     := $(shell find . -name "*.sh")
+ALL_SCRIPTS     := $(shell find . $(EXCLUDE_FIND_EXPR) -name "*.sh" -print)
 
 MAIN_BRANCH    := main
 
@@ -569,6 +575,13 @@ functional-test-ndc-coverage: prepare-coverage-test
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
+
+# Enforce the unit-test coverage floor for the replication and ndc packages
+# locally. Pass a base ref to also check for regressions, e.g.
+#   make check-replication-test-coverage COVERAGE_BASE_REF=main MIN_COVERAGE=80
+MIN_COVERAGE ?= 80
+check-replication-test-coverage:
+	@./develop/github/check_coverage.sh --min $(MIN_COVERAGE) $(if $(COVERAGE_BASE_REF),--base $(COVERAGE_BASE_REF),)
 
 report-test-crash: $(TEST_OUTPUT_ROOT)
 	@printf $(COLOR) "Generate test crash junit report..."

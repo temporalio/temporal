@@ -1,0 +1,48 @@
+name: Replication test coverage
+
+# Enforces a unit-test coverage floor on the service/history/replication and
+# service/history/ndc packages, and that a PR does not decrease their coverage
+# relative to its base branch.
+
+on:
+  pull_request:
+    paths:
+      - "service/history/replication/**"
+      - "service/history/ndc/**"
+      - "develop/github/check_coverage.sh"
+      - ".github/workflows/replication-coverage.yml"
+
+permissions:
+  contents: read
+
+concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
+  group: replication-test-coverage-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  MIN_COVERAGE: 80
+  COMMIT: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  replication-test-coverage:
+    name: Replication unit-test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+          # Full history so the base revision can be checked out into a worktree.
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch --no-tags origin "${{ github.event.pull_request.base.sha }}"
+
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
+
+      - name: Check coverage floor and no-decrease vs base
+        run: |
+          ./develop/github/check_coverage.sh \
+            --min "${{ env.MIN_COVERAGE }}" \
+            --base "${{ github.event.pull_request.base.sha }}"
