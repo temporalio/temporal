@@ -267,11 +267,11 @@ func (sm *scaleManager) callScaler() {
 			return
 		}
 
-		cooldown := time.Duration(float32(time.Second) / sm.settings().MaxRate)
-		sm.nextDecision = sm.timeSource.Now().Add(cooldown)
-
 		sm.setState(newState)
 	}
+
+	cooldown := time.Duration(float32(time.Second) / sm.settings().MaxRate)
+	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
 	sm.logger.Info("new target",
 		tag.Int32("target", target),
