@@ -391,7 +391,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 	s.Nil(err)
 	s.NotNil(getResp)
-	s.Equal("1.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+	s.Equal("1.0", getResp.VersionInfo.Current.Version)
 
 	// Case 6 - Delete Cluster Metadata
 	err = s.ClusterMetadataManager.DeleteClusterMetadata(s.ctx, &p.DeleteClusterMetadataRequest{ClusterName: clusterNameToPersist})
@@ -456,7 +456,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Fetch the persisted values
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 	s.NoError(err)
-	s.Equal("2.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+	s.Equal("2.0", getResp.VersionInfo.Current.Version)
 
 	// Case 11 - List
 	_, err = s.ClusterMetadataManager.SaveClusterMetadata(

@@ -528,7 +528,7 @@ func (u *Update) OnProtocolMessage(
 	// then only Rejection messages can be processed, because they don't create new events in the history.
 	// All other message types abort Update.
 	_, isRejection := body.(*updatepb.Rejection)
-	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
+	shouldAbort := !eventStore.CanAddEvent() && !isRejection
 	if shouldAbort {
 		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		return nil

@@ -991,10 +991,7 @@ func migrateSchedulesFromVisibility(
 	}
 
 	execute := c.Bool(FlagExecute)
-	workers := c.Int(FlagWorkers)
-	if workers < 1 {
-		workers = 1
-	}
+	workers := max(c.Int(FlagWorkers), 1)
 	wfClient := clientFactory.WorkflowClient(c)
 	adminClient := clientFactory.AdminClient(c)
 
@@ -1008,7 +1005,7 @@ func migrateSchedulesFromVisibility(
 	defer closeLog()
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Go(func() {
 			for job := range jobs {
 				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
@@ -1084,10 +1081,7 @@ func migrateSchedulesFromStdin(
 	targetStr string,
 ) error {
 	execute := c.Bool(FlagExecute)
-	workers := c.Int(FlagWorkers)
-	if workers < 1 {
-		workers = 1
-	}
+	workers := max(c.Int(FlagWorkers), 1)
 	adminClient := clientFactory.AdminClient(c)
 
 	var summary migrateSummary
@@ -1099,7 +1093,7 @@ func migrateSchedulesFromStdin(
 
 	jobs := make(chan migrateJob)
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Go(func() {
 			for job := range jobs {
 				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)

@@ -115,7 +115,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -151,7 +151,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && !task.isStarted() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -163,7 +163,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken:         []byte("token1"),
 					WorkflowExecution: task.workflowExecution(),
@@ -574,7 +574,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -597,7 +597,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -608,7 +608,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			if err != nil {
 				return nil, err
 			} else if task.isQuery() {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				querySet.Store(true)
 				return &matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken: []byte("token1"),
@@ -661,7 +661,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		cancel()
 		if err == nil && task.isQuery() {
 			matched = true
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -699,7 +699,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -727,7 +727,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 			if err != nil {
 				return nil, err
 			} else {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				return &matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken:         []byte("token1"),
 					WorkflowExecution: task.workflowExecution(),

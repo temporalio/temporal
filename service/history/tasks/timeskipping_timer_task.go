@@ -19,7 +19,6 @@ type (
 	// It is matched against TimeSkippingInfo.FastForward.SourceEventId at
 	// firing time to detect superseded tasks: re-configuring the fast-forward emits a new task
 	// with a new EventID, and the old task is silently dropped on mismatch.
-	// todo@time-skipping: replication related feature (ndc)
 	TimeSkippingTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time

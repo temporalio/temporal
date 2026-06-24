@@ -714,7 +714,7 @@ func (r *registry) updateIDToNamespace(
 	id namespace.ID,
 	newNS *namespace.Namespace,
 ) *namespace.Namespace {
-	oldNS, _ := iDToNamespace[id]
+	oldNS := iDToNamespace[id]
 	iDToNamespace[id] = newNS
 	return oldNS
 }

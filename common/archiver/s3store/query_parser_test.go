@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/util"
 )
 
 type queryParserSuite struct {
@@ -35,14 +34,14 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
 			query:     "WorkflowTypeName = \"random workflowTypeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowTypeName: util.Ptr("random workflowTypeName"),
+				workflowTypeName: new("random workflowTypeName"),
 			},
 		},
 		{
@@ -61,14 +60,14 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
 			query:     "(WorkflowId = \"random workflowID\")",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
@@ -117,28 +116,28 @@ func (s *queryParserSuite) TestParsePrecision() {
 			query:     commonQueryPart + "CloseTime = 1000 and SearchPrecision = 'Day'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				searchPrecision: util.Ptr(PrecisionDay),
+				searchPrecision: new(PrecisionDay),
 			},
 		},
 		{
 			query:     commonQueryPart + "CloseTime = 1000 and SearchPrecision = 'Hour'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				searchPrecision: util.Ptr(PrecisionHour),
+				searchPrecision: new(PrecisionHour),
 			},
 		},
 		{
 			query:     commonQueryPart + "CloseTime = 1000 and SearchPrecision = 'Minute'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				searchPrecision: util.Ptr(PrecisionMinute),
+				searchPrecision: new(PrecisionMinute),
 			},
 		},
 		{
 			query:     commonQueryPart + "StartTime = 1000 and SearchPrecision = 'Second'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				searchPrecision: util.Ptr(PrecisionSecond),
+				searchPrecision: new(PrecisionSecond),
 			},
 		},
 		{
@@ -174,14 +173,14 @@ func (s *queryParserSuite) TestParseCloseTime() {
 			query:     commonQueryPart + "CloseTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: util.Ptr(time.Unix(0, 1000).UTC()),
+				closeTime: new(time.Unix(0, 1000).UTC()),
 			},
 		},
 		{
 			query:     commonQueryPart + "CloseTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				closeTime: util.Ptr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
+				closeTime: new(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{
@@ -218,14 +217,14 @@ func (s *queryParserSuite) TestParseStartTime() {
 			query:     commonQueryPart + "StartTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: util.Ptr(time.Unix(0, 1000)),
+				startTime: new(time.Unix(0, 1000)),
 			},
 		},
 		{
 			query:     commonQueryPart + "StartTime = \"2019-01-01T11:11:11Z\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: util.Ptr(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
+				startTime: new(time.Date(2019, 1, 1, 11, 11, 11, 0, time.UTC)),
 			},
 		},
 		{

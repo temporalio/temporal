@@ -3094,10 +3094,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	var failedPartitions atomic.Int32
 
 	for _, taskType := range taskTypes {
-		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
-		if numPartitions < 1 {
-			numPartitions = 1
-		}
+		numPartitions := max(wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType), 1)
 
 		tq := tqFamily.TaskQueue(taskType)
 		// Skip partitions that route to an already-visited matching host.

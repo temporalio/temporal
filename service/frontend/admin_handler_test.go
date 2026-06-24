@@ -2074,8 +2074,8 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
-				if strings.HasPrefix(alias, "AliasOf") {
-					return strings.TrimPrefix(alias, "AliasOf"), nil
+				if after, ok := strings.CutPrefix(alias, "AliasOf"); ok {
+					return after, nil
 				}
 				return "", serviceerror.NewInvalidArgument("unknown alias")
 			}).Times(eventsWithSasCount)
