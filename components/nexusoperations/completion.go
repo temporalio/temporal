@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -188,8 +189,6 @@ func (h *CompletionHandler) Handle(
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
 ) error {
-	metricsHandler := h.metricsHandler
-	metricTagConfig := h.config.ResolvedMetricTagConfig()
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
 	isRetryableNotFoundErr := requestID != ""
@@ -231,24 +230,9 @@ func (h *CompletionHandler) Handle(
 		if err != nil {
 			return err
 		}
-		namespaceName, workflowType, closeTime := node.NamespaceName(), node.WorkflowTypeName(), env.Now()
+		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
 		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
-		startedTime := operation.StartedTime
-		emitMetrics = func() {
-			if emitScheduleToStart {
-				emitScheduleToStartLatency(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, startedTime.AsTime())
-			}
-			// Emit the terminal outcome metric. The canceled vs failed split mirrors handleOperationError
-			// so the metric outcome matches the recorded transition.
-			switch {
-			case opFailedError == nil:
-				emitOperationSucceeded(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
-			case opFailedError.State == nexus.OperationStateCanceled:
-				emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
-			default:
-				emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
-			}
-		}
+		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
 		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
@@ -269,4 +253,31 @@ func (h *CompletionHandler) Handle(
 		emitMetrics()
 	}
 	return nil
+}
+
+// deferredCompletionMetric builds the post-commit caller-side emit for a resolved async completion:
+// the terminal outcome (the canceled vs failed split mirrors handleOperationError so the metric
+// matches the recorded transition) plus, when the start was fabricated here, schedule-to-start.
+func (h *CompletionHandler) deferredCompletionMetric(
+	operation Operation,
+	namespaceName, workflowType string,
+	opFailedError *nexus.OperationError,
+	emitScheduleToStart bool,
+	closeTime time.Time,
+) func() {
+	metricsHandler := h.metricsHandler
+	metricTagConfig := h.config.ResolvedMetricTagConfig()
+	return func() {
+		if emitScheduleToStart {
+			emitScheduleToStartLatency(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, operation.StartedTime.AsTime())
+		}
+		switch {
+		case opFailedError == nil:
+			emitOperationSucceeded(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		case opFailedError.State == nexus.OperationStateCanceled:
+			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		default:
+			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+		}
+	}
 }
