@@ -331,7 +331,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
 	s.ErrorAs(err, new(*StreamError))
-	s.Empty(s.taskScheduler.tasks)
+	s.Equal(0, len(s.taskScheduler.tasks))
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_ReceivedNonPrioritizedTask() {
@@ -358,7 +358,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
 	s.ErrorAs(err, new(*StreamError))
-	s.Empty(s.taskScheduler.tasks)
+	s.Equal(0, len(s.taskScheduler.tasks))
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {

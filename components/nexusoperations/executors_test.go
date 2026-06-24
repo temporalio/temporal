@@ -141,7 +141,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].EventType)
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
@@ -186,7 +186,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "successful",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, events[0].EventType)
 				attrs := &historypb.NexusOperationCompletedEventAttributes{
 					ScheduledEventId: 1,
@@ -212,7 +212,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, events[0].EventType)
 				attrs := &historypb.NexusOperationFailedEventAttributes{
 					ScheduledEventId: 1,
@@ -273,7 +273,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "operation-unsuccessful:canceled",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, events[0].EventType)
 				attrs := &historypb.NexusOperationCanceledEventAttributes{
 					ScheduledEventId: 1,
@@ -327,7 +327,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), op.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "internal server error", op.LastAttemptFailure.Message)
-				require.Equal(t, 0, len(events))
+				require.Empty(t, events)
 			},
 		},
 		{
@@ -344,7 +344,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
 				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
-				require.Equal(t, 0, len(events))
+				require.Empty(t, events)
 			},
 		},
 		{
@@ -385,7 +385,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
 				require.Regexp(t, "request timed out", op.LastAttemptFailure.Message)
-				require.Equal(t, 0, len(events))
+				require.Empty(t, events)
 			},
 		},
 		{
@@ -414,7 +414,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetTimeoutFailureInfo())
 				require.Equal(t, "operation timed out", failure.Message)
@@ -428,7 +428,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), failure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", failure.Message)
@@ -442,7 +442,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation:     nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.Equal(t, string(nexus.HandlerErrorTypeNotFound), failure.GetNexusHandlerFailureInfo().GetType())
 				require.Equal(t, "endpoint not registered", failure.Message)
@@ -468,7 +468,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
 				require.Nil(t, op.LastAttemptFailure)
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 			},
 		},
 		{
@@ -486,7 +486,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "invalid-operation-token",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.Equal(t, 1, len(events))
+				require.Len(t, events, 1)
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetApplicationFailureInfo())
 				require.Equal(t, "invalid operation token: length exceeds allowed limit (11/10)", failure.Message)
@@ -661,7 +661,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
-	require.Equal(t, 0, len(backend.Events))
+	require.Empty(t, backend.Events)
 }
 
 func TestProcessTimeoutTask(t *testing.T) {
@@ -683,7 +683,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
-	require.Equal(t, 1, len(backend.Events))
+	require.Len(t, backend.Events, 1)
 	require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, backend.Events[0].EventType)
 	protorequire.ProtoEqual(t, &historypb.NexusOperationTimedOutEventAttributes{
 		ScheduledEventId: 1,
@@ -1379,7 +1379,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	c, err := hsm.MachineData[nexusoperations.Cancelation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, c.State())
-	require.Equal(t, 0, len(backend.Events))
+	require.Empty(t, backend.Events)
 }
 
 // mockNexusOperationRoutingKey is a simple mock implementation of the routing key interface
