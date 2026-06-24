@@ -137,6 +137,7 @@ type (
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
+		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		PartitionScaleAllowedDrift    dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleAllowedDrift]
 		PartitionScaleManagerSettings dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleManagerSettings]
 
@@ -229,6 +230,7 @@ type (
 		PollerScalingDecisionsPerSecond func() float64
 
 		FairnessCounter               func() counter.CounterParams
+		FairnessPassDither            func() bool
 		PartitionScaleAllowedDrift    func() dynamicconfig.PartitionScaleAllowedDrift
 		PartitionScaleManagerSettings func() dynamicconfig.PartitionScaleManagerSettings
 
@@ -380,6 +382,7 @@ func NewConfig(
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
+		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
 		PartitionScaleAllowedDrift:    dynamicconfig.MatchingPartitionScaleAllowedDrift.Get(dc),
 		PartitionScaleManagerSettings: dynamicconfig.MatchingPartitionScaleManager.Get(dc),
 
@@ -553,6 +556,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
+		},
+		FairnessPassDither: func() bool {
+			return config.FairnessPassDither(ns.String(), taskQueueName, taskType)
 		},
 		PartitionScaleAllowedDrift: func() dynamicconfig.PartitionScaleAllowedDrift {
 			return config.PartitionScaleAllowedDrift(ns.String(), taskQueueName, taskType)

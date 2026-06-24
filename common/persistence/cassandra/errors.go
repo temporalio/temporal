@@ -16,10 +16,10 @@ import (
 
 var (
 	errorPriority = map[reflect.Type]int{
-		reflect.TypeOf(&p.ShardOwnershipLostError{}):             0,
-		reflect.TypeOf(&p.CurrentWorkflowConditionFailedError{}): 1,
-		reflect.TypeOf(&p.WorkflowConditionFailedError{}):        2,
-		reflect.TypeOf(&p.ConditionFailedError{}):                3,
+		reflect.TypeFor[*p.ShardOwnershipLostError]():             0,
+		reflect.TypeFor[*p.CurrentWorkflowConditionFailedError](): 1,
+		reflect.TypeFor[*p.WorkflowConditionFailedError]():        2,
+		reflect.TypeFor[*p.ConditionFailedError]():                3,
 	}
 
 	errorDefaultPriority = math.MaxInt64

@@ -78,10 +78,10 @@ func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), namespaceName, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.Equal(2, callCount)
 }
@@ -135,10 +135,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.Equal(2, callCount)
 }
@@ -155,10 +155,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.Equal(2, callCount)
 }
@@ -175,10 +175,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	}
 
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.Equal(2, callCount)
 }
@@ -195,10 +195,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
@@ -216,10 +216,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
@@ -237,10 +237,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
@@ -299,10 +299,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 					api = api + "_notwhitelisted"
 				}
 				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, nil, callFn)
-				s.Nil(err)
+				s.NoError(err)
 
 				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, nil, callFn)
-				s.Nil(err)
+				s.NoError(err)
 			}
 
 			s.Equal(tc.expectedCallCount, callCountByCluster)
@@ -330,10 +330,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
@@ -360,10 +360,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 
 		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-		s.Nil(err)
+		s.NoError(err)
 	}
 
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
@@ -391,10 +391,10 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	apiName := "NotExistRandomAPI"
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
-	s.Nil(err)
+	s.NoError(err)
 
 	s.Equal(2, currentClustercallCount)
 	s.Equal(2, alternativeClustercallCount)

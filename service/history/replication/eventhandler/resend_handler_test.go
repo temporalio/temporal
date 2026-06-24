@@ -327,7 +327,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents() {
 		endEventID,
 		endEventVersion,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents() {
@@ -435,7 +435,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_LocalAndRemoteEvents(
 		endEventID,
 		endEventVersion,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_RemoteEventsOnly() {
@@ -503,7 +503,7 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_MixedVersionHistory_R
 		endEventID,
 		endEventVersion,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_BatchTest() {
@@ -627,12 +627,12 @@ func (s *resendHandlerSuite) TestSendSingleWorkflowHistory_AllRemoteEvents_Batch
 		endEventID,
 		endEventVersion,
 	)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *resendHandlerSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeEvents(events)
-	s.Nil(err)
+	s.NoError(err)
 	return &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,

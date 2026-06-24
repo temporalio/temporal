@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/util"
 )
 
 type queryParserSuite struct {
@@ -36,35 +35,35 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
 			query:     "WorkflowId = \"random workflowID\" and WorkflowId = \"random workflowID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
 			query:     "RunId = \"random runID\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				runID: util.Ptr("random runID"),
+				runID: new("random runID"),
 			},
 		},
 		{
 			query:     "WorkflowType = \"random typeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowTypeName: util.Ptr("random typeName"),
+				workflowTypeName: new("random typeName"),
 			},
 		},
 		{
 			query:     "WorkflowId = 'random workflowID'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID: util.Ptr("random workflowID"),
+				workflowID: new("random workflowID"),
 			},
 		},
 		{
@@ -78,9 +77,9 @@ func (s *queryParserSuite) TestParseWorkflowID_RunID_WorkflowType() {
 			query:     "WorkflowType = 'random typeName' and (WorkflowId = \"random workflowID\" and RunId='random runID')",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowID:       util.Ptr("random workflowID"),
-				runID:            util.Ptr("random runID"),
-				workflowTypeName: util.Ptr("random typeName"),
+				workflowID:       new("random workflowID"),
+				runID:            new("random runID"),
+				workflowTypeName: new("random typeName"),
 			},
 		},
 		{
@@ -131,49 +130,49 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = \"Completed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"canceled\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = \"terminated\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'continuedasnew'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'TIMED_OUT'",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT),
 			},
 		},
 		{
 			query:     "ExecutionStatus = 'Failed' and ExecutionStatus = \"Failed\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -203,7 +202,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 			query:     "ExecutionStatus = 3",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				status: toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				status: new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{
@@ -221,7 +220,7 @@ func (s *queryParserSuite) TestParseCloseStatus() {
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.emptyResult, parsedQuery.emptyResult)
 		if !tc.parsedQuery.emptyResult {
-			s.EqualValues(tc.parsedQuery.status, parsedQuery.status)
+			s.Equal(tc.parsedQuery.status, parsedQuery.status)
 		}
 	}
 }
@@ -305,7 +304,7 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: time.Time{},
 				latestCloseTime:   time.Date(2019, 01, 01, 11, 11, 11, 0, time.UTC),
-				workflowID:        util.Ptr("random workflowID"),
+				workflowID:        new("random workflowID"),
 			},
 		},
 		{
@@ -314,8 +313,8 @@ func (s *queryParserSuite) TestParse() {
 			parsedQuery: &parsedQuery{
 				earliestCloseTime: time.Unix(0, 2000).UTC(),
 				latestCloseTime:   time.Unix(0, 9999).UTC(),
-				runID:             util.Ptr("random runID"),
-				status:            toWorkflowExecutionStatusPtr(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
+				runID:             new("random runID"),
+				status:            new(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED),
 			},
 		},
 		{

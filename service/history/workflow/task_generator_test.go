@@ -400,7 +400,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(genTasks))
+	require.Len(t, genTasks, 2)
 	invocationTask, ok := genTasks[0].(*tasks.StateMachineOutboundTask)
 	var backoffTask *tasks.StateMachineTimerTask
 	if ok {
@@ -441,7 +441,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.Equal(t, int64(3), backoffTask.Version)
 
 	timers := mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 1, len(timers))
+	require.Len(t, timers, 1)
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
 		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
 		Scheduled: true,
@@ -495,12 +495,12 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 
 	// No new timer tasks are generated they are collapsed.
 	// Only an outbound task is expected here.
-	require.Equal(t, 1, len(genTasks))
+	require.Len(t, genTasks, 1)
 	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
 	require.True(t, ok)
 
 	timers = mutableState.GetExecutionInfo().StateMachineTimers
-	require.Equal(t, 2, len(timers))
+	require.Len(t, timers, 2)
 
 	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
@@ -828,15 +828,15 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			)
 			resultTasks, _, err := taskGenerator.GenerateMigrationTasks(nil)
 			require.NoError(t, err)
-			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			require.Len(t, resultTasks, len(tc.expectedTaskTypes))
 			if tc.transitionHistoryEnabled {
-				require.Equal(t, 1, len(resultTasks))
+				require.Len(t, resultTasks, 1)
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				taskEquivalent := syncVersionTask.TaskEquivalents
-				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
 					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
 				}
@@ -1241,6 +1241,47 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 	require.Equal(t, timer1ExpiryTime, byEventID[1].VisibilityTimestamp)
 	require.Contains(t, byEventID, int64(2))
 	require.Equal(t, timer2ExpiryTime, byEventID[2].VisibilityTimestamp)
+}
+
+// TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates asserts the
+// contract: regen carries no per-task status of its own and force re-stamps on every call
+// (callers gate it — the active boolean and PartialRefresh's LastUpdateVersionedTransition
+// check). So a second back-to-back call emits the same tasks again, not a no-op. Content is
+// identical; only the shard-assigned TaskID would differ.
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(t *testing.T) {
+	t.Parallel()
+
+	tsi := &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(time.Hour),
+	}
+
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: tsi,
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		"timer-1": {StartedEventId: 1, ExpiryTime: timestamppb.New(time.Now().Add(time.Hour))},
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).AnyTimes()
+
+	emitCount := 0
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		emitCount += len(ts)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
+
+	// First call emits.
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Positive(t, emitCount, "first call must emit at least one task")
+
+	// Second call force-regenerates: emits again (no status latch suppresses it).
+	emitsAfterFirst := emitCount
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
 }
 
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
