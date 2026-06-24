@@ -13,7 +13,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -43,7 +42,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
 // Additional per-test options may be passed in opts.
-func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *VersioningTestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
 
@@ -69,15 +68,15 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *testcor
 			return tv.WithDeploymentSeries("wd").WithBuildID("b")
 		}),
 	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	return newVersioningTestEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
-func (s *WorkerDeploymentSuite) pollFromDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) pollFromDeployment(env *VersioningTestEnv, tv *testvars.TestVars) {
 	s.pollFromDeploymentUntil(s.Context(), env, tv)
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentUntil(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentUntil(ctx context.Context, env *VersioningTestEnv, tv *testvars.TestVars) {
 	_, _ = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -86,13 +85,13 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentUntil(ctx context.Context, env
 	})
 }
 
-func (s *WorkerDeploymentSuite) startDeploymentPoller(env *testcore.TestEnv, tv *testvars.TestVars) context.CancelFunc {
+func (s *WorkerDeploymentSuite) startDeploymentPoller(env *VersioningTestEnv, tv *testvars.TestVars) context.CancelFunc {
 	ctx, cancel := context.WithCancel(s.Context())
 	go s.pollFromDeploymentUntil(ctx, env, tv)
 	return cancel
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(env *testcore.TestEnv, tv *testvars.TestVars, taskQueueNumber int) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(env *VersioningTestEnv, tv *testvars.TestVars, taskQueueNumber int) {
 	_, _ = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.WithTaskQueueNumber(taskQueueNumber).TaskQueue(),
@@ -101,7 +100,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(env *testc
 	})
 }
 
-func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(env *testcore.TestEnv, tv *testvars.TestVars, expectedError string) {
+func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(env *VersioningTestEnv, tv *testvars.TestVars, expectedError string) {
 	_, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -112,7 +111,7 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(env *testcore.TestE
 	s.Equal(expectedError, err.Error())
 }
 
-func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(env *testcore.TestEnv, tv *testvars.TestVars, expectedTaskQueues int) {
+func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(env *VersioningTestEnv, tv *testvars.TestVars, expectedTaskQueues int) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		respV, _ := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -125,7 +124,7 @@ func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(env *t
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateVersionInDeployment(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 ) {
 	v := tv.DeploymentVersionString()
@@ -152,7 +151,7 @@ func (s *WorkerDeploymentSuite) ensureCreateVersionInDeployment(
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateDeployment(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 ) {
 	ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
@@ -168,12 +167,12 @@ func (s *WorkerDeploymentSuite) ensureCreateDeployment(
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func (s *WorkerDeploymentSuite) startVersionWorkflow(env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) startVersionWorkflow(env *VersioningTestEnv, tv *testvars.TestVars) {
 	go s.pollFromDeployment(env, tv)
 	s.waitForDeploymentVersion(env, tv)
 }
 
-func (s *WorkerDeploymentSuite) waitForDeploymentVersion(env *testcore.TestEnv, tv *testvars.TestVars) {
+func (s *WorkerDeploymentSuite) waitForDeploymentVersion(env *VersioningTestEnv, tv *testvars.TestVars) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -1403,7 +1402,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 
 	// verify that all the registered task-queues have "" set as their ramping version
 	for i := range taskQueues {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 	}
 
 	// set ramping version to 50%
@@ -1412,7 +1411,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 
 	// verify the task queues have new ramping version
 	for i := range taskQueues {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, env.Tv().DeploymentVersionString(), 50)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, env.Tv().DeploymentVersionString(), 50)
 	}
 
 	// verify if the worker-deployment has the right ramping version set
@@ -1481,7 +1480,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 	// check that the current version's task queues have ramping version == __unversioned__
 	for i := range taskQueues {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 	}
 
 	// verify if the worker-deployment has the right ramping version set
@@ -1657,7 +1656,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 	// verify that all the registered task-queues have "__unversioned__" as their current version
 	for i := range taskQueues {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 	}
 
 	// set current and check that the current version's task queues have new current version
@@ -1666,7 +1665,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 
 	// verify the current version has propogated to all the registered task-queues userData
 	for i := range taskQueues {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
 	}
 
 	// verify if the worker-deployment has the right current version set
@@ -1828,17 +1827,17 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	s.ensureCreateVersionInDeployment(env, env.Tv())
 
 	// check that the current version's task queues have current version unversioned to start
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 
 	// set current and check that the current version's task queues have new current version
 	firstCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(env, env.Tv(), true, "")
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
 
 	// set current unversioned and check that the current version's task queues have current version unversioned again
 	secondCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersionUnversionedOption(env, env.Tv(), true, true, false, true, "")
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 
 	// check that deployment has current version == __unversioned__
 	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
@@ -1884,13 +1883,13 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	// set ramp to unversioned
 	s.setAndVerifyRampingVersionUnversionedOption(env, env.Tv(), true, false, 75, true, false, true, "")
 	// check that the current version's task queues have ramping version == __unversioned__
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 
 	// set current to unversioned
 	s.setCurrentVersionUnversionedOption(env, env.Tv(), true, true, false, true, "")
 
 	// check that the current version's task queues have ramping version == "" and current version == "__unversioned__"
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 }
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
@@ -2015,7 +2014,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
 	for i := range tqs {
-		s.verifyTaskQueueVersioningInfo(env, env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
+		env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().WithTaskQueueNumber(i).TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
 	}
 }
 
@@ -2365,7 +2364,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 	// check that the current version's task queues have ramping version == ""
 	s.setCurrentVersion(env, env.Tv(), true, "")
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
 
 	// set ramp to unversioned
 	s.setAndVerifyRampingVersionUnversionedOption(env, env.Tv(), true, false, 75, true, false, true, "")
@@ -2379,7 +2378,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
 	// check that the current version's task queues have ramping version == __unversioned__
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers() {
@@ -2432,7 +2431,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentCurrentVersion_NoPollers(
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the current versioning info
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), env.Tv().DeploymentVersionString(), "", 0)
 }
 
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers() {
@@ -2488,7 +2487,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoPollers(
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// that poller's task queue should have the ramping version info
-	s.verifyTaskQueueVersioningInfo(env, env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, env.Tv().DeploymentVersionString(), 5)
+	env.waitForTaskQueueVersioningInfo(s.Context(), s.T(), env.Tv().TaskQueue(), worker_versioning.UnversionedVersionId, env.Tv().DeploymentVersionString(), 5)
 }
 
 func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
@@ -2501,23 +2500,6 @@ func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
 	go s.pollFromDeployment(env, tv2)
 	s.ensureCreateVersionWithExpectedTaskQueues(env, tv1, 1)
 	s.ensureCreateVersionWithExpectedTaskQueues(env, tv2, 1)
-}
-
-func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(env *testcore.TestEnv, tq *taskqueuepb.TaskQueue, expectedCurrentVersion, expectedRampingVersion string, expectedPercentage float32) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		tqDesc, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueue: tq,
-		})
-		a := require.New(t)
-		a.NoError(err)
-		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedCurrentVersion), tqDesc.GetVersioningInfo().GetCurrentDeploymentVersion())
-		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedRampingVersion), tqDesc.GetVersioningInfo().GetRampingDeploymentVersion())
-		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
-
-	}, time.Second*10, time.Millisecond*1000)
 }
 
 // This test shall first rollback a drained version to a current version. After that, it shall deploy a new version
@@ -3252,7 +3234,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 }
 
 func (s *WorkerDeploymentSuite) tryDeleteVersion(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 	expectedError string,
 ) {
@@ -3359,7 +3341,7 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 }
 
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 	unset bool,
 	percentage int,
@@ -3371,7 +3353,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
 
 //nolint:staticcheck // SA1019
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 	unversioned, unset bool,
 	percentage int,
@@ -3409,12 +3391,12 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 	s.NoError(err)
 }
 
-func (s *WorkerDeploymentSuite) setCurrentVersion(env *testcore.TestEnv, tv *testvars.TestVars, ignoreMissingTaskQueues bool, expectedError string) {
+func (s *WorkerDeploymentSuite) setCurrentVersion(env *VersioningTestEnv, tv *testvars.TestVars, ignoreMissingTaskQueues bool, expectedError string) {
 	s.setCurrentVersionUnversionedOption(env, tv, false, ignoreMissingTaskQueues, false, true, expectedError)
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 	ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
 	expectedError string,
@@ -3423,7 +3405,7 @@ func (s *WorkerDeploymentSuite) setCurrentVersionAllowNoPollersOption(
 }
 
 func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	tv *testvars.TestVars,
 	unversioned, ignoreMissingTaskQueues, allowNoPollers, ensureSystemWorkflowsExist bool,
 	expectedError string,
@@ -3456,7 +3438,7 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(
 	s.NoError(err)
 }
 
-func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(env *testcore.TestEnv, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, expectedError string) {
+func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(env *VersioningTestEnv, tv *testvars.TestVars, self, useWrongConflictToken bool, newManager, expectedError string) {
 	s.ensureCreateDeployment(env, tv)
 	s.ensureCreateVersionInDeployment(env, tv)
 
@@ -3512,7 +3494,7 @@ func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(env *testcore.Test
 	s.Equal(expectedManagerIdentity, desc.GetWorkerDeploymentInfo().GetManagerIdentity())
 }
 
-func (s *WorkerDeploymentSuite) createVersionsInDeployments(env *testcore.TestEnv, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
+func (s *WorkerDeploymentSuite) createVersionsInDeployments(env *VersioningTestEnv, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
 	var expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
 
 	for i := range n {
@@ -3588,7 +3570,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	return true
 }
 
-func (s *WorkerDeploymentSuite) listWorkerDeployments(env *testcore.TestEnv, request *workflowservice.ListWorkerDeploymentsRequest) ([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, error) {
+func (s *WorkerDeploymentSuite) listWorkerDeployments(env *VersioningTestEnv, request *workflowservice.ListWorkerDeploymentsRequest) ([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, error) {
 	var resp *workflowservice.ListWorkerDeploymentsResponse
 	var err error
 	var deploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
@@ -3604,7 +3586,7 @@ func (s *WorkerDeploymentSuite) listWorkerDeployments(env *testcore.TestEnv, req
 }
 
 func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	request *workflowservice.ListWorkerDeploymentsRequest,
 	expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) {
@@ -3635,7 +3617,7 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 }
 
 func (s *WorkerDeploymentSuite) validateWorkerDeploymentCount(
-	env *testcore.TestEnv,
+	env *VersioningTestEnv,
 	request *workflowservice.ListWorkerDeploymentsRequest,
 	expectedCount int,
 ) {
