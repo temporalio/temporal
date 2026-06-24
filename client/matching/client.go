@@ -36,15 +36,17 @@ const (
 )
 
 type clientImpl struct {
-	timeout         time.Duration
-	longPollTimeout time.Duration
-	clients         common.ClientCache
-	metricsHandler  metrics.Handler
-	logger          log.Logger
-	loadBalancer    LoadBalancer
-	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
-	partitionCache  *partitionCache
-	evictionWatcher *goro.Handle
+	timeout              time.Duration
+	longPollTimeout      time.Duration
+	clients              common.ClientCache
+	resolver             membership.ServiceResolver
+	connectionCloseDelay dynamicconfig.DurationPropertyFn
+	metricsHandler       metrics.Handler
+	logger               log.Logger
+	loadBalancer         LoadBalancer
+	spreadRouting        dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
+	partitionCache       *partitionCache
+	evictionWatcher      *goro.Handle
 }
 
 // NewClient creates a new matching service gRPC client
@@ -60,24 +62,23 @@ func NewClient(
 	connectionCloseDelay dynamicconfig.DurationPropertyFn,
 ) matchingservice.MatchingServiceClient {
 	c := &clientImpl{
-		timeout:         timeout,
-		longPollTimeout: longPollTimeout,
-		clients:         clients,
-		metricsHandler:  metricsHandler,
-		logger:          logger,
-		loadBalancer:    lb,
-		spreadRouting:   spreadRouting,
-		partitionCache:  newPartitionCache(metricsHandler),
+		timeout:              timeout,
+		longPollTimeout:      longPollTimeout,
+		clients:              clients,
+		resolver:             resolver,
+		connectionCloseDelay: connectionCloseDelay,
+		metricsHandler:       metricsHandler,
+		logger:               logger,
+		loadBalancer:         lb,
+		spreadRouting:        spreadRouting,
+		partitionCache:       newPartitionCache(metricsHandler),
 	}
 
 	// Start goroutine to prune partition count cache. Stopped by Stop().
 	c.partitionCache.Start()
 
 	// Evict cached clients whose host leaves the membership ring. Stopped by Stop().
-	c.evictionWatcher = goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
-		watchMembershipForEviction(ctx, resolver, clients, connectionCloseDelay, logger)
-		return nil
-	})
+	c.evictionWatcher = goro.NewHandle(context.Background()).Go(c.watchMembership)
 
 	return c
 }
@@ -92,20 +93,16 @@ func (c *clientImpl) Stop() {
 	c.clients.EvictAll()
 }
 
-func watchMembershipForEviction(
-	ctx context.Context,
-	resolver membership.ServiceResolver,
-	clients common.ClientCache,
-	connectionCloseDelay dynamicconfig.DurationPropertyFn,
-	logger log.Logger,
-) {
+// watchMembership evicts cached clients whose host leaves the membership ring.
+// It runs until ctx is cancelled (by Stop).
+func (c *clientImpl) watchMembership(ctx context.Context) error {
 	listenerName := fmt.Sprintf("matchingClientCache-%s", uuid.New().String())
 	ch := make(chan *membership.ChangedEvent, 1)
-	if err := resolver.AddListener(listenerName, ch); err != nil {
-		logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
-		return
+	if err := c.resolver.AddListener(listenerName, ch); err != nil {
+		c.logger.Error("Failed to subscribe matching cache to membership", tag.Error(err))
+		return err
 	}
-	defer func() { _ = resolver.RemoveListener(listenerName) }()
+	defer func() { _ = c.resolver.RemoveListener(listenerName) }()
 
 	// Reap departed hosts via a per-address deadline checked by a single ticker;
 	// a re-add resets it to the latest removal.
@@ -115,16 +112,16 @@ func watchMembershipForEviction(
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
-				evictAt[h.GetAddress()] = time.Now().Add(connectionCloseDelay())
+				evictAt[h.GetAddress()] = time.Now().Add(c.connectionCloseDelay())
 			}
 			for _, h := range event.HostsAdded {
 				delete(evictAt, h.GetAddress())
 			}
 		case <-ticker.C:
-			reapEvictableClients(resolver, clients, evictAt)
+			reapEvictableClients(c.resolver, c.clients, evictAt)
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package resource
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -286,12 +285,7 @@ func ClientBeanProvider(
 	}
 	// Deterministically release the bean's clients (daemon goroutines and
 	// cached gRPC connections) on shutdown.
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			bean.Close()
-			return nil
-		},
-	})
+	lc.Append(fx.StopHook(bean.Close))
 	return bean, nil
 }
 
