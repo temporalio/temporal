@@ -327,14 +327,8 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 
 // Returns the next matching time for a single interval spec.
 func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
-	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
-	if interval < 1 {
-		interval = 1
-	}
-	phase := int64(timestamp.DurationValue(iv.Phase) / time.Second)
-	if phase < 0 {
-		phase = 0
-	}
+	interval := max(int64(timestamp.DurationValue(iv.Interval)/time.Second), 1)
+	phase := max(int64(timestamp.DurationValue(iv.Phase)/time.Second), 0)
 	return (((ts-phase)/interval)+1)*interval + phase
 }
 
@@ -365,10 +359,7 @@ func (cs *CompiledSpec) addJitter(seed string, nominal time.Time, maxJitter time
 	// leaves 32 bits for the range. if we use nanoseconds or microseconds, our range is
 	// limited to only a few seconds or hours. using milliseconds supports up to 49 days.
 	fp := uint64(farm.Fingerprint32(bin))
-	ms := uint64(maxJitter.Milliseconds())
-	if ms > math.MaxUint32 {
-		ms = math.MaxUint32
-	}
+	ms := min(uint64(maxJitter.Milliseconds()), math.MaxUint32)
 	jitter := time.Duration((fp*ms)>>32) * time.Millisecond
 	return nominal.Add(jitter)
 }

@@ -13,7 +13,9 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 )
 
 var (
@@ -53,6 +55,7 @@ type (
 		dataMerger      NamespaceDataMerger
 		admitter        NamespaceReplicationAdmitter
 		logger          log.Logger
+		testHooks       testhooks.TestHooks
 	}
 )
 
@@ -63,14 +66,15 @@ func NewTaskExecutor(
 	dataMerger NamespaceDataMerger,
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
+	testHooks testhooks.TestHooks,
 ) TaskExecutor {
-
 	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
 		dataMerger:      dataMerger,
 		admitter:        admitter,
 		logger:          logger,
+		testHooks:       testHooks,
 	}
 }
 
@@ -82,6 +86,22 @@ func (h *taskExecutorImpl) Execute(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
+	if hook, ok := testhooks.Get(
+		h.testHooks,
+		testhooks.NamespaceReplicationTaskInterceptor,
+		namespace.Name(task.GetInfo().GetName()),
+	); ok {
+		return hook(ctx, task, func() error {
+			return h.executeValidatedTask(ctx, task)
+		})
+	}
+	return h.executeValidatedTask(ctx, task)
+}
+
+func (h *taskExecutorImpl) executeValidatedTask(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) error {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
 		return err
 	}
@@ -302,6 +322,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
+		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
 		request.Namespace.FailoverNotificationVersion = notificationVersion
 		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())

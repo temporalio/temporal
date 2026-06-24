@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
@@ -68,6 +69,7 @@ func (c *moduleTestCase) Run(t *testing.T) {
 
 	app := fx.New(
 		dependencies,
+		testhooks.Module,
 		QueueModule,
 		fx.Invoke(func(params QueueFactoriesLifetimeHookParams) {
 			factories = params.Factories

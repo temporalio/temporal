@@ -210,6 +210,23 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.Equal(t, pres.task)
 }
 
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
+	// Set rate limit to zero — blocks all matches.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should fail due to rate limiting, not lack of poller.
+	t := s.newSyncTask(nil)
+	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
@@ -483,7 +500,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
 		s.md.EnqueueTaskNoWait(t2)
-		time.Sleep(11 * time.Millisecond) // nolint:forbidigo
+		time.Sleep(100 * time.Millisecond) // nolint:forbidigo
 		// but we waited too long, poller timed out, so this does nothing (but doesn't crash or assert)
 		s.md.ReenqueuePollerIfNotMatched(tres.poller)
 		done <- struct{}{}
@@ -801,6 +818,10 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
+			// Reset the task tree for each subtest, since Add appends rather than
+			// replacing (the old s.md.tasks.heap assignment reset implicitly).
+			s.md.tasks = newTaskBTree()
+
 			// Create task
 			var task *internalTask
 			if tc.taskIsQuery {
@@ -817,7 +838,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			if tc.taskPriority > 0 {
 				task.effectivePriority = effectivePriorityFactor * priorityKey(tc.taskPriority)
 			}
-			s.md.tasks.heap = []*internalTask{task}
+			s.md.tasks.Add(task)
 
 			// Create poller
 			poller := &waitingPoller{

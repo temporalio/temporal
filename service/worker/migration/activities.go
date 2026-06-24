@@ -20,6 +20,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -97,6 +98,7 @@ type (
 	}
 
 	WaitReplicationRequest struct {
+		Namespace           string
 		ShardCount          int32
 		RemoteCluster       string
 		AllowedLagging      time.Duration
@@ -245,7 +247,11 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
-			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during replication catchup", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during replication catchup",
+				tag.ShardID(localShard.ShardId),
+				tag.ClusterName(waitRequest.RemoteCluster),
+				tag.WorkflowNamespace(waitRequest.Namespace),
+			)
 
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
@@ -308,6 +314,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	if !isReady {
 		a.Logger.Info("Wait catchup not ready",
 			tag.String("RemoteCluster", waitRequest.RemoteCluster),
+			tag.String("Namespace", waitRequest.Namespace),
 			tag.Int("TotalShards", len(localShards)),
 			tag.Int("ReadyShards", readyShardCount),
 			tag.Int("NotReadyShards", len(localShards)-readyShardCount),
@@ -364,7 +371,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
 		if !hasRemoteShardProgress {
-			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during handover", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during handover",
+				tag.ShardID(localShard.ShardId),
+				tag.ClusterName(waitRequest.RemoteCluster),
+				tag.WorkflowNamespace(waitRequest.Namespace),
+			)
 
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
@@ -373,7 +384,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		handoverInfo, hasHandoverInfo := localShard.HandoverNamespaces[waitRequest.Namespace]
 		if !hasHandoverInfo {
 			// this could happen before namespace cache refresh
-			a.Logger.Info("Wait handover missing handover namespace info", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
+			a.Logger.Info("Wait handover missing handover namespace info",
+				tag.ShardID(localShard.ShardId),
+				tag.ClusterName(waitRequest.RemoteCluster),
+				tag.WorkflowNamespace(waitRequest.Namespace),
+			)
 
 			handoverInfosMissingCount++
 
@@ -1107,7 +1122,12 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.CatchupCluster]
 		if !hasRemoteShardProgress {
-			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during remote cluster replication catchup", tag.ShardID(localShard.ShardId), tag.ClusterName(waitRequest.CatchupCluster))
+			a.Logger.Info("GetReplicationStatus response missing expected remote cluster for shard during remote cluster replication catchup",
+				tag.ShardID(localShard.ShardId),
+				tag.ClusterName(waitRequest.CatchupCluster),
+				tag.WorkflowNamespace(waitRequest.Namespace),
+			)
+
 			// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
 			return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.CatchupCluster), "", nil)
 		}
@@ -1156,6 +1176,7 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 
 	if !isReady {
 		a.Logger.Info("Wait catchup not ready",
+			tag.String("Namespace", waitRequest.Namespace),
 			tag.String("CatchupCluster", waitRequest.CatchupCluster),
 			tag.String("TargetCluster", waitRequest.TargetCluster),
 			tag.String("Namespace", waitRequest.Namespace),
@@ -1178,11 +1199,15 @@ func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.Ar
 		return chasm.WorkflowArchetype, nil
 	}
 
-	// chasm activity library is not registered on worker service, so hardcoding the mapping here for now.
+	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
+	// the mapping here for now.
 	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
 	// chasm registry.
 	if archetypeID == chasmactivity.ArchetypeID {
 		return chasmactivity.Archetype, nil
+	}
+	if archetypeID == chasmnexus.ArchetypeID {
+		return chasmnexus.Archetype, nil
 	}
 
 	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)

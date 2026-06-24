@@ -52,18 +52,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"component.callbacks.allowedAddresses",
-	allowedAddressConverter,
-	AddressMatchRules{},
-	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
-URL: "temporal://system" is always allowed for worker callbacks. The default is no address rules.
-URLs are checked against each in order when starting a workflow with attached callbacks and only need to match one to pass validation.
-This configuration is required for external endpoint targets; any invalid entries are ignored. Each entry is a map with possible values:
-     - "Pattern":string (required) the host:port pattern to which this config applies.
-        Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything, 'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
-     - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
-
 type AddressMatchRules struct {
 	Rules []AddressMatchRule
 }

@@ -85,6 +85,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
 	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
+	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
@@ -810,9 +811,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// writer
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for sleepUntil(func() bool { return delta() <= p.gap }) {
 			info := makeNewTask()
 			tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
@@ -826,12 +825,10 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 				sleep()
 			}
 		}
-	}()
+	})
 
 	// poller
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
@@ -850,7 +847,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 				sleep()
 			}
 		}
-	}()
+	})
 
 	// adjust target over time
 	for t := target.Load(); time.Since(start) < p.duration; sleep() {

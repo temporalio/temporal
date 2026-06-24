@@ -33,7 +33,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -69,6 +71,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
@@ -219,6 +222,8 @@ func NewAdminHandler(
 				args.Config.VisibilityAllowList,
 			),
 			args.Config.SuppressErrorSetSystemSearchAttribute,
+			args.MetricsHandler,
+			args.Logger,
 		),
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
@@ -987,7 +992,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+		return workflow.ErrWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
@@ -1217,6 +1222,20 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, err
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := cluster.ValidateClusterInformation(
+		resp.GetClusterName(),
+		cluster.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		adh.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid remote cluster metadata: %v", err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.clusterMetadataManager
@@ -1266,6 +1285,10 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
+
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, request.GetClusterName()); err != nil {
+		return nil, err
+	}
 
 	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
@@ -1375,10 +1398,10 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, errExecutionNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	if request.GetEvents() == nil {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -1644,8 +1667,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	}
 
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -1792,6 +1818,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+		ScaleInfo:            resp.ScaleInfo,
 	}, nil
 }
 
@@ -1931,6 +1958,10 @@ func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.De
 	if metadata.GetFailoverVersionIncrement() != currentClusterInfo.GetFailoverVersionIncrement() {
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
+	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
 	}
 	if metadata.GetHistoryShardCount() != adh.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()
@@ -2550,7 +2581,37 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	request *adminservice.MigrateScheduleRequest,
 	namespaceID string,
 ) (*adminservice.MigrateScheduleResponse, error) {
-	_, err := adh.schedulerClient.MigrateToWorkflow(ctx,
+	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
+	descResp, err := adh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+		},
+	})
+	switch {
+	case common.IsNotFoundError(err):
+	case err != nil:
+		return nil, err
+	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
+		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+		adh.logger.Warn(
+			"schedule migration to workflow blocked by workflow sentinel",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+		)
+		return nil, chasmscheduler.ErrSentinelBlocked
+	default:
+		adh.logger.Warn(
+			"schedule migration to workflow found existing workflow",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+		)
+	}
+
+	_, err = adh.schedulerClient.MigrateToWorkflow(ctx,
 		&schedulerpb.MigrateToWorkflowRequest{
 			NamespaceId: namespaceID,
 			ScheduleId:  request.GetScheduleId(),

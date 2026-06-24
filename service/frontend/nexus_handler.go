@@ -187,6 +187,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	//nolint:forbidigo // Nexus requests are not tied to a business ID by design (see line 184)
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns
@@ -448,6 +449,7 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
@@ -665,6 +667,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -691,7 +694,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		err := convertOutcomeToNexusHandlerError(t)
 		return err
 
@@ -706,7 +709,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }

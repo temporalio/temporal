@@ -92,13 +92,15 @@ func (s *PrematureEosTestSuite) Test_SpeculativeWFTEventsLostAfterSignalMidHisto
 	// Without this wait there is a race: if the update hasn't been processed yet, the signal
 	// would only add event 8 (SignalReceived) with freshNextEventId=9, producing 8 events
 	// instead of the expected 9 and causing a false test failure.
-	s.Eventually(func() bool {
-		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+	s.Awaitf(func(s *PrematureEosTestSuite) {
+		desc, descErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: env.Namespace().String(),
 				Execution: wfExecution,
 			})
-		return descErr == nil && desc.GetPendingWorkflowTask() != nil
+		s.NoError(descErr)
+		s.NotNil(desc)
+		s.NotNil(desc.GetPendingWorkflowTask())
 	}, 5*time.Second, 250*time.Millisecond, "speculative WFT should be scheduled after sending update")
 
 	// Fetch page 1 via GetWorkflowExecutionHistory — mimicking what the SDK does when a

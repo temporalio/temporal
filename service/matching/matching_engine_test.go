@@ -278,6 +278,85 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	return pm
 }
 
+// captureNPollDeadlines injects a mock partition manager, runs n sequential polls, and returns
+// the context deadline observed inside each pm.PollTask call.
+func (s *matchingEngineSuite) captureNPollDeadlines(
+	partition tqid.Partition,
+	longPollInterval time.Duration,
+	meta *pollMetadata,
+	n int,
+) []time.Time {
+	mockPM := NewMocktaskQueuePartitionManager(s.controller)
+	mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).Times(n)
+	mockPM.EXPECT().LongPollExpirationInterval().Return(longPollInterval).Times(n)
+	mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
+
+	deadlines := make([]time.Time, 0, n)
+	mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, _ *pollMetadata) (*internalTask, bool, error) {
+			dl, _ := ctx.Deadline()
+			deadlines = append(deadlines, dl)
+			return nil, false, errNoTasks
+		},
+	).Times(n)
+
+	s.matchingEngine.partitionsLock.Lock()
+	s.matchingEngine.partitions[partition.Key()] = mockPM
+	s.matchingEngine.partitionsLock.Unlock()
+
+	for range n {
+		_, _, _ = s.matchingEngine.pollTask(context.Background(), partition, meta)
+	}
+	return deadlines
+}
+
+func deadlineSpread(deadlines []time.Time) time.Duration {
+	lo, hi := deadlines[0], deadlines[0]
+	for _, d := range deadlines[1:] {
+		if d.Before(lo) {
+			lo = d
+		}
+		if d.After(hi) {
+			hi = d
+		}
+	}
+	return hi.Sub(lo)
+}
+
+// TestNonForwardedPollsHaveSpreadExpirations verifies that non-forwarded polls receive different
+// expiration times, which is the mechanism that prevents a thundering herd of simultaneous worker
+// reconnects when a wave of long polls all expire at the same instant.
+func (s *matchingEngineSuite) TestNonForwardedPollsHaveSpreadExpirations() {
+	const n = 20
+	partition := newRootPartition(s.ns.ID().String(), "spread-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	deadlines := s.captureNPollDeadlines(partition, 60*time.Second, &pollMetadata{}, n)
+
+	spread := deadlineSpread(deadlines)
+	s.Greater(spread, 5*time.Second, "non-forwarded polls must have varied expirations to prevent thundering herd")
+	s.LessOrEqual(spread, time.Duration(float64(60*time.Second)*forwardedPollJitterRatio))
+}
+
+// TestForwardedPollsHaveConsistentExpirations verifies that forwarded polls all receive the same
+// expiration — jitter was already applied at the leaf partition and must not compound.
+func (s *matchingEngineSuite) TestForwardedPollsHaveConsistentExpirations() {
+	const n = 20
+	partition := newRootPartition(s.ns.ID().String(), "forwarded-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	deadlines := s.captureNPollDeadlines(partition, 60*time.Second, &pollMetadata{forwardedFrom: "leaf"}, n)
+
+	s.Less(deadlineSpread(deadlines), 100*time.Millisecond, "forwarded polls must not receive additional jitter")
+}
+
+// TestShortIntervalPollsHaveConsistentExpirations verifies that polls with a configured interval
+// below the minimum threshold are not jittered — a 10s jitter would be disproportionate for a
+// short timeout and is simply skipped.
+func (s *matchingEngineSuite) TestShortIntervalPollsHaveConsistentExpirations() {
+	const n = 20
+	partition := newRootPartition(s.ns.ID().String(), "short-interval-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	deadlines := s.captureNPollDeadlines(partition, forwardedPollMinInterval-time.Second, &pollMetadata{}, n)
+
+	s.Less(deadlineSpread(deadlines), 100*time.Millisecond, "polls below the minimum interval must not be jittered")
+}
+
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
 	s.PollForTasksEmptyResultTest(context.Background(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
@@ -441,14 +520,12 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	}
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &pollRequest, metrics.NoopMetricsHandler)
 		if err != nil {
 			s.logger.Info(err.Error())
 		}
-		wg.Done()
-	}()
+	})
 
 	partitionReady := func() bool {
 		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
@@ -1169,11 +1246,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		if i == taskCount/2 {
 			maxDispatch = 0
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, pollErr = pollFunc(maxDispatch)
-		}()
+		})
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
@@ -1195,11 +1270,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.logger.Debug("empty poll returned")
 			s.Equal(float64(0), maxDispatch)
 			maxDispatch = defaultTaskDispatchRPS
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				result, pollErr = pollFunc(maxDispatch)
-			}()
+			})
 			wg.Wait()
 			s.NoError(err)
 			s.NoError(pollErr)
@@ -5457,7 +5530,6 @@ func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
@@ -5626,7 +5698,6 @@ func TestGetHistoryForQueryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)

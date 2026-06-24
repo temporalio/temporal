@@ -132,6 +132,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	testClusterFactory := testcore.NewTestClusterFactory()
 	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
 		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
+		clusterConfigs[clusterIndex].DCRedirectionPolicy = params.DCRedirectionPolicy
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true

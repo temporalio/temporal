@@ -39,12 +39,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -98,13 +96,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.serializer = serialization.NewSerializer()
 
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.AllServices,
-			fx.Decorate(
-				func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-					return config.DCRedirectionPolicy{Policy: "noop"}
-				},
-			),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
 	)
 }
 
@@ -1112,6 +1104,10 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	err = sdkWorker.Start()
 	s.NoError(err)
 	defer sdkWorker.Stop()
+
+	// Override dynamic config to disable eager activity execution since we are asserting transfer active task creation in this test.
+	cleanup := s.clusters[0].OverrideDynamicConfig(s.T(), dynamicconfig.EnableActivityEagerExecution, false)
+	defer cleanup()
 
 	workflowRun, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,

@@ -42,16 +42,25 @@ func routeSystemCallbackRequest(
 			logger.Error("failed to decode completion from token", tag.Error(err))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
-		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
+		// Resolve the target namespace/workflow from the token. For CHASM completions (e.g.
+		// standalone Nexus operations) the namespace lives inside the ComponentRef, not the
+		// top-level field, so use the shared helper rather than reading completion.NamespaceId
+		// directly.
+		namespaceID, businessID, _, err := commonnexus.CompletionTarget(completion)
 		if err != nil {
-			logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(completion.NamespaceId), tag.Error(err))
+			logger.Error("failed to extract target from nexus completion token", tag.Error(err))
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+		}
+		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
+		if err != nil {
+			logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
 			var nfe *serviceerror.NamespaceNotFound
 			if errors.As(err, &nfe) {
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", namespaceID)
 			}
 			return nil, commonnexus.ConvertGRPCError(err, false)
 		}
-		clusterName := ns.ActiveClusterName(namespace.RoutingKey{ID: completion.GetWorkflowId()})
+		clusterName := ns.ActiveClusterName(namespace.RoutingKey{ID: businessID})
 		if clusterMetadata.GetCurrentClusterName() == clusterName {
 			frontendClient = localClient
 		} else {

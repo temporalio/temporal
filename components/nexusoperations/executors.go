@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
@@ -392,7 +393,7 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		attrs := event.GetNexusOperationScheduledEventAttributes()
 		args.payload = attrs.GetInput()
-		args.header = attrs.GetNexusHeader()
+		args.header = maps.Clone(attrs.GetNexusHeader())
 		args.nexusLink = commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
@@ -425,32 +426,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			return err
 		}
 
-		var links []*commonpb.Link
-		if result.Links != nil {
-			for _, nexusLink := range result.Links {
-				switch nexusLink.Type {
-				case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-					link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-					if err != nil {
-						// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-						// so ignoring the error for now; we will revisit how to handle these errors later.
-						e.Logger.Error(
-							fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-							tag.Error(err),
-						)
-						continue
-					}
-					links = append(links, &commonpb.Link{
-						Variant: &commonpb.Link_WorkflowEvent_{
-							WorkflowEvent: link,
-						},
-					})
-				default:
-					// If the link data type is unsupported, just ignore it for now.
-					e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
-				}
-			}
-		}
+		links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
 
 		if result.Pending != nil {
 			// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
@@ -784,7 +760,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 			return err
 		}
 		if attrs := event.GetNexusOperationScheduledEventAttributes(); attrs != nil {
-			args.headers = attrs.GetNexusHeader()
+			args.headers = maps.Clone(attrs.GetNexusHeader())
 			args.payload = attrs.GetInput()
 		}
 		return nil

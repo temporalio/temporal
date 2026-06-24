@@ -82,7 +82,10 @@ the 1.31.0 release and will be made the default.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
       # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
-    component.callbacks.allowedAddresses:
+    # From version 1.32.x
+    callback.allowedAddresses:
+    # Uncomment versions older than 1.32.x
+    # component.callbacks.allowedAddresses:
       # Limits which callback URLs are accepted by the server.
       # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
       # For production, restrict allowed hosts and set AllowInsecure to false

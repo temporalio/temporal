@@ -48,12 +48,15 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteexecution"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
@@ -102,6 +105,7 @@ type (
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
 		nexusHandler                 nexus.Handler
+		testHooks                    testhooks.TestHooks
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -138,6 +142,7 @@ type (
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
 		ChasmRegistry                *chasm.Registry
+		TestHooks                    testhooks.TestHooks
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -1786,6 +1791,11 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errWorkflowExecutionNotSet
 	}
 
+	closeTime := new(request.WorkflowCloseTime.AsTime())
+	if !closeTime.After(time.Unix(0, 0)) {
+		closeTime = nil
+	}
+
 	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api (through admin workflow
@@ -1793,10 +1803,13 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		WorkflowID:  request.Execution.GetWorkflowId(),
-		RunID:       request.Execution.GetRunId(),
-		TaskID:      math.MaxInt64,
+		NamespaceID:       namespaceID,
+		WorkflowID:        request.Execution.GetWorkflowId(),
+		RunID:             request.Execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		CloseTime:         closeTime,
+		StartTime:         request.WorkflowStartTime.AsTime(),
+		IsRetentionDelete: false,
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2019,6 +2032,21 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	)
 }
 
+func (h *Handler) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+) (*historyservice.DeleteExecutionResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	h.logger.Info("DeleteExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(request.GetExecution().GetRunId()))
+	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
+}
+
 func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
@@ -2027,6 +2055,16 @@ func (h *Handler) GetDLQTasks(
 }
 
 func (h *Handler) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	if hook, ok := testhooks.Get(h.testHooks, testhooks.HistoryDLQTaskDeleteInterceptor, testhooks.GlobalScope); ok {
+		return hook(ctx, request, h.deleteDLQTasks)
+	}
+	return h.deleteDLQTasks(ctx, request)
+}
+
+func (h *Handler) deleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
@@ -2491,7 +2529,7 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := payloads.Encode(r.ValueAsAny())
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
