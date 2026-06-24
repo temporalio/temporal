@@ -112,6 +112,7 @@ type immutableCtx struct {
 	// But it will be when we support partial loading later,
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
+	// now is constant for this context; child contexts inherit the same value.
 	now time.Time
 
 	executionKey ExecutionKey
