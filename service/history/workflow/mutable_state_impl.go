@@ -7920,6 +7920,10 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		ms.executionState.LastUpdateVersionedTransition = currentVersionedTransition
 	}
 
+	if ms.timeSkippingInfoUpdated && ms.executionInfo.TimeSkippingInfo != nil {
+		ms.executionInfo.TimeSkippingInfo.LastUpdateVersionedTransition = currentVersionedTransition
+	}
+
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
 	// LastUpdateVersionTransition for CHASM nodes already updated when closing the chasm tree transaction.
 }

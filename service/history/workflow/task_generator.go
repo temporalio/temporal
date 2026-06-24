@@ -1029,10 +1029,14 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
-// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
-// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
-// and the only difference is the TaskID.
-// TODO@time-skipping: currently not safe to call in replication context
+// RegenerateTimerTasksForTimeSkipping force re-stamps every pending timer task against the
+// current accumulated skip.
+//
+// It needs no per-task dedup status of its own. Callers gate it on whether a skip actually
+// happened: the active close transaction only invokes it when a skip transition was emitted
+// this transaction (regenerateTimerTasksForTimeSkipping), and PartialRefresh only invokes it
+// when TimeSkippingInfo.LastUpdateVersionedTransition falls within the replicated delta (see
+// refreshTasksForTimeSkipping).
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	if accumulatedSkippedDuration(r.mutableState.GetExecutionInfo()) <= 0 {

@@ -560,7 +560,7 @@ func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -568,7 +568,7 @@ func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -576,7 +576,7 @@ func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -584,7 +584,7 @@ func TestSQLiteQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -592,7 +592,7 @@ func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -600,7 +600,7 @@ func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -608,7 +608,7 @@ func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -616,7 +616,7 @@ func TestSQLiteFileQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 

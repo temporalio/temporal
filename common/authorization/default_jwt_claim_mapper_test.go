@@ -134,7 +134,7 @@ func (s *defaultClaimMapperSuite) testTokenWithAdminPermissions(alg keyAlgorithm
 	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleAdmin, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	s.Len(claims.Namespaces, 1)
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
 }
@@ -154,7 +154,7 @@ func (s *defaultClaimMapperSuite) TestNamespacePermissionCaseSensitive() {
 	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleUndefined, claims.System) // no system role
-	s.Equal(2, len(claims.Namespaces))
+	s.Len(claims.Namespaces, 2)
 	// claims contain namespace role for 'Foo', not for 'foo'.
 	s.Equal(RoleReader, claims.Namespaces["Foo"])
 	s.Equal(RoleAdmin, claims.Namespaces["Temporal-system"])
@@ -181,7 +181,7 @@ func (s *defaultClaimMapperSuite) testTokenWithReaderWriterWorkerPermissions(alg
 	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleUndefined, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	s.Len(claims.Namespaces, 1)
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
@@ -198,7 +198,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRege
 	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleUndefined, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	s.Len(claims.Namespaces, 1)
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader|RoleWriter|RoleWorker, defaultRole)
 }
@@ -258,7 +258,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRegex() {
 	s.NoError(err)
 	s.Equal(testSubject, claims.Subject)
 	s.Equal(RoleAdmin, claims.System)
-	s.Equal(1, len(claims.Namespaces))
+	s.Len(claims.Namespaces, 1)
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
 }
@@ -314,7 +314,7 @@ func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, vali
 		s.NoError(err)
 		s.NotNil(cm)
 		t := reflect.TypeOf(cm)
-		s.True(t == cmType)
+		s.Equal(t, cmType)
 	} else {
 		s.Error(err)
 		s.Nil(cm)
