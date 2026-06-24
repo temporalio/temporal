@@ -13,6 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	command "go.temporal.io/api/command/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
@@ -44,6 +46,20 @@ func NewMockWorkflowContext(ctrl *gomock.Controller) *MockWorkflowContext {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockWorkflowContext) EXPECT() *MockWorkflowContextMockRecorder {
 	return m.recorder
+}
+
+// AppendTaskCompletionPage mocks base method.
+func (m *MockWorkflowContext) AppendTaskCompletionPage(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendTaskCompletionPage", schedID, attempt, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendTaskCompletionPage indicates an expected call of AppendTaskCompletionPage.
+func (mr *MockWorkflowContextMockRecorder) AppendTaskCompletionPage(schedID, attempt, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendTaskCompletionPage", reflect.TypeOf((*MockWorkflowContext)(nil).AppendTaskCompletionPage), schedID, attempt, request)
 }
 
 // Clear mocks base method.
@@ -98,6 +114,21 @@ func (m *MockWorkflowContext) GetArchetypeID() chasm.ArchetypeID {
 func (mr *MockWorkflowContextMockRecorder) GetArchetypeID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchetypeID", reflect.TypeOf((*MockWorkflowContext)(nil).GetArchetypeID))
+}
+
+// GetMergedTaskCompletionPages mocks base method.
+func (m *MockWorkflowContext) GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*command.Command, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMergedTaskCompletionPages", schedID, attempt, request)
+	ret0, _ := ret[0].([]*command.Command)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMergedTaskCompletionPages indicates an expected call of GetMergedTaskCompletionPages.
+func (mr *MockWorkflowContextMockRecorder) GetMergedTaskCompletionPages(schedID, attempt, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMergedTaskCompletionPages", reflect.TypeOf((*MockWorkflowContext)(nil).GetMergedTaskCompletionPages), schedID, attempt, request)
 }
 
 // GetWorkflowKey mocks base method.

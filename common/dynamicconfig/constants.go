@@ -1711,6 +1711,18 @@ See DynamicRateLimitingParams comments for more details.`,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
 	)
+	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
+		"history.enableWorkflowTaskCompletionPagination",
+		false,
+		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
+		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
+	)
+	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
+		"history.workflowTaskCompletionBufferSizeLimit",
+		40*1024*1024,
+		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
+		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
+	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
 		time.Second*20,
