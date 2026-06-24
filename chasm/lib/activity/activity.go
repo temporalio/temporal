@@ -56,6 +56,12 @@ var (
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
+// The activity opts into time skipping: it gates idleness via TimeSkippable and chooses its own skip
+// target via the optional TimeSkippingTargetFinder (it must, because its pending timers include timeout
+// tasks the framework's default scan must not target). These compile-time assertions keep the optional
+// interface from silently desyncing if a method signature drifts.
+var _ chasm.TimeSkippable = (*Activity)(nil)
+
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
 	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
@@ -142,24 +148,6 @@ func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
 		return true
 	}
 	return false
-}
-
-// FindNextTargetTime implements chasm.TimeSkippable. The framework calls it once HasInflightWork has
-// reported the activity idle. The only thing to skip to is the next attempt dispatch — the start-delay
-// end on attempt 1, the retry-backoff end on a retry — capped at the schedule-to-close deadline so we
-// never skip past it. The deadline is only a cap, never a target: we skip to the next dispatch, not to
-// the timeout.
-//
-// TODO(time-skipping): completion callback retry backoff (Nexus callback) is also skippable.
-func (a *Activity) FindNextTargetTime(ctx chasm.Context, target *chasm.TimeSkippingTargetTime) {
-	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
-	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
-		return
-	}
-	target.CompareAndSet(nextDispatch.AsTime())
-	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
-		target.GateByExecutionTimeout(deadline)
-	}
 }
 
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {

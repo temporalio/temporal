@@ -2184,37 +2184,8 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		return nil
 	}
 
-	now := n.Now(nil)
-	var ffTarget time.Time
-	if ff := tsi.GetFastForwardInfo(); IsActiveFastForward(ff) {
-		ffTarget = ff.GetTargetTime().AsTime()
-	}
-
-	transition := &TimeSkippingTransition{CurrentTime: now}
-	transition.considerTarget(ffTarget)
-
-	// The component chooses where to skip to. Only the component knows its task semantics — in
-	// particular which pending timer is a legitimate wake (e.g. a retry backoff / next dispatch) versus
-	// an execution/run timeout that virtual time must never be advanced to. The framework cannot make
-	// that distinction (it only knows a task's category, not its meaning), so there is no framework-side
-	// default scan — FindNextTargetTime is the sole source of the wake target.
-	target := &TimeSkippingTargetTime{}
-	tsRoot.FindNextTargetTime(immutableContext, target)
-	transition.considerTarget(target.GetTime())
-
-	// Finalize. The accumulated TargetTime is min(fast-forward target, component's wake target).
-	switch {
-	case transition.TargetTime.IsZero():
-		// Nothing to skip to and no fast-forward budget.
-	case !transition.TargetTime.After(now):
-		// The earliest candidate is the already-reached fast-forward target: disable only, no skip.
-		transition.TargetTime = time.Time{}
-		transition.DisabledAfterFastForward = true
-	case !ffTarget.IsZero() && !transition.TargetTime.Before(ffTarget):
-		// Skipping to (or past) the fast-forward target: skip and then disable.
-		transition.DisabledAfterFastForward = true
-	default:
-		// A regular skip to the component's wake target, still short of the fast-forward budget.
+	if err := n.calculateTimeSkippingTransition(immutableContext, transition); err != nil {
+		return err
 	}
 
 	// step3: if a time skipping transition is needed, record it and regenerate timer tasks.
@@ -2222,8 +2193,85 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
 			return err
 		}
-		if err := n.regenerateTasksForTimeSkipping(); err != nil {
+		if err := n.regenerateTasksForTimeSkipping(immutableContext); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// validateSerializedTask deserializes a serialized component task on this node and runs its validator
+// against current component state, returning true only if the task is still valid. It mirrors the
+// per-task validation in closeTransactionCleanupInvalidTasks and is used by the time-skipping paths
+// (findNextTargetTime, regenerateTasksForTimeSkipping) so that an invalidated task — e.g. a timeout
+// whose activity already executed — is neither chosen as a skip target nor re-stamped. The component
+// value is hydrated first (prepareComponentValue is idempotent).
+func (n *Node) validateSerializedTask(
+	ctx Context,
+	task *persistencespb.ChasmComponentAttributes_Task,
+) (bool, error) {
+	if err := n.prepareComponentValue(ctx); err != nil {
+		return false, err
+	}
+	taskInstance, err := n.deserializeComponentTask(task)
+	if err != nil {
+		return false, err
+	}
+	return n.validateTask(ctx, TaskAttributes{
+		ScheduledTime: task.GetScheduledTime().AsTime(),
+		Destination:   task.GetDestination(),
+	}, taskInstance)
+}
+
+// calculateTimeSkippingTransition is the framework's default "where to skip to": it scans every scheduled
+// (CategoryTimer) task across the tree — pure AND side-effect — and folds the earliest VALID one
+// strictly after now into the transition. It is used only when the root component's FindNextTargetTime
+// returns useDefault (see TimeSkippable). It mirrors regenerateTasksForTimeSkipping, which iterates the
+// same tasks to re-stamp them.
+//
+// Each candidate is validated before being considered, so an invalidated task is never chosen as a skip
+// target. Validation does NOT exclude timeout timers, though: a timeout is valid while the execution is
+// idle. The default scan is therefore only safe for components whose pending timers are all genuine wake
+// points — see the caveat on TimeSkippable.FindNextTargetTime.
+func (n *Node) calculateTimeSkippingTransition(ctx Context) (*TimeSkippingTransition, error) {
+	tsi := n.backend.GetTimeSkippingInfo()
+	tsc := tsi.GetConfig()
+	if tsc == nil || !tsc.GetEnabled() {
+		return nil, nil
+	}
+	transition := &TimeSkippingTransition{CurrentTime: n.Now(nil)}
+	ff := tsi.GetFastForwardInfo()
+	if ff != nil && !ff.GetHasReached() {
+		transition.considerTarget(ff.GetTargetTime().AsTime())
+	}
+
+	now := n.Now(nil)
+	for _, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		for _, taskList := range [][]*persistencespb.ChasmComponentAttributes_Task{
+			componentAttr.GetPureTasks(),
+			componentAttr.GetSideEffectTasks(),
+		} {
+			for _, task := range taskList {
+				if taskCategory(task) != tasks.CategoryTimer {
+					continue
+				}
+				scheduledTime := task.GetScheduledTime().AsTime()
+				if !scheduledTime.After(now) {
+					continue
+				}
+				valid, err := node.validateSerializedTask(ctx, task)
+				if err != nil {
+					return err
+				}
+				if !valid {
+					continue
+				}
+				transition.considerTarget(scheduledTime)
+			}
 		}
 	}
 	return nil
@@ -2248,7 +2296,10 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 // Physical tasks generated for the same logical tasks earlier this transaction (pre-skip, with the old
 // accumulated skip) become stale; they fire early and no-op when their executor re-checks state. This
 // matches the workflow RegenerateTimerTasksForTimeSkipping model (re-stamp, tolerate stale duplicates).
-func (n *Node) regenerateTasksForTimeSkipping() error {
+//
+// Invalidated tasks are excluded: each task is validated (validateSerializedTask) before being reset or
+// re-stamped, so a task whose validator now rejects it is left alone rather than re-emitted.
+func (n *Node) regenerateTasksForTimeSkipping(ctx Context) error {
 	archetypeID := n.ArchetypeID()
 
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
@@ -2260,27 +2311,40 @@ func (n *Node) regenerateTasksForTimeSkipping() error {
 			continue
 		}
 
-		// Side-effect timer tasks: reset and re-generate each one. Unlike the normal generation loop
-		// in closeTransactionUpdateComponentTasks, there is no early break on physicalTaskStatusCreated
-		// — we re-stamp every CategoryTimer task regardless of prior status.
+		// Side-effect timer tasks: reset and re-generate each valid one. Unlike the normal generation
+		// loop in closeTransactionUpdateComponentTasks, there is no early break on physicalTaskStatusCreated
+		// — we re-stamp every valid CategoryTimer task regardless of prior status.
 		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
 			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
+				continue
+			}
+			valid, err := node.validateSerializedTask(ctx, sideEffectTask)
+			if err != nil {
+				return err
+			}
+			if !valid {
 				continue
 			}
 			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
 			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
 		}
 
-		// Pure tasks are always future-scheduled (CategoryTimer). Reset them all, and track the earliest
-		// across the tree; closeTransactionGeneratePhysicalPureTask emits the single earliest one.
-		pureTasks := componentAttr.GetPureTasks()
-		for _, pureTask := range pureTasks {
+		// Pure tasks are always future-scheduled (CategoryTimer). Reset every valid one, and track the
+		// earliest valid task across the tree; closeTransactionGeneratePhysicalPureTask emits the single
+		// earliest one.
+		for _, pureTask := range componentAttr.GetPureTasks() {
+			valid, err := node.validateSerializedTask(ctx, pureTask)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				continue
+			}
 			pureTask.PhysicalTaskStatus = physicalTaskStatusNone
-		}
-		if len(pureTasks) > 0 &&
-			(firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0) {
-			firstPureTask = pureTasks[0]
-			firstPureTaskNode = node
+			if firstPureTask == nil || comparePureTasks(pureTask, firstPureTask) < 0 {
+				firstPureTask = pureTask
+				firstPureTaskNode = node
+			}
 		}
 	}
 

@@ -1,10 +1,12 @@
 package chasm
 
 import (
+	"context"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -76,7 +78,16 @@ func (s *nodeSuite) TestRegenerateTasksForTimeSkipping_RestampsEachTimerExactlyO
 	root, err := s.newTestTree(s.timeSkippingTaskNodes())
 	s.NoError(err)
 
-	err = root.regenerateTasksForTimeSkipping()
+	// regenerateTasksForTimeSkipping validates each task before re-stamping it; all three test timers
+	// are valid.
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).AnyTimes()
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).AnyTimes()
+
+	err = root.regenerateTasksForTimeSkipping(NewContext(context.Background(), root))
 	s.NoError(err)
 
 	// 2 side-effect CategoryTimer tasks (root + SubComponent1) + 1 pure timer (earliest) = 3, all
