@@ -2178,96 +2178,52 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		return nil
 	}
 
-	// step2: while the root reports the execution idle, the framework — not the component — finds the
-	// next target time by scanning all scheduled timer tasks across the tree (see findNextTargetTime).
-	now := n.Now(nil)
-	ff := tsi.GetFastForwardInfo()
-	var transition *TimeSkippingTransition
-	if !tsRoot.HasInflightWork(immutableContext) {
-		nextTargetTime := &TimeSkippingTargetTime{}
-		if IsActiveFastForward(ff) {
-			nextTargetTime.CompareAndSet(ff.GetTargetTime().AsTime())
-		}
-		if err := n.findNextTargetTime(nextTargetTime); err != nil {
-			return err
-		}
-		if !nextTargetTime.IsZero() {
-			transition = buildTimeSkippingTransition(now, nextTargetTime, ff.TargetTime.AsTime())
-		}
+	// step2: while the root reports the execution idle, build the transition: seed TargetTime with the
+	// fast-forward target, fold in the component's chosen wake target, then finalize.
+	if tsRoot.HasInflightWork(immutableContext) {
+		return nil
 	}
 
-	// step3: if a time skipping transition is needed
+	now := n.Now(nil)
+	var ffTarget time.Time
+	if ff := tsi.GetFastForwardInfo(); IsActiveFastForward(ff) {
+		ffTarget = ff.GetTargetTime().AsTime()
+	}
+
+	transition := &TimeSkippingTransition{CurrentTime: now}
+	transition.considerTarget(ffTarget)
+
+	// The component chooses where to skip to. Only the component knows its task semantics — in
+	// particular which pending timer is a legitimate wake (e.g. a retry backoff / next dispatch) versus
+	// an execution/run timeout that virtual time must never be advanced to. The framework cannot make
+	// that distinction (it only knows a task's category, not its meaning), so there is no framework-side
+	// default scan — FindNextTargetTime is the sole source of the wake target.
+	target := &TimeSkippingTargetTime{}
+	tsRoot.FindNextTargetTime(immutableContext, target)
+	transition.considerTarget(target.GetTime())
+
+	// Finalize. The accumulated TargetTime is min(fast-forward target, component's wake target).
+	switch {
+	case transition.TargetTime.IsZero():
+		// Nothing to skip to and no fast-forward budget.
+	case !transition.TargetTime.After(now):
+		// The earliest candidate is the already-reached fast-forward target: disable only, no skip.
+		transition.TargetTime = time.Time{}
+		transition.DisabledAfterFastForward = true
+	case !ffTarget.IsZero() && !transition.TargetTime.Before(ffTarget):
+		// Skipping to (or past) the fast-forward target: skip and then disable.
+		transition.DisabledAfterFastForward = true
+	default:
+		// A regular skip to the component's wake target, still short of the fast-forward budget.
+	}
+
+	// step3: if a time skipping transition is needed, record it and regenerate timer tasks.
 	if transition.IsValid() {
-		// record the transition
 		if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
 			return err
 		}
-		// regenerate timer tasks
 		if err := n.regenerateTasksForTimeSkipping(); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// findNextTargetTime scans every scheduled (CategoryTimer) task across the tree — pure AND
-// side-effect — and records the earliest one strictly after now into targetTime. This is the
-// framework's "where to skip to": the component only reports idleness (TimeSkippable.HasInflightWork);
-// it does not choose the target.
-//
-// A task is a candidate only if it still validates against its (current) component state. A task that
-// has become invalid since it was scheduled must never be a skip target — e.g. a timeout task whose
-// activity has already executed; skipping to it would advance virtual time to a wake that will only
-// no-op. Component values are hydrated before validation, mirroring closeTransactionCleanupInvalidTasks.
-func (n *Node) findNextTargetTime(targetTime *TimeSkippingTargetTime) error {
-	now := n.Now(nil)
-	validateContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
-
-	for _, node := range n.andAllChildren() {
-		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
-		if componentAttr == nil {
-			continue
-		}
-
-		if err := node.prepareComponentValue(validateContext); err != nil {
-			return err
-		}
-
-		for _, taskList := range [][]*persistencespb.ChasmComponentAttributes_Task{
-			componentAttr.GetPureTasks(),
-			componentAttr.GetSideEffectTasks(),
-		} {
-			for _, task := range taskList {
-				// Only future-scheduled timer tasks are skip targets; immediate
-				// transfer/outbound/visibility tasks fire at wall-clock now.
-				if taskCategory(task) != tasks.CategoryTimer {
-					continue
-				}
-				scheduledTime := task.GetScheduledTime().AsTime()
-				if !scheduledTime.After(now) {
-					continue
-				}
-
-				// Never skip to a task that has become invalid (e.g. a timeout whose activity already
-				// executed).
-				taskInstance, err := node.deserializeComponentTask(task)
-				if err != nil {
-					return err
-				}
-				valid, err := node.validateTask(
-					validateContext,
-					TaskAttributes{ScheduledTime: scheduledTime, Destination: task.GetDestination()},
-					taskInstance,
-				)
-				if err != nil {
-					return err
-				}
-				if !valid {
-					continue
-				}
-
-				targetTime.CompareAndSet(scheduledTime)
-			}
 		}
 	}
 	return nil

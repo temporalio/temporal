@@ -144,6 +144,24 @@ func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
 	return false
 }
 
+// FindNextTargetTime implements chasm.TimeSkippable. The framework calls it once HasInflightWork has
+// reported the activity idle. The only thing to skip to is the next attempt dispatch — the start-delay
+// end on attempt 1, the retry-backoff end on a retry — capped at the schedule-to-close deadline so we
+// never skip past it. The deadline is only a cap, never a target: we skip to the next dispatch, not to
+// the timeout.
+//
+// TODO(time-skipping): completion callback retry backoff (Nexus callback) is also skippable.
+func (a *Activity) FindNextTargetTime(ctx chasm.Context, target *chasm.TimeSkippingTargetTime) {
+	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
+	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
+		return
+	}
+	target.CompareAndSet(nextDispatch.AsTime())
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		target.GateByExecutionTimeout(deadline)
+	}
+}
+
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
 	md := make(map[string]string, 2)
 	if actType := a.GetActivityType().GetName(); actType != "" {
