@@ -279,7 +279,6 @@ func (s *xdcBaseSuite) createNamespace(
 ) string {
 	ctx := testcore.NewContext()
 	ns := "test-namespace-" + uuid.NewString()
-	s.enableNamespaceCacheRefreshOnRead(ns, clusters)
 	var replicationConfigs []*replicationpb.ClusterReplicationConfig
 	var clusterNames []string
 	if isGlobal {
@@ -317,6 +316,7 @@ func (s *xdcBaseSuite) createNamespace(
 		}, replicationWaitTime, replicationCheckInterval)
 	}
 
+	s.waitForNamespaceCacheRefresh()
 	return ns
 }
 
@@ -325,8 +325,6 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	inClusterIndex int,
 	clusters []*testcore.TestCluster,
 ) {
-	s.enableNamespaceCacheRefreshOnRead(ns, clusters)
-
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
@@ -361,14 +359,13 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) promoteNamespace(
 	ns string,
 	inClusterIndex int,
 ) {
-	s.enableNamespaceCacheRefreshOnRead(ns, s.clusters)
-
 	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
 		PromoteNamespace: true,
@@ -378,6 +375,7 @@ func (s *xdcBaseSuite) promoteNamespace(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		s.describeNamespace(t, s.clusters[inClusterIndex], ns, true)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) failover(
@@ -386,7 +384,6 @@ func (s *xdcBaseSuite) failover(
 	targetCluster string,
 	targetFailoverVersion int64,
 ) {
-	s.enableNamespaceCacheRefreshOnRead(ns, s.clusters)
 	s.waitForClusterSynced()
 
 	// update namespace to fail over
@@ -410,20 +407,11 @@ func (s *xdcBaseSuite) failover(
 	}, replicationWaitTime, replicationCheckInterval)
 
 	s.waitForClusterSynced()
+	s.waitForNamespaceCacheRefresh()
 }
 
-func (s *xdcBaseSuite) enableNamespaceCacheRefreshOnRead(ns string, clusters []*testcore.TestCluster) {
-	values := []dynamicconfig.ConstrainedValue{
-		{
-			Constraints: dynamicconfig.Constraints{
-				Namespace: ns,
-			},
-			Value: true,
-		},
-	}
-	for _, testCluster := range clusters {
-		testCluster.OverrideDynamicConfig(s.T(), dynamicconfig.ForceNamespaceCacheRefreshOnRead, values)
-	}
+func (s *xdcBaseSuite) waitForNamespaceCacheRefresh() {
+	time.Sleep(namespaceCacheWaitTime) //nolint:forbidigo
 }
 
 func (s *xdcBaseSuite) describeNamespace(
