@@ -38,6 +38,10 @@ type (
 		// should not call Start until they are ready to receive requests from
 		// other cluster members.
 		Start()
+		// Stop shuts down the monitor, releasing resources tied to its lifetime
+		// such as the service resolvers (closing their Done channels). It is not
+		// a graceful ring departure; use EvictSelf for that.
+		Stop()
 		// EvictSelf evicts this member from the membership ring. After this method is
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.

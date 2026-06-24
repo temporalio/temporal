@@ -26,7 +26,7 @@ func SingleLocalHost(host string) Hosts {
 	return Hosts{All: []string{host}, Self: host}
 }
 
-func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) *staticMonitor {
+func newStaticMonitor(hosts map[primitives.ServiceName]Hosts) membership.Monitor {
 	resolvers := make(map[primitives.ServiceName]*staticResolver, len(hosts))
 	for service, hostList := range hosts {
 		resolvers[service] = newStaticResolver(hostList.All)
