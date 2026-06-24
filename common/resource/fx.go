@@ -240,7 +240,6 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
 		params.ClusterMetadata.GetCurrentClusterName(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(params.DynamicCollection),
-		dynamicconfig.ForceNamespaceCacheRefreshOnRead.Get(params.DynamicCollection),
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(params.DynamicCollection),
 		params.MetricsHandler,
 		params.Logger,

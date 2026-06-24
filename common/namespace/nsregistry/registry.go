@@ -132,7 +132,6 @@ type (
 		// AND was not found when reading through to the persistence layer
 		readthroughNotFoundCache cache.Cache
 
-		forceNamespaceCacheRefreshOnRead dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		// Temporary solution to force read search attributes from persistence
 		forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn
 		replicationResolverFactory              namespace.ReplicationResolverFactory
@@ -155,7 +154,6 @@ func NewRegistry(
 	enableGlobalNamespaces bool,
 	currentClusterName string,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	forceNamespaceCacheRefreshOnRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	forceSearchAttributesCacheRefreshOnRead dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -174,7 +172,6 @@ func NewRegistry(
 		refreshInterval:          refreshInterval,
 		readthroughNotFoundCache: cache.New(readthroughCacheSize, &readthroughNotFoundCacheOpts),
 
-		forceNamespaceCacheRefreshOnRead:        forceNamespaceCacheRefreshOnRead,
 		forceSearchAttributesCacheRefreshOnRead: forceSearchAttributesCacheRefreshOnRead,
 		replicationResolverFactory:              replicationResolverFactory,
 		namespaceStateChangedFn:                 namespaceStateChangedFn,
@@ -749,15 +746,6 @@ func (r *registry) getNamespaceByIDLocked(id namespace.ID) (*namespace.Namespace
 // getOrReadthroughNamespace returns namespace information if it exists or reads through
 // to the persistence layer and updates internal entry if it doesn't
 func (r *registry) getOrReadthroughNamespace(name namespace.Name) (*namespace.Namespace, error) {
-	// test-only path: bypass cache so namespace updates are visible immediately.
-	// This intentionally uses the read-through lock, so forced refresh serializes
-	// reads for matching namespaces. Do not enable this in production.
-	if r.forceNamespaceCacheRefreshOnRead(name.String()) {
-		r.readthroughLock.Lock()
-		defer r.readthroughLock.Unlock()
-		return r.readthroughNamespaceLocked(name)
-	}
-
 	// check main caches
 	ns, err := r.getNamespace(name)
 	if err == nil {
@@ -788,14 +776,6 @@ func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Na
 	// check main caches
 	ns, err := r.getNamespaceByID(id)
 	if err == nil {
-		// test-only path: bypass cache so namespace updates are visible immediately.
-		// This intentionally uses the read-through lock, so forced refresh serializes
-		// reads for matching namespaces. Do not enable this in production.
-		if r.forceNamespaceCacheRefreshOnRead(ns.Name().String()) {
-			r.readthroughLock.Lock()
-			defer r.readthroughLock.Unlock()
-			return r.readthroughNamespaceByIDLocked(id)
-		}
 		return ns, nil
 	}
 
@@ -805,9 +785,6 @@ func (r *registry) getOrReadthroughNamespaceByID(id namespace.ID) (*namespace.Na
 	// check again in case there was an update while waiting
 	ns, err = r.getNamespaceByID(id)
 	if err == nil {
-		if r.forceNamespaceCacheRefreshOnRead(ns.Name().String()) {
-			return r.readthroughNamespaceByIDLocked(id)
-		}
 		return ns, nil
 	}
 

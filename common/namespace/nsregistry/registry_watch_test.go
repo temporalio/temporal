@@ -126,7 +126,6 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 		true,
 		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFn(false),
 		s.captureHandler,
 		s.logger,
