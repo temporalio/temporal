@@ -161,7 +161,6 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", scheduleToStart[0].Tags["namespace"])
 				require.Equal(t, "endpoint", scheduleToStart[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", scheduleToStart[0].Tags["workflowType"])
-				require.Equal(t, "hsm", scheduleToStart[0].Tags["impl"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},
@@ -214,7 +213,6 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", successCount[0].Tags["namespace"])
 				require.Equal(t, "endpoint", successCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", successCount[0].Tags["workflowType"])
-				require.Equal(t, "hsm", successCount[0].Tags["impl"])
 				// Sync success never started, so schedule-to-start (not start-to-close) is recorded.
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
@@ -289,7 +287,6 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, "endpoint", failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
-				require.Equal(t, "hsm", failedCount[0].Tags["impl"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationCancelCount.Name()])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
@@ -361,7 +358,6 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, "namespace-name", cancelCount[0].Tags["namespace"])
 				require.Equal(t, "endpoint", cancelCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", cancelCount[0].Tags["workflowType"])
-				require.Equal(t, "hsm", cancelCount[0].Tags["impl"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationFailedCount.Name()])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
@@ -848,7 +844,6 @@ func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
 			require.Equal(t, "namespace-name", timeoutCount[0].Tags["namespace"])
 			require.Equal(t, "endpoint", timeoutCount[0].Tags["nexus_endpoint"])
 			require.Equal(t, "workflow-type", timeoutCount[0].Tags["workflowType"])
-			require.Equal(t, "hsm", timeoutCount[0].Tags["impl"])
 			require.Equal(t, tc.wantTimeoutType.String(), timeoutCount[0].Tags["timeout_type"])
 
 			// schedule-to-close is always recorded once; the second latency depends on whether the
@@ -1668,7 +1663,6 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				require.Equal(t, "namespace-name", scheduleToStart[0].Tags["namespace"])
 				require.Equal(t, commonnexus.SystemEndpoint, scheduleToStart[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", scheduleToStart[0].Tags["workflowType"])
-				require.Equal(t, "hsm", scheduleToStart[0].Tags["impl"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},
@@ -1727,7 +1721,6 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				require.Equal(t, "namespace-name", successCount[0].Tags["namespace"])
 				require.Equal(t, commonnexus.SystemEndpoint, successCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", successCount[0].Tags["workflowType"])
-				require.Equal(t, "hsm", successCount[0].Tags["impl"])
 				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
 			},
 		},
@@ -1781,7 +1774,6 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
 				require.Equal(t, commonnexus.SystemEndpoint, failedCount[0].Tags["nexus_endpoint"])
 				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
-				require.Equal(t, "hsm", failedCount[0].Tags["impl"])
 				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},

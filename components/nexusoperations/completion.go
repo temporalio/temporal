@@ -120,28 +120,28 @@ func handleOperationError(
 
 // fabricateStartedEventIfMissing adds a NEXUS_OPERATION_STARTED history event and transitions the
 // operation to NEXUS_OPERATION_STATE_STARTED if it has not started yet. It is necessary if the
-// completion is received before the start response. It returns true when it fabricated the started
-// transition, so the caller can emit the schedule-to-start metric.
+// completion is received before the start response. Callers that need to know whether a start was
+// fabricated should check the operation's state before calling (see TransitionStarted.Possible).
 func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
 	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
-) (bool, error) {
+) error {
 	operation, err := hsm.MachineData[Operation](node)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	// The operation was already started, ignore.
 	if !TransitionStarted.Possible(operation) {
-		return false, nil
+		return nil
 	}
 
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -159,10 +159,7 @@ func fabricateStartedEventIfMissing(
 			e.EventTime = startTime
 		}
 	})
-	if err := (StartedEventDefinition{}).Apply(node.Parent, event); err != nil {
-		return false, err
-	}
-	return true, nil
+	return (StartedEventDefinition{}).Apply(node.Parent, event)
 }
 
 // CompletionHandler resolves async Nexus operation completions delivered to the history service
@@ -200,19 +197,22 @@ func (h *CompletionHandler) Handle(
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		started, err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links)
+		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
 			return err
 		}
-		operation, err := hsm.MachineData[Operation](node)
-		if err != nil {
-			return nil
+		// If the operation has not started yet, this completion arrived before the start response and
+		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
+		// schedule-to-start in that case, so we emit it here.
+		fabricatedStart := TransitionStarted.Possible(operation)
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
+			return err
 		}
 		if requestID != "" && operation.RequestId != requestID {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if started && operation.StartedTime != nil {
+		if fabricatedStart && operation.StartedTime != nil {
 			recordScheduleToStartLatency(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), operation.StartedTime.AsTime())
 		}
 

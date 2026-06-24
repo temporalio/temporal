@@ -589,9 +589,6 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 		metrics.NamespaceTag(namespaceName),
 		metrics.NexusEndpointTag(o.GetEndpoint()),
 		metrics.WorkflowTypeTag(wftt),
-		// impl distinguishes CHASM operations from legacy HSM operations during the HSM->CHASM
-		// migration. Intended for internal use only; stripped at the external-observability boundary.
-		metrics.StringTag("impl", "chasm"),
 	}
 
 	opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext)

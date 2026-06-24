@@ -29,10 +29,6 @@ func operationMetricsHandler(
 		metrics.NamespaceTag(namespaceName),
 		metrics.NexusEndpointTag(op.Endpoint),
 		metrics.WorkflowTypeTag(workflowType),
-		// impl distinguishes legacy HSM operations from CHASM operations during the HSM->CHASM
-		// migration. Intended for internal use only; stripped at the external-observability boundary.
-		// Mirrors the impl="chasm" tag in chasm/lib/nexusoperation Operation.metricsHandler.
-		metrics.StringTag("impl", "hsm"),
 	}
 	if tagConfig.IncludeServiceTag {
 		tags = append(tags, metrics.NexusServiceTag(op.Service))

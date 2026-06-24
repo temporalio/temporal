@@ -90,11 +90,11 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			require.Equal(t, "namespace-name", counter[0].Tags["namespace"])
 			require.Equal(t, "workflow-type", counter[0].Tags["workflowType"])
 			require.Equal(t, "endpoint", counter[0].Tags["nexus_endpoint"])
-			require.Equal(t, "hsm", counter[0].Tags["impl"])
 
-			// Only the outcome counter under test is recorded.
+			// Exactly the outcome counter under test is recorded, and no sibling counters leak.
 			for _, name := range allOutcomeCounters {
 				if name == tc.wantCounter {
+					require.Len(t, snapshot[name], 1, "expected counter %s recorded", name)
 					continue
 				}
 				require.Empty(t, snapshot[name], "unexpected counter %s recorded", name)

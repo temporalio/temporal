@@ -336,8 +336,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 
 // TestNexusOperationCallerMetrics verifies that an in-workflow Nexus operation emits the
 // caller-side operation metrics (counter + latencies) tagged with the caller's namespace,
-// endpoint, real workflow type, and the engine ("impl") tag. It runs for both the HSM and CHASM
-// engines, asserting the engine-specific impl tag, which keeps the two implementations at parity.
+// endpoint, and real workflow type. It runs for both the HSM and CHASM engines.
 func (s *NexusWorkflowTestSuite) TestNexusOperationCallerMetrics(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	ctx := env.Context()
@@ -374,11 +373,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCallerMetrics(chasmEnabled bo
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
 
-	expectedImpl := "hsm"
-	if chasmEnabled {
-		expectedImpl = "chasm"
-	}
-
 	successCount := capture.Metric(chasmnexus.NexusOperationSuccessCount.Name())
 	s.Len(successCount, 1)
 	if len(successCount) != 1 {
@@ -389,7 +383,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCallerMetrics(chasmEnabled bo
 		"namespace":      env.Namespace().String(),
 		"nexus_endpoint": endpointName,
 		"workflowType":   callerWorkflowType,
-		"impl":           expectedImpl,
 	})
 
 	// A latency metric is also recorded for the terminal state.
