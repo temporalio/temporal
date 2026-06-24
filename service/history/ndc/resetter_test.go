@@ -351,7 +351,7 @@ func (s *resetterSuite) TestResetWorkflow_RebuildError() {
 
 	resetterRebuildErr := serviceerror.NewInternal("rebuild failed")
 	s.mockStateBuilder.EXPECT().Rebuild(
-		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, new(resetterBaseVersion),
 		gomock.Any(), newBranchToken, gomock.Any(),
 	).Return(nil, RebuildStats{}, resetterRebuildErr)
 
@@ -406,7 +406,7 @@ func (s *resetterSuite) TestResetWorkflow_RefreshExpirationError() {
 		&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
-		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, util.Ptr(resetterBaseVersion),
+		ctx, now, gomock.Any(), branchToken, resetterBaseEventID, new(resetterBaseVersion),
 		gomock.Any(), newBranchToken, gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
 	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)

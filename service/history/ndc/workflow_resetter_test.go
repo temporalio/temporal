@@ -2204,10 +2204,10 @@ func (s *workflowResetterSuite) TestPersistToDB_ThreeRuns_ConflictResolve() {
 		int64(0),
 		baseSnapshot,
 		baseEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		currentMutation,
 		currentEventsSeq,
 		true,
@@ -2431,7 +2431,7 @@ func (s *workflowResetterSuite) TestResetWorkflow_CurrentRunning() {
 	)
 	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		ctx, persistence.UpdateWorkflowModeUpdateCurrent, chasm.WorkflowArchetypeID,
-		int64(0), currentMutation, currentEventsSeq, util.Ptr(int64(0)),
+		int64(0), currentMutation, currentEventsSeq, new(int64(0)),
 		gomock.Any(), gomock.Any(), true,
 	).Return(int64(0), int64(0), nil)
 
