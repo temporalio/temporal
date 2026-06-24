@@ -14,6 +14,25 @@ func (e taskExecutor) metricTagConfig() chasmnexus.NexusMetricTagConfig {
 	return e.Config.ResolvedMetricTagConfig()
 }
 
+// callerMetrics is injected into a terminal transition so it can emit the caller-side metric from
+// inside the transition. It is populated only on the live executor/completion path; the registered
+// (replay) event definitions leave it zero (enabled() == false), so the transition stays silent and
+// the metric is emitted exactly once even though *EventDefinition.Apply re-runs on replication/reset.
+type callerMetrics struct {
+	handler   metrics.Handler
+	tagConfig chasmnexus.NexusMetricTagConfig
+}
+
+// enabled reports whether metrics should be emitted (true only on the live path).
+func (m callerMetrics) enabled() bool {
+	return m.handler != nil
+}
+
+// callerMetrics returns the live-path metrics carrier for the executor.
+func (e taskExecutor) callerMetrics() callerMetrics {
+	return callerMetrics{handler: e.MetricsHandler, tagConfig: e.metricTagConfig()}
+}
+
 // operationMetricsHandler returns a metrics handler enriched with caller-side Nexus operation
 // tags. It mirrors chasm/lib/nexusoperation Operation.metricsHandler so the HSM and CHASM
 // implementations emit identical metric names and labels (see the HSM->CHASM migration). Unlike

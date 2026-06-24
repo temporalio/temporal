@@ -22,6 +22,7 @@ func handleSuccessfulOperationResult(
 	operation Operation,
 	result *commonpb.Payload,
 	links []*commonpb.Link,
+	cm callerMetrics,
 ) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
@@ -39,13 +40,14 @@ func handleSuccessfulOperationResult(
 		}
 		e.Links = links
 	})
-	return CompletedEventDefinition{}.Apply(node.Parent, event)
+	return CompletedEventDefinition{metrics: cm}.Apply(node.Parent, event)
 }
 
 func handleOperationError(
 	node *hsm.Node,
 	operation Operation,
 	opErr *nexus.OperationError,
+	cm callerMetrics,
 ) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
@@ -85,7 +87,7 @@ func handleOperationError(
 			}
 		})
 
-		return FailedEventDefinition{}.Apply(node.Parent, event)
+		return FailedEventDefinition{metrics: cm}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
 		if originalCause.GetCanceledFailureInfo() == nil {
 			// Old SDKs may send an ApplicationFailure for canceled operation causes.
@@ -110,7 +112,7 @@ func handleOperationError(
 			}
 		})
 
-		return CanceledEventDefinition{}.Apply(node.Parent, event)
+		return CanceledEventDefinition{metrics: cm}.Apply(node.Parent, event)
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
 		// transition error.
@@ -128,6 +130,7 @@ func fabricateStartedEventIfMissing(
 	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
+	cm callerMetrics,
 ) error {
 	operation, err := hsm.MachineData[Operation](node)
 	if err != nil {
@@ -159,7 +162,7 @@ func fabricateStartedEventIfMissing(
 			e.EventTime = startTime
 		}
 	})
-	return (StartedEventDefinition{}).Apply(node.Parent, event)
+	return (StartedEventDefinition{metrics: cm}).Apply(node.Parent, event)
 }
 
 // CompletionHandler resolves async Nexus operation completions delivered to the history service
@@ -201,25 +204,24 @@ func (h *CompletionHandler) Handle(
 		if err != nil {
 			return err
 		}
-		// If the operation has not started yet, this completion arrived before the start response and
-		// fabricateStartedEventIfMissing will transition it to started below; the executor never emitted
-		// schedule-to-start in that case, so we emit it here.
-		fabricatedStart := TransitionStarted.Possible(operation)
-		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
-			return err
-		}
 		if requestID != "" && operation.RequestId != requestID {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if fabricatedStart && operation.StartedTime != nil {
-			recordScheduleToStartLatency(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), operation.StartedTime.AsTime())
+
+		// The terminal transitions emit the caller-side metric themselves when handed this live-path
+		// carrier; the registered (replay) event definitions leave it disabled. The transition picks
+		// the right outcome (succeeded/failed/canceled) and schedule-to-start (when this completion
+		// fabricates the start), so nothing needs to be decided here.
+		cm := callerMetrics{handler: metricsHandler, tagConfig: metricTagConfig}
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links, cm); err != nil {
+			return err
 		}
 
 		if opFailedError != nil {
-			err = handleOperationError(node, operation, opFailedError)
+			err = handleOperationError(node, operation, opFailedError, cm)
 		} else {
-			err = handleSuccessfulOperationResult(node, operation, result, nil)
+			err = handleSuccessfulOperationResult(node, operation, result, nil, cm)
 		}
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion with state
 		// based replication.
@@ -227,20 +229,7 @@ func (h *CompletionHandler) Handle(
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if err != nil {
-			return err
-		}
-		// Emit the terminal outcome metric. The canceled vs failed split mirrors handleOperationError
-		// so the metric outcome matches the recorded transition.
-		switch {
-		case opFailedError == nil:
-			recordOperationSucceeded(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		case opFailedError.State == nexus.OperationStateCanceled:
-			recordOperationCanceled(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		default:
-			recordOperationFailed(metricsHandler, metricTagConfig, operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		}
-		return nil
+		return err
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.

@@ -293,6 +293,8 @@ type EventFailed struct {
 	Time       time.Time
 	Node       *hsm.Node
 	Attributes *historypb.NexusOperationFailedEventAttributes
+	// metrics is set only on the live path; the registered (replay) definition leaves it disabled.
+	metrics callerMetrics
 }
 
 var TransitionFailed = hsm.NewTransition(
@@ -306,6 +308,9 @@ var TransitionFailed = hsm.NewTransition(
 		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
 		// If we ever use this code for a standalone state machine implementation we will want to record the last
 		// attempt information in case the completion is a result of a synchronous operation.
+		if event.metrics.enabled() {
+			recordOperationFailed(event.metrics.handler, event.metrics.tagConfig, op, event.Node.NamespaceName(), event.Node.WorkflowTypeName(), event.Time)
+		}
 		return op.output()
 	},
 )
@@ -315,6 +320,8 @@ type EventSucceeded struct {
 	// Only set if the operation completed synchronously, as a response to a StartOperation RPC.
 	Time time.Time
 	Node *hsm.Node
+	// metrics is set only on the live path; the registered (replay) definition leaves it disabled.
+	metrics callerMetrics
 }
 
 var TransitionSucceeded = hsm.NewTransition(
@@ -328,6 +335,9 @@ var TransitionSucceeded = hsm.NewTransition(
 		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
 		// If we ever use this code for a standalone state machine implementation we will want to record the last
 		// attempt information in case the completion is a result of a synchronous operation.
+		if event.metrics.enabled() {
+			recordOperationSucceeded(event.metrics.handler, event.metrics.tagConfig, op, event.Node.NamespaceName(), event.Node.WorkflowTypeName(), event.Time)
+		}
 		return op.output()
 	},
 )
@@ -336,6 +346,8 @@ var TransitionSucceeded = hsm.NewTransition(
 type EventCanceled struct {
 	Time time.Time
 	Node *hsm.Node
+	// metrics is set only on the live path; the registered (replay) definition leaves it disabled.
+	metrics callerMetrics
 }
 
 var TransitionCanceled = hsm.NewTransition(
@@ -349,6 +361,9 @@ var TransitionCanceled = hsm.NewTransition(
 		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
 		// If we ever use this code for a standalone state machine implementation we will want to record the last
 		// attempt information in case the completion is a result of a synchronous operation.
+		if event.metrics.enabled() {
+			recordOperationCanceled(event.metrics.handler, event.metrics.tagConfig, op, event.Node.NamespaceName(), event.Node.WorkflowTypeName(), event.Time)
+		}
 		return op.output()
 	},
 )
@@ -359,6 +374,8 @@ type EventStarted struct {
 	Time       time.Time
 	Node       *hsm.Node
 	Attributes *historypb.NexusOperationStartedEventAttributes
+	// metrics is set only on the live path; the registered (replay) definition leaves it disabled.
+	metrics callerMetrics
 }
 
 var TransitionStarted = hsm.NewTransition(
@@ -374,6 +391,11 @@ var TransitionStarted = hsm.NewTransition(
 		}
 
 		op.StartedTime = timestamppb.New(event.Time)
+
+		// Emit schedule-to-start before the cancelation early-return below so it fires regardless.
+		if event.metrics.enabled() {
+			recordScheduleToStartLatency(event.metrics.handler, event.metrics.tagConfig, op, event.Node.NamespaceName(), event.Node.WorkflowTypeName(), event.Time)
+		}
 
 		// If cancelation is requested already, schedule sending the cancelation request.
 		child, err := op.CancelationNode(event.Node)
@@ -404,6 +426,12 @@ var TransitionStarted = hsm.NewTransition(
 // EventTimedOut is triggered when the schedule-to-close timeout is triggered for an operation.
 type EventTimedOut struct {
 	Node *hsm.Node
+	// Time and TimeoutType are set on the live path for the caller-side metric (close time and the
+	// timeout_type tag); the replay path leaves them zero since metrics is disabled there.
+	Time        time.Time
+	TimeoutType enumspb.TimeoutType
+	// metrics is set only on the live path; the registered (replay) definition leaves it disabled.
+	metrics callerMetrics
 }
 
 var TransitionTimedOut = hsm.NewTransition(
@@ -416,6 +444,9 @@ var TransitionTimedOut = hsm.NewTransition(
 	func(op Operation, event EventTimedOut) (hsm.TransitionOutput, error) {
 		// Keep attempt information as-is for debuggability.
 		// When used in a workflow, this machine node will be deleted from the tree after this transition.
+		if event.metrics.enabled() {
+			recordOperationTimedOut(event.metrics.handler, event.metrics.tagConfig, op, event.Node.NamespaceName(), event.Node.WorkflowTypeName(), event.TimeoutType.String(), event.Time)
+		}
 		return op.output()
 	},
 )

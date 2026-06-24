@@ -451,19 +451,15 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 					Time:       startedTime,
 					Node:       node,
 					Attributes: event.GetNexusOperationStartedEventAttributes(),
+					metrics:    e.callerMetrics(),
 				})
 			}); err != nil {
 				return err
 			}
-			recordScheduleToStartLatency(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), startedTime)
 			return nil
 		}
 		// Operation completed synchronously. Store the result and update the state machine.
-		if err := handleSuccessfulOperationResult(node, operation, result.Successful, links); err != nil {
-			return err
-		}
-		recordOperationSucceeded(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		return nil
+		return handleSuccessfulOperationResult(node, operation, result.Successful, links, e.callerMetrics())
 	})
 }
 
@@ -480,17 +476,9 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		}
 		// Fall through all uncaught errors to retryable
 	case errors.As(callErr, &opErr):
-		if err := handleOperationError(node, operation, opErr); err != nil {
-			return err
-		}
-		// Emit the terminal outcome metric at this live, once-only site (handleOperationError also
-		// runs on the async completion path and on replay, so emission must not live inside it).
-		if opErr.State == nexus.OperationStateCanceled {
-			recordOperationCanceled(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		} else {
-			recordOperationFailed(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-		}
-		return nil
+		// TransitionFailed/TransitionCanceled emit the matching outcome themselves; just hand over
+		// the live-path metrics carrier.
+		return handleOperationError(node, operation, opErr, e.callerMetrics())
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -527,7 +515,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	})
 }
 
-func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) error {
+func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error, cm callerMetrics) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return err
@@ -552,18 +540,14 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 		}
 	})
 
-	return FailedEventDefinition{}.Apply(node.Parent, event)
+	return FailedEventDefinition{metrics: cm}.Apply(node.Parent, event)
 }
 
-// failNonRetryable resolves the operation as failed (non-retryable) and emits the terminal
-// failure metric. It wraps handleNonRetryableStartOperationError so emission happens once, at
-// this live processing site, rather than in the event-application path (which also runs on replay).
+// failNonRetryable resolves the operation as failed (non-retryable). TransitionFailed emits the
+// terminal failure metric itself when handed this live-path carrier (the registered/replay event
+// definition leaves it disabled).
 func (e taskExecutor) failNonRetryable(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
-	if err := handleNonRetryableStartOperationError(node, operation, callErr); err != nil {
-		return err
-	}
-	recordOperationFailed(e.MetricsHandler, e.metricTagConfig(), operation, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
-	return nil
+	return handleNonRetryableStartOperationError(node, operation, callErr, e.callerMetrics())
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
@@ -587,9 +571,8 @@ func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *
 }
 
 func (e taskExecutor) recordOperationTimeout(env hsm.Environment, node *hsm.Node, timeoutType enumspb.TimeoutType) error {
-	var timedOutOp Operation
-	if err := hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
-		timedOutOp = op
+	closeTime := env.Now()
+	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
 			return hsm.TransitionOutput{}, err
@@ -617,15 +600,12 @@ func (e taskExecutor) recordOperationTimeout(env hsm.Environment, node *hsm.Node
 		})
 
 		return TransitionTimedOut.Apply(op, EventTimedOut{
-			Node: node,
+			Node:        node,
+			Time:        closeTime,
+			TimeoutType: timeoutType,
+			metrics:     e.callerMetrics(),
 		})
-	}); err != nil {
-		return err
-	}
-	// timedOutOp was captured from the transition closure above (the same Operation that
-	// MachineData would return); the timeout transition leaves the metric fields unchanged.
-	recordOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), timedOutOp, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
-	return nil
+	})
 }
 
 func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {

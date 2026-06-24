@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -122,6 +124,101 @@ func TestCherryPick(t *testing.T) {
 			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
 		}
 	})
+}
+
+// TestCallerMetricsNotEmittedOnReapply is the replay-safety evidence for the "emit inside the
+// transition" approach: re-applying a terminal event through the registered event definition (the
+// path replication and workflow reset use) must NOT emit caller-side metrics. The registered
+// definition carries no metrics hook, so the transition stays silent; emission happens only on the
+// live executor/completion path, which sets the hook. The live emission is covered by the executor
+// and completion tests, so together they show emit-once-on-live, zero-on-replay.
+func TestCallerMetricsNotEmittedOnReapply(t *testing.T) {
+	testCases := []struct {
+		name       string
+		def        hsm.EventDefinition
+		makeEvent  func(eventID int64) *historypb.HistoryEvent
+		metricName string
+	}{
+		{
+			name: "completed",
+			def:  nexusoperations.CompletedEventDefinition{},
+			makeEvent: func(eventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+						NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{ScheduledEventId: eventID},
+					},
+				}
+			},
+			metricName: chasmnexus.NexusOperationSuccessCount.Name(),
+		},
+		{
+			name: "failed",
+			def:  nexusoperations.FailedEventDefinition{},
+			makeEvent: func(eventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+						NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{ScheduledEventId: eventID},
+					},
+				}
+			},
+			metricName: chasmnexus.NexusOperationFailedCount.Name(),
+		},
+		{
+			name: "canceled",
+			def:  nexusoperations.CanceledEventDefinition{},
+			makeEvent: func(eventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+						NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{ScheduledEventId: eventID},
+					},
+				}
+			},
+			metricName: chasmnexus.NexusOperationCancelCount.Name(),
+		},
+		{
+			name: "timedout",
+			def:  nexusoperations.TimedOutEventDefinition{},
+			makeEvent: func(eventID int64) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+					EventTime: timestamppb.Now(),
+					Attributes: &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+						NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{ScheduledEventId: eventID},
+					},
+				}
+			},
+			metricName: chasmnexus.NexusOperationTimeoutCount.Name(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			}))
+			op, err := hsm.MachineData[nexusoperations.Operation](node)
+			require.NoError(t, err)
+			eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+			require.NoError(t, err)
+
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+
+			// Apply via the registered definition (nil hook) — the replication/reset re-apply path.
+			require.NoError(t, tc.def.Apply(node.Parent, tc.makeEvent(eventID)))
+
+			snapshot := capture.Snapshot()
+			require.Empty(t, snapshot[tc.metricName], "terminal counter must not be emitted on re-apply")
+			require.Empty(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], "latency must not be emitted on re-apply")
+		})
+	}
 }
 
 func TestTerminalStatesDeletion(t *testing.T) {

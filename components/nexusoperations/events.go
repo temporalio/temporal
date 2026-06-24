@@ -126,7 +126,10 @@ func (d CancelRequestFailedEventDefinition) CherryPick(root *hsm.Node, event *hi
 	return hsm.ErrNotCherryPickable
 }
 
-type StartedEventDefinition struct{}
+// StartedEventDefinition applies a NEXUS_OPERATION_STARTED event. Its metrics carrier is set only
+// when the live executor/completion path constructs the definition; the registered (replay) instance
+// leaves it disabled, so the transition emits the caller-side metric exactly once.
+type StartedEventDefinition struct{ metrics callerMetrics }
 
 func (d StartedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -142,6 +145,7 @@ func (d StartedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEv
 			Time:       event.EventTime.AsTime(),
 			Node:       node,
 			Attributes: event.GetNexusOperationStartedEventAttributes(),
+			metrics:    d.metrics,
 		})
 	})
 
@@ -155,7 +159,7 @@ func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Hist
 	return d.Apply(root, event)
 }
 
-type CompletedEventDefinition struct{}
+type CompletedEventDefinition struct{ metrics callerMetrics }
 
 func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -164,8 +168,9 @@ func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionSucceeded.Apply(o, EventSucceeded{
-			Time: event.EventTime.AsTime(),
-			Node: node,
+			Time:    event.EventTime.AsTime(),
+			Node:    node,
+			metrics: d.metrics,
 		})
 	})
 	if err != nil {
@@ -186,7 +191,7 @@ func (d CompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Hi
 	return d.Apply(root, event)
 }
 
-type FailedEventDefinition struct{}
+type FailedEventDefinition struct{ metrics callerMetrics }
 
 func (d FailedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -202,6 +207,7 @@ func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEve
 			Time:       event.EventTime.AsTime(),
 			Attributes: event.GetNexusOperationFailedEventAttributes(),
 			Node:       node,
+			metrics:    d.metrics,
 		})
 	})
 	if err != nil {
@@ -218,7 +224,7 @@ func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Histo
 	return d.Apply(root, event)
 }
 
-type CanceledEventDefinition struct{}
+type CanceledEventDefinition struct{ metrics callerMetrics }
 
 func (d CanceledEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -231,8 +237,9 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionCanceled.Apply(o, EventCanceled{
-			Time: event.EventTime.AsTime(),
-			Node: node,
+			Time:    event.EventTime.AsTime(),
+			Node:    node,
+			metrics: d.metrics,
 		})
 	})
 	if err != nil {
@@ -249,7 +256,7 @@ func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.His
 	return d.Apply(root, event)
 }
 
-type TimedOutEventDefinition struct{}
+type TimedOutEventDefinition struct{ metrics callerMetrics }
 
 func (d TimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -262,7 +269,8 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionTimedOut.Apply(o, EventTimedOut{
-			Node: node,
+			Node:    node,
+			metrics: d.metrics,
 		})
 	})
 	if err != nil {
