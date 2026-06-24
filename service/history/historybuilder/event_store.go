@@ -1,6 +1,8 @@
 package historybuilder
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
@@ -103,6 +105,15 @@ func (b *EventStore) add(
 	return event, batchID
 }
 
+// LatestEventBatchID returns the first event ID of the batch currently being built, or
+// common.EmptyEventID if the current batch is empty, e.g. after a Flush.
+func (b *EventStore) LatestEventBatchID() int64 {
+	if len(b.memLatestBatch) > 0 {
+		return b.memLatestBatch[0].EventId
+	}
+	return common.EmptyEventID
+}
+
 // appendToLatestBatch appends event to memLatestBatch, rolling into a new batch
 // first if the additional event would push the current batch over
 // maxEventBatchSizeInBytes. A value of <= 0 disables the check.
@@ -126,17 +137,10 @@ func (b *EventStore) HasBufferEvents() bool {
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (b *EventStore) HasAnyBufferedEvent(predicate BufferedEventFilter) bool {
-	for _, event := range b.memBufferBatch {
-		if predicate(event) {
-			return true
-		}
+	if slices.ContainsFunc(b.memBufferBatch, predicate) {
+		return true
 	}
-	for _, event := range b.dbBufferBatch {
-		if predicate(event) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(b.dbBufferBatch, predicate)
 }
 
 func (b *EventStore) NumBufferedEvents() int {

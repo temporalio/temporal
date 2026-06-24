@@ -444,7 +444,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	// - ackLevel gets set to maxReadLevel
 	// - backlog counts reset to 0
 	for _, t := range s.capturedTasks() {
-		t.finish(nil, true)
+		t.finish(taskFinishResult{consumedToken: true})
 	}
 
 	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
@@ -576,7 +576,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 
 	// Complete the delivered tasks.
 	for _, t := range s.capturedTasks() {
-		t.finish(nil, true)
+		t.finish(taskFinishResult{consumedToken: true})
 	}
 
 	// Verify the ack level advances past all tasks (expired + valid).
@@ -592,11 +592,8 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 	}, 2*time.Second, 10*time.Millisecond, "ack level did not advance past all tasks")
 }
 
-// TestExpiredTasksOnRead_EmitTasksDropped verifies that when the task reader
-// encounters tasks that have already expired by the time they are read from
-// persistence, tasks_dropped is emitted once per expired task with
-// reason=expired_read. Runs across all three reader implementations (classic,
-// pri, fair) via the suite variants.
+// TestExpiredTasksOnRead_EmitTasksDropped verifies tasks_dropped is emitted once per
+// task that has already expired when read from persistence, with reason=expired_read.
 func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 	const numExpired = 3
 
@@ -632,7 +629,7 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 		reasons := droppedReasons()
 		s.Require().Len(reasons, numExpired)
 		for _, reason := range reasons {
-			s.Equal(metrics.DroppedTaskReasonExpiredReadTag.Value, reason)
+			s.Equal(dropReasonExpiredRead.tag().Value, reason)
 		}
 		return
 	}
@@ -689,7 +686,7 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	for _, reason := range droppedReasons() {
-		s.Equal(metrics.DroppedTaskReasonExpiredReadTag.Value, reason)
+		s.Equal(dropReasonExpiredRead.tag().Value, reason)
 	}
 }
 
@@ -920,9 +917,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// writer
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for sleepUntil(func() bool { return delta() <= p.gap }) {
 			info := makeNewTask()
 			tracker.Store(info.ScheduledEventId, info.Priority.FairnessKey)
@@ -936,16 +931,14 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 				sleep()
 			}
 		}
-	}()
+	})
 
 	// poller
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for sleepUntil(func() bool { return delta() >= -p.gap }) {
 			if t := getTask(); t != nil {
 				// TODO: error sometimes?
-				t.finish(nil, true)
+				t.finish(taskFinishResult{consumedToken: true})
 
 				tindex := t.event.Data.ScheduledEventId
 				if _, loaded := tracker.LoadAndDelete(tindex); loaded {
@@ -960,7 +953,7 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 				sleep()
 			}
 		}
-	}()
+	})
 
 	// adjust target over time
 	for t := target.Load(); time.Since(start) < p.duration; sleep() {

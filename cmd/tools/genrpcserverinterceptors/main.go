@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -43,10 +44,10 @@ var (
 
 	// List of types for which Workflow tag getters are generated.
 	grpcServers = []reflect.Type{
-		reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*historyservice.HistoryServiceServer)(nil)).Elem(),
-		reflect.TypeOf((*matchingservice.MatchingServiceServer)(nil)).Elem(),
+		reflect.TypeFor[workflowservice.WorkflowServiceServer](),
+		reflect.TypeFor[adminservice.AdminServiceServer](),
+		reflect.TypeFor[historyservice.HistoryServiceServer](),
+		reflect.TypeFor[matchingservice.MatchingServiceServer](),
 	}
 
 	// Only request fields that match the pattern are eligible for deeper inspection.
@@ -54,38 +55,28 @@ var (
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
 	excludeTaskTokenTypes = []reflect.Type{
-		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
-		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
+		reflect.TypeFor[*workflowservice.RespondQueryTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskCompletedRequest](),
+		reflect.TypeFor[*workflowservice.RespondNexusTaskFailedRequest](),
 	}
 
-	executionGetterT = reflect.TypeOf((*interface {
+	executionGetterT = reflect.TypeFor[interface {
 		GetExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	workflowExecutionGetterT = reflect.TypeOf((*interface {
+	workflowExecutionGetterT = reflect.TypeFor[interface {
 		GetWorkflowExecution() *commonpb.WorkflowExecution
-	})(nil)).Elem()
+	}]()
 
-	taskTokenGetterT = reflect.TypeOf((*interface {
-		GetTaskToken() []byte
-	})(nil)).Elem()
+	taskTokenGetterT = reflect.TypeFor[interface{ GetTaskToken() []byte }]()
 
-	workflowIDGetterT = reflect.TypeOf((*interface {
-		GetWorkflowId() string
-	})(nil)).Elem()
+	workflowIDGetterT = reflect.TypeFor[interface{ GetWorkflowId() string }]()
 
-	runIDGetterT = reflect.TypeOf((*interface {
-		GetRunId() string
-	})(nil)).Elem()
+	runIDGetterT = reflect.TypeFor[interface{ GetRunId() string }]()
 
-	activityIDGetterT = reflect.TypeOf((*interface {
-		GetActivityId() string
-	})(nil)).Elem()
+	activityIDGetterT = reflect.TypeFor[interface{ GetActivityId() string }]()
 
-	operationIDGetterT = reflect.TypeOf((*interface {
-		GetOperationId() string
-	})(nil)).Elem()
+	operationIDGetterT = reflect.TypeFor[interface{ GetOperationId() string }]()
 )
 
 func main() {
@@ -103,8 +94,8 @@ func getGrpcServerData(grpcServerT reflect.Type) grpcServerData {
 		Imports: []string{grpcServerT.PkgPath()},
 	}
 
-	for i := 0; i < grpcServerT.NumMethod(); i++ {
-		rpcT := grpcServerT.Method(i).Type
+	for method := range grpcServerT.Methods() {
+		rpcT := method.Type
 		if rpcT.NumIn() < 2 {
 			continue
 		}
@@ -138,10 +129,8 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 		pd.WorkflowIDGetter = "GetWorkflowExecution().GetWorkflowId()"
 		pd.RunIDGetter = "GetWorkflowExecution().GetRunId()"
 	case messageType.AssignableTo(taskTokenGetterT):
-		for _, ert := range excludeTaskTokenTypes {
-			if messageType.AssignableTo(ert) {
-				return pd
-			}
+		if slices.ContainsFunc(excludeTaskTokenTypes, messageType.AssignableTo) {
+			return pd
 		}
 		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
@@ -162,9 +151,9 @@ func workflowTagGetters(messageType reflect.Type, depth int) messageData {
 
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
-	for fieldNum := 0; fieldNum < messageType.Elem().NumField(); fieldNum++ {
-		nestedRequest := messageType.Elem().Field(fieldNum)
-		if nestedRequest.Type.Kind() != reflect.Ptr {
+	for nestedRequest := range messageType.Elem().Fields() {
+		nestedRequest := nestedRequest
+		if nestedRequest.Type.Kind() != reflect.Pointer {
 			continue
 		}
 		if nestedRequest.Type.Elem().Kind() != reflect.Struct {

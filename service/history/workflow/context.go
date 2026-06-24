@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -1118,7 +1117,7 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext historyi.ShardContext
 // Returns true if execution is forced terminated
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardContext historyi.ShardContext) (bool, error) {
-	if c.maxMutableStateSizeExceeded() {
+	if c.maxMutableStateSizeExceeded(shardContext.ChasmRegistry()) {
 		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
 			return false, err
 		}
@@ -1130,12 +1129,16 @@ func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardCon
 
 // Returns true if the workflow is running and mutable state size should trigger a forced termination
 // Prints a log message if mutable state size is over the error or warn limits
-func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
+func (c *ContextImpl) maxMutableStateSizeExceeded(chasmRegistry *chasm.Registry) bool {
 	mutableStateSizeLimitError := c.config.MutableStateSizeLimitError()
 	mutableStateSizeLimitWarn := c.config.MutableStateSizeLimitWarn()
 
 	mutableStateSize := c.MutableState.GetApproximatePersistedSize()
-	metrics.PersistedMutableStateSize.With(c.metricsHandler).Record(int64(mutableStateSize))
+	metricsHandler := c.metricsHandler
+	if archetypeTag, ok := getArchetypeMetricTag(chasmRegistry, c.MutableState.ChasmTree().ArchetypeID()); ok {
+		metricsHandler = metricsHandler.WithTags(archetypeTag)
+	}
+	metrics.PersistedMutableStateSize.With(metricsHandler).Record(int64(mutableStateSize))
 
 	if mutableStateSize > mutableStateSizeLimitError {
 		c.logger.Warn("mutable state size exceeds error limit.",
@@ -1222,7 +1225,7 @@ func emitStateTransitionCount(
 	metrics.StateTransitionCount.With(metricsHandler).Record(
 		mutableState.GetExecutionInfo().StateTransitionCount,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
-		metrics.NamespaceStateTag(namespaceState(clusterMetadata, util.Ptr(mutableState.GetCurrentVersion()))),
+		metrics.NamespaceStateTag(namespaceState(clusterMetadata, new(mutableState.GetCurrentVersion()))),
 	)
 }
 
@@ -1255,5 +1258,5 @@ func MutableStateFailoverVersion(
 	if mutableState == nil {
 		return nil
 	}
-	return util.Ptr(mutableState.GetCurrentVersion())
+	return new(mutableState.GetCurrentVersion())
 }

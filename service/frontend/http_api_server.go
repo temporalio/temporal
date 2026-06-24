@@ -132,8 +132,8 @@ func NewHTTPAPIServer(
 		h.matchAdditionalHeaders[v] = true
 	}
 	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
-		if strings.HasSuffix(v, "*") {
-			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(strings.TrimSuffix(v, "*")))
+		if before, ok := strings.CutSuffix(v, "*"); ok {
+			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(before))
 		} else {
 			h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
 		}
@@ -349,9 +349,9 @@ type serviceMethod struct {
 	handler grpc.UnaryHandler
 }
 
-var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-var protoMessageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
-var errorType = reflect.TypeOf((*error)(nil)).Elem()
+var contextType = reflect.TypeFor[context.Context]()
+var protoMessageType = reflect.TypeFor[proto.Message]()
+var errorType = reflect.TypeFor[error]()
 
 func newInlineClientConn(
 	servers map[string]any,
@@ -364,8 +364,8 @@ func newInlineClientConn(
 	methods := map[string]*serviceMethod{}
 	for qualifiedServerName, server := range servers {
 		serverVal := reflect.ValueOf(server)
-		for i := 0; i < serverVal.Type().NumMethod(); i++ {
-			reflectMethod := serverVal.Type().Method(i)
+		for reflectMethod := range serverVal.Type().Methods() {
+			reflectMethod := reflectMethod
 			// We intentionally look this up by name to not assume method indexes line
 			// up from type to value
 			methodVal := serverVal.MethodByName(reflectMethod.Name)

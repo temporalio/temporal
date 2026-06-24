@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestWithTimeout(t *testing.T) {
@@ -16,6 +17,15 @@ func TestWithTimeout(t *testing.T) {
 	deadline, ok := ctx.Deadline()
 	require.True(t, ok)
 	require.WithinDuration(t, time.Now().Add(time.Second), deadline, 50*time.Millisecond)
+}
+
+func TestNameMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := New(t)
+	md, ok := metadata.FromOutgoingContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 }
 
 func TestContextDecorators(t *testing.T) {

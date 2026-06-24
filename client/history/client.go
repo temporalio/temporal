@@ -5,6 +5,7 @@ package history
 
 import (
 	"context"
+	"maps"
 	"math/rand"
 	"sync"
 	"time"
@@ -165,9 +166,7 @@ func (c *clientImpl) GetReplicationMessages(
 
 	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
-		for shardID, tasks := range resp.ShardMessages {
-			response.ShardMessages[shardID] = tasks
-		}
+		maps.Copy(response.ShardMessages, resp.ShardMessages)
 	}
 	var err error
 	if len(errChan) > 0 {

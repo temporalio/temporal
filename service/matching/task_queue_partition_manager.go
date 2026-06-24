@@ -614,7 +614,9 @@ reredirectTask:
 			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
 			// on the child partition that originally received the task.
 			if !forwarded {
-				pm.processTaskAddHooks(ctx, targetVersion, outcome)
+				// We should not use targetVersion because targetVersion is always routing-config-deriven.
+				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
+				pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
 			}
 
 			syncMatchResult := metrics.TaskAddResultSyncMatch
@@ -651,7 +653,13 @@ reredirectTask:
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
 		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
-		pm.processTaskAddHooks(ctx, targetVersion, outcome)
+		// We should not use targetVersion because targetVersion is always routing-config-deriven.
+		// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
+		// Also, note that we use syncMatchQueue's version, and not spoolQueue's version. This is
+		// because for unpinned tasks spoolQueue is always the default (unversioned) queue.
+		// Unpinned tasks are written to the default queue for late binding, in case target version
+		// changes by the time they can be dispatched.
+		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
 	} else {
 		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
 	}
@@ -704,6 +712,7 @@ func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err e
 func (pm *taskQueuePartitionManagerImpl) isActiveInCluster() (bool, error) {
 	ns, err := pm.engine.namespaceRegistry.GetNamespaceByID(pm.ns.ID())
 	if err == nil {
+		//nolint:forbidigo // partition manager is namespace-scoped
 		return ns.ActiveInCluster(pm.engine.clusterMeta.GetCurrentClusterName()), nil
 	}
 	return false, err
@@ -918,7 +927,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			}
 			// Finish the task because now it is copied to the other backlog. It should be considered
 			// invalid because a poller did not receive the task.
-			task.finish(nil, false)
+			task.finish(taskFinishResult{})
 			return nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
@@ -983,7 +992,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		}
 		// Finish the task because now it is copied to the other backlog. It should be considered
 		// invalid because a poller did not receive the task.
-		task.finish(nil, false)
+		task.finish(taskFinishResult{})
 		return nil
 	}
 	return syncMatchQueue.AddSpooledTaskToMatcher(task)
@@ -1008,6 +1017,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
+	firedNoPollerHook := false
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -1024,6 +1034,16 @@ reredirectTask:
 		return nil, err
 	}
 
+	// Fire the task hook so WCI can scale up before we block waiting for a poller.
+	// Only fire for non-forwarded queries: forwarded queries already had the hook fired
+	// on the originating partition.
+	if request.ForwardInfo == nil &&
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		firedNoPollerHook = true
+	}
+
 	dbq := pm.defaultQueue()
 	if dbq == nil {
 		return nil, errDefaultQueueNotInit
@@ -1037,6 +1057,13 @@ reredirectTask:
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
+	}
+	// Report a sync match when the query was dispatched locally. Skip if we already
+	// fired a no-poller hook for this query — the two signals are contradictory for
+	// the same task dispatch.
+	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
 	return res, err
 }
@@ -1074,6 +1101,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	pm.config.setDefaultPriority(task)
 
 reredirectTask:
+	firedNoPollerHook := false
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
 		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
@@ -1089,6 +1117,16 @@ reredirectTask:
 		return nil, err
 	}
 
+	// Fire the task hook so WCI can scale up before we block waiting for a poller.
+	// Only fire for non-forwarded tasks: forwarded tasks already had the hook fired
+	// on the originating partition.
+	if request.ForwardInfo == nil &&
+		!syncMatchQueue.HasPollerAfter(time.Now().Add(-pm.config.WorkerControllerNoPollerHookWindow())) {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchNoPoller)
+		firedNoPollerHook = true
+	}
+
 	dbq := pm.defaultQueue()
 	if dbq == nil {
 		return nil, errDefaultQueueNotInit
@@ -1102,6 +1140,13 @@ reredirectTask:
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchNexusTask
 		goto reredirectTask
+	}
+	// Report a sync match when the task was dispatched locally. Skip if we already
+	// fired a no-poller hook for this task — the two signals are contradictory for
+	// the same task dispatch.
+	if err == nil && res == nil && request.ForwardInfo == nil && !firedNoPollerHook {
+		queueVersion := syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS()
+		pm.processTaskAddHooks(ctx, queueVersion, syncMatchSuccess)
 	}
 	return res, err
 }

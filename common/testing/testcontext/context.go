@@ -8,9 +8,13 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/debug"
+	"google.golang.org/grpc/metadata"
 )
 
-const defaultTimeout = 90 * time.Second
+const (
+	defaultTimeout      = 90 * time.Second
+	testNameMetadataKey = "temporal-test-name"
+)
 
 type contextStore struct {
 	sync.Mutex
@@ -97,6 +101,10 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 	}
 
 	ctx, cancel := context.WithTimeout(tb.Context(), timeout)
+
+	// Annotate gRPC requests with the test name for OTEL tracing.
+	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
+
 	st := &contextState{
 		ctx:        ctx,
 		cancel:     cancel,
@@ -113,6 +121,7 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		if st.err() == context.DeadlineExceeded {
 			tb.Errorf("Test exceeded timeout of %v", st.timeout)
 		}
+		st.release()
 	})
 	return st
 }
@@ -154,6 +163,12 @@ func (s *contextState) err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ctx.Err()
+}
+
+func (s *contextState) release() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ctx = nil
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {

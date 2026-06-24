@@ -260,7 +260,6 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 
 	var methods []reflect.Method
 	for method := range ptrType.Methods() {
-		method := method
 		if !strings.HasPrefix(method.Name, "Test") {
 			continue
 		}
