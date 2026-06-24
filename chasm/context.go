@@ -98,9 +98,7 @@ type MutableContext interface {
 	SetUserMetadata(Component, *sdkpb.UserMetadata) error
 
 	// TimeSkippingController is the framework-provided surface for managing this execution's
-	// time-skipping configuration. A root component opts in by calling SetTimeSkippingConfig when the
-	// execution is created (and again to adjust it). It takes no Component argument because the
-	// configuration is execution-scoped, like the ExecutionKey()/ExecutionInfo() accessors.
+	// time-skipping configuration. It takes no Component argument as the configuration is execution-scoped.
 	TimeSkippingController
 
 	// Get a Ref for the component

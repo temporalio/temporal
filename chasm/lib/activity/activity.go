@@ -55,11 +55,6 @@ var (
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
-
-// The activity opts into time skipping: it gates idleness via TimeSkippable and chooses its own skip
-// target via the optional TimeSkippingTargetFinder (it must, because its pending timers include timeout
-// tasks the framework's default scan must not target). These compile-time assertions keep the optional
-// interface from silently desyncing if a method signature drifts.
 var _ chasm.TimeSkippable = (*Activity)(nil)
 
 type ActivityStore interface {
@@ -130,15 +125,11 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
-// HasInflightWork implements chasm.TimeSkippable. It reports whether advancing virtual time would
-// skip past real work, gating the framework's per-transaction time-skipping decision.
-//
-// Only the activity attempt is considered: it is in flight unless the activity is SCHEDULED and
-// still waiting for its next dispatch — out of a start delay or retry backoff with the next-attempt
-// time strictly in the (virtual) future. Once that time arrives (dispatch pushed to matching,
-// waiting for a poller), the attempt is running (STARTED) or being cancelled (CANCEL_REQUESTED), or
-// the activity has closed, this returns true. This mirrors the workflow time-skipping rule for
-// activities, and means a closed activity is never time-skipped.
+// HasInflightWork implements chasm.TimeSkippable.
+// It returns true if
+// - the activity is not in a scheduled state
+// - the activity is scheduled but the next dispatch is not in the future
+// Otherwise, it returns false.
 func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
 	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		return true

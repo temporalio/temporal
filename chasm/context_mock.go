@@ -183,19 +183,17 @@ func (c *MockContext) withValue(key any, value any) Context {
 type MockMutableContext struct {
 	MockContext
 
-	mu                       sync.Mutex
-	Tasks                    []MockTask
-	LinksByRequest           map[Component]map[string][]*commonpb.Link
-	UserMetadataByComponent  map[Component]*sdkpb.UserMetadata
-	TimeSkippingConfig       *commonpb.TimeSkippingConfig
-	TimeSkippingConfigInited bool
+	mu                      sync.Mutex
+	Tasks                   []MockTask
+	LinksByRequest          map[Component]map[string][]*commonpb.Link
+	UserMetadataByComponent map[Component]*sdkpb.UserMetadata
+	TimeSkippingConfig      *commonpb.TimeSkippingConfig
 }
 
 func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.TimeSkippingConfig = config
-	c.TimeSkippingConfigInited = true
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {
