@@ -663,16 +663,22 @@ func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *d
 }
 
 func GetOverrideTargetDeploymentVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
-	if OverrideIsPinned(override) {
+	switch {
+	case OverrideIsPinned(override):
 		return GetOverridePinnedVersion(override)
+	case override.GetOneTime() != nil:
+		return override.GetOneTime().GetTargetDeploymentVersion()
+	default:
+		// Auto-upgrade has no stored target version; the version is chosen by matching at task dispatch time
+		return nil
 	}
-	return GetOverrideOneTimeTargetVersion(override)
 }
 
 func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
 	if override.GetAutoUpgrade() {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	} else if override.GetPinned() != nil || override.GetOneTime() != nil {
+		// A pending one-time override routes like pinned; unlike pinned, it clears after a WFT completes on its target.
 		return enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 

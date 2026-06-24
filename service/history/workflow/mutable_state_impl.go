@@ -2678,6 +2678,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
 			pinnedOverride = nil
 		}
+	} else if oneTimeTarget := worker_versioning.GetOverrideOneTimeTargetVersion(o); oneTimeTarget != nil {
+		ms.logger.Warn("Unexpected one-time versioning override found during continue-as-new inheritance",
+			tag.WorkflowNamespace(ms.GetNamespaceEntry().Name().String()),
+			tag.WorkflowID(previousExecutionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(previousExecutionState.GetExecutionState().GetRunId()),
+			tag.Deployment(oneTimeTarget.GetDeploymentName()),
+			tag.BuildId(oneTimeTarget.GetBuildId()))
 	}
 
 	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
@@ -6026,8 +6033,9 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			}
 		}
 
-		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
-			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(ms.GetExecutionInfo().VersioningInfo.VersioningOverride); v != nil {
+			// Existing pinned overrides update WorkerDeploymentName immediately; keep one-time overrides aligned.
+			ms.GetExecutionInfo().WorkerDeploymentName = v.GetDeploymentName()
 		}
 	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil

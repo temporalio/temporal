@@ -1476,6 +1476,7 @@ func (s *mutableStateSuite) TestOneTimeOverrideSearchAttributesUseTargetVersion(
 	expectedVersion := worker_versioning.ExternalWorkerDeploymentVersionToString(
 		worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment2),
 	)
+	s.Equal(deployment2.GetSeriesName(), s.mutableState.GetExecutionInfo().GetWorkerDeploymentName())
 	s.Equal(deployment2.GetSeriesName(), s.mutableState.GetWorkerDeploymentSA())
 	s.Equal(expectedVersion, s.mutableState.GetWorkerDeploymentVersionSA())
 	s.Equal(enumspb.VERSIONING_BEHAVIOR_PINNED, s.mutableState.GetWorkflowVersioningBehaviorSA())

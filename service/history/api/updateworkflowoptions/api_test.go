@@ -173,7 +173,7 @@ func TestMergeOptions_PartialMask(t *testing.T) {
 
 }
 
-func TestMergeOptions_VersionOverrideOneofNestedMask(t *testing.T) {
+func TestMergeOptions_VersionOverrideNestedMask(t *testing.T) {
 	testCases := []struct {
 		name string
 		mask *fieldmaskpb.FieldMask
@@ -212,20 +212,9 @@ func TestMergeOptions_VersionOverrideOneofNestedMask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			input := proto.Clone(pinnedOverrideOptionsB).(*workflowpb.WorkflowExecutionOptions)
 			requested := proto.Clone(oneTimeOverrideOptions).(*workflowpb.WorkflowExecutionOptions)
-			if tc.name == "auto_upgrade oneof field" {
-				requested = &workflowpb.WorkflowExecutionOptions{
-					VersioningOverride: &workflowpb.VersioningOverride{
-						Override: &workflowpb.VersioningOverride_AutoUpgrade{
-							AutoUpgrade: true,
-						},
-					},
-				}
-			}
 
-			merged, optionsToReapply, err := mergeWorkflowExecutionOptions(input, requested, tc.mask)
-			require.NoError(t, err)
-			require.True(t, proto.Equal(requested, merged))
-			require.False(t, optionsToReapply.hasChanges())
+			_, _, err := mergeWorkflowExecutionOptions(input, requested, tc.mask)
+			require.Error(t, err)
 		})
 	}
 }

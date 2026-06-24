@@ -223,36 +223,15 @@ func mergeWorkflowExecutionOptions(
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
-	if _, ok := updateFields["versioningOverride.pinned"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.pinned.behavior"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.pinned.version"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.autoUpgrade"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.oneTime"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.oneTime.targetDeploymentVersion"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.oneTime.targetDeploymentVersion.deploymentName"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-	}
-
-	if _, ok := updateFields["versioningOverride.oneTime.targetDeploymentVersion.buildId"]; ok {
-		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	// Keep the deprecated behavior/deployment pair above for compatibility, but require v0.32
+	// oneof overrides to be replaced atomically instead of pretending nested masks are partial updates.
+	for key := range updateFields {
+		if strings.HasPrefix(key, "versioningOverride.") &&
+			key != "versioningOverride.deployment" &&
+			key != "versioningOverride.behavior" {
+			return nil, OptionsToReapply{}, serviceerror.NewInvalidArgument(
+				"versioning_override doesn't support partial updates")
+		}
 	}
 
 	// ==== Priority
