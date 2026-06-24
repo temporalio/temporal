@@ -320,7 +320,7 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_SingleItem_MarkTheTask() {
 	existing.EXPECT().MarkPoisonPill().Return(nil).Times(1)
 
 	result := batchedTestTask.MarkPoisonPill()
-	s.Nil(result)
+	s.NoError(result)
 }
 
 func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
@@ -508,5 +508,5 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandle
 	add2.EXPECT().MarkUnbatchable().Times(1)
 
 	result := batchedTestTask.MarkPoisonPill()
-	s.Nil(result)
+	s.NoError(result)
 }

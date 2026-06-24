@@ -601,7 +601,7 @@ func (s *transactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 
 	currentRunID, err := s.transactionMgr.GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID)
 	s.NoError(err)
-	s.Equal("", currentRunID)
+	s.Empty(currentRunID)
 }
 
 func (s *transactionMgrSuite) TestGetWorkflowCurrentRunID_Exists() {

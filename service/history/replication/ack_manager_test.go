@@ -120,7 +120,7 @@ func (s *ackManagerSuite) TestNotifyNewTasks_NotInitialized() {
 		&tasks.HistoryReplicationTask{TaskID: 123},
 	})
 
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(456))
+	s.Equal(int64(456), *s.replicationAckManager.maxTaskID)
 }
 
 func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
@@ -129,12 +129,12 @@ func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
 	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 100},
 	})
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(123))
+	s.Equal(int64(123), *s.replicationAckManager.maxTaskID)
 
 	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 234},
 	})
-	s.Equal(*s.replicationAckManager.maxTaskID, int64(234))
+	s.Equal(int64(234), *s.replicationAckManager.maxTaskID)
 }
 
 func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
@@ -315,7 +315,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 
 	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
 	s.NoError(err)
-	s.Equal(1, len(replicationTasks))
+	s.Len(replicationTasks, 1)
 	s.Equal(tasksResponse.Tasks[0].GetTaskID(), lastTaskID)
 }
 
