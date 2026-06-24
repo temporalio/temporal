@@ -168,6 +168,7 @@ type (
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
 		partitionScalerFactory        PartitionScalerFactory
+		rateLimitWeightProvider       TaskQueueRateLimitWeightProvider
 		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
@@ -284,6 +285,7 @@ func NewEngine(
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
 	partitionScalerFactory PartitionScalerFactory,
+	rateLimitWeightProvider TaskQueueRateLimitWeightProvider,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -329,6 +331,7 @@ func NewEngine(
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
 		partitionScalerFactory:    partitionScalerFactory,
+		rateLimitWeightProvider:   rateLimitWeightProvider,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
@@ -493,6 +496,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 
 	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
+	nsName, tqName := namespaceEntry.Name(), partition.TaskQueue().Name()
+	tqConfig.RateLimitWeight = func() float64 {
+		return e.rateLimitWeightProvider.GetRateLimitWeight(nsName, tqName)
+	}
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(namespaceEntry, partition, tqConfig)
 	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }

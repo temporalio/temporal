@@ -214,6 +214,7 @@ type (
 		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
+		RateLimitWeight               func() float64
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int
@@ -535,6 +536,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
 		},
+		RateLimitWeight:            func() float64 { return defaultRateLimitWeight },
 		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
 		FairnessKeyRateLimitCacheSize: func() int {
 			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)

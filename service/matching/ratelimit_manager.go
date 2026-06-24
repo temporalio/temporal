@@ -63,7 +63,8 @@ const (
 )
 
 // Create a new rate limit manager for the task queue partition.
-func newRateLimitManager(userDataManager userDataManager,
+func newRateLimitManager(
+	userDataManager userDataManager,
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
 ) *rateLimitManager {
@@ -143,12 +144,13 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.adminTqRate,
 	)
 	r.systemRPS = systemRPS
+	weight := r.config.RateLimitWeight()
 	switch {
 	case r.apiConfigRPS != nil:
-		effectiveRPS = *r.apiConfigRPS / float64(r.numReadPartitions)
+		effectiveRPS = *r.apiConfigRPS * weight / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_API
 	case r.workerRPS != nil:
-		effectiveRPS = *r.workerRPS / float64(r.numReadPartitions)
+		effectiveRPS = *r.workerRPS * weight / float64(r.numReadPartitions)
 		rateLimitSource = enumspb.RATE_LIMIT_SOURCE_WORKER
 	}
 
@@ -235,8 +237,10 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	if fairnessKeyRateLimitDefault.GetRateLimit() == nil {
 		r.fairnessKeyRateLimitDefault = nil
 	} else {
-		// Maintain the fairnessKeyRateLimitDefault as per-partition rate.
-		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) / float64(r.numReadPartitions)
+		// Maintain the fairnessKeyRateLimitDefault as per-partition rate, scaled by the same
+		// cell-fraction weight applied to the whole-queue effectiveRPS.
+		weight := r.config.RateLimitWeight()
+		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) * weight / float64(r.numReadPartitions)
 		r.fairnessKeyRateLimitDefault = &val
 	}
 	fairnessWeightOverrides := config.GetFairnessWeightOverrides()

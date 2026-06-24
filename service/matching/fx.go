@@ -51,6 +51,7 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(simplePartitionScalerFactoryProvider),
+	fx.Provide(taskQueueRateLimitWeightProviderProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
