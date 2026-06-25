@@ -109,15 +109,11 @@ func (m *taskQueueRecordingExecutionManager) recordWorkflowMutation(
 	)
 }
 
-func (c *TemporalImpl) historyFactoryProvider(
+func (c *TemporalImpl) taskQueueRecordingFactoryProvider(
 	params persistenceClient.NewFactoryParams,
 ) persistenceClient.Factory {
-	factory := persistenceClient.FactoryProvider(params)
-	if c.taskQueueRecorder == nil {
-		return factory
-	}
 	return &taskQueueRecordingFactory{
-		Factory:  factory,
+		Factory:  persistenceClient.FactoryProvider(params),
 		recorder: c.taskQueueRecorder,
 	}
 }

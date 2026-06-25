@@ -426,6 +426,10 @@ func (c *TemporalImpl) startHistory() {
 	if c.enableTaskQueueRecorder {
 		c.taskQueueRecorder = NewTaskQueueRecorder(c.logger)
 	}
+	factoryProvider := persistenceClient.FactoryProvider
+	if c.taskQueueRecorder != nil {
+		factoryProvider = c.taskQueueRecordingFactoryProvider
+	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
@@ -468,7 +472,7 @@ func (c *TemporalImpl) startHistory() {
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
-			fx.Provide(c.historyFactoryProvider),
+			fx.Provide(factoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),

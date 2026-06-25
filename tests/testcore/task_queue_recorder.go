@@ -35,7 +35,7 @@ type RecordedTask struct {
 	Task        tasks.Task `json:"task"` // The actual task object
 }
 
-// NewTaskQueueRecorder creates a task write recorder.
+// NewTaskQueueRecorder creates a task queue recorder.
 func NewTaskQueueRecorder(logger log.Logger) *TaskQueueRecorder {
 	return &TaskQueueRecorder{
 		tasks:  make(map[tasks.Category][]RecordedTask),
