@@ -334,6 +334,61 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	s.Empty(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType)
 }
 
+// TestNexusOperationCallerMetrics verifies that an in-workflow Nexus operation emits the
+// caller-side operation metrics (counter + latencies) tagged with the caller's namespace,
+// endpoint, and real workflow type. It runs for both the HSM and CHASM engines.
+func (s *NexusWorkflowTestSuite) TestNexusOperationCallerMetrics(chasmEnabled bool) {
+	env := s.newTestEnv(chasmEnabled)
+	ctx := env.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	const callerWorkflowType = "NexusCallerMetricsWorkflow"
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+		var result string
+		return result, fut.Get(ctx, &result)
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: callerWorkflowType})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	capture := env.StartNamespaceMetricCapture()
+	// Execute by the registered workflow type name so the recorded workflow type is deterministic
+	// (passing the function value would record the anonymous closure's name instead).
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWorkflowType)
+	s.NoError(err)
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result", result)
+
+	successCount := capture.Metric(chasmnexus.NexusOperationSuccessCount.Name())
+	s.Len(successCount, 1)
+	if len(successCount) != 1 {
+		return
+	}
+	s.Equal(int64(1), successCount[0].Value)
+	s.Subset(successCount[0].Tags, map[string]string{
+		"namespace":      env.Namespace().String(),
+		"nexus_endpoint": endpointName,
+		"workflowType":   callerWorkflowType,
+	})
+
+	// A latency metric is also recorded for the terminal state.
+	s.NotEmpty(capture.Metric(chasmnexus.NexusOperationScheduleToCloseLatency.Name()))
+}
+
 // TestNexusOperationStartsStandaloneActivityBidirectionalLinks verifies the end-to-end
 // SAA-via-Nexus path: a workflow invokes a Nexus operation whose handler creates a
 // standalone activity, attaches the Nexus operation back-link to that activity, and
