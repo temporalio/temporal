@@ -17,7 +17,6 @@ import (
 	mockp "go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -74,7 +73,6 @@ func TestExecutionManager_DeletesTasksWhenEnabled(t *testing.T) {
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(true),
-		testhooks.TestHooks{},
 	)
 
 	_, err := em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest(expectedKeys))
@@ -100,7 +98,6 @@ func TestExecutionManager_DoesNotDeleteTasksWhenDisabled(t *testing.T) {
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(false),
-		testhooks.TestHooks{},
 	)
 
 	keys := []tasks.Key{tasks.NewKey(time.Now().UTC(), 789)}
@@ -137,7 +134,6 @@ func TestExecutionManager_DeleteTasksError_DoesNotFailUpdate(t *testing.T) {
 		log.NewNoopLogger(),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(true),
-		testhooks.TestHooks{},
 	)
 
 	// UpdateWorkflowExecution should succeed even though CompleteHistoryTask failed
@@ -167,7 +163,6 @@ func TestExecutionManager_TrimHistoryBranchSkipped_NonWorkflow(t *testing.T) {
 		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(false),
-		testhooks.TestHooks{},
 	)
 
 	req := newTestUpdateRequest(nil)
@@ -231,7 +226,6 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
 		dynamicconfig.GetIntPropertyFn(1024*1024),
 		dynamicconfig.GetBoolPropertyFn(false),
-		testhooks.TestHooks{},
 	)
 
 	_, err = em.UpdateWorkflowExecution(context.Background(), newTestUpdateRequest(nil))

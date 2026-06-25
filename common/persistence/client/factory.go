@@ -211,7 +211,7 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		f.logger,
 		f.config.TransactionSizeLimit,
 		f.enableBestEffortDeleteTasksOnWorkflowUpdate,
-		f.testHooks,
+		persistence.WithTestHooks(f.testHooks),
 	)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
 		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)

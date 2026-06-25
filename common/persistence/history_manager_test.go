@@ -11,7 +11,6 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -116,7 +115,6 @@ func TestHistoryManager_InvalidBranchToken_ReturnsInvalidArgument(t *testing.T) 
 				log.NewNoopLogger(),
 				dynamicconfig.GetIntPropertyFn(1024*1024),
 				dynamicconfig.GetBoolPropertyFn(false),
-				testhooks.TestHooks{},
 			)
 
 			tc.testFunc(t, em, invalidBranchToken)

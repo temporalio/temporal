@@ -38,9 +38,21 @@ type (
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 		testHooks                                   testhooks.TestHooks
 	}
+
+	ExecutionManagerOption func(*executionManagerOptions)
+
+	executionManagerOptions struct {
+		testHooks testhooks.TestHooks
+	}
 )
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
+
+func WithTestHooks(testHooks testhooks.TestHooks) ExecutionManagerOption {
+	return func(options *executionManagerOptions) {
+		options.testHooks = testHooks
+	}
+}
 
 // NewExecutionManager returns new ExecutionManager
 func NewExecutionManager(
@@ -50,8 +62,13 @@ func NewExecutionManager(
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
-	testHooks testhooks.TestHooks,
+	opts ...ExecutionManagerOption,
 ) ExecutionManager {
+	options := executionManagerOptions{}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	return &executionManagerImpl{
 		serializer:            serializer,
 		eventBlobCache:        eventBlobCache,
@@ -60,7 +77,7 @@ func NewExecutionManager(
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
-		testHooks: testHooks,
+		testHooks: options.testHooks,
 	}
 }
 
