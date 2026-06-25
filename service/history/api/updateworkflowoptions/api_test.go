@@ -2,6 +2,7 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -62,6 +62,25 @@ func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ st
 	return nil
 }
 
+// tscProtoEq is a gomock.Matcher for *commonpb.TimeSkippingConfig that uses proto.Equal
+// instead of reflect.DeepEqual, which fails on proto messages with differing internal state.
+type tscProtoEq struct{ expected *commonpb.TimeSkippingConfig }
+
+func (m tscProtoEq) Matches(x any) bool {
+	got, _ := x.(*commonpb.TimeSkippingConfig)
+	if m.expected == nil && got == nil {
+		return true
+	}
+	if m.expected == nil || got == nil {
+		return false
+	}
+	return proto.Equal(m.expected, got)
+}
+
+func (m tscProtoEq) String() string {
+	return fmt.Sprintf("proto.Equal(%v)", m.expected)
+}
+
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
 	unpinnedOverrideOptions = &workflowpb.WorkflowExecutionOptions{
@@ -81,6 +100,18 @@ var (
 			PinnedVersion: "X.B",
 		},
 	}
+	oneTimeOverrideOptions = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_OneTime{
+				OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+					TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+						DeploymentName: "X",
+						BuildId:        "C",
+					},
+				},
+			},
+		},
+	}
 )
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
@@ -88,48 +119,104 @@ func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 	input := emptyOptions
 
 	// Merge unpinned into empty options
-	merged, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
+	merged, optionsToReapply, err := mergeWorkflowExecutionOptions(input, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Merge pinned_A into unpinned options
-	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsA, merged)
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Merge pinned_B into pinned_A options
-	merged, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, pinnedOverrideOptionsB, merged)
+	require.False(t, optionsToReapply.hasChanges())
 
 	// Unset versioning override
-	merged, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	require.EqualExportedValues(t, emptyOptions, merged)
+	require.False(t, optionsToReapply.hasChanges())
 }
 
 func TestMergeOptions_PartialMask(t *testing.T) {
-	bothUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
+	allUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
 	behaviorOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior"}}
 	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
 
-	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
+	_, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
 	require.Error(t, err)
 
-	_, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
+	_, _, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
 	require.Error(t, err)
 
-	merged, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, bothUpdateMask)
+	merged, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, allUpdateMask)
 	require.NoError(t, err)
 	require.EqualExportedValues(t, unpinnedOverrideOptions, merged)
+
+	// partial mask for time skipping config will return invalid argument error
+	timeSkippingPartialMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}}
+	_, _, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, timeSkippingPartialMask)
+	require.Error(t, err)
+
+}
+
+func TestMergeOptions_VersionOverrideNestedMask(t *testing.T) {
+	testCases := []struct {
+		name string
+		mask *fieldmaskpb.FieldMask
+	}{
+		{
+			name: "one_time field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time"}},
+		},
+		{
+			name: "one_time target version field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version"}},
+		},
+		{
+			name: "one_time target version deployment name field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.deployment_name"}},
+		},
+		{
+			name: "one_time target version build id field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.build_id"}},
+		},
+		{
+			name: "pinned oneof field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.pinned"}},
+		},
+		{
+			name: "pinned nested version field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.pinned.version"}},
+		},
+		{
+			name: "auto_upgrade oneof field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.auto_upgrade"}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := proto.Clone(pinnedOverrideOptionsB).(*workflowpb.WorkflowExecutionOptions)
+			requested := proto.Clone(oneTimeOverrideOptions).(*workflowpb.WorkflowExecutionOptions)
+
+			_, _, err := mergeWorkflowExecutionOptions(input, requested, tc.mask)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestMergeOptions_EmptyMask(t *testing.T) {
@@ -137,77 +224,98 @@ func TestMergeOptions_EmptyMask(t *testing.T) {
 	input := pinnedOverrideOptionsB
 
 	// Don't merge anything
-	merged, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
+	merged, optionsToReapply, err := mergeWorkflowExecutionOptions(input, pinnedOverrideOptionsA, emptyUpdateMask)
 	require.NoError(t, err)
+	require.False(t, optionsToReapply.hasChanges())
 	require.EqualExportedValues(t, input, merged)
 
 	// Don't merge anything
-	merged, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
+	merged, optionsToReapply, err = mergeWorkflowExecutionOptions(input, nil, emptyUpdateMask)
 	require.NoError(t, err)
+	require.False(t, optionsToReapply.hasChanges())
 	require.EqualExportedValues(t, input, merged)
 }
 
 func TestMergeOptions_AsteriskMask(t *testing.T) {
 	asteriskUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"*"}}
-	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, asteriskUpdateMask)
+	_, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, asteriskUpdateMask)
 	require.Error(t, err)
 }
 
 func TestMergeOptions_FooMask(t *testing.T) {
 	fooUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"foo"}}
-	_, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, fooUpdateMask)
+	_, _, err := mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, fooUpdateMask)
 	require.Error(t, err)
 }
 
 func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
+
+	// assuming the TSC is always in the mask -> meaning the user always updates the TSC
 	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
-	cfgA := &workflowpb.TimeSkippingConfig{Enabled: true}
-	cfgB := &workflowpb.TimeSkippingConfig{
-		Enabled: true,
-		Bound:   &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: durationpb.New(time.Hour)},
+	cfgA := &commonpb.TimeSkippingConfig{Enabled: true}
+	cfgB := &commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour),
 	}
+	cfgC := &commonpb.TimeSkippingConfig{Enabled: false}
 
 	tcs := []struct {
-		name        string
-		current     *workflowpb.WorkflowExecutionOptions
-		update      *workflowpb.WorkflowExecutionOptions
-		wantChanged bool
-		wantConfig  *workflowpb.TimeSkippingConfig
+		name                 string
+		mergeInto            *workflowpb.WorkflowExecutionOptions
+		mergeFrom            *workflowpb.WorkflowExecutionOptions
+		configForUpdateEvent *commonpb.TimeSkippingConfig
+		configHasChanged     bool
 	}{
-		// nil update means "don't touch" even when mask is present
 		{
-			name:        "nil update - existing config preserved",
-			current:     &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
-			update:      &workflowpb.WorkflowExecutionOptions{},
-			wantChanged: false,
-			wantConfig:  cfgA,
+			name:                 "nil update - clears the TSC",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            nil,
+			configForUpdateEvent: nil,
+			configHasChanged:     true,
 		},
-		// non-nil update replaces and is detected as a change
 		{
-			name:        "new config - changed",
-			current:     &workflowpb.WorkflowExecutionOptions{},
-			update:      &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
-			wantChanged: true,
-			wantConfig:  cfgB,
+			name:                 "same config with side-effect field change",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			configForUpdateEvent: cfgB,
+			configHasChanged:     true,
 		},
-		// identical config is not detected as a change
 		{
-			name:        "same config - no change",
-			current:     &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
-			update:      &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
-			wantChanged: false,
-			wantConfig:  cfgB,
+			name:                 "new config with side-effect field change",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgB},
+			configForUpdateEvent: cfgB,
+			configHasChanged:     true,
+		},
+		{
+			name:                 "same config with no side-effect field change",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			configForUpdateEvent: cfgA,
+			configHasChanged:     false,
+		},
+		{
+			name:                 "new config to disable time skipping",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgC},
+			configForUpdateEvent: cfgC,
+			configHasChanged:     true,
+		},
+		{
+			name:                 "new config to enable time skipping",
+			mergeInto:            &workflowpb.WorkflowExecutionOptions{},
+			mergeFrom:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfgA},
+			configForUpdateEvent: cfgA,
+			configHasChanged:     true,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			original := proto.Clone(tc.current).(*workflowpb.WorkflowExecutionOptions)
-			merged, err := mergeWorkflowExecutionOptions(tc.current, tc.update, tscMask)
+			merged, sideEffects, err := mergeWorkflowExecutionOptions(tc.mergeInto, tc.mergeFrom, tscMask)
 			require.NoError(t, err)
-			require.True(t, proto.Equal(tc.wantConfig, merged.GetTimeSkippingConfig()),
-				"config mismatch: want %v, got %v", tc.wantConfig, merged.GetTimeSkippingConfig())
-			require.Equal(t, tc.wantChanged, !proto.Equal(merged, original))
+			require.True(t, proto.Equal(tc.configForUpdateEvent, merged.GetTimeSkippingConfig()))
+			require.Equal(t, tc.configHasChanged, sideEffects.timeSkippingConfigHasChanged)
 		})
 	}
 }
@@ -304,7 +412,10 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 	).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
 		IsMember: true,
 	}, nil)
-	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "", expectedOverrideOptions.Priority, expectedOverrideOptions.TimeSkippingConfig, nil).Return(&historypb.HistoryEvent{}, nil)
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "",
+		expectedOverrideOptions.Priority, expectedOverrideOptions.TimeSkippingConfig, false, nil).Return(&historypb.HistoryEvent{}, nil)
+	s.currentMutableState.EXPECT().Now().Return(time.Time{})
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
 	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
@@ -334,57 +445,128 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 	proto.Equal(expectedOverrideOptions, resp.GetWorkflowExecutionOptions())
 }
 
-func TestValidateTimeSkippingConfig(t *testing.T) {
-	tenMin := durationpb.New(10 * time.Minute)
-	twentyMin := durationpb.New(20 * time.Minute)
-	maxSkippedTen := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: tenMin}
-	maxSkippedTwenty := &workflowpb.TimeSkippingConfig_MaxSkippedDuration{MaxSkippedDuration: twentyMin}
-	maxElapsedTen := &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: tenMin}
+func TestMergeAndApply(t *testing.T) {
+	oneHour := durationpb.New(time.Hour)
+	newOverride := &workflowpb.VersioningOverride{Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE}
+
+	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
+	versioningMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
 
 	tcs := []struct {
-		name        string
-		config      *workflowpb.TimeSkippingConfig
-		accumulated *durationpb.Duration
-		wantErr     bool
+		name          string
+		initialConfig *commonpb.TimeSkippingConfig
+		updateOptions *workflowpb.WorkflowExecutionOptions
+		updateMask    *fieldmaskpb.FieldMask
+
+		// use version as an unrelated option to test its impacts on TSC
+		expectVersioningOverride *workflowpb.VersioningOverride
+		unsetVersion             bool
+
+		// the values in WorkflowExecutionOptionsUpdatedEventAttributes
+		expectChanges    bool
+		expectTSCInEvent *commonpb.TimeSkippingConfig
+		expectTSCUpdated bool
+
+		// only checks the result when needed
+		needCheckResultTSC bool
+		resultTSC          *commonpb.TimeSkippingConfig
 	}{
 		{
-			name:   "nil config",
-			config: nil,
+			name:          "basic: enable from nil config",
+			initialConfig: nil,
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
+			},
+			updateMask:               tscMask,
+			expectChanges:            true,
+			expectVersioningOverride: nil,
+			unsetVersion:             true,
+			expectTSCInEvent:         &commonpb.TimeSkippingConfig{Enabled: true},
+			expectTSCUpdated:         true,
+			resultTSC:                &commonpb.TimeSkippingConfig{Enabled: true},
+			needCheckResultTSC:       true,
 		},
 		{
-			name:        "disabled short-circuits even when bound would be violated",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: false, Bound: maxSkippedTen},
-			accumulated: twentyMin,
+			name:          "basic: disable from enabled config",
+			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: false},
+			},
+			updateMask:               tscMask,
+			expectChanges:            true,
+			expectVersioningOverride: nil,
+			unsetVersion:             true,
+			expectTSCInEvent:         &commonpb.TimeSkippingConfig{Enabled: false},
+			expectTSCUpdated:         true,
+			resultTSC:                &commonpb.TimeSkippingConfig{Enabled: false},
+			needCheckResultTSC:       true,
 		},
 		{
-			name:   "enabled, no bound",
-			config: &workflowpb.TimeSkippingConfig{Enabled: true},
+			name:          "basic: fast-forward from nil",
+			initialConfig: nil,
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			},
+			updateMask:               tscMask,
+			expectChanges:            true,
+			expectVersioningOverride: nil,
+			unsetVersion:             true,
+			expectTSCInEvent:         &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCUpdated:         true,
+			resultTSC:                &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			needCheckResultTSC:       true,
 		},
 		{
-			name:        "MaxElapsedDuration bound is not validated here",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxElapsedTen},
-			accumulated: twentyMin,
+			name:          "reapply: TSC updated with same fast-forward",
+			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			updateOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			},
+			updateMask:               tscMask,
+			expectVersioningOverride: nil,
+			unsetVersion:             true,
+
+			expectChanges:      true,
+			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCUpdated:   true,
+			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			needCheckResultTSC: true,
 		},
 		{
-			name:   "MaxSkipped set, nil accumulated treated as zero",
-			config: &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
+			name:                     "TSC no change: version update with fast-forward untouched",
+			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			updateOptions:            &workflowpb.WorkflowExecutionOptions{VersioningOverride: newOverride},
+			updateMask:               versioningMask,
+			expectVersioningOverride: newOverride,
+			unsetVersion:             false,
+			// as we always put the merged TSC into the event, even if it is the same as the initial config
+			expectChanges:      true,
+			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCUpdated:   false,
+			needCheckResultTSC: true,
+			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
 		},
 		{
-			name:        "MaxSkipped > accumulated",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTwenty},
-			accumulated: tenMin,
+			name:                     "TSC no change: TSC without fast-forward are updated with same value",
+			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true},
+			updateOptions:            &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+			updateMask:               tscMask,
+			expectVersioningOverride: nil,
+			unsetVersion:             false,
+			expectChanges:            false,
 		},
 		{
-			name:        "MaxSkipped == accumulated is rejected (must be strictly greater)",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
-			accumulated: tenMin,
-			wantErr:     true,
-		},
-		{
-			name:        "MaxSkipped < accumulated is rejected",
-			config:      &workflowpb.TimeSkippingConfig{Enabled: true, Bound: maxSkippedTen},
-			accumulated: twentyMin,
-			wantErr:     true,
+			name:                     "nil allowed: nil with mask clears the TSC",
+			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			updateOptions:            &workflowpb.WorkflowExecutionOptions{VersioningOverride: newOverride},
+			updateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config", "versioning_override"}},
+			expectChanges:            true,
+			expectVersioningOverride: newOverride,
+			unsetVersion:             false,
+			expectTSCInEvent:         nil,
+			expectTSCUpdated:         true,
+			resultTSC:                nil,
+			needCheckResultTSC:       true,
 		},
 	}
 
@@ -392,118 +574,35 @@ func TestValidateTimeSkippingConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			ms := historyi.NewMockMutableState(ctrl)
-			info := &persistencespb.WorkflowExecutionInfo{}
-			if tc.accumulated != nil {
-				info.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-					AccumulatedSkippedDuration: tc.accumulated,
-				}
-			}
-			ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
-
-			err := validateTimeSkippingConfig(tc.config, ms)
-			if tc.wantErr {
-				var invalidArg *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArg)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestMergeAndApply_TimeSkippingConfig(t *testing.T) {
-	oneHour := durationpb.New(time.Hour)
-	twoHours := durationpb.New(2 * time.Hour)
-	thirtyMin := durationpb.New(30 * time.Minute)
-
-	testCases := []struct {
-		name           string
-		initialConfig  *workflowpb.TimeSkippingConfig
-		updateOptions  *workflowpb.WorkflowExecutionOptions
-		updateMask     *fieldmaskpb.FieldMask
-		expectedConfig *workflowpb.TimeSkippingConfig
-	}{
-		{
-			name: "update max_skipped_duration preserves enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: oneHour,
-				},
-			},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-						MaxSkippedDuration: twoHours,
-					},
-				},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_skipped_duration"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: twoHours,
-				},
-			},
-		},
-		{
-			name: "change bound type to max_elapsed_duration preserves enabled",
-			initialConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxSkippedDuration{
-					MaxSkippedDuration: oneHour,
-				},
-			},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{
-					Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-						MaxElapsedDuration: thirtyMin,
-					},
-				},
-			},
-			updateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.max_elapsed_duration"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{
-				Enabled: true,
-				Bound: &workflowpb.TimeSkippingConfig_MaxElapsedDuration{
-					MaxElapsedDuration: thirtyMin,
-				},
-			},
-		},
-		{
-			name:          "enable from nil config",
-			initialConfig: nil,
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
-			},
-			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
-		},
-		{
-			name:          "disable from enabled config",
-			initialConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
-			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
-			},
-			updateMask:     &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config.enabled"}},
-			expectedConfig: &workflowpb.TimeSkippingConfig{Enabled: false},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			ms := historyi.NewMockMutableState(ctrl)
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-					Config: tc.initialConfig,
-				},
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: tc.initialConfig},
 			}).AnyTimes()
-			ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil, "", nil, gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
+
+			if tc.expectChanges {
+				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+					tc.expectVersioningOverride,
+					tc.unsetVersion,
+					"",
+					nil,
+					nil,
+					"",
+					nil,
+					tscProtoEq{tc.expectTSCInEvent},
+					tc.expectTSCUpdated,
+					nil,
+				).Return(&historypb.HistoryEvent{}, nil).Times(1)
+			}
 
 			result, hasChanges, err := MergeAndApply(ms, tc.updateOptions, tc.updateMask, "")
 			require.NoError(t, err)
-			require.True(t, hasChanges)
-			require.True(t, proto.Equal(tc.expectedConfig, result.GetTimeSkippingConfig()))
+			if tc.expectChanges {
+				require.True(t, hasChanges)
+				if tc.needCheckResultTSC {
+					require.True(t, proto.Equal(tc.resultTSC, result.GetTimeSkippingConfig()))
+				}
+			} else {
+				require.False(t, hasChanges)
+			}
 		})
 	}
 }

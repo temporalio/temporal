@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
@@ -5022,7 +5023,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.
@@ -5107,7 +5107,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.
@@ -5590,7 +5589,7 @@ func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"Keyword01": payload.EncodeString("random-keyword"),
+			"Keyword01": sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
@@ -5655,8 +5654,8 @@ func (s *engineSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},

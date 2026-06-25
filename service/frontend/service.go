@@ -65,6 +65,7 @@ type Config struct {
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalWorkerDeploymentReadRPS                                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalWorkerDeploymentReadBurstRatio                              dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -169,6 +170,9 @@ type Config struct {
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Per-namespace percentage [0-100] of new schedules routed to CHASM when
+	// EnableCHASMSchedulerCreation is true. Default 0.
+	CHASMSchedulerCreationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
@@ -230,6 +234,7 @@ type Config struct {
 	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	PollerAutoscalingAutoEnroll       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -297,6 +302,7 @@ func NewConfig(
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Get(dc),
 		GlobalWorkerDeploymentReadRPS:                                     dynamicconfig.FrontendGlobalWorkerDeploymentReadRPS.Get(dc),
+		GlobalWorkerDeploymentReadBurstRatio:                              dynamicconfig.FrontendGlobalWorkerDeploymentReadBurstRatio.Get(dc),
 
 		GlobalNamespaceRPS:                     dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		InternalFEGlobalNamespaceRPS:           dynamicconfig.InternalFrontendGlobalNamespaceRPS.Get(dc),
@@ -351,11 +357,12 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
-		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
-		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
-		EnableCHASMSchedulerSentinels: dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
+		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -401,6 +408,7 @@ func NewConfig(
 		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		PollerAutoscalingAutoEnroll:       dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
 		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
@@ -531,22 +539,18 @@ func (s *Service) Stop() {
 	s.logger.Info("ShutdownHandler: Draining traffic")
 	// Gracefully stop gRPC server and HTTP API server concurrently
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.AfterFunc(requestDrainTime, func() {
 			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 			s.server.Stop()
 		})
 		s.server.GracefulStop()
 		t.Stop()
-	}()
+	})
 	if s.httpAPIServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s.httpAPIServer.GracefulStop(requestDrainTime)
-		}()
+		})
 	}
 	wg.Wait()
 

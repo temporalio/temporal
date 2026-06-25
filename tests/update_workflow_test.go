@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1255,7 +1256,11 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func(s *WorkflowUpdateSuite) {
-			env := testcore.NewEnv(s.T())
+			// Cases in this table intentionally trigger soft asserts and then
+			// verify the resulting error; disable fail-on-error so those logs
+			// don't poison the cluster.
+			env := testcore.NewEnv(s.T(), testcore.WithDisableTestloggerFailure())
+
 			mustStartWorkflow(env, env.Tv())
 
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -4783,23 +4788,24 @@ func (s *WorkflowUpdateSuite) TestUpdatesAreSentToWorkerInOrderOfAdmission() {
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
 
-	expectedHistory := `
+	var expectedHistory strings.Builder
+	expectedHistory.WriteString(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	`
+	`)
 	for i := range nUpdates {
 		tvi := env.Tv().WithUpdateIDNumber(i)
-		expectedHistory += fmt.Sprintf(`
+		expectedHistory.WriteString(fmt.Sprintf(`
 	  %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
 	  %d WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}`,
 			5+2*i, tvi.UpdateID(),
-			6+2*i, tvi.UpdateID())
+			6+2*i, tvi.UpdateID()))
 	}
 
 	history := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
-	s.EqualHistoryEvents(expectedHistory, history)
+	s.EqualHistoryEvents(expectedHistory.String(), history)
 }
 
 func (s *WorkflowUpdateSuite) TestWaitAccepted_GotCompleted() {

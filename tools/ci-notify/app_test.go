@@ -197,3 +197,22 @@ func TestFilterCompleted(t *testing.T) {
 		})
 	}
 }
+
+func TestSlowestRuns(t *testing.T) {
+	report := &DigestReport{
+		Runs: []WorkflowRunSummary{
+			{DisplayTitle: "medium", Duration: 20 * time.Minute},
+			{DisplayTitle: "ignored", Duration: 0},
+			{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+			{DisplayTitle: "fastest", Duration: 5 * time.Minute},
+			{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		},
+	}
+
+	result := report.slowestRuns(3)
+
+	require.Len(t, result, 3)
+	require.Equal(t, "slowest", result[0].DisplayTitle)
+	require.Equal(t, "second slowest", result[1].DisplayTitle)
+	require.Equal(t, "medium", result[2].DisplayTitle)
+}

@@ -202,6 +202,8 @@ func SearchAttributeValidatorProvider(
 	saMapperProvider searchattribute.MapperProvider,
 	visibilityMgr manager.VisibilityManager,
 	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *searchattribute.Validator {
 	return searchattribute.NewValidator(
 		saProvider,
@@ -215,6 +217,8 @@ func SearchAttributeValidatorProvider(
 			dynamicconfig.VisibilityAllowList.Get(dynamicCollection),
 		),
 		dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dynamicCollection),
+		metricsHandler,
+		logger,
 	)
 }
 

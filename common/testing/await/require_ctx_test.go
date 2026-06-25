@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 )
@@ -99,7 +100,7 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	t.Parallel()
 
-	longCtx, cancel := context.WithTimeout(testcontext.New(t), time.Minute)
+	longCtx, cancel := context.WithTimeout(testcontext.For(t), time.Minute)
 	defer cancel()
 	longDeadline, ok := longCtx.Deadline()
 	require.True(t, ok)
@@ -152,12 +153,10 @@ func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
-	t.Parallel()
-
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -171,7 +170,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("cancels attempt context on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -185,10 +184,38 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		require.Contains(t, tb.fatals(), "not satisfied after")
 	})
 
+	t.Run("retries after attempt timeout until await timeout", func(t *testing.T) {
+		attemptTimeoutEnv := 50 * time.Millisecond
+		attemptTimeout := attemptTimeoutEnv * debug.TimeoutMultiplier
+		pollInterval := 100 * time.Millisecond
+		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
+
+		ctx := testcontext.For(t)
+		var attempts atomic.Int32
+		var firstAttemptRemaining time.Duration
+
+		tb := newRecordingTB()
+		tb.run(func() {
+			await.Require(ctx, tb, func(t *await.T) {
+				if attempts.Add(1) == 1 {
+					deadline, _ := t.Context().Deadline()
+					firstAttemptRemaining = time.Until(deadline)
+				}
+				<-t.Context().Done()
+			}, attemptTimeout+2*pollInterval, pollInterval)
+		})
+
+		require.True(t, tb.Failed())
+		require.Contains(t, tb.fatals(), "not satisfied after")
+		require.Positive(t, firstAttemptRemaining)
+		require.LessOrEqual(t, firstAttemptRemaining, attemptTimeout)
+		require.Greater(t, attempts.Load(), int32(1))
+	})
+
 	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 
 		tb := newRecordingTB()
@@ -206,7 +233,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("caps attempt context with parent deadline", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithTimeout(testcontext.New(t), time.Second)
+		parentCtx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
 		defer cancel()
 
 		tb := newRecordingTB()
@@ -232,7 +259,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("parent context cancellation stops polling", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithCancel(testcontext.New(t))
+		parentCtx, cancel := context.WithCancel(testcontext.For(t))
 		defer cancel()
 		var attempts atomic.Int32
 
@@ -253,7 +280,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("reports all attempt errors on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -275,7 +302,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("truncates middle attempts when many fail", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		var attempts atomic.Int32
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -302,7 +329,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("Requiref includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Requiref(ctx, tb, func(t *await.T) {
@@ -336,7 +363,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				ctx := testcontext.New(t)
+				ctx := testcontext.For(t)
 				tb := newRecordingTB()
 				tb.run(func() {
 					await.Require(ctx, tb, func(_ *await.T) {
@@ -352,7 +379,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("does not poll after prior failure", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.New(t)
+		ctx := testcontext.For(t)
 		conditionCalled := false
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -374,7 +401,7 @@ func TestRequire_SoftDeadlockLogsAndCancels(t *testing.T) {
 
 	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.New(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -400,7 +427,7 @@ func TestRequire_DeadlockDetected(t *testing.T) {
 
 	const awaitTimeout = 10 * time.Second
 
-	ctx := testcontext.New(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	start := time.Now()
 	tb.run(func() {
@@ -421,7 +448,7 @@ func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
 	t.Parallel()
 
 	var finished atomic.Bool
-	ctx := testcontext.New(t)
+	ctx := testcontext.For(t)
 	tb := newRecordingTB()
 	tb.run(func() {
 		await.Require(ctx, tb, func(t *await.T) {
@@ -451,6 +478,7 @@ func newRecordingTB() *recordingTB {
 
 func (r *recordingTB) Helper()      {}
 func (r *recordingTB) Failed() bool { return r.failed.Load() }
+func (r *recordingTB) Name() string { return "recordingTB" }
 func (r *recordingTB) Logf(format string, args ...any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

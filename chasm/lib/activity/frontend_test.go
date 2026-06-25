@@ -28,6 +28,11 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
 		},
+		linkValidator: newLinkValidator(
+			defaultMaxLinksPerRequest,
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
 		logger: log.NewNoopLogger(),
 	}
 	nsID := namespace.ID("test-namespace-id")

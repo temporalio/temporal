@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	batchpb "go.temporal.io/api/batch/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -27,10 +28,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -98,6 +101,11 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 1000),
+
+		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters (database constraint).
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("v3").WithBuildID("b")
+		}),
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
@@ -105,7 +113,6 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 
 func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*testcore.TestEnv, *Versioning3Suite), opts ...testcore.TestOption) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
-		behavior := behavior
 		s.Run(behavior.Name(), func(s *Versioning3Suite) {
 			envOpts := append([]testcore.TestOption{}, opts...)
 			envOpts = append(envOpts, behavior.Options()...)
@@ -2245,6 +2252,657 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 		}}
 }
 
+func (s *Versioning3Suite) makeOneTimeOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_OneTime{
+			OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+				TargetDeploymentVersion: tv.ExternalDeploymentVersion(),
+			},
+		}}
+}
+
+func (s *Versioning3Suite) describeVersioningInfo(
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+) *workflowpb.WorkflowExecutionVersioningInfo {
+	resp, err := env.FrontendClient().DescribeWorkflowExecution(
+		s.Context(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: execution,
+		},
+	)
+	s.NoError(err)
+	return resp.GetWorkflowExecutionInfo().GetVersioningInfo()
+}
+
+func (s *Versioning3Suite) requireOneTimeOverride(
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+	tv *testvars.TestVars,
+) {
+	versioningInfo := s.describeVersioningInfo(env, execution)
+	oneTime := versioningInfo.GetVersioningOverride().GetOneTime()
+	s.NotNil(oneTime)
+	s.ProtoEqual(tv.ExternalDeploymentVersion(), oneTime.GetTargetDeploymentVersion())
+}
+
+func (s *Versioning3Suite) requireNoVersioningOverride(
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+) {
+	versioningInfo := s.describeVersioningInfo(env, execution)
+	s.Nil(versioningInfo.GetVersioningOverride())
+}
+
+func (s *Versioning3Suite) updateVersioningOverride(
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+	override *workflowpb.VersioningOverride,
+) {
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: override},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+}
+
+func (s *Versioning3Suite) pollWorkflowTask(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+) *workflowservice.PollWorkflowTaskQueueResponse {
+	task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		Identity:          tv.WorkerIdentity(),
+		TaskQueue:         tv.TaskQueue(),
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(task.GetTaskToken())
+	return task
+}
+
+func (s *Versioning3Suite) completeWorkflowTask(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) {
+	request.Namespace = env.Namespace().String()
+	request.Identity = tv.WorkerIdentity()
+	request.TaskToken = task.GetTaskToken()
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), request)
+	s.NoError(err)
+}
+
+func startChildWorkflowCommand(tv *testvars.TestVars) *commandpb.Command {
+	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		WorkflowId:   tv.WorkflowID(),
+		WorkflowType: tv.WorkflowType(),
+		TaskQueue:    tv.TaskQueue(),
+		Input:        tv.Any().Payloads(),
+	}
+
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+			StartChildWorkflowExecutionCommandAttributes: attributes,
+		},
+	}
+}
+
+func (s *Versioning3Suite) pollUntilChildWorkflowTask(
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	childWorkflowID string,
+	handleChild func(*workflowservice.PollWorkflowTaskQueueResponse) *workflowservice.RespondWorkflowTaskCompletedRequest,
+) *commonpb.WorkflowExecution {
+	// Starting the child can create two WFTs on the same version/task queue:
+	// one parent follow-up WFT for ChildWorkflowExecutionStarted, and one child
+	// first WFT. Drain the parent follow-up if it arrives first.
+	const maxWorkflowTasksAfterChildStart = 2
+	var childExecution *commonpb.WorkflowExecution
+	for i := 0; i < maxWorkflowTasksAfterChildStart && childExecution == nil; i++ {
+		s.pollWftAndHandle(env, tv, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				if task.GetWorkflowExecution().GetWorkflowId() == childWorkflowID {
+					childExecution = task.GetWorkflowExecution()
+					return handleChild(task), nil
+				}
+				return respondEmptyWft(tv, false, vbPinned), nil
+			})
+	}
+	s.NotNil(childExecution)
+	return childExecution
+}
+
+// TestOneTimeOverride_TargetWorkflowTaskClearsOverride verifies the core
+// one-time override lifecycle. The workflow first runs on version 1, then an
+// operator sets a one-time override to version 2. The next WFT must route to
+// version 2 while the override is pending. Once that WFT completes from version
+// 2, the server should clear the override and keep the workflow on the base
+// behavior/version reported by that completion.
+func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskClearsOverride() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_PendingWorkflowTaskRoutesToTargetAndClears verifies that
+// a one-time override applies to a WFT that was scheduled but not yet started.
+// The workflow is started while version 1 is current, leaving its first WFT
+// pending. An operator then sets a one-time override to version 2 before any
+// worker starts that task. The first WFT should be dispatched to version 2, and
+// completion from version 2 should consume and clear the override.
+func (s *Versioning3Suite) TestOneTimeOverride_PendingWorkflowTaskRoutesToTargetAndClears() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	s.pollUntilRegistered(env, tv1)
+	s.setCurrentDeployment(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_TargetWorkflowTaskReportsAutoUpgrade verifies that a
+// one-time override only controls routing until the target WFT completes. The
+// workflow first runs on version 1, then an operator sets a one-time override to
+// version 2. The version 2 worker completes that WFT and reports AutoUpgrade,
+// so the override should clear and the workflow's base state should become
+// AutoUpgrade on version 2. When version 3 later becomes current, the workflow
+// should route to version 3 through normal AutoUpgrade routing.
+func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskReportsAutoUpgrade() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	tv3 := tv1.WithBuildIDNumber(3)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbUnpinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbUnpinned, tv2.Deployment(), nil, nil)
+
+	s.pollUntilRegistered(env, tv3)
+	s.setCurrentDeployment(env, tv3)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv3, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv3, false, vbUnpinned), nil
+		})
+
+	s.verifyWorkflowVersioning(env, tv1, vbUnpinned, tv3.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_StartedWorkflowTaskOnPreviousVersionDoesNotClear verifies
+// the race where an operator sets a one-time override while a WFT from the
+// previous version is already started. That old WFT completion should update
+// base behavior/version from the old worker, but it must not consume the
+// one-time override because it did not complete on the target version. The next
+// WFT should still route to the one-time target and clear the override there.
+func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskOnPreviousVersionDoesNotClear() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	startedTask := s.pollWorkflowTask(env, tv1)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.completeWorkflowTask(env, tv1, startedTask, respondEmptyWft(tv1, false, vbUnpinned))
+
+	s.requireOneTimeOverride(env, execution, tv2)
+	s.verifyWorkflowVersioning(env, tv1, vbUnpinned, tv1.Deployment(), s.makeOneTimeOverride(tv2), nil)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_StartedWorkflowTaskContinueAsNewRejected verifies the
+// live race where a WFT is already started on version 1, then an operator sets a
+// one-time override to version 2, and the old WFT tries to close with
+// Continue-As-New. The options update is a buffered event, so the CAN command
+// must be rejected as UnhandledCommand before CAN inheritance can derive state
+// from the pending one-time override. The follow-up WFT should then run on
+// version 2 and consume the override on the original run.
+func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskContinueAsNewRejected() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	startedTask := s.pollWorkflowTask(env, tv1)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  tv1.WorkerIdentity(),
+		TaskToken: startedTask.GetTaskToken(),
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType: tv1.WorkflowType(),
+						TaskQueue:    tv1.TaskQueue(),
+						Input:        tv1.Any().Payloads(),
+					},
+				},
+			},
+		},
+		VersioningBehavior: vbPinned,
+		DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+	})
+	s.Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Equal("UnhandledCommand", err.Error())
+
+	s.requireOneTimeOverride(env, execution, tv2)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Equal(execution.GetRunId(), task.GetWorkflowExecution().GetRunId())
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_TargetWorkflowTaskContinueAsNewDoesNotInheritOverride
+// verifies the CAN boundary after the one-time move has actually happened. The
+// workflow routes to version 2 through the one-time override, and that version 2
+// WFT completes with Continue-As-New. Since the WFT completed on the target
+// version, the override should clear before the new run's versioning state is
+// computed. The continued run should not inherit a stale one-time override.
+func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskContinueAsNewDoesNotInheritOverride() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: tv1.WorkflowType(),
+								TaskQueue:    tv1.TaskQueue(),
+								Input:        tv1.Any().Payloads(),
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv2.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEqual(execution.GetRunId(), task.GetWorkflowExecution().GetRunId()) // The workflow CAN'ed
+			s.requireNoVersioningOverride(env, task.GetWorkflowExecution())
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	currentExecution := &commonpb.WorkflowExecution{WorkflowId: execution.GetWorkflowId()}
+	s.requireNoVersioningOverride(env, currentExecution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_ClearedMoveAllowsUpgradeOnContinueAsNewToNewCurrent
+// verifies the main one-time override use case. An operator moves a running
+// pinned workflow from version 1 to patched version 2. After one successful WFT
+// on version 2, the override clears and version 2 becomes the workflow's base
+// pinned version. When version 3 later becomes current, an explicit
+// upgrade-on-CAN should not be blocked by the old override; the new run should
+// start on version 3 through normal AutoUpgrade initial-versioning behavior.
+func (s *Versioning3Suite) TestOneTimeOverride_ClearedMoveAllowsUpgradeOnContinueAsNewToNewCurrent() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	tv3 := tv1.WithBuildIDNumber(3)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+
+	s.pollUntilRegistered(env, tv3)
+	s.setCurrentDeployment(env, tv3)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType:              tv1.WorkflowType(),
+								TaskQueue:                 tv1.TaskQueue(),
+								Input:                     tv1.Any().Payloads(),
+								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv2.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	var newRunID string
+	s.pollWftAndHandle(env, tv3, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			newRunID = task.GetWorkflowExecution().GetRunId()
+			s.NotEqual(execution.GetRunId(), newRunID)
+			s.requireNoVersioningOverride(env, task.GetWorkflowExecution())
+			return respondCompleteWorkflow(tv3, vbPinned), nil
+		})
+	s.NotEmpty(newRunID)
+
+	currentExecution := &commonpb.WorkflowExecution{WorkflowId: execution.GetWorkflowId()}
+	s.requireNoVersioningOverride(env, currentExecution)
+	s.verifyWorkflowVersioning(env, tv3, vbPinned, tv3.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_ResetReappliesPendingMove verifies reset/reapply
+// semantics for a consumed one-time override. The original run moves from
+// version 1 to version 2 and consumes the one-time override. Reset then goes
+// back to a point before the override was set. Default reset reapply should
+// reapply the WorkflowExecutionOptionsUpdated event that set the one-time
+// override, so the reset run gets one pending WFT routed to version 2.
+func (s *Versioning3Suite) TestOneTimeOverride_ResetReappliesPendingMove() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	var resetEventID int64
+	for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetEventID = event.GetEventId() // just capturing the resetID here so that we come back to this event when we actually do the reset!
+			break
+		}
+	}
+	s.NotZero(resetEventID)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.GetWorkflowId(),
+			RunId:      execution.GetRunId(),
+		},
+		Reason:                    "reset before one-time override",
+		WorkflowTaskFinishEventId: resetEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+
+	resetExecution := &commonpb.WorkflowExecution{
+		WorkflowId: execution.GetWorkflowId(),
+		RunId:      resetResp.GetRunId(),
+	}
+	s.requireOneTimeOverride(env, resetExecution, tv2)
+
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Equal(resetResp.GetRunId(), task.GetWorkflowExecution().GetRunId())
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, resetExecution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_SameNamespaceChildInheritsPendingOverride verifies the
+// child-workflow boundary when a one-time override is pending. A parent WFT is
+// already started on version 1, then an operator sets a one-time override to
+// version 2. That old parent WFT starts a same-namespace child. The parent WFT
+// itself must not consume the one-time override because it completed on version
+// 1, but the child should inherit the pending override, route its first WFT to
+// version 2, and clear the override after that first child WFT completes.
+func (s *Versioning3Suite) TestOneTimeOverride_SameNamespaceChildInheritsPendingOverride() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	childTV1 := tv1.WithWorkflowIDNumber(2)
+	childTV2 := childTV1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	startedTask := s.pollWorkflowTask(env, tv1)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	s.completeWorkflowTask(env, tv1, startedTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			startChildWorkflowCommand(childTV1),
+		},
+		VersioningBehavior: vbPinned,
+		DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+	})
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	childExecution := s.pollUntilChildWorkflowTask(env, tv2, childTV1.WorkflowID(),
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) *workflowservice.RespondWorkflowTaskCompletedRequest {
+			s.requireOneTimeOverride(env, task.GetWorkflowExecution(), childTV2)
+			return respondEmptyWft(tv2, false, vbPinned)
+		})
+
+	s.requireNoVersioningOverride(env, childExecution)
+	s.verifyWorkflowVersioning(env, childTV2, vbPinned, childTV2.Deployment(), nil, nil)
+}
+
+// TestOneTimeOverride_CrossTaskQueueChildInheritsOnlyWhenTargetOwnsTaskQueue
+// verifies the child task-queue ownership boundary. If the one-time target
+// version is registered on the child's task queue, the child inherits the
+// pending one-time override and routes its first WFT to the target. If the
+// target version is not registered on the child's task queue, the child does not
+// inherit the parent override and starts through the child task queue's own
+// current routing.
+func (s *Versioning3Suite) TestOneTimeOverride_CrossTaskQueueChildInheritsOnlyWhenTargetOwnsTaskQueue() {
+	for _, tc := range []struct {
+		name                          string
+		targetPresentInChildTaskQueue bool
+	}{
+		{
+			name:                          "target present in child task queue",
+			targetPresentInChildTaskQueue: true,
+		},
+		{
+			name:                          "target not present in child task queue",
+			targetPresentInChildTaskQueue: false,
+		},
+	} {
+		s.Run(tc.name, func(s *Versioning3Suite) {
+			env := s.setupEnv()
+			tv1 := env.Tv().WithBuildIDNumber(1)
+			tv2 := tv1.WithBuildIDNumber(2)
+			childTV1 := tv1.WithWorkflowIDNumber(2).WithTaskQueueNumber(2)
+			childTV2 := childTV1.WithBuildIDNumber(2)
+
+			execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+			s.pollUntilRegistered(env, tv2)
+			s.pollUntilRegistered(env, childTV1)
+			s.waitForDeploymentDataPropagation(env, childTV1, versionStatusCurrent, false, tqTypeWf)
+			if tc.targetPresentInChildTaskQueue {
+				s.pollUntilRegistered(env, childTV2)
+				s.waitForDeploymentDataPropagation(env, childTV2, versionStatusInactive, false, tqTypeWf)
+			}
+
+			s.triggerNormalWFT(env, tv1, execution)
+			startedTask := s.pollWorkflowTask(env, tv1)
+
+			s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+			s.requireOneTimeOverride(env, execution, tv2)
+
+			s.completeWorkflowTask(env, tv1, startedTask, &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					startChildWorkflowCommand(childTV1),
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			})
+
+			if tc.targetPresentInChildTaskQueue {
+				s.pollWftAndHandle(env, childTV2, false, nil,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						s.NotNil(task)
+						s.Equal(childTV1.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+						s.requireOneTimeOverride(env, task.GetWorkflowExecution(), childTV2)
+						return respondEmptyWft(childTV2, false, vbPinned), nil
+					})
+
+				s.requireNoVersioningOverride(env, childTV1.WorkflowExecution())
+				s.verifyWorkflowVersioning(env, childTV2, vbPinned, childTV2.Deployment(), nil, nil)
+			} else {
+				s.pollWftAndHandle(env, childTV1, false, nil,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						s.NotNil(task)
+						s.Equal(childTV1.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+						s.requireNoVersioningOverride(env, task.GetWorkflowExecution())
+						return respondEmptyWft(childTV1, false, vbPinned), nil
+					})
+
+				s.verifyWorkflowVersioning(env, childTV1, vbPinned, childTV1.Deployment(), nil, nil)
+			}
+		})
+	}
+}
+
+// TestOneTimeOverride_InvalidTargetVersionRejected verifies that the operator
+// cannot set a one-time override to a version that is not registered on the
+// workflow's task queue. The update should fail before persistence, leaving the
+// workflow without a pending override.
+func (s *Versioning3Suite) TestOneTimeOverride_InvalidTargetVersionRejected() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	missingTV := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: s.makeOneTimeOverride(missingTV)},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.Error(err)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.Contains(err.Error(), worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
+	s.requireNoVersioningOverride(env, execution)
+}
+
 // testPinnedCaN_UpgradeOnCaN tests ContinueAsNew of a Pinned workflow with InitialVersioningBehavior
 // set to AUTO_UPGRADE using task polling directly (without SDK). This allows testing the feature
 // before it's exposed in the SDK.
@@ -3460,7 +4118,6 @@ func (s *Versioning3Suite) pollUntilRegistered(env *testcore.TestEnv, tv *testva
 	}
 	pollCtx, cancel := context.WithCancel(s.Context())
 	for _, tqType := range tqTypes {
-		tqType := tqType
 		go func() {
 			for pollCtx.Err() == nil {
 				switch tqType {
@@ -5909,6 +6566,287 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 		})
 
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+}
+
+// Flow:
+//  1. Start a pinned workflow on v1 and fail a normal WFT before any target change.
+//  2. Move matching's current version to v2, poll a hidden transient WFT, and fail it after it notifies v2.
+//  3. Verify the notification is still outstanding in mutable state, with no durable started-event flag in history.
+//  4. Roll matching back to v1 and assert the next WFT re-fires the outstanding target-version notification.
+func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+
+	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
+	defer cancel()
+
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	setCurrentInMatching := func(tv *testvars.TestVars, revisionNumber int64, previous ...*testvars.TestVars) {
+		routingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            revisionNumber,
+		}
+		upsertVersions := map[string]*deploymentspb.WorkerDeploymentVersionData{
+			tv.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+		}
+		for _, prev := range previous {
+			upsertVersions[prev.DeploymentVersion().GetBuildId()] = &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			}
+		}
+		s.syncTaskQueueDeploymentDataWithRoutingConfig(env, tv, routingConfig, upsertVersions, []string{}, tqTypeWf)
+		s.waitForDeploymentDataPropagation(env, tv, versionStatusCurrent, false, tqTypeWf)
+	}
+
+	lastStartedEvent := func(events []*historypb.HistoryEvent) *historypb.HistoryEvent {
+		var lastStarted *historypb.HistoryEvent
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				lastStarted = event
+			}
+		}
+		return lastStarted
+	}
+
+	assertNoPersistedTargetChange := func(execution *commonpb.WorkflowExecution) {
+		for _, event := range env.GetHistory(env.Namespace().String(), execution) {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+				s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+					"persisted parent history should not expose targetWorkerDeploymentVersionChanged=true")
+			}
+		}
+	}
+
+	setCurrentInMatching(tv1, 1)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	normalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(normalTask.GetTaskToken())
+	normalStarted := lastStartedEvent(normalTask.GetHistory().GetEvents())
+	s.NotNil(normalStarted)
+	s.False(normalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged())
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: normalTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	setCurrentInMatching(tv2, 2, tv1)
+
+	hiddenTransientTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(hiddenTransientTask.GetTaskToken())
+	s.verifyTransientTask(hiddenTransientTask)
+	hiddenStarted := lastStartedEvent(hiddenTransientTask.GetHistory().GetEvents())
+	s.NotNil(hiddenStarted)
+	s.True(hiddenStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"transient WFT should notify the worker about v2")
+
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: hiddenTransientTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv1.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	ms, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	lastNotified := ms.GetDatabaseMutableState().GetExecutionInfo().GetLastNotifiedTargetVersion()
+	s.NotNil(lastNotified, "failed transient notification should remain as an outstanding notification")
+	s.Equal(tv2.BuildID(), lastNotified.GetDeploymentVersion().GetBuildId())
+	s.Equal(int64(2), lastNotified.GetRevisionNumber())
+	assertNoPersistedTargetChange(execution)
+
+	s.rollbackTaskQueueToVersion(env, tv1)
+
+	finalTask, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv1.TaskQueue(),
+		Identity:          tv1.WorkerIdentity(),
+		DeploymentOptions: tv1.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(finalTask.GetTaskToken())
+	finalStarted := lastStartedEvent(finalTask.GetHistory().GetEvents())
+	s.NotNil(finalStarted)
+	s.True(finalStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+		"outstanding notification should re-fire even when matching is rolled back to v1")
+}
+
+// Scenario: a pinned v1 workflow auto-upgrades to v2 via Continue-As-New, v1 is
+// made current again, then reset-by-build-ID resets the workflow before v2 usage
+// so the reset run resumes on v1.
+func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
+	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
+
+	tv := env.Tv()
+	tv1 := tv.WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	revision := int64(1)
+	setCurrentVersion := func(current *testvars.TestVars, draining ...*testvars.TestVars) {
+		versions := map[string]*deploymentspb.WorkerDeploymentVersionData{
+			current.DeploymentVersion().GetBuildId(): {
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			},
+		}
+		for _, version := range draining {
+			versions[version.DeploymentVersion().GetBuildId()] = &deploymentspb.WorkerDeploymentVersionData{
+				Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
+			}
+		}
+		s.updateTaskQueueDeploymentDataWithRoutingConfig(env, current, &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(current.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            revision,
+		}, versions, []string{}, tqTypeWf)
+		revision++
+	}
+
+	setCurrentVersion(tv1)
+
+	runID := s.startWorkflow(env, tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	setCurrentVersion(tv2, tv1)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType:              tv1.WorkflowType(),
+								TaskQueue:                 tv1.TaskQueue(),
+								Input:                     tv1.Any().Payloads(),
+								InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	var canRunID string
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			canRunID = task.WorkflowExecution.GetRunId()
+			s.NotEqual(runID, canRunID)
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+	s.verifyWorkflowVersioning(env, tv2, vbPinned, tv2.Deployment(), nil, nil)
+
+	query := fmt.Sprintf(
+		"WorkflowId = '%s' AND ExecutionStatus = 'Running' AND TemporalUsedWorkerDeploymentVersions = '%s'",
+		tv1.WorkflowID(),
+		tv2.DeploymentVersionStringV32(),
+	)
+	s.Await(func(s *Versioning3Suite) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), 1)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	setCurrentVersion(tv1, tv2)
+
+	jobID := tv1.Any().String()
+	_, err := env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "reset by build ID after rollback",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_BuildId{
+						BuildId: tv2.BuildID(),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Await(func(s *Versioning3Suite) {
+		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+	}, 20*time.Second, 500*time.Millisecond)
+
+	var resetRunID string
+	s.pollWftAndHandle(env, tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			resetRunID = task.WorkflowExecution.GetRunId()
+			s.NotEqual(runID, resetRunID)
+			s.NotEqual(canRunID, resetRunID)
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv1.Deployment(), nil, nil)
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: tv1.WorkflowID(),
+			RunId:      canRunID,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
 }
 
 // TestOverride_SuppressesTargetVersionChangedSignal tests that a versioning override

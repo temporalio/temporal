@@ -27,11 +27,7 @@ const (
 	summaryOutputDirFlag  = "--summary-output-dir="
 	crashReportNameFlag   = "--crashreportname="
 	gotestsumPathFlag     = "--gotestsum-path="
-
-	// goTestTimeoutFlag is the go test flag whose value is also used as the
-	// testrunner's total-run deadline (so results are flushed before an external
-	// kill such as a GitHub Actions timeout).
-	goTestTimeoutFlagEq = "-timeout="
+	totalTimeoutFlag      = "--total-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
@@ -81,7 +77,7 @@ type runner struct {
 	junitGlob        string
 	summaryOutputDir string
 	alerts           []alert
-	totalTimeout     time.Duration // derived from the -timeout go test flag
+	totalTimeout     time.Duration
 }
 
 func newRunner() *runner {
@@ -93,17 +89,6 @@ func newRunner() *runner {
 
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
-	// Pre-pass: read the go test -timeout value and use it as the testrunner's
-	// total deadline so results are flushed before an external kill (e.g. GitHub
-	// Actions timeout). The flag is NOT consumed — it still passes through to gotestsum.
-	for _, arg := range args {
-		if strings.HasPrefix(arg, goTestTimeoutFlagEq) {
-			if d, err := time.ParseDuration(strings.TrimPrefix(arg, goTestTimeoutFlagEq)); err == nil {
-				r.totalTimeout = d
-			}
-		}
-	}
-
 	var sanitizedArgs []string
 	for _, arg := range args {
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
@@ -116,6 +101,18 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
 			}
 			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if strings.HasPrefix(arg, totalTimeoutFlag) {
+			var err error
+			r.totalTimeout, err = time.ParseDuration(strings.TrimPrefix(arg, totalTimeoutFlag))
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %q: %w", totalTimeoutFlag, err)
+			}
+			if r.totalTimeout == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", totalTimeoutFlag)
+			}
+			continue
 		}
 
 		if strings.HasPrefix(arg, gotestsumPathFlag) {
@@ -322,8 +319,10 @@ func (r *runner) writeCurrentReport() {
 	}
 }
 
+// nolint:revive,deep-exit
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
+	var totalTimeoutFired bool
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
 
@@ -339,6 +338,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// flush the XML before the external kill arrives.
 		if ctx.Err() != nil {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
+			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
 			if readErr := currentAttempt.junitReport.read(); readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
@@ -349,6 +349,12 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
 			}
+			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
+			currentAttempt.junitReport.appendSyntheticFailure(
+				"testrunner.TotalTimeout",
+				failureTypeTimeout,
+				fmt.Sprintf("test-runner total timeout (%s) reached before all tests completed", r.totalTimeout),
+			)
 			break
 		}
 
@@ -434,6 +440,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if currentAttempt.exitErr != nil {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
 		os.Exit(currentAttempt.exitErr.ExitCode())
+	}
+	// Without a non-zero exit, a total-timeout makes CI silently green.
+	if totalTimeoutFired {
+		log.Printf("exiting with failure: total timeout (%s) reached", r.totalTimeout)
+		os.Exit(1)
 	}
 }
 

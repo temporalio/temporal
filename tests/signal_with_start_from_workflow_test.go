@@ -1,15 +1,12 @@
 package tests
 
 import (
-	"context"
 	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,7 +22,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payloads"
 	sdkconverter "go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -35,8 +32,8 @@ import (
 // target workflow. It is used by TestBothWorkflowsVisibleAfterSWSFromWorkflow to verify
 // end-to-end SDK serialization against the real server.
 func systemNexusSWSWorkflow(ctx workflow.Context, req *workflowservice.SignalWithStartWorkflowExecutionRequest) (string, error) {
-	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.WorkflowService.ServiceName)
-	fut := nc.ExecuteOperation(ctx, workflowservicenexus.WorkflowService.SignalWithStartWorkflowExecution,
+	nc := workflow.NewNexusClient(commonnexus.SystemEndpoint, workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName)
+	fut := nc.ExecuteOperation(ctx, workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.SignalWithStartWorkflowExecution,
 		req,
 		workflow.NexusOperationOptions{})
 	var result workflowservice.SignalWithStartWorkflowExecutionResponse
@@ -57,21 +54,23 @@ func sysNexusSWSTargetWorkflow(ctx workflow.Context) (string, error) {
 }
 
 type SignalWithStartFromWorkflowTestSuite struct {
-	testcore.FunctionalTestBase // nolint:forbidigo // Will migrate to test env at a later date
+	parallelsuite.Suite[*SignalWithStartFromWorkflowTestSuite]
 }
 
 func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(SignalWithStartFromWorkflowTestSuite))
+	parallelsuite.Run(t, &SignalWithStartFromWorkflowTestSuite{})
 }
 
-func (s *SignalWithStartFromWorkflowTestSuite) SetupSuite() {
-	s.SetupSuiteWithCluster(
-		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-			dynamicconfig.EnableChasm.Key():                       true,
-			dynamicconfig.EnableSignalWithStartFromWorkflow.Key(): true,
-		}),
-	)
+// newTestEnv creates a TestEnv with the dynamic config required to exercise
+// SignalWithStartWorkflowExecution from a workflow. Both settings are
+// namespace-scoped, so they apply to the test's own namespace on the shared
+// cluster. Additional per-test options may be passed in opts.
+func (s *SignalWithStartFromWorkflowTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	baseOpts := []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableSignalWithStartFromWorkflow, true),
+	}
+	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 // scheduleAndGetSWSResult dispatches a SignalWithStartWorkflowExecution Nexus operation
@@ -82,26 +81,27 @@ func (s *SignalWithStartFromWorkflowTestSuite) SetupSuite() {
 // swsReq must NOT set Namespace, RequestId, or Links — the processor populates those from
 // the Nexus operation context.
 func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
-	ctx context.Context,
+	env *testcore.TestEnv,
 	callerTaskQueue string,
 	swsReq *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (*workflowservice.SignalWithStartWorkflowExecutionResponse, *failurepb.Failure) {
-	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	ctx := s.Context()
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, "caller-workflow")
 	s.NoError(err)
 	defer func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
 	}()
 
 	// First poll: schedule the SWS Nexus operation.
-	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
 	s.NoError(err)
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -110,7 +110,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
@@ -121,8 +121,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 	s.NoError(err)
 
 	// Second poll: wait for the NexusOperationCompleted or NexusOperationFailed event.
-	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
@@ -148,11 +148,12 @@ func (s *SignalWithStartFromWorkflowTestSuite) scheduleAndGetSWSResult(
 // startAndCompleteWorkflow starts a workflow and immediately completes it by responding to
 // its first workflow task. Returns the run ID of the completed execution.
 func (s *SignalWithStartFromWorkflowTestSuite) startAndCompleteWorkflow(
-	ctx context.Context,
+	env *testcore.TestEnv,
 	workflowID, taskQueue string,
 ) string {
-	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	ctx := s.Context()
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   workflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -160,15 +161,15 @@ func (s *SignalWithStartFromWorkflowTestSuite) startAndCompleteWorkflow(
 	})
 	s.NoError(err)
 
-	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
 	s.NoError(err)
 	runID := pollResp.WorkflowExecution.RunId
 
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{{
@@ -185,18 +186,19 @@ func (s *SignalWithStartFromWorkflowTestSuite) startAndCompleteWorkflow(
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
 // __temporal_system endpoint.
 func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
-	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, "workflow")
 	s.NoError(err)
 
 	workflowID := testcore.RandomizeStr(s.T().Name())
 
-	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -204,7 +206,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 		Identity: "test",
 	})
 	s.NoError(err)
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -213,7 +215,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input: payloads.MustEncodeSingle(&workflowservice.SignalWithStartWorkflowExecutionRequest{
 							WorkflowId: workflowID,
@@ -233,8 +235,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.NoError(err)
 
 	// Poll for the completion
-	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -255,7 +257,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.NotNil(result)
 
 	// Complete the workflow
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -277,7 +279,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.True(response.Started)
 
 	// Verify the linkage from the handler workflow in the caller's history.
-	it := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	it := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	var opScheduledEvent *historypb.HistoryEvent
 	var opCompletedEvent *historypb.HistoryEvent
 	for it.HasNext() {
@@ -300,8 +302,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.Equal(opScheduledEvent.GetNexusOperationScheduledEventAttributes().GetRequestId(), link.GetWorkflowEvent().GetRequestIdRef().GetRequestId())
 
 	// Verify the linkage from the caller workflow in the handler's history.
-	// it = s.SdkClient().GetWorkflowHistory(ctx, workflowID, response.RunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-	it = s.SdkClient().GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	// it = env.SdkClient().GetWorkflowHistory(ctx, workflowID, response.RunID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	it = env.SdkClient().GetWorkflowHistory(ctx, workflowID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	var wfStartedEvent *historypb.HistoryEvent
 	for it.HasNext() {
 		ev, err := it.Next()
@@ -319,7 +321,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 	s.Equal(opScheduledEvent.GetEventId(), link.GetWorkflowEvent().GetEventRef().EventId)
 
 	// Verify the request ID info is recorded correctly in the handler workflow's description.
-	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, response.GetRunId())
+	desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowID, response.GetRunId())
 	s.NoError(err)
 	requestIDInfos := desc.GetWorkflowExtendedInfo().GetRequestIdInfos()
 	requestID := slices.Collect(maps.Keys(requestIDInfos))[0]
@@ -329,26 +331,27 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 // TestSignalExistingWorkflow verifies that SWS called from a workflow signals an already-running
 // target workflow without starting a new one (Started=false, RunId unchanged).
 func (s *SignalWithStartFromWorkflowTestSuite) TestSignalExistingWorkflow() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	// Start the target workflow and leave it running.
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
 	})
 	s.NoError(err)
 	originalRunID := startResp.RunId
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:            targetWorkflowID,
 		SignalName:            "test-signal",
 		WorkflowType:          &commonpb.WorkflowType{Name: "target-workflow"},
@@ -364,19 +367,20 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalExistingWorkflow() {
 // TestStartNewWorkflow verifies that SWS called from a workflow starts a new execution when no
 // workflow with the given ID exists (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestStartNewWorkflow() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:   targetWorkflowID,
 		SignalName:   "test-signal",
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 
 	s.Nil(failure)
@@ -387,14 +391,15 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartNewWorkflow() {
 // TestSignalTerminatedWorkflow verifies that SWS starts a fresh run when the target workflow
 // has been terminated (Started=true, new RunId).
 func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	// Start and terminate the target workflow.
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -403,10 +408,10 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
 	s.NoError(err)
 	originalRunID := startResp.RunId
 
-	err = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, originalRunID, "setup")
+	err = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, originalRunID, "setup")
 	s.NoError(err)
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:   targetWorkflowID,
 		SignalName:   "test-signal",
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
@@ -421,16 +426,14 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
 // TestIDReusePolicy_RejectDuplicate verifies that SWS fails with WorkflowExecutionAlreadyStarted
 // when the target workflow has completed and the reuse policy is REJECT_DUPLICATE.
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_RejectDuplicate() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
-
-	ctx := testcore.NewContext()
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	s.startAndCompleteWorkflow(ctx, targetWorkflowID, targetTaskQueue)
+	s.startAndCompleteWorkflow(env, targetWorkflowID, targetTaskQueue)
 
-	_, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	_, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:            targetWorkflowID,
 		SignalName:            "test-signal",
 		WorkflowType:          &commonpb.WorkflowType{Name: "target-workflow"},
@@ -445,16 +448,15 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_RejectDuplicate
 // TestIDReusePolicy_AllowDuplicate verifies that SWS starts a new run when the target has
 // completed and the reuse policy is ALLOW_DUPLICATE (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
-
-	ctx := testcore.NewContext()
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	s.startAndCompleteWorkflow(ctx, targetWorkflowID, targetTaskQueue)
+	s.startAndCompleteWorkflow(env, targetWorkflowID, targetTaskQueue)
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:            targetWorkflowID,
 		SignalName:            "test-signal",
 		WorkflowType:          &commonpb.WorkflowType{Name: "target-workflow"},
@@ -462,7 +464,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate(
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 
 	s.Nil(failure)
@@ -474,17 +476,16 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate(
 //  1. Target completed successfully → SWS fails (already started error).
 //  2. Target was terminated → SWS starts a new run (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
-
-	ctx := testcore.NewContext()
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	ctx := s.Context()
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	// Sub-case 1: target completed successfully → should fail.
-	s.startAndCompleteWorkflow(ctx, targetWorkflowID, targetTaskQueue)
+	s.startAndCompleteWorkflow(env, targetWorkflowID, targetTaskQueue)
 
 	_, failure := s.scheduleAndGetSWSResult(
-		ctx,
+		env,
 		testcore.RandomizeStr(s.T().Name()),
 		&workflowservice.SignalWithStartWorkflowExecutionRequest{
 			WorkflowId:            targetWorkflowID,
@@ -497,19 +498,19 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateF
 	s.NotNil(failure, "expected failure when completed workflow + ALLOW_DUPLICATE_FAILED_ONLY")
 
 	// Sub-case 2: target terminated → should start a new run.
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
 	s.NoError(err)
-	err = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "setup")
+	err = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "setup")
 	s.NoError(err)
 
 	resp, failure := s.scheduleAndGetSWSResult(
-		ctx,
+		env,
 		testcore.RandomizeStr(s.T().Name()),
 		&workflowservice.SignalWithStartWorkflowExecutionRequest{
 			WorkflowId:            targetWorkflowID,
@@ -520,7 +521,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateF
 		},
 	)
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true after terminated workflow + ALLOW_DUPLICATE_FAILED_ONLY")
@@ -530,13 +531,14 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateF
 // starts a new one when the conflict policy is TERMINATE_EXISTING (Started=true, new RunId,
 // original run terminated).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExisting() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -545,7 +547,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 	s.NoError(err)
 	originalRunID := startResp.RunId
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:               targetWorkflowID,
 		SignalName:               "test-signal",
 		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
@@ -553,7 +555,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 
 	s.Nil(failure)
@@ -561,8 +563,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 	s.NotEqual(originalRunID, resp.RunId, "expected a new RunId")
 
 	// Verify the original run was terminated.
-	desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: originalRunID},
 	})
 	s.NoError(err)
@@ -573,25 +575,26 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 // returns its RunId without starting a new one (Started=false) when the conflict policy is
 // USE_EXISTING.
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    env.Namespace().String(),
 		WorkflowId:   targetWorkflowID,
 		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		RequestId:    uuid.NewString(),
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, startResp.RunId, "test cleanup")
 	})
 	s.NoError(err)
 	originalRunID := startResp.RunId
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:               targetWorkflowID,
 		SignalName:               "test-signal",
 		WorkflowType:             &commonpb.WorkflowType{Name: "target-workflow"},
@@ -599,7 +602,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
 	})
 	s.Nil(failure)
 	s.False(resp.Started, "expected Started=false with USE_EXISTING")
@@ -612,21 +615,22 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting(
 // is not a supported operation. The validation error surfaces here as a workflow task failure
 // on the ScheduleNexusOperation command (BadScheduleNexusOperationAttributes).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
-	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, "caller-workflow")
 	s.NoError(err)
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
 	})
 
-	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
@@ -639,7 +643,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: targetTaskQueue},
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -648,7 +652,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input:     payloads.MustEncodeSingle(swsReq),
 					},
@@ -679,26 +683,26 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	// driving the workflow task manually, so coverage is not lost in the meantime.
 	s.T().Skip("requires SDK release that lifts the __temporal_ endpoint prefix check")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	s.T().Cleanup(cancel)
+	env := s.newTestEnv()
+	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	// Stand up dedicated SDK workers for the caller and target workflows.
-	callerWorker := sdkworker.New(s.SdkClient(), callerTaskQueue, sdkworker.Options{})
+	callerWorker := sdkworker.New(env.SdkClient(), callerTaskQueue, sdkworker.Options{})
 	callerWorker.RegisterWorkflow(systemNexusSWSWorkflow)
 	s.NoError(callerWorker.Start())
 	s.T().Cleanup(func() { callerWorker.Stop() })
 
-	targetWorker := sdkworker.New(s.SdkClient(), targetTaskQueue, sdkworker.Options{})
+	targetWorker := sdkworker.New(env.SdkClient(), targetTaskQueue, sdkworker.Options{})
 	targetWorker.RegisterWorkflow(sysNexusSWSTargetWorkflow)
 	s.NoError(targetWorker.Start())
 	s.T().Cleanup(func() { targetWorker.Stop() })
 
 	// Execute the caller workflow. It calls SWS via the system Nexus endpoint and returns
 	// the RunID of the newly-started target workflow.
-	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, systemNexusSWSWorkflow, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:   targetWorkflowID,
@@ -713,7 +717,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	s.NotEmpty(callerRun.GetID())
 	s.NotEmpty(callerRun.GetRunID())
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, "", "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, "", "test cleanup")
 	})
 
 	// --- Assertion 1: Caller workflow completes and returns the target's RunID. ---
@@ -724,8 +728,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	s.NotEmpty(targetRunID)
 
 	// Confirm COMPLETED via Describe now that we know the caller has finished.
-	callerDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	callerDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()},
 	})
 	s.NoError(err)
@@ -735,25 +739,25 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	// GetWorkflow(...).Get blocks until the target workflow finishes, implicitly asserting
 	// it reaches COMPLETED status. The target returns whatever signal payload it received.
 	var targetResult string
-	s.NoError(s.SdkClient().GetWorkflow(ctx, targetWorkflowID, targetRunID).Get(ctx, &targetResult))
+	s.NoError(env.SdkClient().GetWorkflow(ctx, targetWorkflowID, targetRunID).Get(ctx, &targetResult))
 	s.Equal("signal-input", targetResult)
 
 	// Confirm COMPLETED via Describe now that we know the target has finished.
-	targetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	targetDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
 	})
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, targetDesc.WorkflowExecutionInfo.Status)
 
 	// --- Assertion 3: Target carries the memo passed in the SWS request. ---
-	s.Require().NotNil(targetDesc.WorkflowExecutionInfo.Memo)
+	s.NotNil(targetDesc.WorkflowExecutionInfo.Memo)
 	s.Contains(targetDesc.WorkflowExecutionInfo.Memo.Fields, "memo-key")
 
 	// --- Assertion 4: Signal was delivered with the correct name and input. ---
 	// Since the target has already completed, its full history is available without polling.
-	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: targetRunID},
 	})
 	s.NoError(err)
@@ -764,7 +768,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 			break
 		}
 	}
-	s.Require().NotNil(signalEvent, "expected WorkflowExecutionSignaled event in target history")
+	s.NotNil(signalEvent, "expected WorkflowExecutionSignaled event in target history")
 	s.Equal("test-signal", signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	var signalInputVal string
 	s.NoError(payloads.Decode(signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input, &signalInputVal))
@@ -778,20 +782,20 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 // verifies that the server accepts and correctly processes such requests — matching what
 // the Python SDK (and other SDKs that prefer proto binary) sends.
 func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary() {
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	s.T().Cleanup(cancel)
+	env := s.newTestEnv()
+	ctx := s.Context()
 
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	// Start a caller workflow to obtain an initial workflow task.
-	callerRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, "caller-workflow")
 	s.NoError(err)
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "test cleanup")
 	})
 
 	// Encode the SWS request as binary/protobuf. PreferProtoDataConverter places
@@ -806,18 +810,18 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	}
 	pls, err := sdkconverter.PreferProtoDataConverter.ToPayloads(swsReq)
 	s.NoError(err)
-	s.Require().Len(pls.Payloads, 1)
+	s.Len(pls.Payloads, 1)
 	protoBinaryPayload := pls.Payloads[0]
 	s.Equal("binary/protobuf", string(protoBinaryPayload.Metadata["encoding"]))
 
 	// First poll: respond with a ScheduleNexusOperation command carrying the proto binary input.
-	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
 	s.NoError(err)
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -826,7 +830,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input:     protoBinaryPayload,
 					},
@@ -837,8 +841,8 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	s.NoError(err)
 
 	// Second poll: wait for NexusOperationCompleted or NexusOperationFailed.
-	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: callerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
@@ -862,37 +866,37 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	s.NotEmpty(sswResp.RunId)
 
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, sswResp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, sswResp.RunId, "test cleanup")
 	})
 
 	// Both workflows must be visible.
-	callerDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	callerDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()},
 	})
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, callerDesc.WorkflowExecutionInfo.Status)
 
-	targetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	targetDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: sswResp.RunId},
 	})
 	s.NoError(err)
-	s.Require().NotNil(targetDesc.WorkflowExecutionInfo.Memo)
+	s.NotNil(targetDesc.WorkflowExecutionInfo.Memo)
 	s.Contains(targetDesc.WorkflowExecutionInfo.Memo.Fields, "memo-key")
 }
 
 // TestStartDelay verifies that SWS with WorkflowStartDelay completes successfully from a
 // workflow (Started=true) and that the target workflow eventually becomes running.
 func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
-	ctx := testcore.NewContext()
+	env := s.newTestEnv()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	startDelay := 2 * time.Second
 
-	resp, failure := s.scheduleAndGetSWSResult(ctx, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, failure := s.scheduleAndGetSWSResult(env, callerTaskQueue, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		WorkflowId:         targetWorkflowID,
 		SignalName:         "test-signal",
 		WorkflowType:       &commonpb.WorkflowType{Name: "target-workflow"},
@@ -900,19 +904,19 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
 		WorkflowStartDelay: durationpb.New(startDelay),
 	})
 	s.T().Cleanup(func() {
-		_ = s.SdkClient().TerminateWorkflow(ctx, targetWorkflowID, resp.RunId, "test cleanup")
+		_ = env.SdkClient().TerminateWorkflow(s.Context(), targetWorkflowID, resp.RunId, "test cleanup")
 	})
 	s.Nil(failure)
 	s.True(resp.Started, "expected Started=true with WorkflowStartDelay")
 	s.NotEmpty(resp.RunId)
 
 	// Verify the workflow eventually becomes running after the delay.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+	s.Await(func(s *SignalWithStartFromWorkflowTestSuite) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID, RunId: resp.RunId},
 		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.WorkflowExecutionInfo.Status)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.WorkflowExecutionInfo.Status)
 	}, startDelay+5*time.Second, 200*time.Millisecond)
 }

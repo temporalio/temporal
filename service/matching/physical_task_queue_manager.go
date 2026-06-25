@@ -352,6 +352,20 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return err
 }
 
+// StartScaleManager is called by backlog manager after it's loaded metadata from the default queue. (New matcher only.)
+func (c *physicalTaskQueueManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
+	c.partitionMgr.StartScaleManager(scaleState)
+}
+
+func (c *physicalTaskQueueManagerImpl) UpdateScaleState(scaleState *persistencespb.PartitionScaleState, syncToDB bool) error {
+	if !syncToDB {
+		return c.backlogMgr.getDB().UpdateScaleState(c.tqCtx /* unused */, scaleState, false)
+	}
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	defer cancel()
+	return c.backlogMgr.getDB().UpdateScaleState(ctx, scaleState, true)
+}
+
 // Call this to set up dual-read from the other table.
 // Must be called by the active backlog manager before it sets itself initialized.
 // Must only be called when using new matcher.
@@ -470,8 +484,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 ) (*internalTask, error) {
 	c.liveness.markAlive()
 
-	c.currentPolls.Add(1)
-	defer c.currentPolls.Add(-1)
+	metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(1)))
+	defer func() {
+		metrics.PendingPolls.With(c.metricsHandler).Record(float64(c.currentPolls.Add(-1)))
+	}()
 
 	namespaceId := namespace.ID(c.queue.NamespaceId())
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
@@ -485,6 +501,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
+	//nolint:forbidigo // physical task queue lifecycle is namespace-scoped
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(ctx, pollMetadata)
 	}
@@ -504,7 +521,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
 			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
-			task.finish(nil, false)
+			task.finish(taskFinishResult{dropReason: dropReasonExpiredMemory})
 			continue
 		}
 
@@ -551,10 +568,9 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	task *internalTask,
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		task.finish(nil, false)
-
 		var invalidTaskTag = getInvalidTaskTag(task)
 		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+		task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 		// Don't try to set read level here because it may have been advanced already.
 
 		// Stay alive as long as we're invalidating tasks

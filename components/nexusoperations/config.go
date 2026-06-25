@@ -179,6 +179,7 @@ type Config struct {
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
+	MetricTagConfig                     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -198,6 +199,7 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
+		MetricTagConfig:                     MetricTagConfiguration.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -209,4 +211,14 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		},
 		NumHistoryShards: cfg.NumHistoryShards,
 	}
+}
+
+// ResolvedMetricTagConfig returns the configured metric tag config, defaulting to an empty config
+// when the receiver or the setting is nil (e.g. in tests that construct a bare Config). It is
+// nil-receiver safe.
+func (c *Config) ResolvedMetricTagConfig() chasmnexus.NexusMetricTagConfig {
+	if c == nil || c.MetricTagConfig == nil {
+		return chasmnexus.NexusMetricTagConfig{}
+	}
+	return c.MetricTagConfig()
 }

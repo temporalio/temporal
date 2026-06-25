@@ -152,10 +152,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		rand.Int63(),
 	)
 
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
-
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -182,8 +178,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into newSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
 }
@@ -285,10 +282,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		rand.Int63(),
 	)
 
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
-
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -315,8 +308,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into prevSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, prevSnapshot)
 	s.AssertHEEqualWithDB(branchToken, prevEvents)
 }
@@ -2734,7 +2728,7 @@ func (s *ExecutionMutableStateSuite) assertHEWithDB(
 	if !assertPrefix {
 		s.Nil(resp.NextPageToken)
 	}
-	s.Equal(len(historyEvents), len(resp.HistoryEvents))
+	s.Len(resp.HistoryEvents, len(historyEvents))
 	for i, event := range historyEvents {
 		s.ProtoEqual(event, resp.HistoryEvents[i])
 	}

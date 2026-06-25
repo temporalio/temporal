@@ -11,7 +11,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -2111,6 +2110,88 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 	s.Nil(resp.ExecutionErr)
 }
 
+// TestExecuteChasmPureTimerTask_ClosesTransactionWhenInvalid verifies that the
+// mutable state transaction is closed (via wfCtx.UpdateWorkflowExecutionAsActive,
+// which calls CloseTransactionAsMutation on the mutable state) after executing
+// a CHASM pure task even when the task is invalid. ExecutePureTask returns
+// (false, nil) for invalid tasks ("no-op succeed"); the tree still gets marked
+// dirty so the transaction must close to clean up the invalid task.
+func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_ClosesTransactionWhenInvalid() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+
+	// Mock the CHASM tree with an invalid pure task: ExecutePureTask returns
+	// (false, nil) to simulate the validator rejecting the task.
+	mockEach := &chasm.MockNodePureTask{
+		HandleExecutePureTask: func(_ context.Context, _ chasm.TaskAttributes, _ any) (bool, error) {
+			return false, nil
+		},
+	}
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
+		Times(1).Do(
+		func(_ time.Time, callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error)) error {
+			_, err := callback(mockEach, chasm.TaskAttributes{}, nil)
+			return err
+		})
+
+	// Mock mutable state.
+	ms := historyi.NewMockMutableState(s.controller)
+	info := &persistencespb.WorkflowExecutionInfo{}
+	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+	ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes() // emulate transition history disabled.
+	ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(
+		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().Now().Return(s.now).AnyTimes()
+
+	timerTask := &tasks.ChasmTaskPure{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		VisibilityTimestamp: s.now,
+		TaskID:              s.mustGenerateTaskID(),
+		ArchetypeID:         tests.ArchetypeID,
+	}
+
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+	// Even though the pure task was invalid, the transaction must still be
+	// closed so that the (now-dirty) tree can be flushed and the invalid task
+	// can be cleaned up.
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any()).Times(1).Return(nil)
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	//nolint:revive // unchecked-type-assertion
+	timerQueueActiveTaskExecutor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		s.mockShard.Resource.GetMatchingClient(),
+		s.mockChasmEngine,
+	).(*timerQueueActiveTaskExecutor)
+
+	resp := timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.NoError(resp.ExecutionErr)
+	s.Len(mockEach.ExecuteCalls, 1)
+}
+
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_ExecutesAllAvailableTimers() {
 	numInvocations := 0
 
@@ -2300,7 +2381,7 @@ func (s *timerQueueActiveTaskExecutorSuite) mustGenerateTaskID() int64 {
 // programming GetWorkflowExecution.
 func (s *timerQueueActiveTaskExecutorSuite) makeTimeSkippingMS() (*persistencespb.WorkflowMutableState, definition.WorkflowKey) {
 	execution := &commonpb.WorkflowExecution{
-		WorkflowId: "ts-bound-wf-" + uuid.NewString(),
+		WorkflowId: "ts-fast-forward-wf-" + uuid.NewString(),
 		RunId:      uuid.NewString(),
 	}
 	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
@@ -2332,11 +2413,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wor
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-		},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(time.Hour)},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2375,8 +2455,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_TSI
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_ConfigDisabled() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: false},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: false},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2395,11 +2475,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Con
 	s.ErrorIs(resp.ExecutionErr, errNoTimerFired)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoBoundInfo() {
+func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoFastForwardInfo() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		// CurrentElapsedDurationBound deliberately not set.
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		// FastForward deliberately not set.
 	}
 
 	timerTask := &tasks.TimeSkippingTimerTask{
@@ -2418,8 +2498,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoB
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_HasReached() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 			HasReached:    true,
@@ -2442,8 +2522,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Has
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_SourceEventIDZero() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 0,
 		},
@@ -2465,10 +2545,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_SourceEventIDMismatch() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{Enabled: true},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
-			SourceEventId: 2, // bound was reconfigured; old task carries EventID=1.
+			SourceEventId: 2, // fast-forward was reconfigured; old task carries EventID=1.
 		},
 	}
 
@@ -2488,11 +2568,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_HappyPath() {
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config: &workflowpb.TimeSkippingConfig{
-			Enabled: true,
-			Bound:   &workflowpb.TimeSkippingConfig_MaxElapsedDuration{MaxElapsedDuration: durationpb.New(time.Hour)},
-		},
-		CurrentElapsedDurationBound: &persistencespb.TimeSkippingBoundInfo{
+		Config: &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(time.Hour)},
+		FastForwardInfo: &persistencespb.FastForwardInfo{
 			TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
 			SourceEventId: 1,
 		},
@@ -2518,7 +2597,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Hap
 	tsi := loaded.GetExecutionInfo().GetTimeSkippingInfo()
 	s.Require().NotNil(tsi)
 	s.False(tsi.GetConfig().GetEnabled(), "happy path must flip Enabled=false")
-	s.True(tsi.GetCurrentElapsedDurationBound().GetHasReached(), "happy path must set HasReached=true")
+	s.True(tsi.GetFastForwardInfo().GetHasReached(), "happy path must set HasReached=true")
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask() {
@@ -2689,7 +2768,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	// on reload. After load, pendingActivityTimerHeartbeats[id] is reset to the
 	// year-2000 sentinel by NewMutableStateFromDB, and ToRealTime(year 2000) = 1999-12-31 23:00.
 	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-		Config:                     &workflowpb.TimeSkippingConfig{Enabled: true},
+		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 		AccumulatedSkippedDuration: durationpb.New(time.Hour),
 	}
 

@@ -1,10 +1,13 @@
 package historybuilder
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,6 +31,14 @@ type EventStore struct {
 	memEventsBatches [][]*historypb.HistoryEvent
 	memLatestBatch   []*historypb.HistoryEvent
 	memBufferBatch   []*historypb.HistoryEvent
+
+	// Cumulative serialized size in bytes of events currently in memLatestBatch.
+	// When appending the next event would push this above
+	// maxEventBatchSizeInBytes, the batch is rolled into
+	// memEventsBatches and a fresh memLatestBatch is started.
+	memLatestBatchSize int
+
+	maxEventBatchSizeInBytes dynamicconfig.IntPropertyFn
 
 	// scheduled to started event ID mapping
 	scheduledIDToStartedID map[int64]int64
@@ -88,10 +99,36 @@ func (b *EventStore) add(
 		b.memBufferBatch = append(b.memBufferBatch, event)
 	} else {
 		event.EventId = b.AllocateEventID()
-		b.memLatestBatch = append(b.memLatestBatch, event)
+		b.appendToLatestBatch(event)
 		batchID = b.memLatestBatch[0].EventId
 	}
 	return event, batchID
+}
+
+// LatestEventBatchID returns the first event ID of the batch currently being built, or
+// common.EmptyEventID if the current batch is empty, e.g. after a Flush.
+func (b *EventStore) LatestEventBatchID() int64 {
+	if len(b.memLatestBatch) > 0 {
+		return b.memLatestBatch[0].EventId
+	}
+	return common.EmptyEventID
+}
+
+// appendToLatestBatch appends event to memLatestBatch, rolling into a new batch
+// first if the additional event would push the current batch over
+// maxEventBatchSizeInBytes. A value of <= 0 disables the check.
+func (b *EventStore) appendToLatestBatch(event *historypb.HistoryEvent) {
+	eventSize := proto.Size(event)
+	if limit := b.maxEventBatchSizeInBytes(); limit > 0 {
+		if len(b.memLatestBatch) > 0 && b.memLatestBatchSize+eventSize > limit {
+			b.FlushAndCreateNewBatch()
+		}
+	}
+	// Always accumulate so the size reflects the full batch even when the
+	// limit is disabled. Otherwise, enabling maxEventBatchSizeInBytes mid-flight
+	// would start counting from that point and undercount the current batch.
+	b.memLatestBatchSize += eventSize
+	b.memLatestBatch = append(b.memLatestBatch, event)
 }
 
 func (b *EventStore) HasBufferEvents() bool {
@@ -100,17 +137,10 @@ func (b *EventStore) HasBufferEvents() bool {
 
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (b *EventStore) HasAnyBufferedEvent(predicate BufferedEventFilter) bool {
-	for _, event := range b.memBufferBatch {
-		if predicate(event) {
-			return true
-		}
+	if slices.ContainsFunc(b.memBufferBatch, predicate) {
+		return true
 	}
-	for _, event := range b.dbBufferBatch {
-		if predicate(event) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(b.dbBufferBatch, predicate)
 }
 
 func (b *EventStore) NumBufferedEvents() int {
@@ -162,7 +192,9 @@ func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]in
 	// 2nd wire event ID, e.g. activity, child workflow
 	b.wireEventIDs(bufferBatch)
 
-	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
+	for _, event := range bufferBatch {
+		b.appendToLatestBatch(event)
+	}
 
 	return b.scheduledIDToStartedID, b.requestIDToEventID
 }
@@ -175,6 +207,7 @@ func (b *EventStore) FlushAndCreateNewBatch() {
 
 	b.memEventsBatches = append(b.memEventsBatches, b.memLatestBatch)
 	b.memLatestBatch = nil
+	b.memLatestBatchSize = 0
 }
 
 func (b *EventStore) Finish(
@@ -200,6 +233,7 @@ func (b *EventStore) Finish(
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
 	b.memLatestBatch = nil
+	b.memLatestBatchSize = 0
 	b.dbClearBuffer = false
 	b.dbBufferBatch = nil
 	b.scheduledIDToStartedID = nil

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -72,6 +73,9 @@ func defaultConfig() *scheduler.Config {
 		ServiceCallTimeout: func() time.Duration {
 			return 5 * time.Second
 		},
+		EncodeInternalTokenWithEnvelope: func(string) bool {
+			return true
+		},
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(1 * time.Second)
 		},
@@ -88,9 +92,12 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 		SpecProcessor:  specProcessor,
 	}
 	return scheduler.NewLibrary(
+		config,
 		nil,
 		scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
-			Config: config,
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
 			Config: config,
@@ -209,6 +216,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
 		HandleIsWorkflow:          func() bool { return false },
+		HandleGetNamespaceEntry:   tv.Namespace,
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
 			return &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
@@ -274,12 +282,25 @@ func (e *testEnv) CloseTransaction() error {
 // HasTask returns true if the given task type was added with the given visibilityTime.
 func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
-	for _, tasks := range e.NodeBackend.TasksByCategory {
-		for _, t := range tasks {
+	for _, categoryTasks := range e.NodeBackend.TasksByCategory {
+		for _, t := range categoryTasks {
 			if reflect.TypeOf(t) == taskType &&
 				t.GetVisibilityTime().Equal(visibilityTime) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// HasTaskInCategory is like HasTask but scoped to a single queue category, to
+// distinguish tasks that share a physical type but land in different queues.
+func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilityTime time.Time) bool {
+	taskType := reflect.TypeOf(task)
+	for _, t := range e.NodeBackend.TasksByCategory[category] {
+		if reflect.TypeOf(t) == taskType &&
+			t.GetVisibilityTime().Equal(visibilityTime) {
+			return true
 		}
 	}
 	return false
@@ -346,6 +367,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
 	nodeBackend.HandleIsWorkflow = func() bool { return false }
+	nodeBackend.HandleGetNamespaceEntry = tv.Namespace
 	nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
 		return &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,

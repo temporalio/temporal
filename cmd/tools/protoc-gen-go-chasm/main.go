@@ -154,7 +154,7 @@ func genAssignShard(m *protogen.Method) (string, error) {
 func goFieldPath(m *protogen.Method, path string) (string, error) {
 	parts := strings.Split(path, ".")
 	field := m.Input
-	goPath := ""
+	var goPath strings.Builder
 	for _, part := range parts {
 		fieldName := codegen.SnakeCaseToPascalCase(part)
 		i := slices.IndexFunc(field.Fields, func(f *protogen.Field) bool {
@@ -165,9 +165,9 @@ func goFieldPath(m *protogen.Method, path string) (string, error) {
 		}
 		field = field.Fields[i].Message
 		// Convert to getter form
-		goPath += "." + "Get" + fieldName + "()"
+		goPath.WriteString("." + "Get" + fieldName + "()")
 	}
-	return goPath, nil
+	return goPath.String(), nil
 }
 
 func routingOptions(m *protogen.Method) (*routingspb.RoutingOptions, error) {
@@ -209,7 +209,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("return nil, err")
 	w.unindent()
 	w.println("}")
-	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient)", svc.GoName)
+	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
 	w.println("var redirector history.Redirector[%sClient]", svc.GoName)
 	w.println("if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {")
 	w.indent() // start if

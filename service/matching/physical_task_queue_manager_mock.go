@@ -357,6 +357,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Start() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Start))
 }
 
+// StartScaleManager mocks base method.
+func (m *MockphysicalTaskQueueManager) StartScaleManager(arg0 *persistence.PartitionScaleState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartScaleManager", arg0)
+}
+
+// StartScaleManager indicates an expected call of StartScaleManager.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) StartScaleManager(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartScaleManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).StartScaleManager), arg0)
+}
+
 // Stop mocks base method.
 func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 	m.ctrl.T.Helper()
@@ -418,6 +430,20 @@ func (m *MockphysicalTaskQueueManager) UpdateRemotePriorityBacklogs(arg0 remoteP
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateRemotePriorityBacklogs(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemotePriorityBacklogs", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdateRemotePriorityBacklogs), arg0)
+}
+
+// UpdateScaleState mocks base method.
+func (m *MockphysicalTaskQueueManager) UpdateScaleState(arg0 *persistence.PartitionScaleState, arg1 bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateScaleState", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateScaleState indicates an expected call of UpdateScaleState.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateScaleState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScaleState", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdateScaleState), arg0, arg1)
 }
 
 // UserDataChanged mocks base method.

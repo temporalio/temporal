@@ -79,6 +79,20 @@ func (c *metricClient) CheckTaskQueueVersionMembership(
 	return c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
 }
 
+func (c *metricClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CountWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCountWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountWorkers(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,

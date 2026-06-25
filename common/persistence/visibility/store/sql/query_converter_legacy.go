@@ -3,6 +3,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -656,12 +657,7 @@ func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {
-	for _, op := range supportedOperators {
-		if operator == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedOperators, operator)
 }
 
 func isSupportedComparisonOperator(operator string) bool {
@@ -677,10 +673,5 @@ func isSupportedTextOperator(operator string) bool {
 }
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
-	for _, tp := range supportedTypesRangeCond {
-		if saType == tp {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedTypesRangeCond, saType)
 }
