@@ -119,9 +119,6 @@ func (m *taskQueueRecordingExecutionManager) recordWorkflowTasks(
 	info *persistencespb.WorkflowExecutionInfo,
 	tasksByCategory map[tasks.Category][]tasks.Task,
 ) {
-	if info == nil {
-		return
-	}
 	m.recorder.Record(
 		shardID,
 		rangeID,
