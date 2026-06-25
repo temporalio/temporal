@@ -144,7 +144,7 @@ func (r *rateLimitManager) computeEffectiveRPSAndSourceLocked() {
 		r.adminTqRate,
 	)
 	r.systemRPS = systemRPS
-	weight := r.config.RateLimitWeight()
+	weight := r.config.RateLimitFraction()
 	switch {
 	case r.apiConfigRPS != nil:
 		effectiveRPS = *r.apiConfigRPS * weight / float64(r.numReadPartitions)
@@ -239,7 +239,7 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	} else {
 		// Maintain the fairnessKeyRateLimitDefault as per-partition rate, scaled by the same
 		// cell-fraction weight applied to the whole-queue effectiveRPS.
-		weight := r.config.RateLimitWeight()
+		weight := r.config.RateLimitFraction()
 		val := float64(fairnessKeyRateLimitDefault.GetRateLimit().GetRequestsPerSecond()) * weight / float64(r.numReadPartitions)
 		r.fairnessKeyRateLimitDefault = &val
 	}

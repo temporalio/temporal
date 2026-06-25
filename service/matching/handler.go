@@ -75,8 +75,7 @@ type (
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
 		PartitionScalerFactory        PartitionScalerFactory
-		RateLimitWeightProvider       TaskQueueRateLimitWeightProvider
-	}
+		}
 )
 
 const (
@@ -120,7 +119,6 @@ func NewHandler(
 			params.Serializer,
 			params.TaskHookFactories,
 			params.PartitionScalerFactory,
-			params.RateLimitWeightProvider,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
