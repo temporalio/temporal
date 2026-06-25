@@ -1,13 +1,16 @@
 package testcore
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -18,6 +21,7 @@ import (
 // Tasks are stored flattened by category - all tasks of the same type are in a single list,
 // with each task wrapped with metadata about when/where it was written.
 type TaskQueueRecorder struct {
+	persistence.ExecutionManager
 	mu     sync.RWMutex
 	tasks  map[tasks.Category][]RecordedTask // All tasks by category, in order
 	logger log.Logger
@@ -41,6 +45,15 @@ func NewTaskQueueRecorder(logger log.Logger) *TaskQueueRecorder {
 		tasks:  make(map[tasks.Category][]RecordedTask),
 		logger: logger,
 	}
+}
+
+func NewTaskQueueRecordingExecutionManager(
+	delegate persistence.ExecutionManager,
+	logger log.Logger,
+) *TaskQueueRecorder {
+	recorder := NewTaskQueueRecorder(logger)
+	recorder.ExecutionManager = delegate
+	return recorder
 }
 
 func (r *TaskQueueRecorder) Record(
@@ -211,4 +224,102 @@ func writeFile(filePath string, data []byte) error {
 
 	_, err = file.Write(data)
 	return err
+}
+
+func (r *TaskQueueRecorder) AddHistoryTasks(
+	ctx context.Context,
+	request *persistence.AddHistoryTasksRequest,
+) error {
+	err := r.ExecutionManager.AddHistoryTasks(ctx, request)
+	if err == nil && request != nil {
+		r.Record(request.ShardID, request.RangeID, request.NamespaceID, request.WorkflowID, request.Tasks)
+	}
+	return err
+}
+
+func (r *TaskQueueRecorder) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+	response, err := r.ExecutionManager.CreateWorkflowExecution(ctx, request)
+	if err == nil && request != nil {
+		r.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.NewWorkflowSnapshot.ExecutionInfo,
+			request.NewWorkflowSnapshot.Tasks,
+		)
+	}
+	return response, err
+}
+
+func (r *TaskQueueRecorder) UpdateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	response, err := r.ExecutionManager.UpdateWorkflowExecution(ctx, request)
+	if err == nil && request != nil {
+		r.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.UpdateWorkflowMutation.ExecutionInfo,
+			request.UpdateWorkflowMutation.Tasks,
+		)
+		if request.NewWorkflowSnapshot != nil {
+			r.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
+	}
+	return response, err
+}
+
+func (r *TaskQueueRecorder) ConflictResolveWorkflowExecution(
+	ctx context.Context,
+	request *persistence.ConflictResolveWorkflowExecutionRequest,
+) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	response, err := r.ExecutionManager.ConflictResolveWorkflowExecution(ctx, request)
+	if err == nil && request != nil {
+		r.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.ResetWorkflowSnapshot.ExecutionInfo,
+			request.ResetWorkflowSnapshot.Tasks,
+		)
+		if request.NewWorkflowSnapshot != nil {
+			r.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
+		if request.CurrentWorkflowMutation != nil {
+			r.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.CurrentWorkflowMutation.ExecutionInfo,
+				request.CurrentWorkflowMutation.Tasks,
+			)
+		}
+	}
+	return response, err
+}
+
+func (r *TaskQueueRecorder) recordWorkflowTasks(
+	shardID int32,
+	rangeID int64,
+	info *persistencespb.WorkflowExecutionInfo,
+	tasksByCategory map[tasks.Category][]tasks.Task,
+) {
+	r.Record(
+		shardID,
+		rangeID,
+		info.NamespaceId,
+		info.WorkflowId,
+		tasksByCategory,
+	)
 }
