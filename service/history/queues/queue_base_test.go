@@ -59,6 +59,8 @@ var testQueueOptions = Options{
 	MonitorOptions: MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		ReaderStuckLagDuration:      dynamicconfig.GetDurationPropertyFn(0),
+		ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	},
 	MaxPollRPS:                          dynamicconfig.GetIntPropertyFn(20),
