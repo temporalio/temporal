@@ -38,3 +38,7 @@ func (p *unitRateLimitFractionProvider) GetRateLimitFraction(_ namespace.Name, _
 }
 
 var defaultTaskQueueRateLimitFractionProvider = NewTaskQueueRateLimitFractionProvider(&unitRateLimitFractionProvider{})
+
+func taskQueueRateLimitFractionProviderProvider() TaskQueueRateLimitFractionProvider {
+	return defaultTaskQueueRateLimitFractionProvider
+}
