@@ -367,15 +367,6 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
 		Priority:       enumsspb.TASK_PRIORITY_HIGH,
 	}
-}
-
-func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
-	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:       enumsspb.ReplicationTaskType(-1),
-		SourceTaskId:   rand.Int63(),
-		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
-		Priority:       enumsspb.TASK_PRIORITY_HIGH,
-	}
 	streamResp1 := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
