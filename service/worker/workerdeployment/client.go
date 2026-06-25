@@ -630,6 +630,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
@@ -1798,6 +1799,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			LastDeactivationTime: v.GetLastDeactivationTime(),
 			Status:               v.GetStatus(),
 			ComputeConfig:        v.GetComputeConfig(),
+			ComputeStatus:        v.GetComputeStatus(),
 		})
 	}
 
