@@ -17,11 +17,11 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -137,28 +137,20 @@ func assertNoRecv[T any](s *ScaleManagerSuite, ch <-chan T, d time.Duration, msg
 	}
 }
 
-type recordingLogger struct {
-	shadowLogs chan struct{}
+func waitLogMatches(s *ScaleManagerSuite, e *testlogger.Expectation, count int64, msg string) {
+	s.T().Helper()
+	await.RequireTruef(s.T(), func() bool { return e.MatchCount() == count },
+		time.Second, time.Millisecond, "%s", msg)
 }
 
-func (l *recordingLogger) Debug(string, ...tag.Tag) {}
-func (l *recordingLogger) Info(msg string, _ ...tag.Tag) {
-	if msg != "new target" {
-		return
-	}
-	select {
-	case l.shadowLogs <- struct{}{}:
-	default:
-	}
-}
-func (l *recordingLogger) Warn(string, ...tag.Tag)   {}
-func (l *recordingLogger) Error(string, ...tag.Tag)  {}
-func (l *recordingLogger) DPanic(string, ...tag.Tag) {}
-func (l *recordingLogger) Panic(msg string, _ ...tag.Tag) {
-	panic(msg)
-}
-func (l *recordingLogger) Fatal(msg string, _ ...tag.Tag) {
-	panic(msg)
+// assertNoNewLogs asserts that no new matching log is emitted during d, i.e. the
+// expectation's match count stays at whatever it is when this is called. Unlike a
+// fixed expected count, this is robust to how many matches happened earlier in the test.
+func assertNoNewLogs(s *ScaleManagerSuite, e *testlogger.Expectation, d time.Duration, msg string) {
+	s.T().Helper()
+	before := e.MatchCount()
+	s.Require().Never(func() bool { return e.MatchCount() != before },
+		d, time.Millisecond, msg)
 }
 
 // --- tests ---
@@ -330,7 +322,8 @@ func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryScalerCall() {
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
-	logger := &recordingLogger{shadowLogs: make(chan struct{}, 1)}
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -340,7 +333,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "NoChange decision should not log")
+	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "NoChange decision should not log")
 }
 
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
@@ -348,7 +341,8 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
-	logger := &recordingLogger{shadowLogs: make(chan struct{}, 4)}
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 4)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -369,7 +363,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitRecv(s, logger.shadowLogs, "first shadow log missing")
+	waitLogMatches(s, shadowLog, 1, "first shadow log missing")
 
 	s.sm.AddedTasks(1)
 	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
@@ -377,22 +371,23 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "shadow log repeated before cadence")
+	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "shadow log repeated before cadence")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
+	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "fourth shadow call missing")
-	waitRecv(s, logger.shadowLogs, "second shadow log missing")
+	waitLogMatches(s, shadowLog, 2, "second shadow log missing")
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
-	logger := &recordingLogger{shadowLogs: make(chan struct{}, 1)}
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -403,7 +398,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "disabled scaler should not log")
+	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "disabled scaler should not log")
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
