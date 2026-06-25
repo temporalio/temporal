@@ -8,23 +8,23 @@ import (
 	"sync"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-// TaskQueueRecorder records ALL task writes to the history task queues
-// (transfer, timer, replication, visibility, archival, etc.).
+// TaskQueueRecorder wraps an ExecutionManager to record ALL task writes
+// to the history task queues (transfer, timer, replication, visibility, archival, etc.).
 // This is useful for integration tests where you want to assert on what tasks
 // were generated and in what order.
 // Tasks are stored flattened by category - all tasks of the same type are in a single list,
 // with each task wrapped with metadata about when/where it was written.
 type TaskQueueRecorder struct {
-	persistence.ExecutionManager
-	mu     sync.RWMutex
-	tasks  map[tasks.Category][]RecordedTask // All tasks by category, in order
-	logger log.Logger
+	mu       sync.RWMutex
+	tasks    map[tasks.Category][]RecordedTask // All tasks by category, in order
+	delegate persistence.ExecutionManager
+	logger   log.Logger
 }
 
 // RecordedTask wraps a task with metadata about when and where it was written
@@ -39,24 +39,103 @@ type RecordedTask struct {
 	Task        tasks.Task `json:"task"` // The actual task object
 }
 
-// NewTaskQueueRecorder creates a task queue recorder.
-func NewTaskQueueRecorder(logger log.Logger) *TaskQueueRecorder {
+// NewTaskQueueRecorder creates a recorder that wraps the given ExecutionManager
+func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logger) *TaskQueueRecorder {
 	return &TaskQueueRecorder{
-		tasks:  make(map[tasks.Category][]RecordedTask),
-		logger: logger,
+		tasks:    make(map[tasks.Category][]RecordedTask),
+		delegate: delegate,
+		logger:   logger,
 	}
 }
 
-func NewTaskQueueRecordingExecutionManager(
-	delegate persistence.ExecutionManager,
-	logger log.Logger,
-) *TaskQueueRecorder {
-	recorder := NewTaskQueueRecorder(logger)
-	recorder.ExecutionManager = delegate
-	return recorder
+type taskQueueRecordingFactory struct {
+	persistenceClient.Factory
+	logger log.Logger
+	record func(*TaskQueueRecorder)
 }
 
-func (r *TaskQueueRecorder) Record(
+func (f *taskQueueRecordingFactory) NewExecutionManager() (persistence.ExecutionManager, error) {
+	manager, err := f.Factory.NewExecutionManager()
+	if err != nil {
+		return nil, err
+	}
+	recorder := NewTaskQueueRecorder(manager, f.logger)
+	f.record(recorder)
+	return recorder, nil
+}
+
+// AddHistoryTasks records the task write and then delegates to the underlying manager
+func (r *TaskQueueRecorder) AddHistoryTasks(
+	ctx context.Context,
+	request *persistence.AddHistoryTasksRequest,
+) error {
+	// Call the delegate first
+	err := r.delegate.AddHistoryTasks(ctx, request)
+
+	// Only record if successful
+	if err == nil {
+		r.recordTasks(request.ShardID, 0, request.NamespaceID, request.WorkflowID, request.Tasks)
+	}
+
+	return err
+}
+
+func (r *TaskQueueRecorder) UpdateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.UpdateWorkflowExecutionRequest,
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	// Call the delegate first
+	resp, err := r.delegate.UpdateWorkflowExecution(ctx, request)
+
+	// Only record if successful
+	if err == nil {
+		// Record tasks from the mutation
+		r.recordTasks(
+			request.ShardID,
+			request.RangeID,
+			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+			request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId,
+			request.UpdateWorkflowMutation.Tasks,
+		)
+
+		// Record tasks from new workflow snapshot if present
+		if request.NewWorkflowSnapshot != nil {
+			r.recordTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
+	}
+
+	return resp, err
+}
+
+func (r *TaskQueueRecorder) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+	// Call the delegate first
+	resp, err := r.delegate.CreateWorkflowExecution(ctx, request)
+
+	// Only record if successful
+	if err == nil {
+		r.recordTasks(
+			request.ShardID,
+			request.RangeID,
+			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
+			request.NewWorkflowSnapshot.Tasks,
+		)
+	}
+
+	return resp, err
+}
+
+// recordTasks appends tasks to the flattened list by category, wrapping each with metadata
+func (r *TaskQueueRecorder) recordTasks(
 	shardID int32,
 	rangeID int64,
 	namespaceID string,
@@ -319,100 +398,220 @@ func writeFile(filePath string, data []byte) error {
 	return err
 }
 
-func (r *TaskQueueRecorder) AddHistoryTasks(
-	ctx context.Context,
-	request *persistence.AddHistoryTasksRequest,
-) error {
-	err := r.ExecutionManager.AddHistoryTasks(ctx, request)
-	if err == nil && request != nil {
-		r.Record(request.ShardID, request.RangeID, request.NamespaceID, request.WorkflowID, request.Tasks)
-	}
-	return err
+// Delegate all other ExecutionManager methods to the underlying implementation
+// These are pass-through methods that don't need recording
+
+func (r *TaskQueueRecorder) GetName() string {
+	return r.delegate.GetName()
 }
 
-func (r *TaskQueueRecorder) CreateWorkflowExecution(
-	ctx context.Context,
-	request *persistence.CreateWorkflowExecutionRequest,
-) (*persistence.CreateWorkflowExecutionResponse, error) {
-	response, err := r.ExecutionManager.CreateWorkflowExecution(ctx, request)
-	if err == nil && request != nil {
-		r.recordWorkflowTasks(
-			request.ShardID,
-			request.RangeID,
-			request.NewWorkflowSnapshot.ExecutionInfo,
-			request.NewWorkflowSnapshot.Tasks,
-		)
-	}
-	return response, err
+func (r *TaskQueueRecorder) Close() {
+	r.delegate.Close()
 }
 
-func (r *TaskQueueRecorder) UpdateWorkflowExecution(
+func (r *TaskQueueRecorder) GetWorkflowExecution(
 	ctx context.Context,
-	request *persistence.UpdateWorkflowExecutionRequest,
-) (*persistence.UpdateWorkflowExecutionResponse, error) {
-	response, err := r.ExecutionManager.UpdateWorkflowExecution(ctx, request)
-	if err == nil && request != nil {
-		r.recordWorkflowTasks(
-			request.ShardID,
-			request.RangeID,
-			request.UpdateWorkflowMutation.ExecutionInfo,
-			request.UpdateWorkflowMutation.Tasks,
-		)
-		if request.NewWorkflowSnapshot != nil {
-			r.recordWorkflowTasks(
-				request.ShardID,
-				request.RangeID,
-				request.NewWorkflowSnapshot.ExecutionInfo,
-				request.NewWorkflowSnapshot.Tasks,
-			)
-		}
-	}
-	return response, err
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+	return r.delegate.GetWorkflowExecution(ctx, request)
 }
 
 func (r *TaskQueueRecorder) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
-	response, err := r.ExecutionManager.ConflictResolveWorkflowExecution(ctx, request)
-	if err == nil && request != nil {
-		r.recordWorkflowTasks(
+	resp, err := r.delegate.ConflictResolveWorkflowExecution(ctx, request)
+	if err == nil {
+		r.recordTasks(
 			request.ShardID,
 			request.RangeID,
-			request.ResetWorkflowSnapshot.ExecutionInfo,
+			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId,
 			request.ResetWorkflowSnapshot.Tasks,
 		)
 		if request.NewWorkflowSnapshot != nil {
-			r.recordWorkflowTasks(
+			r.recordTasks(
 				request.ShardID,
 				request.RangeID,
-				request.NewWorkflowSnapshot.ExecutionInfo,
+				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
 				request.NewWorkflowSnapshot.Tasks,
 			)
 		}
 		if request.CurrentWorkflowMutation != nil {
-			r.recordWorkflowTasks(
+			r.recordTasks(
 				request.ShardID,
 				request.RangeID,
-				request.CurrentWorkflowMutation.ExecutionInfo,
+				request.CurrentWorkflowMutation.ExecutionInfo.NamespaceId,
+				request.CurrentWorkflowMutation.ExecutionInfo.WorkflowId,
 				request.CurrentWorkflowMutation.Tasks,
 			)
 		}
 	}
-	return response, err
+	return resp, err
 }
 
-func (r *TaskQueueRecorder) recordWorkflowTasks(
-	shardID int32,
-	rangeID int64,
-	info *persistencespb.WorkflowExecutionInfo,
-	tasksByCategory map[tasks.Category][]tasks.Task,
-) {
-	r.Record(
-		shardID,
-		rangeID,
-		info.NamespaceId,
-		info.WorkflowId,
-		tasksByCategory,
-	)
+func (r *TaskQueueRecorder) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *persistence.DeleteWorkflowExecutionRequest,
+) error {
+	return r.delegate.DeleteWorkflowExecution(ctx, request)
+}
+
+func (r *TaskQueueRecorder) DeleteCurrentWorkflowExecution(
+	ctx context.Context,
+	request *persistence.DeleteCurrentWorkflowExecutionRequest,
+) error {
+	return r.delegate.DeleteCurrentWorkflowExecution(ctx, request)
+}
+
+func (r *TaskQueueRecorder) GetCurrentExecution(
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
+) (*persistence.GetCurrentExecutionResponse, error) {
+	return r.delegate.GetCurrentExecution(ctx, request)
+}
+
+func (r *TaskQueueRecorder) SetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.SetWorkflowExecutionRequest,
+) (*persistence.SetWorkflowExecutionResponse, error) {
+	return r.delegate.SetWorkflowExecution(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ListConcreteExecutions(
+	ctx context.Context,
+	request *persistence.ListConcreteExecutionsRequest,
+) (*persistence.ListConcreteExecutionsResponse, error) {
+	return r.delegate.ListConcreteExecutions(ctx, request)
+}
+
+func (r *TaskQueueRecorder) GetHistoryTasks(
+	ctx context.Context,
+	request *persistence.GetHistoryTasksRequest,
+) (*persistence.GetHistoryTasksResponse, error) {
+	return r.delegate.GetHistoryTasks(ctx, request)
+}
+
+func (r *TaskQueueRecorder) CompleteHistoryTask(
+	ctx context.Context,
+	request *persistence.CompleteHistoryTaskRequest,
+) error {
+	return r.delegate.CompleteHistoryTask(ctx, request)
+}
+
+func (r *TaskQueueRecorder) RangeCompleteHistoryTasks(
+	ctx context.Context,
+	request *persistence.RangeCompleteHistoryTasksRequest,
+) error {
+	return r.delegate.RangeCompleteHistoryTasks(ctx, request)
+}
+
+func (r *TaskQueueRecorder) PutReplicationTaskToDLQ(
+	ctx context.Context,
+	request *persistence.PutReplicationTaskToDLQRequest,
+) error {
+	return r.delegate.PutReplicationTaskToDLQ(ctx, request)
+}
+
+func (r *TaskQueueRecorder) GetReplicationTasksFromDLQ(
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
+) (*persistence.GetHistoryTasksResponse, error) {
+	return r.delegate.GetReplicationTasksFromDLQ(ctx, request)
+}
+
+func (r *TaskQueueRecorder) DeleteReplicationTaskFromDLQ(
+	ctx context.Context,
+	request *persistence.DeleteReplicationTaskFromDLQRequest,
+) error {
+	return r.delegate.DeleteReplicationTaskFromDLQ(ctx, request)
+}
+
+func (r *TaskQueueRecorder) RangeDeleteReplicationTaskFromDLQ(
+	ctx context.Context,
+	request *persistence.RangeDeleteReplicationTaskFromDLQRequest,
+) error {
+	return r.delegate.RangeDeleteReplicationTaskFromDLQ(ctx, request)
+}
+
+func (r *TaskQueueRecorder) IsReplicationDLQEmpty(
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
+) (bool, error) {
+	return r.delegate.IsReplicationDLQEmpty(ctx, request)
+}
+
+func (r *TaskQueueRecorder) GetHistoryBranchUtil() persistence.HistoryBranchUtil {
+	return r.delegate.GetHistoryBranchUtil()
+}
+
+func (r *TaskQueueRecorder) AppendHistoryNodes(
+	ctx context.Context,
+	request *persistence.AppendHistoryNodesRequest,
+) (*persistence.AppendHistoryNodesResponse, error) {
+	return r.delegate.AppendHistoryNodes(ctx, request)
+}
+
+func (r *TaskQueueRecorder) AppendRawHistoryNodes(
+	ctx context.Context,
+	request *persistence.AppendRawHistoryNodesRequest,
+) (*persistence.AppendHistoryNodesResponse, error) {
+	return r.delegate.AppendRawHistoryNodes(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ReadHistoryBranch(
+	ctx context.Context,
+	request *persistence.ReadHistoryBranchRequest,
+) (*persistence.ReadHistoryBranchResponse, error) {
+	return r.delegate.ReadHistoryBranch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ReadHistoryBranchByBatch(
+	ctx context.Context,
+	request *persistence.ReadHistoryBranchRequest,
+) (*persistence.ReadHistoryBranchByBatchResponse, error) {
+	return r.delegate.ReadHistoryBranchByBatch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *persistence.ReadHistoryBranchReverseRequest,
+) (*persistence.ReadHistoryBranchReverseResponse, error) {
+	return r.delegate.ReadHistoryBranchReverse(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *persistence.ReadHistoryBranchRequest,
+) (*persistence.ReadRawHistoryBranchResponse, error) {
+	return r.delegate.ReadRawHistoryBranch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) ForkHistoryBranch(
+	ctx context.Context,
+	request *persistence.ForkHistoryBranchRequest,
+) (*persistence.ForkHistoryBranchResponse, error) {
+	return r.delegate.ForkHistoryBranch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) DeleteHistoryBranch(
+	ctx context.Context,
+	request *persistence.DeleteHistoryBranchRequest,
+) error {
+	return r.delegate.DeleteHistoryBranch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) TrimHistoryBranch(
+	ctx context.Context,
+	request *persistence.TrimHistoryBranchRequest,
+) (*persistence.TrimHistoryBranchResponse, error) {
+	return r.delegate.TrimHistoryBranch(ctx, request)
+}
+
+func (r *TaskQueueRecorder) GetAllHistoryTreeBranches(
+	ctx context.Context,
+	request *persistence.GetAllHistoryTreeBranchesRequest,
+) (*persistence.GetAllHistoryTreeBranchesResponse, error) {
+	return r.delegate.GetAllHistoryTreeBranches(ctx, request)
 }

@@ -423,12 +423,18 @@ func (c *TemporalImpl) startHistory() {
 		c.chasmVisibilityMgr = chasmVisibilityManager
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
-	taskQueueRecorderOption := fx.Options()
+	persistenceFactoryProvider := persistenceClient.FactoryProvider
 	if c.enableTaskQueueRecorder {
-		taskQueueRecorderOption = fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
-			c.taskQueueRecorder = NewTaskQueueRecordingExecutionManager(base, logger)
-			return c.taskQueueRecorder
-		})
+		persistenceFactoryProvider = func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
+			factory := persistenceClient.FactoryProvider(params)
+			return &taskQueueRecordingFactory{
+				Factory: factory,
+				logger:  params.Logger,
+				record: func(recorder *TaskQueueRecorder) {
+					c.taskQueueRecorder = recorder
+				},
+			}
+		}
 	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
@@ -472,7 +478,7 @@ func (c *TemporalImpl) startHistory() {
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
-			fx.Provide(persistenceClient.FactoryProvider),
+			fx.Provide(persistenceFactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
@@ -487,7 +493,6 @@ func (c *TemporalImpl) startHistory() {
 			history.Module,
 			replication.Module,
 			temporal.FxLogAdapter,
-			taskQueueRecorderOption,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasm.Module,
 			fx.Populate(&namespaceRegistry),
