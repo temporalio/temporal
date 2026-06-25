@@ -338,14 +338,15 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err := err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
-	case *serviceerrors.ShardOwnershipLost:
+	if isSystemResourceExhausted(err) {
 		return true
-	default:
-		return false
 	}
+
+	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
+		return true
+	}
+
+	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
