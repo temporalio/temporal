@@ -3222,19 +3222,32 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 	}
 
-	taskToken := tasktoken.NewActivityTaskToken(
-		task.event.Data.GetNamespaceId(),
-		task.event.Data.GetWorkflowId(),
-		task.event.Data.GetRunId(),
-		task.event.Data.GetScheduledEventId(),
-		attributes.GetActivityId(),
-		attributes.GetActivityType().GetName(),
-		historyResponse.GetAttempt(),
-		historyResponse.GetClock(),
-		historyResponse.GetVersion(),
-		historyResponse.GetStartVersion(),
-		task.event.GetData().GetComponentRef(),
-	)
+	var taskToken *tokenspb.Task
+	if componentRef := task.event.GetData().GetComponentRef(); len(componentRef) > 0 {
+		taskToken = tasktoken.NewCHASMActivityTaskToken(
+			task.event.Data.GetNamespaceId(),
+			task.event.Data.GetWorkflowId(),
+			task.event.Data.GetRunId(),
+			attributes.GetActivityId(),
+			attributes.GetActivityType().GetName(),
+			historyResponse.GetAttempt(),
+			componentRef,
+		)
+	} else {
+		taskToken = tasktoken.NewActivityTaskToken(
+			task.event.Data.GetNamespaceId(),
+			task.event.Data.GetWorkflowId(),
+			task.event.Data.GetRunId(),
+			task.event.Data.GetScheduledEventId(),
+			attributes.GetActivityId(),
+			attributes.GetActivityType().GetName(),
+			historyResponse.GetAttempt(),
+			historyResponse.GetClock(),
+			historyResponse.GetVersion(),
+			historyResponse.GetStartVersion(),
+			nil,
+		)
+	}
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 
 	// This is here to ensure that this field is never nil as expected by the TS SDK.

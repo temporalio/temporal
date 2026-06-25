@@ -30,6 +30,28 @@ func NewWorkflowTaskToken(
 	}
 }
 
+// NewCHASMActivityTaskToken builds a task token for a CHASM (standalone) activity.
+// CHASM activities don't use ScheduledEventId, Clock, Version, or StartVersion.
+func NewCHASMActivityTaskToken(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	activityId string,
+	activityType string,
+	attempt int32,
+	componentRef []byte,
+) *tokenspb.Task {
+	return NewActivityTaskToken(
+		namespaceID, workflowID, runID,
+		0, // scheduledEventId
+		activityId, activityType, attempt,
+		nil, // clock
+		0,   // version
+		0,   // startVersion
+		componentRef,
+	)
+}
+
 func NewActivityTaskToken(
 	namespaceID string,
 	workflowID string,
