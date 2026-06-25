@@ -989,7 +989,6 @@ func (s *Scheduler) ListInfo(
 	ctx chasm.Context,
 ) *schedulepb.ScheduleListInfo {
 	spec := common.CloneProto(s.Schedule.Spec)
-	executionInfo := ctx.ExecutionInfo()
 
 	// Clear fields that are too large/not useful for the list view.
 	spec.TimezoneData = nil
@@ -1009,7 +1008,6 @@ func (s *Scheduler) ListInfo(
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
 		FutureActionTimes: generator.FutureActionTimes,
-		StateSizeBytes:    int64(executionInfo.ApproximateStateSize),
 	}
 }
 
