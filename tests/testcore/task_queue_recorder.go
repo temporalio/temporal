@@ -420,35 +420,7 @@ func (r *TaskQueueRecorder) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
-	resp, err := r.delegate.ConflictResolveWorkflowExecution(ctx, request)
-	if err == nil {
-		r.recordTasks(
-			request.ShardID,
-			request.RangeID,
-			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
-			request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId,
-			request.ResetWorkflowSnapshot.Tasks,
-		)
-		if request.NewWorkflowSnapshot != nil {
-			r.recordTasks(
-				request.ShardID,
-				request.RangeID,
-				request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-				request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId,
-				request.NewWorkflowSnapshot.Tasks,
-			)
-		}
-		if request.CurrentWorkflowMutation != nil {
-			r.recordTasks(
-				request.ShardID,
-				request.RangeID,
-				request.CurrentWorkflowMutation.ExecutionInfo.NamespaceId,
-				request.CurrentWorkflowMutation.ExecutionInfo.WorkflowId,
-				request.CurrentWorkflowMutation.Tasks,
-			)
-		}
-	}
-	return resp, err
+	return r.delegate.ConflictResolveWorkflowExecution(ctx, request)
 }
 
 func (r *TaskQueueRecorder) DeleteWorkflowExecution(
