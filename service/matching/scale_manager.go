@@ -46,54 +46,14 @@ type scaleManager struct {
 	background         *goro.Handle
 
 	// owned by the worker goroutine after Start starts it
-	scaleState          *persistencespb.PartitionScaleState
-	scaleDB             scaleDB
-	nextDecision        time.Time
-	nextShadowScaleLog  time.Time
-	nextShadowDrainLog  time.Time
-	prevShadowScaleInfo scaleLogInfo
-	prevShadowDrainInfo drainLogInfo
+	scaleState       *persistencespb.PartitionScaleState
+	scaleDB          scaleDB
+	nextDecision     time.Time
+	nextShadowLog    time.Time
+	prevShadowTarget int32
 
 	batch  atomic.Int64
 	wakeup chan struct{}
-}
-
-type scaleLogInfo struct {
-	target     int32
-	prevTarget int32
-	maxTarget  int32
-}
-
-func (i scaleLogInfo) Equal(other scaleLogInfo) bool {
-	return i.target == other.target &&
-		i.prevTarget == other.prevTarget &&
-		i.maxTarget == other.maxTarget
-}
-
-type drainLogInfo struct {
-	target            int32
-	read              int32
-	prevRead          int32
-	drainedPartitions []int32
-}
-
-func (i drainLogInfo) Equal(other drainLogInfo) bool {
-	return i.target == other.target &&
-		i.read == other.read &&
-		i.prevRead == other.prevRead &&
-		drainedEqual(i.drainedPartitions, other.drainedPartitions)
-}
-
-func drainedEqual(a, b []int32) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // scaleDB is used to write scale state to persistence. It's a sub-interface of
@@ -243,24 +203,19 @@ func (sm *scaleManager) callScaler() {
 		newState.BacklogState = bitSet(newState.BacklogState).set(i)
 	}
 
-	logInfo := scaleLogInfo{
-		target:     target,
-		prevTarget: prevTarget,
-		maxTarget:  newState.MaxTarget,
-	}
 	settings := sm.settings()
-	shadowMode := sm.shadowModeEnabled(settings)
+	shadowMode := settings.ShadowModeLogInterval > 0
 	if shadowMode {
-		if sm.timeSource.Now().Before(sm.nextShadowScaleLog) || // too early
-			sm.prevShadowScaleInfo.Equal(logInfo) || // only log new changes
-			!sm.scalerIsDynamic(target) { // only log dynamic scale targets
-			// emit metric as a heartbeat even if no shadow log
+		if sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
+			sm.prevShadowTarget == target || // only log new changes
+			target <= 0 { // only log if scaler is enabled
+			// emit scale event metric as a heartbeat even if no shadow log
 			metrics.PartitionScaleEvents.With(sm.metricsHandler.
 				WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 			return
 		}
-		sm.nextShadowScaleLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
-		sm.prevShadowScaleInfo = logInfo
+		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
+		sm.prevShadowTarget = target
 	} else {
 		// we must successfully write to the db before making new state active
 		if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
@@ -281,14 +236,6 @@ func (sm *scaleManager) callScaler() {
 		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.
 		WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
-}
-
-func (sm *scaleManager) shadowModeEnabled(settings dynamicconfig.PartitionScaleManagerSettings) bool {
-	return settings.ShadowModeLogInterval > 0
-}
-
-func (sm *scaleManager) scalerIsDynamic(target int32) bool {
-	return target > 0
 }
 
 // setState updates the current scale state and syncs it to ephemeral data.
@@ -337,9 +284,10 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 	}
 
 	// check if we should evaluate drain state
+	settings := sm.settings()
 	target := scaleState.GetTarget()
 	checkDrain := target > 0 &&
-		sm.timeSource.Since(time.Unix(0, scaleState.GetTargetVersion())) >= sm.settings().DrainBufferTime
+		sm.timeSource.Since(time.Unix(0, scaleState.GetTargetVersion())) >= settings.DrainBufferTime
 	info := scaleStateToInfo(scaleState)
 	var toClear []int32
 
@@ -367,6 +315,12 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 		return
 	}
 
+	// If shadow mode observes an existing managed scale state, do not persist
+	// drain completion or mutate read partitions.
+	if settings.ShadowModeLogInterval > 0 {
+		return
+	}
+
 	newState := common.CloneProto(scaleState)
 	if newState == nil {
 		newState = &persistencespb.PartitionScaleState{}
@@ -375,38 +329,19 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 		newState.BacklogState = bitSet(newState.BacklogState).clear(i)
 	}
 
-	logInfo := drainLogInfo{
-		target:            info.Write,
-		read:              bitSet(newState.BacklogState).len(),
-		prevRead:          info.Read,
-		drainedPartitions: toClear,
-	}
-	settings := sm.settings()
-	shadowMode := sm.shadowModeEnabled(settings)
-	if shadowMode {
-		if sm.timeSource.Now().Before(sm.nextShadowDrainLog) || // too early
-			sm.prevShadowDrainInfo.Equal(logInfo) || // only log new changes
-			len(toClear) == 0 { // only log if partitions were cleared
-			return
-		}
-		sm.nextShadowDrainLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
-		sm.prevShadowDrainInfo = logInfo
-	} else {
-		// sync to db (must be persisted before taking effect)
-		if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
-			sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("drain"))
-			return
-		}
-
-		sm.setState(newState)
+	// sync to db (must be persisted before taking effect)
+	if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
+		sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("drain"))
+		return
 	}
 
 	sm.logger.Info("drain",
-		tag.Any("drained-partitions", logInfo.drainedPartitions),
-		tag.Int32("target", logInfo.target),
-		tag.Int32("prev-read", logInfo.prevRead),
-		tag.Int32("read", logInfo.read),
-		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+		tag.Any("drained-partitions", toClear),
+		tag.Int32("target", info.Write),
+		tag.Int32("prev-read", info.Read),
+		tag.Int32("read", bitSet(newState.BacklogState).len()))
+
+	sm.setState(newState)
 }
 
 func partitionIsFullyDrained(

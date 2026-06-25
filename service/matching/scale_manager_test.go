@@ -292,9 +292,9 @@ func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 	s.Equal(int32(1), s.sm.scaleState.GetTarget())
 }
 
-// TestShadowModeUsesRealStateOnEveryCall verifies that shadow mode does not feed
-// hypothetical target or private state back into later scaler calls.
-func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryCall() {
+// TestShadowModeUsesRealStateOnEveryScalerCall verifies that shadow mode does
+// not feed hypothetical target or private state back into later scaler calls.
+func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryScalerCall() {
 	s.settings.ShadowModeLogInterval = time.Minute
 	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
 	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
@@ -319,6 +319,7 @@ func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryCall() {
 	s.Equal(1, in1.CurrentTarget)
 	s.ProtoEqual(realPriv, in1.PrivateState)
 
+	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
 	s.Equal(1, in2.CurrentTarget)
@@ -370,6 +371,10 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	waitRecv(s, inputs, "first shadow call missing")
 	waitRecv(s, logger.shadowLogs, "first shadow log missing")
 
+	s.sm.AddedTasks(1)
+	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
+
+	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
 	assertNoRecv(s, logger.shadowLogs, 30*time.Millisecond, "shadow log repeated before cadence")
