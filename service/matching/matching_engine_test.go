@@ -241,11 +241,11 @@ func newMatchingEngine(
 	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
 	e := &matchingEngineImpl{
-		taskManager:             taskMgr,
-		fairTaskManager:         fairTaskMgr,
-		historyClient:           mockHistoryClient,
+		taskManager:     taskMgr,
+		fairTaskManager: fairTaskMgr,
+		historyClient:   mockHistoryClient,
 
-		partitions:              make(map[tqid.PartitionKey]taskQueuePartitionManager),
+		partitions: make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),

@@ -75,7 +75,7 @@ type (
 		Serializer                    serialization.Serializer
 		TaskHookFactories             []hooks.TaskHookFactory `group:"TaskHookFactories"`
 		PartitionScalerFactory        PartitionScalerFactory
-		}
+	}
 )
 
 const (

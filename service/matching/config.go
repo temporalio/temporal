@@ -216,7 +216,7 @@ type (
 		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
-		RateLimitFraction                func() float64
+		RateLimitFraction             func() float64
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int

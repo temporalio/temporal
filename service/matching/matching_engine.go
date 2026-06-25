@@ -327,8 +327,8 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
-		taskHookFactories:      taskHookFactories,
-		partitionScalerFactory: partitionScalerFactory,
+		taskHookFactories:         taskHookFactories,
+		partitionScalerFactory:    partitionScalerFactory,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
