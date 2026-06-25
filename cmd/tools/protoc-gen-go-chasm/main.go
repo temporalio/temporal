@@ -95,6 +95,7 @@ func (p *Plugin) Run(plugin *protogen.Plugin) error {
 		w.println(`"go.temporal.io/server/common/log"`)
 		w.println(`"go.temporal.io/server/common/membership"`)
 		w.println(`"go.temporal.io/server/common/metrics"`)
+		w.println(`"go.uber.org/fx"`)
 		w.println(`"google.golang.org/grpc"`)
 		w.unindent()
 		w.println(")")
@@ -194,6 +195,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("// %s initializes a new %s.", ctorName, structName)
 	w.println("func %s(", ctorName)
 	w.indent()
+	w.println("lc fx.Lifecycle,")
 	w.println("dc *dynamicconfig.Collection,")
 	w.println("rpcFactory     common.RPCFactory,")
 	w.println("monitor        membership.Monitor,")
@@ -227,15 +229,23 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("redirector = history.NewBasicRedirector(connections, resolver)")
 	w.unindent() // close else
 	w.println("}")
-	w.println("return &%s{", structName)
+	w.println("client := &%s{", structName)
 	w.indent() // start struct literal
 	w.println("metricsHandler: metricsHandler,")
 	w.println("redirector:     redirector,")
 	w.println("numShards:      config.NumHistoryShards,")
 	w.println("retryPolicy:    common.CreateHistoryClientRetryPolicy(),")
 	w.unindent() // close struct literal
-	w.println("}, nil")
+	w.println("}")
+	w.println("lc.Append(fx.StopHook(client.Stop))")
+	w.println("return client, nil")
 	w.unindent() // close ctor body
+	w.println("}")
+
+	w.println("func (c *%s) Stop() {", structName)
+	w.indent()
+	w.println("c.redirector.Close()")
+	w.unindent()
 	w.println("}")
 
 	for _, method := range svc.Methods {
