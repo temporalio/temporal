@@ -58,7 +58,9 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.scaler.EXPECT().Stop().AnyTimes()
 
 	s.settings = dynamicconfig.PartitionScaleManagerSettings{
-		MaxRate:            10, // 100ms cooldown
+		MaxRate:            10,  // 100ms cooldown
+		ShrinkRatio:        1.0, // no shrink limit by default
+		ShrinkDelta:        100, // no shrink limit by default
 		BatchSize:          1,
 		BackgroundInterval: time.Hour, // disabled by default
 		DrainBufferTime:    time.Hour, // disabled by default

@@ -97,7 +97,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 
 		lastReadMessageID = int(task.SourceTaskId)
 		remainingMessageCount--
-		_, err = outputFile.Write([]byte(fmt.Sprintf("%v\n", string(taskStr))))
+		_, err = outputFile.Write(fmt.Appendf(nil, "%v\n", string(taskStr)))
 		if err != nil {
 			return fmt.Errorf("fail to print dlq messages.: %s", err)
 		}

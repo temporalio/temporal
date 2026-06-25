@@ -140,6 +140,7 @@ func (sm *scaleManager) backgroundWork(ctx context.Context) error {
 		ch, _ := sm.timeSource.NewTimer(backoff.Jitter(sm.settings().BackgroundInterval, 0.05))
 		return ch
 	}
+	ch := timerCh()
 	for {
 		select {
 		case <-ctx.Done():
@@ -148,7 +149,8 @@ func (sm *scaleManager) backgroundWork(ctx context.Context) error {
 		case <-sm.wakeup:
 			sm.callScaler()
 
-		case <-timerCh():
+		case <-ch:
+			ch = timerCh()
 			// call scaler even if batch == 0, to allow scale down when no tasks are coming in
 			sm.callScaler()
 			// check child partitions periodically

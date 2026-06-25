@@ -41,7 +41,7 @@ func TestVersionWorkflowSuite(t *testing.T) {
 func (s *VersionWorkflowSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env = s.NewTestWorkflowEnvironment()
 
 	// Provide getter functions for drainage refresh interval and visibility grace period
 	drainageRefreshGetter := func() time.Duration { return 5 * time.Minute }

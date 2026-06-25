@@ -1153,13 +1153,16 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
-	hostIDEqual, err := uuid.Parse(request.GetHostId())
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
-	}
-	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
-	if err != nil {
-		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	var hostIDEqualBytes []byte
+	if request.GetHostId() != "" {
+		hostIDEqual, err := uuid.Parse(request.GetHostId())
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+		}
+		hostIDEqualBytes, err = hostIDEqual.MarshalBinary()
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+		}
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
@@ -2596,10 +2599,7 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	case err != nil:
 		return nil, err
 	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime))
-		if sentinelIdleTimeRemaining < 0 {
-			sentinelIdleTimeRemaining = 0
-		}
+		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),

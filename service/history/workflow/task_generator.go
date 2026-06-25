@@ -250,10 +250,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
 			// to the archival system at the same time
 
-			delay := backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay())
-			if delay > retention {
-				delay = retention
-			}
+			delay := min(backoff.FullJitter(r.config.ArchivalProcessorArchiveDelay()), retention)
 			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
 			archiveTime := closedTime.Add(delay)
 
@@ -1032,10 +1029,14 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 	return true
 }
 
-// RegenerateTimerTasksForTimeSkipping regenerates the timer tasks for time skipping.
-// This function is not idempotent, but when called twice, logically the timerTasks regenerated will have the same contents,
-// and the only difference is the TaskID.
-// TODO@time-skipping: currently not safe to call in replication context
+// RegenerateTimerTasksForTimeSkipping force re-stamps every pending timer task against the
+// current accumulated skip.
+//
+// It needs no per-task dedup status of its own. Callers gate it on whether a skip actually
+// happened: the active close transaction only invokes it when a skip transition was emitted
+// this transaction (regenerateTimerTasksForTimeSkipping), and PartialRefresh only invokes it
+// when TimeSkippingInfo.LastUpdateVersionedTransition falls within the replicated delta (see
+// refreshTasksForTimeSkipping).
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
 	if accumulatedSkippedDuration(r.mutableState.GetExecutionInfo()) <= 0 {
