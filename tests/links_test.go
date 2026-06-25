@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -887,7 +888,7 @@ func (swt *signalWorkflowTest) signalWithStartWorkflow(ctx context.Context, targ
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input:     protoBinaryPayload,
 					},

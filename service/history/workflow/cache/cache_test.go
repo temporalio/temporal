@@ -221,7 +221,7 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err4)
-	s.False(ctx == newContext)
+	s.NotEqual(ctx, newContext)
 	release(err4)
 }
 

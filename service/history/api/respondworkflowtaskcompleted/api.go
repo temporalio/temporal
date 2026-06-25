@@ -486,9 +486,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 
-		// wtFailedEventID must be used as the event batch ID for any following workflow termination events
-		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +498,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms.FlushBufferedEvents()
 
 			_, err := ms.AddWorkflowExecutionTerminatedEvent(
-				wtFailedEventID,
 				wtFailedCause.Message(),
 				nil,
 				consts.IdentityHistoryService,

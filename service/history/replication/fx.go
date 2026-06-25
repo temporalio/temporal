@@ -193,10 +193,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 		if !ok {
 			return NewSequentialTaskQueueWithID(item)
 		}
-		parallelism := config.ReplicationLowPriorityTaskParallelism()
-		if parallelism < 1 {
-			parallelism = 1
-		}
+		parallelism := max(config.ReplicationLowPriorityTaskParallelism(), 1)
 		// 0..parallelism-1, stable for a given RunID. Different runs of the same workflow can share
 		// a slot, so up to P sequential queues (and workers) can progress them concurrently.
 		slot := int(farm.Fingerprint32([]byte(workflowKey.RunID)) % uint32(parallelism))

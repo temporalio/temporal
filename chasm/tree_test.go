@@ -752,7 +752,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.IsType(&TestComponent{}, node.value)
 	tc := node.value.(*TestComponent)
 	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
-	s.Equal(tc.ComponentData.CreateRequestId, "component-data")
+	s.Equal("component-data", tc.ComponentData.CreateRequestId)
 	s.Equal(valueStateSynced, node.valueState)
 
 	s.Nil(tc.SubComponent1.Internal.value())
@@ -3220,6 +3220,44 @@ func (s *nodeSuite) testComponentTree() *Node {
 	return node // maybe tc too
 }
 
+func (s *nodeSuite) TestContextNowStableWithinContext() {
+	root := s.testComponentTree()
+
+	startTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+	updatedTime := startTime.Add(time.Minute)
+	laterTime := updatedTime.Add(time.Minute)
+	finalTime := laterTime.Add(time.Minute)
+
+	s.timeSource.Update(startTime)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	s.timeSource.Update(updatedTime)
+
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	s.Equal(startTime, mutableContext.Now(component))
+	s.Equal(startTime, mutableContext.Now(component))
+
+	childComponent := testComponent.SubComponent1.Get(mutableContext)
+	s.Equal(startTime, mutableContext.Now(childComponent))
+
+	contextWithValue := ContextWithValue(mutableContext, "test-key", "test-value")
+	s.Equal("test-value", contextWithValue.Value("test-key"))
+	s.Equal(startTime, contextWithValue.Now(component))
+
+	s.timeSource.Update(laterTime)
+	s.Equal(startTime, contextWithValue.Now(component))
+	s.Equal(laterTime, NewMutableContext(context.Background(), root).Now(component))
+
+	immutableContext := NewContext(context.Background(), root)
+	s.Equal(laterTime, immutableContext.Now(component))
+
+	s.timeSource.Update(finalTime)
+	s.Equal(laterTime, immutableContext.Now(component))
+}
+
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	root := s.testComponentTree()
 
@@ -3272,6 +3310,64 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+}
+
+func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
+	root := s.testComponentTree()
+
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	taskStartTime := time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC)
+	nextTaskTime := taskStartTime.Add(time.Minute)
+	s.timeSource.Update(taskStartTime)
+
+	mutableContext := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	taskAttributes := TaskAttributes{ScheduledTime: TaskScheduledTimeImmediate}
+	mutableContext.AddTask(
+		component,
+		taskAttributes,
+		&TestPureTask{},
+	)
+	mutableContext.AddTask(
+		component,
+		taskAttributes,
+		&TestPureTask{},
+	)
+
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(2)
+
+	var observedTimes []time.Time
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Execute(
+			gomock.AssignableToTypeOf(&mutableCtx{}),
+			gomock.AssignableToTypeOf(&TestComponent{}),
+			gomock.Eq(taskAttributes),
+			gomock.Any(),
+		).
+		DoAndReturn(func(ctx MutableContext, component any, _ TaskAttributes, _ *TestPureTask) error {
+			chasmComponent := component.(Component)
+			firstNow := ctx.Now(chasmComponent)
+			secondNow := ctx.Now(chasmComponent)
+			s.Equal(firstNow, secondNow)
+
+			observedTimes = append(observedTimes, firstNow)
+			if len(observedTimes) == 1 {
+				s.timeSource.Update(nextTaskTime)
+			}
+			return nil
+		}).
+		Times(2)
+
+	mutations, err := root.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 1, "root should be updated")
+	s.Empty(mutations.DeletedNodes)
+	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
 }
 
 func (s *nodeSuite) TestEachPureTask() {
@@ -3527,60 +3623,6 @@ func (s *nodeSuite) TestExecutePureTask() {
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
-}
-
-func (s *nodeSuite) TestValidatePureTask() {
-	taskAttributes := TaskAttributes{}
-	pureTask := &TestPureTask{
-		Data: []byte("some-random-data"),
-	}
-
-	root := s.testComponentTree()
-	_, err := root.CloseTransaction()
-	s.NoError(err)
-
-	ctx := context.Background()
-	expectValidate := func(retValue bool, errValue error) {
-		s.testLibrary.mockPureTaskHandler.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
-	}
-
-	// Succeed task validation (happy case).
-	expectValidate(true, nil)
-	valid, err := root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.True(valid)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Invalid task (validation returns false).
-	expectValidate(false, nil)
-	valid, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.False(valid)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Error during task validation (no execution occurs).
-	expectedErr := errors.New("dummy")
-	expectValidate(false, expectedErr)
-	_, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.ErrorIs(expectedErr, err)
-	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
-
-	// Close the root component.
-	mutableCtx := NewMutableContext(ctx, root)
-	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
-	s.NoError(err)
-	rootComponent.(*TestComponent).Complete(mutableCtx)
-	_, err = root.CloseTransaction()
-	s.NoError(err)
-
-	// Invalid task for sub-component due to access rule.
-	subComponent1, ok := root.children["SubComponent1"]
-	s.True(ok)
-	valid, err = subComponent1.ValidatePureTask(ctx, taskAttributes, pureTask)
-	s.NoError(err)
-	s.False(valid)
-	s.Equal(valueStateSynced, subComponent1.valueState) // node is always clean for task validation
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
@@ -3940,23 +3982,26 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 
 	// Succeed validation as valid.
 	expectValidate((*TestComponent)(nil), true, nil)
-	isValid, err := root.ValidateSideEffectTask(ctx, chasmTask)
-	s.True(isValid)
+	isTaskInTree, isValidByComponent, err := root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
 
-	// Succeed validation as invalid.
+	// Task is in tree but component says invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
-	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
-	s.False(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
 
-	// Fail validation.
+	// Component validator returns an error — task was found in the tree, but validation failed.
 	expectedErr := errors.New("validation failed")
 	expectValidate((*TestComponent)(nil), false, expectedErr)
-	isValid, err = root.ValidateSideEffectTask(ctx, chasmTask)
-	s.False(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.ErrorIs(expectedErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -3976,20 +4021,22 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		Info:                childTaskInfo,
 	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
-	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	s.True(isValid)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
 
-	// Succeed validation as invalid since parent is closed.
+	// Component access check fails (parent closed) — task is structurally in the tree but
+	// isValidByComponent=false because the access rule rejects it.
 	mutableCtx := NewMutableContext(ctx, root)
 	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
 	s.NoError(err)
 	rootComponent.(*TestComponent).Complete(mutableCtx)
-	// Note there's also no mock for task validator here in this case.
-	// Access rule is checked first.
-	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
-	s.False(isValid)
+	// Note there's also no mock for the task validator here; the access rule is checked first.
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.True(isTaskInTree)
+	s.False(isValidByComponent)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }

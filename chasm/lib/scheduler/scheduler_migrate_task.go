@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,18 +34,20 @@ type (
 	SchedulerMigrateToWorkflowTaskHandlerOptions struct {
 		fx.In
 
-		Config         *Config
-		MetricsHandler metrics.Handler
-		BaseLogger     log.Logger
-		HistoryClient  resource.HistoryClient
+		Config           *Config
+		MetricsHandler   metrics.Handler
+		BaseLogger       log.Logger
+		HistoryClient    resource.HistoryClient
+		SaMapperProvider searchattribute.MapperProvider
 	}
 
 	SchedulerMigrateToWorkflowTaskHandler struct {
 		chasm.SideEffectTaskHandlerBase[*schedulerpb.SchedulerMigrateToWorkflowTask]
-		config         *Config
-		metricsHandler metrics.Handler
-		baseLogger     log.Logger
-		historyClient  resource.HistoryClient
+		config           *Config
+		metricsHandler   metrics.Handler
+		baseLogger       log.Logger
+		historyClient    resource.HistoryClient
+		saMapperProvider searchattribute.MapperProvider
 	}
 )
 
@@ -54,10 +55,11 @@ func NewSchedulerMigrateToWorkflowTaskHandler(
 	opts SchedulerMigrateToWorkflowTaskHandlerOptions,
 ) *SchedulerMigrateToWorkflowTaskHandler {
 	return &SchedulerMigrateToWorkflowTaskHandler{
-		config:         opts.Config,
-		metricsHandler: opts.MetricsHandler,
-		baseLogger:     opts.BaseLogger,
-		historyClient:  opts.HistoryClient,
+		config:           opts.Config,
+		metricsHandler:   opts.MetricsHandler,
+		baseLogger:       opts.BaseLogger,
+		historyClient:    opts.HistoryClient,
+		saMapperProvider: opts.SaMapperProvider,
 	}
 }
 
@@ -182,8 +184,25 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	// Build the start request to match createScheduleWorkflow in the frontend
 	// as closely as possible. Include TemporalNamespaceDivision so the V1
 	// workflow is discoverable via ListSchedules.
-	sa := &commonpb.SearchAttributes{IndexedFields: maps.Clone(result.searchAttributes)}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(legacyscheduler.NamespaceDivision))
+	saMap := payload.MergeMapOfPayload(
+		result.searchAttributes,
+		map[string]*commonpb.Payload{
+			sadefs.TemporalNamespaceDivision: payload.EncodeString(legacyscheduler.NamespaceDivision),
+		},
+	)
+
+	// The CHASM scheduler stores custom search attributes by their alias (the frontend
+	// passes the original request through unchanged), whereas V1 scheduler workflows
+	// store them unaliased/resolved. Mirror how V1 unaliases search attributes before
+	// starting the system scheduler workflow.
+	sa, err := searchattribute.UnaliasFields(
+		h.saMapperProvider,
+		&commonpb.SearchAttributes{IndexedFields: saMap},
+		result.namespace,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to unalias search attributes: %w", err)
+	}
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
@@ -195,7 +214,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		Identity:                 fmt.Sprintf("temporal-scheduler-migration-%s-%s", result.namespace, result.scheduleID),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		Memo:                     &commonpb.Memo{Fields: maps.Clone(result.memo)},
+		Memo:                     &commonpb.Memo{Fields: result.memo},
 		SearchAttributes:         sa,
 		Priority:                 &commonpb.Priority{},
 	}

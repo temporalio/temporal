@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -145,7 +144,7 @@ func (r *ConflictResolverImpl) rebuild(
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
-		util.Ptr(lastItem.GetVersion()),
+		new(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		findStartRequestID(executionState),

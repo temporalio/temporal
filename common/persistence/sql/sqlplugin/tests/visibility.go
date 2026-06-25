@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -101,7 +100,7 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       util.Ptr(runID.String()),
+		RunID:       new(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -158,7 +157,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       util.Ptr(runID.String()),
+		RunID:       new(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -187,8 +186,8 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -198,7 +197,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       util.Ptr(runID.String()),
+		RunID:       new(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -227,8 +226,8 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -244,8 +243,8 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -255,7 +254,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID: namespaceID.String(),
-		RunID:       util.Ptr(runID.String()),
+		RunID:       new(runID.String()),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -263,6 +262,61 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		rows[index].NamespaceID = namespaceID.String()
 	}
 	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
+}
+
+func (s *visibilitySuite) TestInsertGet() {
+	namespaceID := primitives.NewUUID()
+	runID := primitives.NewUUID()
+	workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
+	workflowID := shuffle.String(testVisibilityWorkflowID)
+	startTime := s.now()
+	executionTime := startTime.Add(time.Second)
+	status := int32(0)
+	closeTime := (*time.Time)(nil)
+	historyLength := (*int64)(nil)
+
+	visibility1 := s.newRandomVisibilityRow(
+		namespaceID,
+		runID,
+		workflowTypeName,
+		workflowID,
+		startTime,
+		executionTime,
+		status,
+		closeTime,
+		historyLength,
+	)
+	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility1)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	visibility2 := s.newRandomVisibilityRow(
+		namespaceID,
+		runID,
+		workflowTypeName,
+		workflowID,
+		startTime,
+		executionTime,
+		status,
+		closeTime,
+		historyLength,
+	)
+	_, err = s.store.InsertIntoVisibility(newVisibilityContext(), &visibility2)
+	s.NoError(err)
+	// NOTE: cannot do assertion on affected rows
+	//  PostgreSQL will return 0
+	//  MySQL will return 1: ref https://dev.mysql.com/doc/c-api/5.7/en/mysql-affected-rows.html
+
+	getFilter := sqlplugin.VisibilityGetFilter{
+		NamespaceID: namespaceID.String(),
+		RunID:       runID.String(),
+	}
+	row, err := s.store.GetFromVisibility(newVisibilityContext(), getFilter)
+	s.NoError(err)
+	row.NamespaceID = namespaceID.String()
+	s.Equal(&visibility1, row)
 }
 
 func (s *visibilitySuite) TestDeleteGet() {
@@ -352,8 +406,8 @@ func (s *visibilitySuite) TestReplaceDeleteGet() {
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -413,13 +467,13 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	maxStartTime := startTime
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
-		WorkflowID:       util.Ptr(workflowID),
-		RunID:            util.Ptr(""),
+		WorkflowID:       new(workflowID),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -474,13 +528,13 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
-		WorkflowID:       util.Ptr(workflowID),
-		RunID:            util.Ptr(""),
+		WorkflowID:       new(workflowID),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -490,8 +544,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.MaxTime = new(lastVisibility.StartTime)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -525,8 +579,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -538,13 +592,13 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	maxStartTime := closeTime
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
-		WorkflowID:       util.Ptr(workflowID),
-		RunID:            util.Ptr(""),
+		WorkflowID:       new(workflowID),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -582,8 +636,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				startTime,
 				executionTime,
 				status,
-				timePtr(closeTime),
-				util.Ptr(historyLength),
+				new(closeTime),
+				new(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -598,13 +652,13 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
-		WorkflowID:       util.Ptr(workflowID),
-		RunID:            util.Ptr(""),
+		WorkflowID:       new(workflowID),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -615,7 +669,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
 			selectFilter.MaxTime = lastVisibility.CloseTime
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -663,12 +717,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
-		WorkflowTypeName: util.Ptr(workflowTypeName),
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		RunID:            new(""),
+		WorkflowTypeName: new(workflowTypeName),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -724,12 +778,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
-		WorkflowTypeName: util.Ptr(workflowTypeName),
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		RunID:            new(""),
+		WorkflowTypeName: new(workflowTypeName),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -739,8 +793,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.MaxTime = new(lastVisibility.StartTime)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -774,8 +828,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		startTime,
 		executionTime,
 		status,
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -788,12 +842,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
-		WorkflowTypeName: util.Ptr(workflowTypeName),
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		RunID:            new(""),
+		WorkflowTypeName: new(workflowTypeName),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -831,8 +885,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				startTime,
 				executionTime,
 				status,
-				timePtr(closeTime),
-				util.Ptr(historyLength),
+				new(closeTime),
+				new(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -848,12 +902,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
-		WorkflowTypeName: util.Ptr(workflowTypeName),
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		RunID:            new(""),
+		WorkflowTypeName: new(workflowTypeName),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -864,7 +918,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
 			selectFilter.MaxTime = lastVisibility.CloseTime
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -912,12 +966,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -973,12 +1027,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -988,8 +1042,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
-			selectFilter.MaxTime = timePtr(lastVisibility.StartTime)
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.MaxTime = new(lastVisibility.StartTime)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -1030,8 +1084,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		startTime,
 		executionTime,
 		int32(status),
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -1044,12 +1098,12 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -1088,8 +1142,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 				startTime,
 				executionTime,
 				status,
-				timePtr(closeTime),
-				util.Ptr(historyLength),
+				new(closeTime),
+				new(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -1105,12 +1159,12 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -1121,7 +1175,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
 			selectFilter.MaxTime = lastVisibility.CloseTime
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -1162,8 +1216,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		startTime,
 		executionTime,
 		int32(status),
-		timePtr(closeTime),
-		util.Ptr(historyLength),
+		new(closeTime),
+		new(historyLength),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -1176,12 +1230,12 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
-		WorkflowTypeName: util.Ptr(workflowTypeName),
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		RunID:            new(""),
+		WorkflowTypeName: new(workflowTypeName),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(status),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	rows, err := s.store.SelectFromVisibility(newVisibilityContext(), selectFilter)
 	s.NoError(err)
@@ -1226,8 +1280,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 				startTime,
 				executionTime,
 				int32(status),
-				timePtr(closeTime),
-				util.Ptr(historyLength),
+				new(closeTime),
+				new(historyLength),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -1243,12 +1297,12 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 	selectFilter := sqlplugin.VisibilitySelectFilter{
 		NamespaceID:      namespaceID.String(),
 		WorkflowID:       nil,
-		RunID:            util.Ptr(""),
+		RunID:            new(""),
 		WorkflowTypeName: nil,
-		MinTime:          timePtr(minStartTime),
-		MaxTime:          timePtr(maxStartTime),
+		MinTime:          new(minStartTime),
+		MaxTime:          new(maxStartTime),
 		Status:           int32(status),
-		PageSize:         util.Ptr(pageSize),
+		PageSize:         new(pageSize),
 	}
 	var rows []sqlplugin.VisibilityRow
 	for {
@@ -1259,7 +1313,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 		if len(rowsPerPage) > 0 {
 			lastVisibility := rowsPerPage[len(rowsPerPage)-1]
 			selectFilter.MaxTime = lastVisibility.CloseTime
-			selectFilter.RunID = util.Ptr(lastVisibility.RunID)
+			selectFilter.RunID = new(lastVisibility.RunID)
 		} else {
 			break
 		}
@@ -1360,8 +1414,4 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 		Encoding:          testVisibilityEncoding,
 		Version:           s.version,
 	}
-}
-
-func timePtr(t time.Time) *time.Time {
-	return &t
 }

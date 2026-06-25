@@ -197,10 +197,10 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
-		false,
+		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
-	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
@@ -604,49 +604,14 @@ is currently processing a task.
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
 	)
 
-	ScheduleInvariantsScannerOverdueNextActionTimeEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerOverdueNextActionTimeEnabled",
-		false,
-		`ScheduleInvariantsScannerOverdueNextActionTimeEnabled enables flagging schedules whose
-TemporalScheduleNextActionTime lies further in the past than the tolerance.`,
-	)
-	ScheduleInvariantsScannerStuckOpenEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerStuckOpenEnabled",
-		false,
-		`ScheduleInvariantsScannerStuckOpenEnabled enables flagging schedules that appear stuck open
-long after their CloseTime.`,
-	)
-	ScheduleInvariantsScannerUnknownStateEnabled = NewGlobalBoolSetting(
-		"worker.scheduleInvariantsScannerUnknownStateEnabled",
-		false,
-		`ScheduleInvariantsScannerUnknownStateEnabled enables flagging running, unpaused schedules with
-no TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known to be
-backfilled on legacy schedules.`,
-	)
-	ScheduleInvariantsScannerOverdueNextActionTimeTolerance = NewGlobalDurationSetting(
-		"worker.scheduleInvariantsScannerOverdueNextActionTimeTolerance",
-		10*time.Minute,
-		`ScheduleInvariantsScannerOverdueNextActionTimeTolerance is how far in the past
-TemporalScheduleNextActionTime must be before the schedule is flagged.`,
-	)
-	ScheduleInvariantsScannerVisibilityRPS = NewGlobalFloatSetting(
-		"worker.scheduleInvariantsScannerVisibilityRPS",
-		1.0,
-		`ScheduleInvariantsScannerVisibilityRPS rate-limits visibility calls from the
-schedule-invariants scanner.`,
-	)
-	ScheduleInvariantsScannerScanInterval = NewGlobalDurationSetting(
-		"worker.scheduleInvariantsScannerScanInterval",
-		15*time.Minute,
-		`ScheduleInvariantsScannerScanInterval is how often each schedule-invariants scanner
-activity kicks off a fresh scan pass.`,
-	)
-	ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier = NewGlobalIntSetting(
-		"worker.scheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier",
-		2,
-		`ScheduleInvariantsScannerStuckOpenIdleTimeBufferMultiplier multiplies the configured
-schedule IdleTime to set how far past a schedule's idle-close deadline it must be before the
-stuck-open scanner flags it.`,
+	ScheduleInvariantsScannerOptions = NewGlobalTypedSetting(
+		"worker.scheduleInvariantsScannerOptions",
+		DefaultScheduleInvariantsScannerParams,
+		`ScheduleInvariantsScannerOptions configures the schedule-invariants scanners.
+Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled (per-invariant
+toggles, all default false), OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+VisibilityRPS, ScanInterval, and StuckOpenIdleTimeBufferMultiplier. See
+ScheduleInvariantsScannerParams comments for details.`,
 	)
 
 	// keys for frontend
@@ -732,6 +697,11 @@ used here will be the effective RPS from global and per-instance limits. The val
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
 		50,
 		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
+	)
+	FrontendGlobalWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
+		"frontend.globalNamespaceWorkerDeploymentReadBurstRatio",
+		10,
+		`FrontendGlobalWorkerDeploymentReadBurstRatio is the burst limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion) as a ratio of FrontendGlobalWorkerDeploymentReadRPS. The RPS used here is the effective per-instance RPS after distributing the global limit among available frontend service instances. The value must be 1 or higher.`,
 	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
@@ -1425,6 +1395,11 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	WorkerControllerNoPollerHookWindow = NewGlobalDurationSetting(
+		"matching.workerControllerNoPollerHookWindow",
+		5*time.Second,
+		`WorkerControllerNoPollerHookWindow controls how recently a worker must have polled before skipping the WCI scale-up signal on an incoming query or Nexus task dispatch`,
+	)
 	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
 		"matching.emitTaskDispatchLatencyAtPoll",
 		true,
@@ -1544,6 +1519,14 @@ second per poller by one physical queue manager`,
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
 	)
+	MatchingFairnessPassDither = NewTaskQueueBoolSetting(
+		"matching.fairnessPassDither",
+		false,
+		`When true, dither the starting pass of new/reset fairness keys over their initial
+stride instead of starting them all at the ack level. This spreads low-weight keys ahead
+in pass-space so they don't clump at the front after a counter reset (e.g. partition
+movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new keys.`,
+	)
 	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
@@ -1591,6 +1574,20 @@ default as namespace cardinality can be high and this requires a metrics collect
 		},
 		`Settings for partition scale manager.`,
 	)
+	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
+		"matching.partitionScaler",
+		ConvertSimplePartitionScalerSettings,
+		SimplePartitionScalerSettings{},
+		`Settings for simple partition scaler.`,
+	)
+
+	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
+		"matching.forceReadTasksOnWrite",
+		false,
+		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
+read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
+This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
+	)
 
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
@@ -1633,6 +1630,12 @@ to remove expired entries. Should be shorter than EntryTTL for timely cleanup. L
 Don't change this on a live cluster without using the gradual change mechanism.
 `,
 	)
+	MatchingConnectionCloseDelay = NewGlobalDurationSetting(
+		"matching.connectionCloseDelay",
+		30*time.Second,
+		`MatchingConnectionCloseDelay delays closing a cached matching client connection after its host
+leaves the membership ring, giving in-flight long-polls time to drain before the connection is closed.`,
+	)
 
 	// keys for history
 
@@ -1656,13 +1659,6 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		true,
 		`EnableHistoryReplicationDLQV2 switches to the DLQ v2 implementation for history replication. See details in
 [go.temporal.io/server/common/persistence.QueueV2]`,
-	)
-
-	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
-		"history.enableDeleteWorkflowExecutionReplication",
-		false,
-		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
-execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
 	)
 
 	HistoryRPS = NewGlobalIntSetting(
@@ -1857,7 +1853,17 @@ to this require a restart to take effect.`,
 		"history.clientOwnershipCachingUnusedTTL",
 		30*time.Second,
 		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
-for cached shard ownership entries after a membership update.`,
+for cached shard ownership entries after a membership update.
+Should be less than history.connectionCloseDelay so that connections are not
+closed while still cached.`,
+	)
+	HistoryConnectionCloseDelay = NewGlobalDurationSetting(
+		"history.connectionCloseDelay",
+		60*time.Second,
+		`HistoryConnectionCloseDelay delays closing a cached history connection after its host leaves
+the membership ring, giving in-flight RPCs time to drain before the connection is closed.
+Should be greater than history.clientOwnershipCachingUnusedTTL so that connections are not closed
+while still cached.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
@@ -3457,6 +3463,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerCommandsEnabled",
 		false,
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
+	)
+
+	PollerAutoscalingAutoEnroll = NewNamespaceBoolSetting(
+		"frontend.pollerAutoscalingAutoEnroll",
+		false,
+		`When true, workers should use poller autoscaling by default unless explicitly configured otherwise.`,
 	)
 
 	WorkflowPauseEnabled = NewNamespaceBoolSetting(

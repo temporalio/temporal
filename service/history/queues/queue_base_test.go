@@ -210,6 +210,7 @@ func (s *queueBaseSuite) TestStartStop() {
 			key := NewRandomKeyInRange(paginationRange)
 			mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -554,6 +555,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
 		}

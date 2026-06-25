@@ -60,7 +60,7 @@ func (g *GeneratorTaskHandler) Execute(
 
 	now := ctx.Now(generator)
 
-	generator.EventLog.Get(ctx).LogEvent(ctx, "generatorTask executed")
+	generator.getOrCreateEventLog(ctx).LogEvent(ctx, "generatorTask executed")
 
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
@@ -106,12 +106,20 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Emit metrics and update state for any dropped actions.
 	if result.DroppedCount > 0 {
-		generator.EventLog.Get(ctx).LogEvent(ctx,
+		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("buffer overrun, dropped %d actions", result.DroppedCount))
 		logger.Warn("Buffer overrun, dropping actions",
 			tag.Int64("dropped-count", result.DroppedCount))
 		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
+	}
+
+	// Track tick volume so operators can attribute CHASM pure-task throughput
+	// to paused schedules vs. real work. Each fire while paused advances the
+	// HWM without buffering anything.
+	metricsHandler.Counter(metrics.ScheduleGeneratorTicks.Name()).Record(1)
+	if scheduler.Schedule.State.Paused {
+		metricsHandler.Counter(metrics.ScheduleGeneratorPausedTicks.Name()).Record(1)
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -139,7 +147,7 @@ func (g *GeneratorTaskHandler) Execute(
 		// customer can describe/modify/restart the schedule.
 		//
 		// Once the idle timer expires, we close the component.
-		generator.EventLog.Get(ctx).LogEvent(ctx,
+		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("scheduled idle task for %s", idleExpiration.Format(time.RFC3339)))
 		ctx.AddTask(scheduler, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
@@ -162,8 +170,10 @@ func (g *GeneratorTaskHandler) Execute(
 		// fire will simply advance the HWM without appending actions (handled in
 		// ProcessTimeRange).
 		generator.scheduleTask(ctx, result.NextWakeupTime)
+	} else {
+		// Hold open without a task: see the comment block above.
+		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
-	// else: hold open without a task; see the comment block above.
 
 	return nil
 }
@@ -172,7 +182,7 @@ func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.
 	spec := jsonStringer{sched.Schedule.Spec}
 	policies := jsonStringer{sched.Schedule.Policies}
 
-	generator.EventLog.Get(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies))
+	generator.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("%s:\nSpec: %s\nPolicies: %s\n", msg, spec, policies))
 	logger.Info(msg,
 		tag.Stringer("spec", spec),
 		tag.Stringer("policies", policies))

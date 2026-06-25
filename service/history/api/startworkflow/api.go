@@ -684,17 +684,17 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
-
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
 					requestID,
 					completionCallbacks,
 					links,
-					"",  // identity
-					nil, // priority
-					nil, // timeSkippingConfig
-					nil, // workflowUpdateOptions
+					"",    // identity
+					nil,   // priority
+					nil,   // timeSkippingConfig
+					false, // timeSkippingConfigUpdated
+					nil,   // workflowUpdateOptions
 				)
 				return api.UpdateWorkflowWithoutWorkflowTask, err
 			},
