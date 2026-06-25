@@ -415,6 +415,8 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 
 	// Without a per-key limit the whole-queue ready time is the same for every task, so one
 	// check suffices and we avoid locking readyTimeForTask per task in the scan below.
+	// TODO: reaching into the rate limiter's state like this breaks its encapsulation;
+	// refactor the rate limit logic so findMatch doesn't need to know about it.
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
 	if !perKeyLimited {
 		if delay := wholeQueueReady.delay(now); delay > 0 {
