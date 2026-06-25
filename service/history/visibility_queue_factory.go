@@ -144,11 +144,10 @@ func (f *visibilityQueueFactory) CreateQueue(
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:                     f.Config.VisibilityTaskBatchSize,
-				MaxPendingTasksCount:          f.Config.QueuePendingTaskMaxCount,
-				PollBackoffInterval:           f.Config.VisibilityProcessorPollBackoffInterval,
-				MaxPredicateSize:              f.Config.QueueMaxPredicateSize,
-				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
+				BatchSize:            f.Config.VisibilityTaskBatchSize,
+				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
+				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
@@ -163,6 +162,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

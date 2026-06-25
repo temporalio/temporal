@@ -98,6 +98,7 @@ type (
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
+		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
 	}
 )
 

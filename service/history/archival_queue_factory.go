@@ -186,11 +186,10 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:                     f.Config.ArchivalTaskBatchSize,
-				MaxPendingTasksCount:          f.Config.QueuePendingTaskMaxCount,
-				PollBackoffInterval:           f.Config.ArchivalProcessorPollBackoffInterval,
-				MaxPredicateSize:              f.Config.QueueMaxPredicateSize,
-				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
+				BatchSize:            f.Config.ArchivalTaskBatchSize,
+				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
+				PollBackoffInterval:  f.Config.ArchivalProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
@@ -205,6 +204,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		logger,

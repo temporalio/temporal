@@ -69,6 +69,7 @@ var testQueueOptions = Options{
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
 	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
+	ShrinkPredicateMaxPendingKeys:       dynamicconfig.GetIntPropertyFn(10),
 }
 
 func TestQueueBaseSuite(t *testing.T) {

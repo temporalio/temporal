@@ -283,11 +283,10 @@ func (f *outboundQueueFactory) CreateQueue(
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
-				BatchSize:                     f.Config.OutboundTaskBatchSize,
-				MaxPendingTasksCount:          f.Config.OutboundQueuePendingTaskMaxCount,
-				PollBackoffInterval:           f.Config.OutboundProcessorPollBackoffInterval,
-				MaxPredicateSize:              f.Config.OutboundQueueMaxPredicateSize,
-				ShrinkPredicateMaxPendingKeys: f.Config.QueueShrinkPredicateMaxPendingKeys,
+				BatchSize:            f.Config.OutboundTaskBatchSize,
+				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
+				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,
@@ -303,6 +302,7 @@ func (f *outboundQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperStateMachineNamespaceIDAndDestination{},
