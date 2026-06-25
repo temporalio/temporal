@@ -342,7 +342,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	if options.taskQueueRecorder {
 		recorder := cluster.GetTaskQueueRecorder()
 		require.NotNil(t, recorder)
-		env.InjectHook(testhooks.NewHook(testhooks.HistoryTasksWritten, recorder.Record))
 	}
 
 	return env

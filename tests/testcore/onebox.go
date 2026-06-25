@@ -468,7 +468,7 @@ func (c *TemporalImpl) startHistory() {
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
-			fx.Provide(persistenceClient.FactoryProvider),
+			fx.Provide(c.historyFactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),

@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/testing/testhooks"
 )
 
 var (
@@ -62,7 +61,6 @@ type (
 		healthSignals                               persistence.HealthSignalAggregator
 		enableDataLossMetrics                       dynamicconfig.BoolPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
-		testHooks                                   testhooks.TestHooks
 	}
 )
 
@@ -87,7 +85,6 @@ func NewFactory(
 	healthSignals persistence.HealthSignalAggregator,
 	enableDataLossMetrics EnableDataLossMetrics,
 	enableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate,
-	testHooks testhooks.TestHooks,
 ) Factory {
 	factory := &factoryImpl{
 		dataStoreFactory:      dataStoreFactory,
@@ -103,7 +100,6 @@ func NewFactory(
 		healthSignals:         healthSignals,
 		enableDataLossMetrics: dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
 		enableBestEffortDeleteTasksOnWorkflowUpdate: dynamicconfig.BoolPropertyFn(enableBestEffortDeleteTasksOnWorkflowUpdate),
-		testHooks: testHooks,
 	}
 	factory.initDependencies()
 	return factory
@@ -211,7 +207,6 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		f.logger,
 		f.config.TransactionSizeLimit,
 		f.enableBestEffortDeleteTasksOnWorkflowUpdate,
-		f.testHooks,
 	)
 	if f.systemRateLimiter != nil && f.namespaceRateLimiter != nil {
 		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)

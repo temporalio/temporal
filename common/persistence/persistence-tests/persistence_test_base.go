@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/temporal/environment"
 )
 
@@ -232,7 +231,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.PersistenceHealthSignals,
 		func() bool { return false },
 		func() bool { return false },
-		testhooks.TestHooks{},
 	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
