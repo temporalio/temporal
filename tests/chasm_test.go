@@ -1119,15 +1119,9 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 	})
 }
 
-// TestPauseUnpauseNow verifies that ctx.Now(component) accounts for pause state:
-//   - While a component is paused, Now() returns the time the pause began (frozen).
-//   - After an unpause, Now() resumes from where it was logically (real time minus
-//     accumulated pause duration), so the component's logical clock does not advance
-//     during the pause interval.
-//
-// The test also exercises persistence by relying on the engine loading state from
-// the database between each handler call (each call is an independent transaction).
-func (s *ChasmSuite) TestPauseUnpauseNow() {
+// TestPauseUnpauseInfo verifies that ctx.PauseInfo(component) correctly tracks pause state
+// across transactions loaded from the database.
+func (s *ChasmSuite) TestPauseUnpauseInfo() {
 	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
 		tv := testvars.New(ss.T())
 
@@ -1144,43 +1138,37 @@ func (s *ChasmSuite) TestPauseUnpauseNow() {
 		})
 		ss.NoError(err)
 
-		// Baseline: Now() before any pause.
-		nowResp, err := tests.GetNowHandler(ctx, cenv.NamespaceID(), storeID)
+		// Baseline: no pause info before any pause.
+		pi, err := tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
-		baseNow := nowResp.Now
+		ss.Nil(pi.PausedSince)
+		ss.Zero(pi.AccumulatedPauseDuration)
 
-		// Pause the component. The framework records the pause time in CloseTransaction.
+		// Pause the component.
 		err = tests.PausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 
-		// Now() while paused must be frozen at the pause time (loaded from persistence).
-		nowWhilePaused, err := tests.GetNowHandler(ctx, cenv.NamespaceID(), storeID)
+		// While paused: PausedSince should be set, accumulated should be zero.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
-		// The frozen time should be >= the baseline (pause happened after the baseline read)
-		// and should not be the current wall time.
-		ss.False(nowWhilePaused.Now.IsZero(), "expected non-zero Now() while paused")
-		ss.False(nowWhilePaused.Now.Before(baseNow), "paused time should be >= baseline")
+		ss.Require().NotNil(pi.PausedSince, "PausedSince must be set while paused")
+		ss.Zero(pi.AccumulatedPauseDuration)
+		pausedSince := *pi.PausedSince
 
-		// A second read while still paused must return the same frozen time.
-		nowWhilePaused2, err := tests.GetNowHandler(ctx, cenv.NamespaceID(), storeID)
+		// Second read while still paused: PausedSince must remain the same.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
-		ss.Equal(nowWhilePaused.Now, nowWhilePaused2.Now, "Now() must remain frozen while paused")
+		ss.Require().NotNil(pi.PausedSince)
+		ss.Equal(pausedSince, *pi.PausedSince)
 
-		// Unpause. CloseTransaction will accumulate the pause duration and clear PausedTime.
+		// Unpause.
 		err = tests.UnpausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 
-		// Now() after unpause should reflect the accumulated pause duration subtracted from
-		// the current wall time, so it resumes logically from roughly where it was frozen.
-		// That means it should be close to (but may be slightly after) the frozen time.
-		const tolerance = 5 * time.Second
-		nowAfterUnpause, err := tests.GetNowHandler(ctx, cenv.NamespaceID(), storeID)
+		// After unpause: PausedSince is nil, AccumulatedPauseDuration is positive.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
-		ss.False(nowAfterUnpause.Now.IsZero(), "expected non-zero Now() after unpause")
-		// Logical time after unpause should be roughly where the freeze started.
-		diff := nowAfterUnpause.Now.Sub(nowWhilePaused.Now)
-		ss.True(diff >= 0 && diff <= tolerance,
-			"Now() after unpause (%v) should be within %v of the frozen time (%v), got diff=%v",
-			nowAfterUnpause.Now, tolerance, nowWhilePaused.Now, diff)
+		ss.Nil(pi.PausedSince)
+		ss.Positive(pi.AccumulatedPauseDuration)
 	})
 }

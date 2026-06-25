@@ -243,14 +243,14 @@ func (s *PayloadStore) Unpause(
 	return nil, nil
 }
 
-func (s *PayloadStore) GetNow(
+func (s *PayloadStore) GetPauseInfo(
 	chasmContext chasm.Context,
 	_ chasm.NoValue,
-) (GetNowResponse, error) {
+) (chasm.ComponentPauseInfo, error) {
 	if err := assertContextValue(chasmContext); err != nil {
-		return GetNowResponse{}, err
+		return chasm.ComponentPauseInfo{}, err
 	}
-	return GetNowResponse{Now: chasmContext.Now(s)}, nil
+	return chasmContext.PauseInfo(s), nil
 }
 
 func (s *PayloadStore) Terminate(

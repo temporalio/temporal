@@ -89,6 +89,10 @@ func (c *MockContext) Now(cmp Component) time.Time {
 	return time.Now()
 }
 
+func (c *MockContext) PauseInfo(_ Component) ComponentPauseInfo {
+	return ComponentPauseInfo{}
+}
+
 func (c *MockContext) Ref(cmp Component) ([]byte, error) {
 	if c.HandleRef != nil {
 		return c.HandleRef(cmp)

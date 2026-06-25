@@ -1566,21 +1566,12 @@ func (n *Node) applyPendingComponentMetadata() bool {
 	return dirty
 }
 
-// closeTransactionUpdatePauseInfo detects LifecycleStatePaused transitions for
-// every component node that was accessed (deserialized) in this transaction, and
-// updates ChasmPauseInfo accordingly so that Now(component) returns a stable,
-// pause-adjusted time in subsequent transactions.
-//
-// Called after closeTransactionApplyPendingComponentMetadata so that all
-// framework-managed metadata has already been written to serializedNode.
+// closeTransactionUpdatePauseInfo updates ChasmPauseInfo for components that
+// transitioned into or out of LifecycleStatePaused this transaction.
 func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 	now := n.timeSource.Now()
 	for _, node := range n.andAllChildren() {
 		if !node.isComponent() {
-			continue
-		}
-		// Skip nodes that were never loaded; their lifecycle state cannot have changed.
-		if node.valueState == valueStateNeedDeserialize {
 			continue
 		}
 		component, ok := node.value.(Component)
@@ -1593,36 +1584,20 @@ func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 			continue
 		}
 
-		currentState := component.LifecycleState(immutableContext)
 		pauseInfo := attrs.GetPauseInfo()
 		wasPaused := pauseInfo != nil && pauseInfo.PausedTime != nil
-		isPaused := currentState.IsPaused()
+		isPaused := component.LifecycleState(immutableContext).IsPaused()
 
 		switch {
 		case !wasPaused && isPaused:
-			// Transition into paused: record the start of this pause interval.
 			if attrs.PauseInfo == nil {
 				attrs.PauseInfo = &persistencespb.ChasmPauseInfo{}
 			}
 			attrs.PauseInfo.PausedTime = timestamppb.New(now)
 		case wasPaused && !isPaused:
-			// Transition out of paused: accumulate the duration of this pause interval.
 			elapsed := now.Sub(pauseInfo.PausedTime.AsTime())
-			prev := pauseInfo.GetAccumulatedPauseDuration().AsDuration()
-			attrs.PauseInfo.AccumulatedPauseDuration = durationpb.New(prev + elapsed)
+			attrs.PauseInfo.AccumulatedPauseDuration = durationpb.New(pauseInfo.GetAccumulatedPauseDuration().AsDuration() + elapsed)
 			attrs.PauseInfo.PausedTime = nil
-		default:
-			continue
-		}
-
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
-		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
-			node.updateLastUpdateVersionedTransition()
-			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
-			delete(n.mutation.DeletedNodes, encodedPath)
 		}
 	}
 	return nil
@@ -1658,44 +1633,19 @@ func (n *Node) dataNodePath(
 	return refNode.path(), nil
 }
 
-// Now returns the current wall-clock time for non-component callers.
 func (n *Node) Now(
 	_ Component,
 ) time.Time {
 	return n.timeSource.Now()
 }
 
-// componentNow returns the effective current time for the given component,
-// adjusting for any accumulated pause duration so that time does not advance
-// while a component is in LifecycleStatePaused.
-//
-// If the component is currently paused (pausedTime is set), its logical time is
-// frozen at the moment the pause began. If the component has been paused before
-// but is now running, the accumulated pause duration is subtracted from baseNow
-// so that logical time resumes from where it left off.
-func (n *Node) componentNow(component Component, baseNow time.Time) time.Time {
+// componentPauseInfo returns the persisted pause info for the given component, or nil if none.
+func (n *Node) componentPauseInfo(component Component) *persistencespb.ChasmPauseInfo {
 	node, ok := n.valueToNode[component]
 	if !ok {
-		// Component not yet registered as a tree node (created in this transaction).
-		return baseNow
+		return nil
 	}
-	attrs := node.serializedNode.GetMetadata().GetComponentAttributes()
-	if attrs == nil {
-		return baseNow
-	}
-	pauseInfo := attrs.GetPauseInfo()
-	if pauseInfo == nil {
-		return baseNow
-	}
-	if pt := pauseInfo.GetPausedTime(); pt != nil {
-		// Frozen at the time the pause began.
-		return pt.AsTime()
-	}
-	accum := pauseInfo.GetAccumulatedPauseDuration().AsDuration()
-	if accum == 0 {
-		return baseNow
-	}
-	return baseNow.Add(-accum)
+	return node.serializedNode.GetMetadata().GetComponentAttributes().GetPauseInfo()
 }
 
 // AddTask implements the CHASM MutableContext interface
