@@ -668,14 +668,17 @@ func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *d
 }
 
 func GetOverrideTargetDeploymentVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
-	switch {
-	case OverrideIsPinned(override):
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
 		return GetOverridePinnedVersion(override)
-	case override.GetOneTime() != nil:
-		return override.GetOneTime().GetTargetDeploymentVersion()
-	default:
+	case *workflowpb.VersioningOverride_OneTime:
+		return o.OneTime.GetTargetDeploymentVersion()
+	case *workflowpb.VersioningOverride_AutoUpgrade:
 		// Auto-upgrade has no stored target version; the version is chosen by matching at task dispatch time
 		return nil
+	default:
+		// Deprecated v0.30/v0.31 pinned override fields.
+		return GetOverridePinnedVersion(override)
 	}
 }
 

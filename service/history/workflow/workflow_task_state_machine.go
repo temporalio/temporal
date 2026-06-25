@@ -824,9 +824,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions))
-	oneTimeTarget := worker_versioning.GetOverrideOneTimeTargetVersion(
-		m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
-	)
 
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
@@ -841,6 +838,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		wftDeployment,
 		vb,
 	)
+
+	var oneTimeTarget *deploymentpb.WorkerDeploymentVersion
+	if oneTime := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetOneTime(); oneTime != nil {
+		oneTimeTarget = oneTime.GetTargetDeploymentVersion()
+	}
 
 	wftScheduleToClose := event.GetEventTime().AsTime().Sub(workflowTask.ScheduledTime)
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits, wftScheduleToClose)
