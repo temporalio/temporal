@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -377,9 +378,17 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 		Return(nil)
 
 	// One ephemeral push from Start (0 → Read=4/Write=2), one from the drain (Read drops to 2).
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).Times(2)
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
 	state := waitRecv(s, dbWrites, "drain never wrote")
@@ -390,6 +399,111 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 	s.True(bitSet(state.BacklogState).get(1))
 	s.False(bitSet(state.BacklogState).get(2))
 	s.False(bitSet(state.BacklogState).get(3))
+
+	// Drain dropped Read to 2; Write stays at target 2.
+	i1 := waitRecv(s, scaleInfos, "no drain push")
+	s.Equal(int32(2), i1.Read, "drain read")
+	s.Equal(int32(2), i1.Write, "drain write")
+}
+
+// TestDrainShrinkLimitedReadWrite is an end-to-end drain runthrough that checks
+// the Read/Write counts pushed to ephemeral data as partitions drain, exercising
+// the write-shrink limit across multiple rounds. With ShrinkDelta=2 and target=1:
+// 10 partitions backlogged -> Read=10/Write=8; drain 7,8,9 -> Read=7/Write=5;
+// drain the rest -> Read=1/Write=1 (partition 0 stays because id < target).
+func (s *ScaleManagerSuite) TestDrainShrinkLimitedReadWrite() {
+	s.settings.BackgroundInterval = 50 * time.Millisecond
+	s.settings.DrainBufferTime = 0
+	s.settings.ShrinkDelta = 2 // ShrinkRatio stays 1.0, so delta dominates
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:        1,
+		MaxTarget:     10,
+		TargetVersion: 0, // fake clock starts at Unix zero; target never changes here
+		BacklogState: bitSet(nil).
+			set(0).set(1).set(2).set(3).set(4).set(5).set(6).set(7).set(8).set(9),
+	}
+
+	// drained holds the partition ids that currently report BacklogDrained. The
+	// test advances it between drain rounds.
+	var drained atomic.Pointer[map[int32]bool]
+	setDrained := func(ids ...int32) {
+		m := make(map[int32]bool, len(ids))
+		for _, id := range ids {
+			m[id] = true
+		}
+		drained.Store(&m)
+	}
+	setDrained() // nothing drained yet
+
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			id := req.GetTaskQueuePartition().GetNormalPartitionId()
+			// Echo the manager's current scale info so partitionIsFullyDrained's
+			// version/read/write equality check passes at every round. This runs on
+			// the background goroutine that owns scaleState, so the read is safe.
+			info := scaleStateToInfo(s.sm.scaleState, s.settings)
+			return &matchingservice.DescribeTaskQueuePartitionResponse{
+				ScaleInfo: info,
+				VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+					"v1": {
+						PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
+							InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
+								{BacklogDrained: (*drained.Load())[id]},
+							},
+						},
+					},
+				},
+			}, nil
+		}).AnyTimes()
+
+	// The timer also calls the scaler; keep target stable with NoChange.
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).AnyTimes()
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 3)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
+
+	s.startManager(10, initial)
+
+	// Start pushes the initial counts: Read=10, Write=max(1, 10-2)=8.
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(10), i0.Read, "initial read")
+	s.Equal(int32(8), i0.Write, "initial write")
+
+	// Round 1: partitions 7,8,9 fully drain.
+	setDrained(7, 8, 9)
+	s.fireBackgroundTimer()
+	st1 := waitRecv(s, dbWrites, "round 1 drain never wrote")
+	s.Equal(int32(7), bitSet(st1.BacklogState).len(), "round 1 backlog count")
+	s.False(bitSet(st1.BacklogState).get(7))
+	s.False(bitSet(st1.BacklogState).get(8))
+	s.False(bitSet(st1.BacklogState).get(9))
+	i1 := waitRecv(s, scaleInfos, "no round 1 push")
+	s.Equal(int32(7), i1.Read, "round 1 read")   // backlog len 7
+	s.Equal(int32(5), i1.Write, "round 1 write") // max(1, 7-2)
+
+	// Round 2: everything else drains. Partition 0 (id < target) keeps its bit.
+	setDrained(1, 2, 3, 4, 5, 6)
+	s.fireBackgroundTimer()
+	st2 := waitRecv(s, dbWrites, "round 2 drain never wrote")
+	s.Equal(int32(1), bitSet(st2.BacklogState).len(), "round 2 backlog count")
+	s.True(bitSet(st2.BacklogState).get(0), "partition below target stays set")
+	i2 := waitRecv(s, scaleInfos, "no round 2 push")
+	s.Equal(int32(1), i2.Read, "round 2 read")   // max(target 1, backlog len 1)
+	s.Equal(int32(1), i2.Write, "round 2 write") // max(1, 1-1)
 }
 
 // TestNoDrainWithBacklog verifies that partitions still reporting backlog
@@ -423,7 +537,9 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
 	// Only the push on Start (0 → Read=4/Write=2) is expected.
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
@@ -433,10 +549,18 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 		}).AnyTimes()
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote despite backlog")
+	// No backlog cleared, so no further ephemeral push beyond the one at Start.
+	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push without drain")
 }
 
 // TestDrainSkippedDuringBufferTime verifies that drain is not evaluated until
@@ -457,7 +581,9 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
@@ -467,10 +593,18 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 		}).AnyTimes()
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote inside DrainBufferTime")
+	// Drain skipped during buffer time, so no push beyond the one at Start.
+	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push during buffer time")
 }
 
 // TestScaleStateToInfoShrinkLimit exercises the write-shrink limiting in
