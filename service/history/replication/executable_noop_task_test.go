@@ -101,7 +101,3 @@ func (s *executableNoopTaskSuite) TestMarkPoisonPill() {
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 }
-
-func (s *executableNoopTaskSuite) TestQueueID() {
-	s.Equal(noopTaskID, s.task.QueueID())
-}

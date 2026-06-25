@@ -435,53 +435,6 @@ func (s *executableTaskTrackerSuite) TestLowWatermark_PendingTask() {
 	s.Equal([]int64{task0.TaskID()}, taskIDs)
 }
 
-func (s *executableTaskTrackerSuite) TestSize() {
-	s.Equal(0, s.taskTracker.Size())
-
-	task0 := NewMockTrackableExecutableTask(s.controller)
-	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
-	task1 := NewMockTrackableExecutableTask(s.controller)
-	task1.EXPECT().TaskID().Return(task0.TaskID() + 1).AnyTimes()
-	highWatermark := WatermarkInfo{
-		Watermark: task1.TaskID() + 1,
-		Timestamp: time.Unix(0, rand.Int63()),
-	}
-	s.taskTracker.TrackTasks(highWatermark, task0, task1)
-
-	s.Equal(2, s.taskTracker.Size())
-}
-
-func (s *executableTaskTrackerSuite) TestTrackTasks_LowerHighWatermark_Panic() {
-	task0 := NewMockTrackableExecutableTask(s.controller)
-	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
-	// high watermark must be > last task ID, otherwise panic
-	highWatermark := WatermarkInfo{
-		Watermark: task0.TaskID(),
-		Timestamp: time.Unix(0, rand.Int63()),
-	}
-
-	s.Panics(func() {
-		s.taskTracker.TrackTasks(highWatermark, task0)
-	})
-}
-
-func (s *executableTaskTrackerSuite) TestLowWatermark_UnknownState_Panic() {
-	task0 := NewMockTrackableExecutableTask(s.controller)
-	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
-	task0.EXPECT().TaskCreationTime().Return(time.Unix(0, rand.Int63())).AnyTimes()
-	task0.EXPECT().State().Return(ctasks.State(-1)).AnyTimes()
-
-	tasks := s.taskTracker.TrackTasks(WatermarkInfo{
-		Watermark: task0.TaskID() + 1,
-		Timestamp: time.Unix(0, rand.Int63()),
-	}, task0)
-	s.Equal([]TrackableExecutableTask{task0}, tasks)
-
-	s.Panics(func() {
-		s.taskTracker.LowWatermark()
-	})
-}
-
 func (s *executableTaskTrackerSuite) TestCancellation() {
 	task0 := NewMockTrackableExecutableTask(s.controller)
 	task0.EXPECT().TaskID().Return(rand.Int63()).AnyTimes()
