@@ -398,6 +398,13 @@ func (c *workerComponent) reEnqueueTasks(
 	}
 
 	for shardID, batch := range tasksByShard {
+		// ADDTASKS_DEBUG (temporary, malik): rule-out marker. If the source-side AddTasks calls
+		// are coming from DLQ re-enqueue rather than the replication backfill, this fires.
+		activity.GetLogger(ctx).Info("ADDTASKS_DEBUG dlq reEnqueue -> AddTasks",
+			"source-cluster", params.SourceCluster,
+			"shard-id", shardID,
+			"task-count", len(batch),
+		)
 		_, err := taskClient.AddTasks(ctx, &adminservice.AddTasksRequest{
 			ShardId: shardID,
 			Tasks:   batch,

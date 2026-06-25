@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"net"
+	rtdebug "runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -73,6 +74,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -2316,6 +2318,32 @@ func (adh *AdminHandler) AddTasks(
 		ShardId: request.ShardId,
 		Tasks:   historyTasks,
 	}
+
+	// ADDTASKS_DEBUG (temporary, malik): identify who calls the AddTasks admin RPC on the
+	// source cell during replication start/stop. The stack here is only gRPC plumbing because
+	// the caller is remote, so the real signal is the caller info + peer + task categories.
+	{
+		categoryIDs := make([]int32, len(request.Tasks))
+		for i, t := range request.Tasks {
+			categoryIDs[i] = t.CategoryId
+		}
+		callerInfo := headers.GetCallerInfo(ctx)
+		peerAddr := "unknown"
+		if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+			peerAddr = p.Addr.String()
+		}
+		adh.logger.Info("ADDTASKS_DEBUG admin AddTasks received",
+			tag.NewInt32("shard-id", request.ShardId),
+			tag.NewInt("task-count", len(request.Tasks)),
+			tag.NewStringTag("category-ids", fmt.Sprintf("%v", categoryIDs)),
+			tag.NewStringTag("caller-name", callerInfo.CallerName),
+			tag.NewStringTag("caller-type", callerInfo.CallerType),
+			tag.NewStringTag("caller-origin", callerInfo.CallOrigin),
+			tag.NewStringTag("peer-addr", peerAddr),
+			tag.SysStackTrace(string(rtdebug.Stack())),
+		)
+	}
+
 	_, err := adh.historyClient.AddTasks(ctx, historyServiceRequest)
 	if err != nil {
 		return nil, err

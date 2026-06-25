@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	rtdebug "runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -481,6 +482,20 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
+	// ADDTASKS_DEBUG (temporary, malik): catch-all for the source-side task-write delta during
+	// replication start/stop. Gated to replication-category writes only (the delta we care about)
+	// so this hot path is not flooded. This stack DOES show the real in-process caller, unlike the
+	// RPC handlers. Catches paths that drive task writes WITHOUT going through the AddTasks RPC.
+	if replTasks, ok := request.Tasks[tasks.CategoryReplication]; ok && len(replTasks) > 0 {
+		s.GetLogger().Info("ADDTASKS_DEBUG shard AddTasks (replication category)",
+			tag.NewInt32("shard-id", request.ShardID),
+			tag.NewStringTag("namespace-id", request.NamespaceID),
+			tag.NewStringTag("workflow-id", request.WorkflowID),
+			tag.NewInt("repl-task-count", len(replTasks)),
+			tag.SysStackTrace(string(rtdebug.Stack())),
+		)
+	}
+
 	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err

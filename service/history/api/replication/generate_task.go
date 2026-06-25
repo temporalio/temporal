@@ -2,11 +2,13 @@ package replication
 
 import (
 	"context"
+	rtdebug "runtime/debug"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -52,6 +54,16 @@ func GenerateTask(
 	if err != nil {
 		return nil, err
 	}
+
+	// ADDTASKS_DEBUG (temporary, malik): rule-out marker. This is the in-process migration/force-
+	// replication task generator writing replication tasks to the source shard. If the source-side
+	// task-write delta is driven by generation rather than the backfill RPC, this fires.
+	shardContext.GetLogger().Info("ADDTASKS_DEBUG generate migration tasks -> AddTasks",
+		tag.NewInt32("shard-id", shardContext.GetShardID()),
+		tag.NewStringTag("workflow-id", request.Execution.WorkflowId),
+		tag.NewInt("repl-task-count", len(replicationTasks)),
+		tag.SysStackTrace(string(rtdebug.Stack())),
+	)
 
 	err = shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: shardContext.GetShardID(),
