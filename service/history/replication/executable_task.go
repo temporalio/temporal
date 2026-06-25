@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	rtdebug "runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -786,6 +787,16 @@ func (e *ExecutableTaskImpl) SyncState(
 				Blob:       blob,
 			})
 		}
+
+		// ADDTASKS_DEBUG (temporary, malik): this is the leading hypothesis for the source-side
+		// AddTasks calls. The passive re-adds task equivalents back to the SOURCE cluster when
+		// sync-state cannot apply (FailedPrecondition). This stack is the real caller chain.
+		logger.Info("ADDTASKS_DEBUG replication backfill -> source AddTasks",
+			tag.NewStringTag("source-cluster", e.sourceClusterName),
+			tag.NewInt32("source-shard-id", e.sourceShardKey.ShardID),
+			tag.NewInt("task-equivalent-count", len(tasksToAdd)),
+			tag.SysStackTrace(string(rtdebug.Stack())),
+		)
 
 		_, err := remoteAdminClient.AddTasks(ctx, &adminservice.AddTasksRequest{
 			ShardId: e.sourceShardKey.ShardID,

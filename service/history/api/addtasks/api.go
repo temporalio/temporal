@@ -2,11 +2,14 @@ package addtasks
 
 import (
 	"context"
+	"fmt"
+	rtdebug "runtime/debug"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -56,6 +59,21 @@ func Invoke(
 
 	if len(req.Tasks) == 0 {
 		return nil, serviceerror.NewInvalidArgument("No tasks in request")
+	}
+
+	// ADDTASKS_DEBUG (temporary, malik): confirms the admin->history hop and the categories
+	// landing on this shard. Stack is plumbing only (remote caller); category is the fingerprint.
+	{
+		categoryIDs := make([]int32, len(req.Tasks))
+		for i, t := range req.Tasks {
+			categoryIDs[i] = t.CategoryId
+		}
+		shardContext.GetLogger().Info("ADDTASKS_DEBUG history AddTasks invoke",
+			tag.NewInt32("shard-id", req.ShardId),
+			tag.NewInt("task-count", len(req.Tasks)),
+			tag.NewStringTag("category-ids", fmt.Sprintf("%v", categoryIDs)),
+			tag.SysStackTrace(string(rtdebug.Stack())),
+		)
 	}
 
 	taskGroups := make(map[taskGroupKey]map[tasks.Category][]tasks.Task)
