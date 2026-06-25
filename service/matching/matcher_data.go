@@ -454,7 +454,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 			break
 		}
 		if matched == nil {
-			// no compatible poller for this task; keep scanning lower-priority tasks
+			// no compatible poller for this task; keep scanning later tasks
 			return true
 		}
 
