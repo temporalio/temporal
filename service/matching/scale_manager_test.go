@@ -473,6 +473,110 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 		30*time.Millisecond, time.Millisecond, "drain wrote inside DrainBufferTime")
 }
 
+// TestScaleStateToInfoShrinkLimit exercises the write-shrink limiting in
+// scaleStateToInfo. Read is max(target, backlog len); write is held up near
+// read so it can't shrink faster than allowedShrink = max(1, min(read*ShrinkRatio,
+// ShrinkDelta)) below read, with target as the floor. This matters during drain,
+// when read exceeds target.
+func (s *ScaleManagerSuite) TestScaleStateToInfoShrinkLimit() {
+	// backlog builds a BacklogState with bits 0..n-1 set, giving a read count of n.
+	backlog := func(n int32) bitSet {
+		b := bitSet(nil)
+		for i := range n {
+			b = b.set(i)
+		}
+		return b
+	}
+
+	cases := []struct {
+		name        string
+		target      int32
+		backlogLen  int32
+		shrinkRatio float32
+		shrinkDelta int32
+		wantRead    int32
+		wantWrite   int32
+	}{
+		{
+			name:        "no drain: read==target, write==target regardless of shrink",
+			target:      10,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   10,
+		},
+		{
+			name:        "ratio dominates: read=10 ratio=0.1 -> shrink 1",
+			target:      2,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   9, // 10 - max(1, min(1, 8))
+		},
+		{
+			name:        "delta dominates: read=200 ratio=0.1 (=20) capped at delta 8",
+			target:      2,
+			backlogLen:  200,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    200,
+			wantWrite:   192, // 200 - 8
+		},
+		{
+			name:        "no shrink limit (suite defaults): write falls to target",
+			target:      2,
+			backlogLen:  10,
+			shrinkRatio: 1.0,
+			shrinkDelta: 100,
+			wantRead:    10,
+			wantWrite:   2, // 10 - min(10, 100) = 0, floored to target
+		},
+		{
+			name:        "shrink floored to 1 when ratio rounds to 0",
+			target:      2,
+			backlogLen:  5,
+			shrinkRatio: 0.0,
+			shrinkDelta: 8,
+			wantRead:    5,
+			wantWrite:   4, // 5 - max(1, min(0, 8))
+		},
+		{
+			name:        "target floor wins over read-allowedShrink",
+			target:      9,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   9, // max(9, 10-1)
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			settings := s.settings
+			settings.ShrinkRatio = tc.shrinkRatio
+			settings.ShrinkDelta = tc.shrinkDelta
+
+			state := &persistencespb.PartitionScaleState{
+				Target:        tc.target,
+				TargetVersion: 12345,
+				BacklogState:  backlog(tc.backlogLen),
+			}
+			info := scaleStateToInfo(state, settings)
+			s.Equal(tc.wantRead, info.Read, "read")
+			s.Equal(tc.wantWrite, info.Write, "write")
+			s.Equal(int64(12345), info.Version, "version")
+		})
+	}
+
+	// nil state: read and write are both 0.
+	info := scaleStateToInfo(nil, s.settings)
+	s.Equal(int32(0), info.Read)
+	s.Equal(int32(0), info.Write)
+}
+
 // TestDBWriteFailureKeepsState verifies that when persistence fails the
 // in-memory state and ephemeral data are not advanced. A subsequent successful
 // write should then update both.
