@@ -408,13 +408,10 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
 // nolint:revive // will improve later
-func (d *matcherData) findMatch(allowForwarding bool, now int64) (*internalTask, *waitingPoller, time.Duration) {
+func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
 	// tree.Iter() cursor escapes to the heap.
-	var matchedTask *internalTask
-	var matchedPoller *waitingPoller
-	var minDelay time.Duration
 	d.tasks.tree.Scan(func(task *internalTask) bool {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
@@ -464,7 +461,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (*internalTask,
 		matchedTask, matchedPoller = task, matched
 		return false
 	})
-	return matchedTask, matchedPoller, minDelay
+	return
 }
 
 // call with lock held
