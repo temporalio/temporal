@@ -10,7 +10,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -49,7 +49,7 @@ func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logg
 }
 
 type taskQueueRecordingPersistenceFactory struct {
-	persistenceClient.Factory
+	persistenceclient.Factory
 	logger      log.Logger
 	setRecorder func(*TaskQueueRecorder)
 }
