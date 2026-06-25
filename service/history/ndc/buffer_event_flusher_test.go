@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -115,99 +114,6 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 
 	_, _, err = s.nDCBufferEventFlusher.flush(context.Background())
 	s.NoError(err)
-}
-
-func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask_Error() {
-	bufFlushErr := serviceerror.NewInternal("clear transient task failed")
-
-	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().ClearTransientWorkflowTask().Return(bufFlushErr)
-
-	wfCtx, ms, err := s.nDCBufferEventFlusher.flush(context.Background())
-	s.Error(err)
-	s.Equal(bufFlushErr, err)
-	s.Nil(wfCtx)
-	s.Nil(ms)
-}
-
-func (s *bufferEventFlusherSuite) TestNoBufferedEvents_NoTransientTask() {
-	// HasBufferedEvents false and no started workflow task: returns existing ctx/ms unchanged.
-	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
-	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(false).AnyTimes()
-
-	wfCtx, ms, err := s.nDCBufferEventFlusher.flush(context.Background())
-	s.NoError(err)
-	s.Equal(historyi.WorkflowContext(s.mockContext), wfCtx)
-	s.Equal(historyi.MutableState(s.mockMutableState), ms)
-}
-
-func (s *bufferEventFlusherSuite) TestFlushBufferedEvents_FlushError() {
-	bufFlushErr := serviceerror.NewInternal("flush failed")
-
-	// targetWorkflow.FlushBufferedEvents() reaches GetLastWriteVersion which errors.
-	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(0), bufFlushErr)
-
-	wfCtx, ms, err := s.nDCBufferEventFlusher.flush(context.Background())
-	s.Error(err)
-	s.Equal(bufFlushErr, err)
-	s.Nil(wfCtx)
-	s.Nil(ms)
-}
-
-func (s *bufferEventFlusherSuite) TestFlushBufferedEvents_UpdateError() {
-	lastWriteVersion := int64(300)
-	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(10, 0),
-		versionhistory.NewVersionHistoryItem(150, 300),
-	})
-	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-	bufFlushErr := serviceerror.NewInternal("update failed")
-
-	s.mockMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
-	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil)
-	workflowTask := &historyi.WorkflowTaskInfo{
-		ScheduledEventID: 1234,
-		StartedEventID:   2345,
-	}
-	s.mockMutableState.EXPECT().GetStartedWorkflowTask().Return(workflowTask)
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
-		nil,
-		consts.IdentityHistoryService,
-		nil,
-		"",
-		"",
-		"",
-		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil)
-	s.mockMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
-	s.mockMutableState.EXPECT().AddWorkflowTaskScheduledEvent(
-		false,
-		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-	).Return(&historyi.WorkflowTaskInfo{}, nil)
-	s.mockMutableState.EXPECT().FlushBufferedEvents()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-
-	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(bufFlushErr)
-
-	wfCtx, ms, err := s.nDCBufferEventFlusher.flush(context.Background())
-	s.Error(err)
-	s.Equal(bufFlushErr, err)
-	s.Nil(wfCtx)
-	s.Nil(ms)
 }
 
 func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {

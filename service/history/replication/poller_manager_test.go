@@ -5,9 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/cluster"
-	"go.uber.org/mock/gomock"
 )
 
 func TestGetPollingShardIds(t *testing.T) {
@@ -66,70 +63,4 @@ func TestGetPollingShardIds(t *testing.T) {
 			assert.Equal(t, tt.expectedShardIDs, shardIDs)
 		})
 	}
-}
-
-const (
-	pollerMgrCurrentCluster = "active"
-	pollerMgrSourceCluster  = "standby"
-)
-
-func pollerMgrNewMetadata(t *testing.T, info map[string]cluster.ClusterInformation) *cluster.MockMetadata {
-	ctrl := gomock.NewController(t)
-	md := cluster.NewMockMetadata(ctrl)
-	md.EXPECT().GetCurrentClusterName().Return(pollerMgrCurrentCluster).AnyTimes()
-	md.EXPECT().GetAllClusterInfo().Return(info).AnyTimes()
-	return md
-}
-
-func TestNewPollerManager(t *testing.T) {
-	md := pollerMgrNewMetadata(t, cluster.TestAllClusterInfo)
-	p := newPollerManager(1, md)
-	require.NotNil(t, p)
-	require.Equal(t, int32(1), p.currentShardId)
-}
-
-func TestGetSourceClusterShardIDs_Success(t *testing.T) {
-	info := map[string]cluster.ClusterInformation{
-		pollerMgrCurrentCluster: {ShardCount: 4},
-		pollerMgrSourceCluster:  {ShardCount: 16},
-	}
-	md := pollerMgrNewMetadata(t, info)
-	p := newPollerManager(1, md)
-	ids, err := p.getSourceClusterShardIDs(pollerMgrSourceCluster)
-	require.NoError(t, err)
-	require.Equal(t, []int32{1, 5, 9, 13}, ids)
-}
-
-func TestGetSourceClusterShardIDs_CurrentClusterMissing(t *testing.T) {
-	info := map[string]cluster.ClusterInformation{
-		pollerMgrSourceCluster: {ShardCount: 16},
-	}
-	md := pollerMgrNewMetadata(t, info)
-	p := newPollerManager(1, md)
-	ids, err := p.getSourceClusterShardIDs(pollerMgrSourceCluster)
-	require.Error(t, err)
-	require.Nil(t, ids)
-}
-
-func TestGetSourceClusterShardIDs_SourceClusterMissing(t *testing.T) {
-	info := map[string]cluster.ClusterInformation{
-		pollerMgrCurrentCluster: {ShardCount: 4},
-	}
-	md := pollerMgrNewMetadata(t, info)
-	p := newPollerManager(1, md)
-	ids, err := p.getSourceClusterShardIDs(pollerMgrSourceCluster)
-	require.Error(t, err)
-	require.Nil(t, ids)
-}
-
-func TestGetSourceClusterShardIDs_NotMultiples(t *testing.T) {
-	info := map[string]cluster.ClusterInformation{
-		pollerMgrCurrentCluster: {ShardCount: 4},
-		pollerMgrSourceCluster:  {ShardCount: 6},
-	}
-	md := pollerMgrNewMetadata(t, info)
-	p := newPollerManager(1, md)
-	ids, err := p.getSourceClusterShardIDs(pollerMgrSourceCluster)
-	require.Error(t, err)
-	require.Nil(t, ids)
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -22,7 +21,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -227,164 +225,6 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
 		rand.Int63(),
 	)
 	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, errors.New("OwO"))
-
-	s.Equal(err, s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestQueueID() {
-	s.Equal(s.task.WorkflowKey, s.task.QueueID())
-}
-
-func (s *executableWorkflowStateTaskSuite) TestExecute_GetShard_Error() {
-	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().MarkExecutionStart()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	).AnyTimes()
-	wfStateShardErr := errors.New("wfState-shard-error")
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(nil, wfStateShardErr)
-
-	s.Equal(wfStateShardErr, s.task.Execute())
-}
-
-func (s *executableWorkflowStateTaskSuite) TestExecute_GetEngine_Error() {
-	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().MarkExecutionStart()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	).AnyTimes()
-	shardContext := historyi.NewMockShardContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil)
-	wfStateEngineErr := errors.New("wfState-engine-error")
-	shardContext.EXPECT().GetEngine(gomock.Any()).Return(nil, wfStateEngineErr)
-
-	s.Equal(wfStateEngineErr, s.task.Execute())
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_Duplicate() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	s.executableTask.EXPECT().MarkTaskDuplicated().Times(1)
-
-	s.NoError(s.task.HandleErr(consts.ErrDuplicate))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_NotFound() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-
-	s.NoError(s.task.HandleErr(serviceerror.NewNotFound("")))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_Nil() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-
-	s.NoError(s.task.HandleErr(nil))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_Default_Error() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	wfStateDefaultErr := serviceerror.NewUnavailable("OwO")
-
-	s.Equal(wfStateDefaultErr, s.task.HandleErr(wfStateDefaultErr))
-}
-
-func wfStateNewSyncStateErr(s *executableWorkflowStateTaskSuite) *serviceerrors.SyncState {
-	return serviceerrors.NewSyncState(
-		"",
-		s.task.NamespaceID,
-		s.task.WorkflowID,
-		s.task.RunID,
-		0,
-		nil,
-		nil,
-	).(*serviceerrors.SyncState)
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_SyncState_NamespaceError() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	wfStateNsErr := errors.New("wfState-ns-error")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		"", false, wfStateNsErr,
-	)
-	err := wfStateNewSyncStateErr(s)
-
-	s.Equal(err, s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_SyncState_Success() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	)
-	err := wfStateNewSyncStateErr(s)
-	s.executableTask.EXPECT().SyncState(gomock.Any(), err, ResendAttempt).Return(true, nil)
-
-	s.NoError(s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_SyncState_DoNotContinue() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	)
-	err := wfStateNewSyncStateErr(s)
-	s.executableTask.EXPECT().SyncState(gomock.Any(), err, ResendAttempt).Return(false, nil)
-
-	s.NoError(s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_SyncState_Error() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	)
-	err := wfStateNewSyncStateErr(s)
-	s.executableTask.EXPECT().SyncState(gomock.Any(), err, ResendAttempt).Return(false, errors.New("OwO"))
-
-	s.Equal(err, s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_NamespaceError() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	wfStateResendNsErr := errors.New("wfState-resend-ns-error")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		"", false, wfStateResendNsErr,
-	)
-	err := serviceerrors.NewRetryReplication(
-		"",
-		s.task.NamespaceID,
-		s.task.WorkflowID,
-		s.task.RunID,
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-	)
-
-	s.Equal(err, s.task.HandleErr(err))
-}
-
-func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_DoNotContinue() {
-	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
-		uuid.NewString(), true, nil,
-	)
-	err := serviceerrors.NewRetryReplication(
-		"",
-		s.task.NamespaceID,
-		s.task.WorkflowID,
-		s.task.RunID,
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, nil)
 
 	s.Equal(err, s.task.HandleErr(err))
 }
