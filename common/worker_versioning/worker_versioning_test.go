@@ -1062,6 +1062,61 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "v0.32: One-time override, with cache hit, returns cached reactivation eligibility",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 42)
+			},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: false,
+			expectedRevisionNumber:         42,
+		},
+		{
+			name: "v0.32: One-time override, with cache miss, RPC returns member and active",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+					IsMember:               true,
+					ShouldSkipReactivation: true,
+					RevisionNumber:         7,
+				}, nil)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: true,
+			expectedRevisionNumber:         7,
+		},
+		{
+			name: "v0.32: One-time override, without target deployment version, returns error",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{},
+				},
+			},
+			setupCache:    func(c *testVersionMembershipCache) {},
+			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
+			expectError:   true,
+			errorContains: "must provide target deployment version if override is one-time",
+		},
+		{
 			name: "v0.32: Pinned override, with cache hit (drained), returns isDrainedOrInactive=true and cached revision",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{

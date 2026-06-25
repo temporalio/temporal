@@ -376,8 +376,8 @@ type (
 		// GetEffectiveDeployment returns the effective deployment in the following order:
 		//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 		//     new deployment
-		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+		//     pending one-time move, either at wf start time or later via UpdateWorkflowExecutionOptions.
 		//  3. Deployment: this is returned when there is no transition and no override (the most
 		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -387,8 +387,8 @@ type (
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
 		//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-		//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+		//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 		//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
