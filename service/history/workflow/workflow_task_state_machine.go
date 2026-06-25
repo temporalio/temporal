@@ -839,8 +839,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		vb,
 	)
 
+	override := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+	// Capture the pending one-time target before afterAddWorkflowTaskCompletedEvent,
+	// which clears the override when this WFT completes on the target version.
 	var oneTimeTarget *deploymentpb.WorkerDeploymentVersion
-	if oneTime := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetOneTime(); oneTime != nil {
+	if oneTime := override.GetOneTime(); oneTime != nil {
 		oneTimeTarget = oneTime.GetTargetDeploymentVersion()
 	}
 
@@ -851,7 +854,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	}
 	// afterAddWorkflowTaskCompletedEvent clears the one-time override. Emit fulfillment
 	// telemetry only on this live completion path, not when applying rebuilt history.
-	if wftCompletedOnTargetVersion(wftDeployment, oneTimeTarget) {
+	if oneTimeTarget != nil && wftCompletedOnTargetVersion(wftDeployment, oneTimeTarget) {
 		metrics.WorkerDeploymentVersioningOneTimeOverrideCounter.With(m.metricsHandler).Record(1)
 		m.ms.logger.Info("One-time versioning override fulfilled",
 			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
