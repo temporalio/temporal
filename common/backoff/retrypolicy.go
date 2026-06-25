@@ -177,11 +177,9 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 
 func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	// add jitter to avoid global synchronization
-	jitterPortion := int(0.2 * nextInterval)
-	// Prevent overflow
-	if jitterPortion < 1 {
-		jitterPortion = 1
-	}
+	jitterPortion := max(
+		// Prevent overflow
+		int(0.2*nextInterval), 1)
 	nextInterval = nextInterval*0.8 + float64(getJitterRand().Intn(jitterPortion))
 	return nextInterval
 }

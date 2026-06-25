@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -2159,10 +2160,117 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_InheritsPendingOneTimeOverride() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	childWorkflowID := "some random child workflow ID"
+	childRunID := uuid.NewString()
+	childWorkflowType := "some random child workflow type"
+	targetVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "my_app",
+		BuildId:        "build_2",
+	}
+	versioningOverride := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_OneTime{
+			OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+				TargetDeploymentVersion: targetVersion,
+			},
+		},
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:               execution.WorkflowId,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride, false, "", nil, nil, uuid.NewString(), nil, nil, false, nil)
+	s.NoError(err)
+
+	taskID := s.mustGenerateTaskID()
+	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		event.GetEventId(),
+		s.namespace,
+		s.namespaceID,
+		childWorkflowID,
+		childWorkflowType,
+		taskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	)
+
+	transferTask := &tasks.StartChildExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		InitiatedEventID:    event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	rootExecutionInfo := &workflowspb.RootExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      execution.RunId,
+		},
+	}
+
+	childClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	expectedRequest := s.createChildWorkflowExecutionRequest(
+		s.namespace,
+		transferTask,
+		mutableState,
+		ci,
+		rootExecutionInfo,
+		nil,
+	)
+	expectedRequest.StartRequest.VersioningOverride = versioningOverride
+	expectedRequest.VersioningOverride = versioningOverride
+	expectedRequest.InheritedPinnedVersion = targetVersion
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), protomock.Eq(expectedRequest)).
+		Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID, Clock: childClock}, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(&historyservice.ScheduleWorkflowTaskResponse{}, nil)
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
@@ -2398,7 +2506,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -2657,7 +2765,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -2844,7 +2952,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 				return nil, err
 			}
 			s.NoError(err)
-			s.True(cmpResult <= 0)
+			s.LessOrEqual(cmpResult, 0)
 			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
 		},
 	)
@@ -3004,7 +3112,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 				s.NoError(resp.ExecutionErr)
 			} else {
 				s.Error(resp.ExecutionErr)
-				s.Assert().ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
+				s.ErrorIs(resp.ExecutionErr, consts.ErrDependencyTaskNotCompleted)
 			}
 		})
 	}

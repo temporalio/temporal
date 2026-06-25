@@ -95,7 +95,7 @@ func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
 		require.NoError(collect, err, "git ls-remote failed:\n%s", out)
 
 		var tags []string
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			parts := strings.Fields(line)
 			if len(parts) == 2 {
 				tags = append(tags, strings.TrimPrefix(parts[1], "refs/tags/"))

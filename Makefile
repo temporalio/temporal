@@ -420,7 +420,7 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # on the exit code alone, since go fix can exit non-zero without actually
 # modifying any files (see https://github.com/golang/go/issues/77482).
 # Note: go fix automatically skips generated files.
-GOFIX_FLAGS ?= -any -rangeint
+GOFIX_FLAGS ?=
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
@@ -508,6 +508,22 @@ mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
 	@CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v $(MIXED_BRAIN_TEST_ROOT) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
+
+LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS             ?= 15
+LEAK_ITERS_WARMUP      ?= 3
+LEAK_GC_SETTLE_TIMEOUT ?= 10s
+LEAK_TIMEOUT           ?= 5m
+leak-test:
+	@printf $(COLOR) "Run goroutine-leak regression test..."
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
+		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
+		LEAK_GC_SETTLE_TIMEOUT=$(LEAK_GC_SETTLE_TIMEOUT) \
+		go test -run TestClusterShutdownLeak -count=1 -v \
+			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \
+			./tests/leakcheck/ -args -persistenceType=sql -persistenceDriver=sqlite
 
 verify-test-log:
 	@test -s test.log || (echo "TEST FAILURE: test.log is missing or empty" && exit 1)

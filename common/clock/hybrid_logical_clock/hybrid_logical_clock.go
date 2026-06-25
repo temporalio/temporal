@@ -14,11 +14,9 @@ type Clock = clockspb.HybridLogicalClock
 // HybridLogicalClock requires the previous clock to ensure that time doesn't move backwards and the next clock is
 // monotonically increasing.
 func Next(prior *Clock, source commonclock.TimeSource) *Clock {
-	wallclock := source.Now().UnixMilli()
-	// Ensure time does not move backwards
-	if wallclock < prior.GetWallClock() {
-		wallclock = prior.GetWallClock()
-	}
+	wallclock := max(
+		// Ensure time does not move backwards
+		source.Now().UnixMilli(), prior.GetWallClock())
 	// Ensure timestamp is monotonically increasing
 	var version int32
 	if wallclock == prior.GetWallClock() {

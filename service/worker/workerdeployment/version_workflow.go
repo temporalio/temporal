@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -224,6 +225,20 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			}
 
 			d.setStateChanged()
+		})
+	}
+
+	// Version gate for sync-validation-status signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "sync-validation-status-signal", workflow.DefaultVersion, 0) >= 0 {
+		syncValidationStatusChannel := workflow.GetSignalChannel(ctx, worker_versioning.SignalSyncValidationStatus)
+		d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			var vs wciiface.ValidationStatus
+			c.Receive(ctx, &vs)
+			d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
+			d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
 		})
 	}
 
@@ -1056,6 +1071,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 		ComputeConfig:        s.ComputeConfig,
+		ComputeStatus:        s.ComputeStatus,
 	}
 }
 
@@ -1072,7 +1088,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	drainage := d.VersionState.GetDrainageInfo()
 	var interval time.Duration
 	var err error
-	if drainage.LastCheckedTime.AsTime() == drainage.LastChangedTime.AsTime() {
+	if drainage.LastCheckedTime.AsTime().Equal(drainage.LastChangedTime.AsTime()) {
 		// this is the first update, so we wait according to the grace period config
 		interval, err = getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 	} else {
@@ -1176,11 +1192,12 @@ func (d *VersionWorkflowRunner) findNewVersionStatus(args *deploymentspb.SyncVer
 }
 
 func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx workflow.Context, newStatus enumspb.VersionDrainageStatus) {
-	if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+	switch newStatus {
+	case enumspb.VERSION_DRAINAGE_STATUS_DRAINED:
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
-	} else if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+	case enumspb.VERSION_DRAINAGE_STATUS_DRAINING:
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
-	} else {
+	default:
 		// This should only happen if we encounter an error while checking the drainage status of the version
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}

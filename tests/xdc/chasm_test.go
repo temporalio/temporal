@@ -59,15 +59,9 @@ func (s *ChasmSuite) SetupSuite() {
 func (s *ChasmSuite) SetupTest() {
 	s.setupTest()
 
-	chasmEngine, err := s.clusters[0].Host().ChasmEngine()
+	chasmContext, err := s.clusters[0].Host().ChasmContext(context.Background())
 	s.Require().NoError(err)
-	s.Require().NotNil(chasmEngine)
-
-	chasmVisibilityMgr := s.clusters[0].Host().ChasmVisibilityManager()
-	s.Require().NotNil(chasmVisibilityMgr)
-
-	s.chasmContext = chasm.NewEngineContext(context.Background(), chasmEngine)
-	s.chasmContext = chasm.NewVisibilityManagerContext(s.chasmContext, chasmVisibilityMgr)
+	s.chasmContext = chasmContext
 }
 
 func (s *ChasmSuite) TearDownSuite() {
@@ -82,7 +76,6 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	})
 	s.NoError(err)
 	nsID := nsResp.NamespaceInfo.GetId()
-
 	tv := testvars.New(s.T())
 	storeID := tv.Any().String()
 
@@ -100,18 +93,12 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
@@ -177,18 +164,12 @@ func (s *ChasmSuite) TestRetentionTimer() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 	s.NoError(err)
@@ -282,14 +263,14 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 	s.NoError(err)
 	s.NotEmpty(startResp.GetRunId())
 
-	// Wait for replication to cluster 1 (standby).
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityID,
 		},
-		Archetype: activity.Archetype,
+		ArchetypeId: uint32(activity.ArchetypeID),
 	}
+	// Wait for replication to cluster 1 (standby).
 	s.Eventually(func() bool {
 		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
 		return err == nil
@@ -406,18 +387,12 @@ func (s *ChasmSuite) TestDeleteExecution_ReplicatedToStandby() {
 	)
 	s.NoError(err)
 
-	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
-	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
-	s.True(ok)
-
 	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: storeID,
 		},
-		Archetype: archetype,
+		ArchetypeId: uint32(tests.ArchetypeID),
 	}
 
 	s.Eventually(func() bool {
