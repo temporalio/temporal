@@ -412,6 +412,16 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
 	// tree.Iter() cursor escapes to the heap.
+
+	// Without a per-key limit the whole-queue ready time is the same for every task, so one
+	// check suffices and we avoid locking readyTimeForTask per task in the scan below.
+	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
+	if !perKeyLimited {
+		if delay := wholeQueueReady.delay(now); delay > 0 {
+			return nil, nil, delay
+		}
+	}
+
 	d.tasks.tree.Scan(func(task *internalTask) bool {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
@@ -450,12 +460,14 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 
 		// skip per-key rate-limited tasks, tracking the minimum delay so the caller
 		// knows when the soonest one becomes ready
-		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
-		if delay > 0 {
-			if minDelay == 0 || delay < minDelay {
-				minDelay = delay
+		if perKeyLimited {
+			delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
+			if delay > 0 {
+				if minDelay == 0 || delay < minDelay {
+					minDelay = delay
+				}
+				return true
 			}
-			return true
 		}
 
 		matchedTask, matchedPoller = task, matched
