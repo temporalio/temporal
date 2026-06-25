@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -87,6 +88,25 @@ func (s *nodeSuite) initAssertions() {
 
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+}
+
+func (s *nodeSuite) TestContextMetricsHandler_SuppressedWhenReplaying() {
+	base := s.nodeBase()
+	liveHandler := metricstest.NewCaptureHandler()
+	base.metricsHandler = liveHandler
+	root := newNode(base, nil, "")
+
+	// The same context reflects the tree's replay state, no special constructor needed.
+	ctx := NewMutableContext(context.Background(), root)
+	s.Equal(metrics.Handler(liveHandler), ctx.MetricsHandler())
+
+	root.SetReplaying(true)
+	s.True(root.Replaying())
+	s.Equal(metrics.NoopMetricsHandler, ctx.MetricsHandler(), "metrics suppressed while replaying")
+
+	root.SetReplaying(false)
+	s.False(root.Replaying())
+	s.Equal(metrics.Handler(liveHandler), ctx.MetricsHandler(), "metrics restored after replay")
 }
 
 func (s *nodeSuite) TestNewTree() {

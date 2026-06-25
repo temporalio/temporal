@@ -137,6 +137,12 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
+		// replaying indicates the tree is re-applying transitions from history (cherry-pick during
+		// workflow reset / conflict resolution) rather than executing them live. While set,
+		// Context.MetricsHandler() returns a no-op handler so transition side-effect metrics are
+		// not double-counted on re-apply. Set via Node.SetReplaying; read via Node.Replaying.
+		replaying bool
+
 		// Following fields are changes accumulated in this transaction,
 		// and will get cleaned up after CloseTransaction().
 
@@ -2891,6 +2897,21 @@ func (n *Node) root() *Node {
 		return n
 	}
 	return n.parent.root()
+}
+
+// Replaying reports whether the tree is currently re-applying transitions from history
+// (cherry-pick during workflow reset / conflict resolution) rather than executing them live. While
+// true, Context.MetricsHandler() returns a no-op handler so that side-effect metrics emitted inside
+// a transition are not double-counted on re-apply.
+func (n *Node) Replaying() bool {
+	return n.root().replaying
+}
+
+// SetReplaying toggles replay mode for the whole tree. The reset/conflict-resolution re-apply path
+// should set it true around the cherry-pick and restore it to false afterwards. This applies
+// framework-wide to any component's transitions, not just a specific event type.
+func (n *Node) SetReplaying(replaying bool) {
+	n.root().replaying = replaying
 }
 
 // isComponentTaskExpired returns true when the task's scheduled time is equal

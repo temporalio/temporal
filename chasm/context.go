@@ -201,6 +201,12 @@ func (c *immutableCtx) Logger() log.Logger {
 }
 
 func (c *immutableCtx) MetricsHandler() metrics.Handler {
+	if c.root.replaying {
+		// Suppress metrics while the tree is re-applying a transition from history (cherry-pick
+		// during reset / conflict resolution) so side-effect metrics emitted inside transitions are
+		// not double-counted. See nodeBase.replaying / Node.SetReplaying.
+		return metrics.NoopMetricsHandler
+	}
 	return c.root.metricsHandler
 }
 
