@@ -18,6 +18,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -411,53 +412,124 @@ func (e taskExecutor) loadOperationArgs(
 	return
 }
 
-// nolint:revive // (cognitive complexity) This function is long but the complexity is justified.
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+	// emitMetrics is derived from the operation's resulting state inside the Access closure and
+	// invoked only after the write transaction commits successfully, so a failed commit (which
+	// retries the task) does not double-count the metric. See operationMetricsHandler's doc comment.
+	var emitMetrics func()
+	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
 			return err
 		}
-		if callErr != nil {
-			return e.handleStartOperationError(env, node, operation, callErr)
+		switch {
+		case callErr != nil:
+			err = e.handleStartOperationError(env, node, operation, callErr)
+		case result.Pending != nil:
+			err = e.saveStartedResult(env, node, operation, result)
+		default:
+			// Operation completed synchronously. Store the result and update the state machine.
+			links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
+			err = handleSuccessfulOperationResult(node, operation, result.Successful, links)
 		}
-		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 		if err != nil {
 			return err
 		}
-
-		links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
-
-		if result.Pending != nil {
-			// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
-			// to allow it to complete via callback.
-			event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-						ScheduledEventId: eventID,
-						OperationToken:   result.Pending.Token,
-						// TODO(bergundy): Remove this fallback after the 1.27 release.
-						OperationId: result.Pending.Token,
-						RequestId:   operation.RequestId,
-					},
-				}
-				// nolint:revive // We must mutate here even if the linter doesn't like it.
-				e.Links = links
-			})
-			return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
-				return TransitionStarted.Apply(operation, EventStarted{
-					Time:       env.Now(),
-					Node:       node,
-					Attributes: event.GetNexusOperationStartedEventAttributes(),
-				})
-			})
+		// Derive the metric from the resulting state (set by the transition above) rather than from
+		// each branch, mirroring how the completion handler emits from the post-transition state.
+		finalOp, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
 		}
-		// Operation completed synchronously. Store the result and update the state machine.
-		return handleSuccessfulOperationResult(node, operation, result.Successful, links)
+		emitMetrics = e.deferredOperationMetric(finalOp, callErr, node.NamespaceName(), node.WorkflowTypeName(), env.Now())
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if emitMetrics != nil {
+		emitMetrics()
+	}
+	return nil
+}
+
+// saveStartedResult transitions the operation to started in response to an async (pending) start
+// response so it can later complete via callback.
+func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, operation Operation, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]) error {
+	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
+		return err
+	}
+	links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
+	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: eventID,
+				OperationToken:   result.Pending.Token,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: result.Pending.Token,
+				RequestId:   operation.RequestId,
+			},
+		}
+		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		e.Links = links
+	})
+	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+		return TransitionStarted.Apply(operation, EventStarted{
+			Time:       env.Now(),
+			Node:       node,
+			Attributes: event.GetNexusOperationStartedEventAttributes(),
+		})
 	})
 }
 
+// deferredOperationMetric returns the caller-side metric to record for op's resulting state, or nil
+// when nothing should be emitted (e.g. a retryable attempt failure that leaves the operation
+// scheduled/backing-off). The returned closure is invoked by the caller after the write transaction
+// commits so the metric is not double-counted if the commit fails and the task is retried. callErr
+// carries the timeout type for the below-min-request-timeout case.
+func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, namespaceName, workflowType string, closeTime time.Time) func() {
+	switch op.State() {
+	case enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED:
+		return func() {
+			emitOperationSucceeded(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
+		}
+	case enumsspb.NEXUS_OPERATION_STATE_CANCELED:
+		return func() {
+			emitOperationCanceled(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
+		}
+	case enumsspb.NEXUS_OPERATION_STATE_FAILED:
+		return func() {
+			emitOperationFailed(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, closeTime)
+		}
+	case enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
+		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
+		var belowMin *operationTimeoutBelowMinError
+		if errors.As(callErr, &belowMin) {
+			timeoutType = belowMin.timeoutType
+		}
+		return func() {
+			emitOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, timeoutType.String(), closeTime)
+		}
+	case enumsspb.NEXUS_OPERATION_STATE_STARTED:
+		if op.StartedTime == nil {
+			return nil
+		}
+		startedTime := op.StartedTime.AsTime()
+		return func() {
+			emitScheduleToStartLatency(e.MetricsHandler, e.metricTagConfig(), op, namespaceName, workflowType, startedTime)
+		}
+	default:
+		// Scheduled / backing off: a retryable attempt failure, nothing terminal to record.
+		return nil
+	}
+}
+
+// handleStartOperationError resolves a failed StartOperation attempt by transitioning the operation
+// to its resulting state: terminally failed/canceled/timed-out, or backing off for a retryable
+// attempt failure. It does not emit metrics; saveResult derives the caller-side metric from the
+// resulting state (see deferredOperationMetric).
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
 	var opErr *nexus.OperationError
@@ -545,17 +617,36 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeScheduleToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToCloseTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
 }
 
 func (e taskExecutor) executeScheduleToStartTimeoutTask(env hsm.Environment, node *hsm.Node, task ScheduleToStartTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
 }
 
 func (e taskExecutor) executeStartToCloseTimeoutTask(env hsm.Environment, node *hsm.Node, task StartToCloseTimeoutTask) error {
-	return e.recordOperationTimeout(node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	return e.executeOperationTimeout(env, node, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 }
 
+// executeOperationTimeout is the entry point for the timeout timer tasks: it records the timeout
+// event (recordOperationTimeout) and emits the timeout metric. The write transaction is owned by the
+// HSM task framework (it commits after this returns), so emission here is pre-commit — the same
+// property the server's own activity-timeout metric has in timer_queue_active_task_executor.go.
+func (e taskExecutor) executeOperationTimeout(env hsm.Environment, node *hsm.Node, timeoutType enumspb.TimeoutType) error {
+	if err := e.recordOperationTimeout(node, timeoutType); err != nil {
+		return err
+	}
+	op, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	emitOperationTimedOut(e.MetricsHandler, e.metricTagConfig(), op, node.NamespaceName(), node.WorkflowTypeName(), timeoutType.String(), env.Now())
+	return nil
+}
+
+// recordOperationTimeout records the NEXUS_OPERATION_TIMED_OUT history event and transitions the
+// operation to timed-out. It does NOT emit metrics; the caller reads the resulting state and decides
+// when/whether to emit (the saveResult path emits post-commit, executeOperationTimeout pre-commit).
 func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb.TimeoutType) error {
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
