@@ -91,6 +91,7 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
+		EnableHistoryTaskRecorder       bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -355,6 +356,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		EnableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -601,7 +603,7 @@ func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 
 // ExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
-	return tc.host.GetExecutionManager()
+	return tc.host.executionManager
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.
@@ -625,8 +627,8 @@ func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder
 	return tc.host.replicationStreamRecorder
 }
 
-func (tc *TestCluster) GetTaskQueueRecorder() *TaskQueueRecorder {
-	return tc.host.GetTaskQueueRecorder()
+func (tc *TestCluster) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	return tc.host.GetHistoryTaskRecorder()
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {
