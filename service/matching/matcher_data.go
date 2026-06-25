@@ -414,11 +414,13 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	// tree.Iter() cursor escapes to the heap.
 
 	// Without a per-key limit the whole-queue ready time is the same for every task, so one
-	// check suffices and we avoid locking readyTimeForTask per task in the scan below.
+	// check suffices and we avoid locking readyTimeForTask per task in the scan below. Only
+	// short-circuit when a match is actually possible (tasks and pollers both present) so we
+	// don't arm the rate-limit timer in cases where the full scan would have found nothing.
 	// TODO: reaching into the rate limiter's state like this breaks its encapsulation;
 	// refactor the rate limit logic so findMatch doesn't need to know about it.
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
-	if !perKeyLimited {
+	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
 		if delay := wholeQueueReady.delay(now); delay > 0 {
 			return nil, nil, delay
 		}
