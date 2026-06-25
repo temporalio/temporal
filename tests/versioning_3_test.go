@@ -2516,6 +2516,63 @@ func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskOnPreviousVers
 	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
 }
 
+// TestOneTimeOverride_StartedWorkflowTaskContinueAsNewRejected verifies the
+// live race where a WFT is already started on version 1, then an operator sets a
+// one-time override to version 2, and the old WFT tries to close with
+// Continue-As-New. The options update is a buffered event, so the CAN command
+// must be rejected as UnhandledCommand before CAN inheritance can derive state
+// from the pending one-time override. The follow-up WFT should then run on
+// version 2 and consume the override on the original run.
+func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskContinueAsNewRejected() {
+	env := s.setupEnv()
+	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
+	s.pollUntilRegistered(env, tv2)
+
+	s.triggerNormalWFT(env, tv1, execution)
+	startedTask := s.pollWorkflowTask(env, tv1)
+
+	s.updateVersioningOverride(env, execution, s.makeOneTimeOverride(tv2))
+	s.requireOneTimeOverride(env, execution, tv2)
+
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  tv1.WorkerIdentity(),
+		TaskToken: startedTask.GetTaskToken(),
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType: tv1.WorkflowType(),
+						TaskQueue:    tv1.TaskQueue(),
+						Input:        tv1.Any().Payloads(),
+					},
+				},
+			},
+		},
+		VersioningBehavior: vbPinned,
+		DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+	})
+	s.Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Equal("UnhandledCommand", err.Error())
+
+	s.requireOneTimeOverride(env, execution, tv2)
+	s.pollWftAndHandle(env, tv2, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Equal(execution.GetRunId(), task.GetWorkflowExecution().GetRunId())
+			return respondEmptyWft(tv2, false, vbPinned), nil
+		})
+
+	s.requireNoVersioningOverride(env, execution)
+	s.verifyWorkflowVersioning(env, tv1, vbPinned, tv2.Deployment(), nil, nil)
+}
+
 // TestOneTimeOverride_TargetWorkflowTaskContinueAsNewDoesNotInheritOverride
 // verifies the CAN boundary after the one-time move has actually happened. The
 // workflow routes to version 2 through the one-time override, and that version 2
