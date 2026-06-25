@@ -79,7 +79,6 @@ func (s *namespaceSuite) TestFrontendAPIMetrics() {
 
 	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	for method := range t.Methods() {
-		method := method
 		methodName := method.Name
 		methodType := method.Type
 
@@ -103,7 +102,6 @@ func (s *namespaceSuite) TestMatchingAPIMetrics() {
 
 	t := reflect.TypeFor[matchingservice.MatchingServiceServer]()
 	for method := range t.Methods() {
-		method := method
 		methodName := method.Name
 		methodType := method.Type
 
@@ -127,7 +125,6 @@ func (s *namespaceSuite) TestHistoryAPIMetrics() {
 
 	t := reflect.TypeFor[historyservice.HistoryServiceServer]()
 	for method := range t.Methods() {
-		method := method
 		methodName := method.Name
 		methodType := method.Type
 

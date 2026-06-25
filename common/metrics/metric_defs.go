@@ -629,6 +629,16 @@ const (
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
+// Matching task dropped reason tag values
+const (
+	DroppedTaskReasonNotFound      = "not_found"
+	DroppedTaskReasonInternalError = "internal_error"
+	DroppedTaskReasonDataLoss      = "data_loss"
+	DroppedTaskReasonExpiredRead   = "expired_read"
+	DroppedTaskReasonExpiredMemory = "expired_memory"
+	DroppedTaskReasonInvalid       = "invalid"
+)
+
 var (
 	ServiceRequests = NewCounterDef(
 		"service_requests",
@@ -1204,7 +1214,7 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1244,6 +1254,10 @@ var (
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
 	)
+	DroppedTasksCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
+	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
 		WithDescription("Count of tasks that were completed after being dropped from the matcher"),
@@ -1251,6 +1265,10 @@ var (
 	TaskRetryTransient = NewCounterDef(
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
+	)
+	FairReaderStuckDetected = NewCounterDef(
+		"fair_reader_stuck_detected",
+		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")

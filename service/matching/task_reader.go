@@ -124,6 +124,7 @@ dispatchLoop:
 }
 
 func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.taggedMetricsHandler(), res.dropReason)
 	tr.backlogMgr.completeTask(task, res.startErr)
 }
 
@@ -253,6 +254,7 @@ func (tr *taskReader) addTasksToBuffer(
 		if IsTaskExpired(t) {
 			// task is expired when "add tasks to buffer" is called, so when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.taggedMetricsHandler(), dropReasonExpiredRead)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())

@@ -1822,5 +1822,6 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 		ComputeConfig:        versionSummary.GetComputeConfig(),
+		ComputeStatus:        versionSummary.GetComputeStatus(),
 	}
 }

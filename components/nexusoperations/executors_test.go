@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -92,6 +93,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome      string
 		checkOutcome               func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
+		checkCallerMetrics         func(t *testing.T, snapshot metricstest.CaptureSnapshot)
 		requestTimeout             time.Duration
 		schedToCloseTimeout        time.Duration
 		startToCloseTimeout        time.Duration
@@ -152,6 +154,15 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Len(t, events[0].Links, 1)
 				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0].GetWorkflowEvent())
 			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// Async start emits schedule-to-start; no terminal outcome counter yet.
+				scheduleToStart := snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()]
+				require.Len(t, scheduleToStart, 1)
+				require.Equal(t, "namespace-name", scheduleToStart[0].Tags["namespace"])
+				require.Equal(t, "endpoint", scheduleToStart[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", scheduleToStart[0].Tags["workflowType"])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
+			},
 		},
 		{
 			name:                "sync start",
@@ -194,6 +205,18 @@ func TestProcessInvocationTask(t *testing.T) {
 					RequestId:        op.RequestId,
 				}
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCompletedEventAttributes())
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				successCount := snapshot[chasmnexus.NexusOperationSuccessCount.Name()]
+				require.Len(t, successCount, 1)
+				require.Equal(t, int64(1), successCount[0].Value)
+				require.Equal(t, "namespace-name", successCount[0].Tags["namespace"])
+				require.Equal(t, "endpoint", successCount[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", successCount[0].Tags["workflowType"])
+				// Sync success never started, so schedule-to-start (not start-to-close) is recorded.
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
+				require.Empty(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()])
 			},
 		},
 		{
@@ -256,6 +279,19 @@ func TestProcessInvocationTask(t *testing.T) {
 				}
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationFailedEventAttributes())
 			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// A synchronous OperationError(failed) emits the fail counter at the executor site.
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, int64(1), failedCount[0].Value)
+				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
+				require.Equal(t, "endpoint", failedCount[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationCancelCount.Name()])
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
+			},
 		},
 		{
 			name:            "sync canceled",
@@ -313,6 +349,19 @@ func TestProcessInvocationTask(t *testing.T) {
 					},
 				}
 				protorequire.ProtoEqual(t, attrs, events[0].GetNexusOperationCanceledEventAttributes())
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// A synchronous OperationError(canceled) emits the cancel counter at the executor site.
+				cancelCount := snapshot[chasmnexus.NexusOperationCancelCount.Name()]
+				require.Len(t, cancelCount, 1)
+				require.Equal(t, int64(1), cancelCount[0].Value)
+				require.Equal(t, "namespace-name", cancelCount[0].Tags["namespace"])
+				require.Equal(t, "endpoint", cancelCount[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", cancelCount[0].Tags["workflowType"])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationFailedCount.Name()])
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
 			},
 		},
 		{
@@ -541,7 +590,16 @@ func TestProcessInvocationTask(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Outbound-request metrics are asserted on the mock below; caller-side operation metrics
+			// are emitted via a tagged handler, so route those to a capture handler the cases assert.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).DoAndReturn(func(tags ...metrics.Tag) metrics.Handler {
+				return captureHandler.WithTags(tags...)
+			}).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
@@ -623,6 +681,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.checkCallerMetrics != nil {
+				tc.checkCallerMetrics(t, capture.Snapshot())
+			}
 			if tc.cancelBeforeStart {
 				c, err := op.Cancelation(node)
 				require.NoError(t, err)
@@ -641,7 +702,7 @@ func TestProcessBackoffTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Node:        node,
@@ -672,7 +733,7 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err := reg.ExecuteTimerTask(
 		env,
@@ -710,6 +771,110 @@ func TestProcessTimeoutTask(t *testing.T) {
 	}, backend.Events[0].GetNexusOperationTimedOutEventAttributes())
 }
 
+func TestProcessTimeoutTask_EmitsCallerMetrics(t *testing.T) {
+	testCases := []struct {
+		name             string
+		started          bool // transition the operation to STARTED before timing out
+		includeServiceOp bool // opt into the optional service/operation tags
+		timerTask        hsm.Task
+		wantTimeoutType  enumspb.TimeoutType
+	}{
+		{
+			name:            "schedule-to-close before start",
+			timerTask:       nexusoperations.ScheduleToCloseTimeoutTask{},
+			wantTimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:             "schedule-to-close before start with service and operation tags",
+			includeServiceOp: true,
+			timerTask:        nexusoperations.ScheduleToCloseTimeoutTask{},
+			wantTimeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		},
+		{
+			name:            "start-to-close after start",
+			started:         true,
+			timerTask:       nexusoperations.StartToCloseTimeoutTask{},
+			wantTimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newRegistry(t)
+			backend := &hsmtest.NodeBackend{}
+			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			}))
+			env := fakeEnv{node}
+
+			if tc.started {
+				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
+						Node:       node,
+						Time:       time.Now(),
+						Attributes: &historypb.NexusOperationStartedEventAttributes{OperationToken: "token"},
+					})
+				}))
+			}
+
+			config := &nexusoperations.Config{}
+			if tc.includeServiceOp {
+				config.MetricTagConfig = func() chasmnexus.NexusMetricTagConfig {
+					return chasmnexus.NexusMetricTagConfig{IncludeServiceTag: true, IncludeOperationTag: true}
+				}
+			}
+
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+
+			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
+				MetricsHandler: captureHandler,
+				Config:         config,
+			}))
+
+			require.NoError(t, reg.ExecuteTimerTask(env, node, tc.timerTask))
+
+			snapshot := capture.Snapshot()
+
+			// Exactly one timeout counter, value 1, with the full expected tag set.
+			timeoutCount := snapshot[chasmnexus.NexusOperationTimeoutCount.Name()]
+			require.Len(t, timeoutCount, 1)
+			require.Equal(t, int64(1), timeoutCount[0].Value)
+			require.Equal(t, "namespace-name", timeoutCount[0].Tags["namespace"])
+			require.Equal(t, "endpoint", timeoutCount[0].Tags["nexus_endpoint"])
+			require.Equal(t, "workflow-type", timeoutCount[0].Tags["workflowType"])
+			require.Equal(t, tc.wantTimeoutType.String(), timeoutCount[0].Tags["timeout_type"])
+
+			// schedule-to-close is always recorded once; the second latency depends on whether the
+			// operation had started: start-to-close when started, schedule-to-start otherwise.
+			scheduleToClose := snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()]
+			require.Len(t, scheduleToClose, 1)
+			if tc.started {
+				require.Len(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()], 1)
+				require.Empty(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()])
+			} else {
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()], 1)
+				require.Empty(t, snapshot[chasmnexus.NexusOperationStartToCloseLatency.Name()])
+			}
+
+			// The optional service/operation tags are emitted on both the counter and the latency
+			// (they share the enriched handler) only when the tag config opts in.
+			if tc.includeServiceOp {
+				require.Equal(t, "service", timeoutCount[0].Tags["nexus_service"])
+				require.Equal(t, "operation", timeoutCount[0].Tags["nexus_operation"])
+				require.Equal(t, "service", scheduleToClose[0].Tags["nexus_service"])
+				require.Equal(t, "operation", scheduleToClose[0].Tags["nexus_operation"])
+			} else {
+				require.NotContains(t, timeoutCount[0].Tags, "nexus_service")
+				require.NotContains(t, timeoutCount[0].Tags, "nexus_operation")
+				require.NotContains(t, scheduleToClose[0].Tags, "nexus_service")
+				require.NotContains(t, scheduleToClose[0].Tags, "nexus_operation")
+			}
+		})
+	}
+}
+
 func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	reg := newRegistry(t)
 	backend := &hsmtest.NodeBackend{}
@@ -718,7 +883,7 @@ func TestProcessScheduleToStartTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err := reg.ExecuteTimerTask(
 		env,
@@ -764,7 +929,7 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 	}))
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	// Transition to STARTED state first
 	err := hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
@@ -1368,7 +1533,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 
 	env := fakeEnv{node}
 
-	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{}))
+	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{MetricsHandler: metrics.NoopMetricsHandler, Config: &nexusoperations.Config{}}))
 
 	err = reg.ExecuteTimerTask(
 		env,
@@ -1442,6 +1607,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 		setupChasmRegistry    func(*testing.T) *chasm.Registry
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
+		checkCallerMetrics    func(t *testing.T, snapshot metricstest.CaptureSnapshot)
 	}{
 		{
 			name: "async start",
@@ -1489,6 +1655,15 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				}, events[0].GetNexusOperationStartedEventAttributes())
 				require.Len(t, events[0].Links, 1)
 				protorequire.ProtoEqual(t, handlerLink, events[0].Links[0].GetWorkflowEvent())
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// Async start emits schedule-to-start; no terminal outcome counter yet.
+				scheduleToStart := snapshot[chasmnexus.NexusOperationScheduleToStartLatency.Name()]
+				require.Len(t, scheduleToStart, 1)
+				require.Equal(t, "namespace-name", scheduleToStart[0].Tags["namespace"])
+				require.Equal(t, commonnexus.SystemEndpoint, scheduleToStart[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", scheduleToStart[0].Tags["workflowType"])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},
 		{
@@ -1539,6 +1714,15 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationCompletedEventAttributes())
 			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				successCount := snapshot[chasmnexus.NexusOperationSuccessCount.Name()]
+				require.Len(t, successCount, 1)
+				require.Equal(t, int64(1), successCount[0].Value)
+				require.Equal(t, "namespace-name", successCount[0].Tags["namespace"])
+				require.Equal(t, commonnexus.SystemEndpoint, successCount[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", successCount[0].Tags["workflowType"])
+				require.Len(t, snapshot[chasmnexus.NexusOperationScheduleToCloseLatency.Name()], 1)
+			},
 		},
 		{
 			name: "operation error",
@@ -1581,6 +1765,16 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				attrs := events[0].GetNexusOperationFailedEventAttributes()
 				require.Equal(t, int64(1), attrs.ScheduledEventId)
 				require.Equal(t, "nexus operation completed unsuccessfully", attrs.Failure.Message)
+			},
+			checkCallerMetrics: func(t *testing.T, snapshot metricstest.CaptureSnapshot) {
+				// A synchronous operation failure emits the fail counter at the executor site.
+				failedCount := snapshot[chasmnexus.NexusOperationFailedCount.Name()]
+				require.Len(t, failedCount, 1)
+				require.Equal(t, int64(1), failedCount[0].Value)
+				require.Equal(t, "namespace-name", failedCount[0].Tags["namespace"])
+				require.Equal(t, commonnexus.SystemEndpoint, failedCount[0].Tags["nexus_endpoint"])
+				require.Equal(t, "workflow-type", failedCount[0].Tags["workflowType"])
+				require.Empty(t, snapshot[chasmnexus.NexusOperationSuccessCount.Name()])
 			},
 		},
 		{
@@ -1659,7 +1853,16 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
 				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+
 			metricsHandler := metrics.NewMockHandler(ctrl)
+			// Outbound-request metrics are asserted on the mock below; caller-side operation metrics
+			// are emitted via a tagged handler, so route those to a capture handler the cases assert.
+			metricsHandler.EXPECT().WithTags(gomock.Any()).DoAndReturn(func(tags ...metrics.Tag) metrics.Handler {
+				return captureHandler.WithTags(tags...)
+			}).AnyTimes()
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
@@ -1720,6 +1923,9 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.checkCallerMetrics != nil {
+				tc.checkCallerMetrics(t, capture.Snapshot())
+			}
 		})
 	}
 }

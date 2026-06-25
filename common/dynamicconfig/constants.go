@@ -1519,6 +1519,14 @@ second per poller by one physical queue manager`,
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
 	)
+	MatchingFairnessPassDither = NewTaskQueueBoolSetting(
+		"matching.fairnessPassDither",
+		false,
+		`When true, dither the starting pass of new/reset fairness keys over their initial
+stride instead of starting them all at the ack level. This spreads low-weight keys ahead
+in pass-space so they don't clump at the front after a counter reset (e.g. partition
+movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new keys.`,
+	)
 	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
@@ -1571,6 +1579,14 @@ default as namespace cardinality can be high and this requires a metrics collect
 		ConvertSimplePartitionScalerSettings,
 		SimplePartitionScalerSettings{},
 		`Settings for simple partition scaler.`,
+	)
+
+	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
+		"matching.forceReadTasksOnWrite",
+		false,
+		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
+read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
+This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
 	)
 
 	// Worker registry settings
