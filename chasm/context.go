@@ -117,6 +117,12 @@ type immutableCtx struct {
 
 	executionKey ExecutionKey
 
+	// replaying indicates this context is driving a transition that is being re-applied from
+	// history rather than executed live (e.g. cherry-pick during workflow reset / conflict
+	// resolution). While set, MetricsHandler() returns a no-op handler so that metrics emitted
+	// inside a transition are not double-counted on re-apply. Child contexts inherit the value.
+	replaying bool
+
 	// Not embedding the Node here to avoid exposing AddTask() method on Node,
 	// so that ContextImpl won't implement MutableContext interface.
 	root *Node
@@ -133,7 +139,7 @@ func NewContext(
 	ctx context.Context,
 	node *Node,
 ) Context {
-	return newContext(ctx, node)
+	return newContext(ctx, node, false)
 }
 
 // newContext creates a new immutableCtx from an existing Context and root Node.
@@ -141,13 +147,15 @@ func NewContext(
 func newContext(
 	ctx context.Context,
 	node *Node,
+	replaying bool,
 ) *immutableCtx {
 	root := node.root()
 	workflowKey := node.backend.GetWorkflowKey()
 	return &immutableCtx{
-		ctx:  ctx,
-		now:  root.Now(nil),
-		root: root,
+		ctx:       ctx,
+		now:       root.Now(nil),
+		root:      root,
+		replaying: replaying,
 		executionKey: ExecutionKey{
 			NamespaceID: workflowKey.NamespaceID,
 			BusinessID:  workflowKey.WorkflowID,
@@ -201,6 +209,12 @@ func (c *immutableCtx) Logger() log.Logger {
 }
 
 func (c *immutableCtx) MetricsHandler() metrics.Handler {
+	if c.replaying {
+		// Suppress metrics while re-applying a transition from history (cherry-pick during reset /
+		// conflict resolution) so side-effect metrics emitted inside transitions are not
+		// double-counted. See the replaying field.
+		return metrics.NoopMetricsHandler
+	}
 	return c.root.metricsHandler
 }
 
@@ -217,6 +231,7 @@ func (c *immutableCtx) withValue(key any, value any) Context {
 		ctx:          context.WithValue(c.goContext(), key, value),
 		now:          c.now,
 		root:         c.root,
+		replaying:    c.replaying,
 		executionKey: c.executionKey,
 	}
 }
@@ -257,7 +272,24 @@ func NewMutableContext(
 	node *Node,
 ) MutableContext {
 	return &mutableCtx{
-		immutableCtx: newContext(ctx, node),
+		immutableCtx: newContext(ctx, node, false),
+	}
+}
+
+// NewMutableContextForReplay creates a MutableContext for re-applying a transition from history
+// (cherry-pick during workflow reset / conflict resolution) rather than executing it live. While a
+// transition runs under this context, MetricsHandler() returns a no-op handler so that metrics
+// emitted inside the transition are not double-counted on re-apply. This applies framework-wide to
+// any component's transitions, not just a specific event type.
+//
+// NOTE: Library authors should not invoke this constructor directly; it is intended for the
+// reset/conflict-resolution re-apply path.
+func NewMutableContextForReplay(
+	ctx context.Context,
+	node *Node,
+) MutableContext {
+	return &mutableCtx{
+		immutableCtx: newContext(ctx, node, true),
 	}
 }
 
