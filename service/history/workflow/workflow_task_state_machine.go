@@ -1379,8 +1379,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
-	if oneTimeTarget := worker_versioning.GetOverrideOneTimeTargetVersion(versioningInfo.GetVersioningOverride()); oneTimeTarget != nil &&
-		wftCompletedOnTargetVersion(wftDeployment, oneTimeTarget) {
+	if oneTime := versioningInfo.GetVersioningOverride().GetOneTime(); oneTime != nil &&
+		wftCompletedOnTargetVersion(wftDeployment, oneTime.GetTargetDeploymentVersion()) {
 		// Clear before computing effective deployment/behavior so the worker-reported base state takes effect.
 		versioningInfo.VersioningOverride = nil
 	}
