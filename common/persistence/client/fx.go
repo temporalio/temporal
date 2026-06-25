@@ -161,18 +161,21 @@ func FactoryProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	metricsHandler metrics.Handler,
 	logger log.ThrottledLogger,
 ) persistence.HealthSignalAggregator {
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
-		return persistence.NewHealthSignalAggregator(
+		aggregator := persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
 			logger,
 		)
+		lc.Append(fx.StopHook(aggregator.Stop))
+		return aggregator
 	}
 
 	return persistence.NoopHealthSignalAggregator
