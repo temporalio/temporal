@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -143,7 +145,6 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 				// RPCAddress and HTTPAddress will be filled in
 			},
 		}
-		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 		clusterConfigs[clusterIndex].EnableHistoryTaskRecorder = params.EnableHistoryTaskRecorder
 
@@ -302,22 +303,26 @@ func (s *xdcBaseSuite) createNamespace(
 	_, err := clusters[0].FrontendClient().RegisterNamespace(ctx, regReq)
 	s.NoError(err)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		s.describeNamespace(t, clusters[0], ns, isGlobal)
-	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+	s.waitForNamespaceAvailable(clusters[0], ns, namespaceCacheWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+		if resp.GetIsGlobalNamespace() != isGlobal {
+			return fmt.Errorf("namespace global state = %v, want %v", resp.GetIsGlobalNamespace(), isGlobal)
+		}
+		return nil
+	})
 
 	if len(clusters) > 1 && isGlobal {
 		// If namespace is global and config has more than 1 cluster, it should be replicated to these other clusters.
 		// Check other clusters too.
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			for _, c := range clusters[1:] {
-				resp := s.describeNamespace(t, c, ns, isGlobal)
-				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
-			}
-		}, replicationWaitTime, replicationCheckInterval)
+		for _, c := range clusters[1:] {
+			s.waitForNamespaceAvailable(c, ns, replicationWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+				if resp.GetIsGlobalNamespace() != isGlobal {
+					return fmt.Errorf("namespace global state = %v, want %v", resp.GetIsGlobalNamespace(), isGlobal)
+				}
+				return compareNamespaceClusters(resp, clusterNames)
+			})
+		}
 	}
 
-	s.waitForNamespaceCacheRefresh()
 	return ns
 }
 
@@ -326,6 +331,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	inClusterIndex int,
 	clusters []*testcore.TestCluster,
 ) {
+
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
@@ -341,24 +347,25 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	s.NoError(err)
 
 	var isGlobalNamespace bool
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp := s.describeNamespace(t, clusters[inClusterIndex], ns, true)
-		require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
+	s.waitForNamespaceAvailable(clusters[inClusterIndex], ns, namespaceCacheWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+		if err := compareNamespaceClusters(resp, clusterNames); err != nil {
+			return err
+		}
 		isGlobalNamespace = resp.GetIsGlobalNamespace()
-	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+		return nil
+	})
 
 	if len(clusters) > 1 && isGlobalNamespace {
 		// If namespace is global and config has more than 1 cluster, it should be replicated to these other clusters.
 		// Check other clusters too.
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			for ci, c := range clusters {
-				if ci == inClusterIndex {
-					continue
-				}
-				resp := s.describeNamespace(t, c, ns, true)
-				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
+		for ci, c := range clusters {
+			if ci == inClusterIndex {
+				continue
 			}
-		}, replicationWaitTime, replicationCheckInterval)
+			s.waitForNamespaceAvailable(c, ns, replicationWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+				return compareNamespaceClusters(resp, clusterNames)
+			})
+		}
 	}
 	s.waitForNamespaceCacheRefresh()
 }
@@ -367,15 +374,19 @@ func (s *xdcBaseSuite) promoteNamespace(
 	ns string,
 	inClusterIndex int,
 ) {
+
 	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
 		PromoteNamespace: true,
 	})
 	s.NoError(err)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		s.describeNamespace(t, s.clusters[inClusterIndex], ns, true)
-	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+	s.waitForNamespaceAvailable(s.clusters[inClusterIndex], ns, namespaceCacheWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+		if !resp.GetIsGlobalNamespace() {
+			return errors.New("namespace is not global")
+		}
+		return nil
+	})
 	s.waitForNamespaceCacheRefresh()
 }
 
@@ -400,50 +411,55 @@ func (s *xdcBaseSuite) failover(
 	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
 
 	// check local and remote clusters
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, c := range s.clusters {
-			resp := s.describeNamespace(t, c, ns, true)
-			require.Equal(t, targetCluster, resp.GetReplicationConfig().GetActiveClusterName())
-		}
-	}, replicationWaitTime, replicationCheckInterval)
+	for _, c := range s.clusters {
+		s.waitForNamespaceAvailable(c, ns, replicationWaitTime, func(resp *workflowservice.DescribeNamespaceResponse) error {
+			if got := resp.GetReplicationConfig().GetActiveClusterName(); got != targetCluster {
+				return fmt.Errorf("active cluster = %q, want %q", got, targetCluster)
+			}
+			return nil
+		})
+	}
+	s.waitForNamespaceCacheRefresh()
 
 	s.waitForClusterSynced()
-	s.waitForNamespaceCacheRefresh()
+}
+
+func (s *xdcBaseSuite) waitForNamespaceAvailable(
+	testCluster *testcore.TestCluster,
+	ns string,
+	waitTime time.Duration,
+	check testcore.NamespaceAvailabilityCheck,
+) {
+	s.Require().NoError(testCluster.WaitForNamespaceAvailable(
+		testcore.NewContext(),
+		ns,
+		waitTime,
+		namespaceCacheCheckInterval,
+		check,
+	))
+}
+
+func compareNamespaceClusters(resp *workflowservice.DescribeNamespaceResponse, want []string) error {
+	got := make([]string, 0, len(resp.GetReplicationConfig().GetClusters()))
+	for _, namespaceCluster := range resp.GetReplicationConfig().GetClusters() {
+		got = append(got, namespaceCluster.GetClusterName())
+	}
+	if !slices.Equal(got, want) {
+		return fmt.Errorf("namespace clusters = %v, want %v", got, want)
+	}
+	return nil
 }
 
 func (s *xdcBaseSuite) waitForNamespaceCacheRefresh() {
-	time.Sleep(namespaceCacheWaitTime) //nolint:forbidigo
-}
+	ctx := testcore.NewContext()
+	timer := time.NewTimer(namespaceCacheWaitTime)
+	defer timer.Stop()
 
-func (s *xdcBaseSuite) describeNamespace(
-	t require.TestingT,
-	testCluster *testcore.TestCluster,
-	ns string,
-	isGlobal bool,
-) *workflowservice.DescribeNamespaceResponse {
-	resp, err := testCluster.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-	require.Equal(t, isGlobal, resp.GetIsGlobalNamespace())
-	if isGlobal {
-		require.NotNil(t, resp.GetReplicationConfig())
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		s.Require().NoError(ctx.Err())
 	}
-	return resp
-}
-
-func (s *xdcBaseSuite) namespaceClusterNames(resp *workflowservice.DescribeNamespaceResponse) []string {
-	replicationConfig := resp.GetReplicationConfig()
-	if replicationConfig == nil {
-		return nil
-	}
-	clusters := replicationConfig.GetClusters()
-	clusterNames := make([]string, len(clusters))
-	for i, replicationCluster := range clusters {
-		clusterNames[i] = replicationCluster.GetClusterName()
-	}
-	return clusterNames
 }
 
 func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {

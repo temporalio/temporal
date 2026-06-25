@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -60,6 +61,7 @@ type (
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
 		tokenProvider                   auth.TokenProvider
+		chasmLibraries                  []chasm.Library
 	}
 )
 

@@ -2,22 +2,30 @@ package testcore
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"sync"
 
+	"github.com/dgryski/go-farm"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -25,6 +33,9 @@ type clients struct {
 	logger            log.Logger
 	hostsByService    map[primitives.ServiceName]static.Hosts
 	tlsConfigProvider *encryption.FixedTLSConfigProvider
+	dc                *dynamicconfig.Collection
+	testHooks         testhooks.TestHooks
+	metricsHandler    metrics.Handler
 
 	frontend frontendClients
 	history  historyClients
@@ -47,18 +58,28 @@ type historyClients struct {
 }
 
 type matchingClient struct {
+	once   sync.Once
 	client matchingservice.MatchingServiceClient
+
+	clientConnsLock sync.Mutex
+	clientConns     []*grpc.ClientConn
 }
 
 func newClients(
 	logger log.Logger,
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	tlsConfigProvider *encryption.FixedTLSConfigProvider,
+	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
 ) clients {
 	return clients{
 		logger:            logger,
 		hostsByService:    hostsByService,
 		tlsConfigProvider: tlsConfigProvider,
+		dc:                dc,
+		testHooks:         testHooks,
+		metricsHandler:    metricsHandler,
 	}
 }
 
@@ -113,6 +134,13 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
+	c.matching.once.Do(func() {
+		client, err := c.newMatchingClient()
+		if err != nil {
+			c.logger.Fatal("unable to create matching test client", tag.Error(err))
+		}
+		c.matching.client = client
+	})
 	return c.matching.client
 }
 
@@ -126,6 +154,12 @@ func (c *clients) close() []error {
 			errs = append(errs, conn.Close())
 		}
 	}
+	c.matching.clientConnsLock.Lock()
+	for _, conn := range c.matching.clientConns {
+		errs = append(errs, conn.Close())
+	}
+	c.matching.clientConns = nil
+	c.matching.clientConnsLock.Unlock()
 	c.frontend.conn = nil
 	c.history.conn = nil
 	return errs
@@ -136,6 +170,10 @@ func (c *clients) newConn(serviceName primitives.ServiceName) (*grpc.ClientConn,
 	if err != nil {
 		return nil, err
 	}
+	return c.newConnToAddress(serviceName, address)
+}
+
+func (c *clients) newConnToAddress(serviceName primitives.ServiceName, address string) (*grpc.ClientConn, error) {
 	tlsConfig, err := c.tlsConfig(serviceName)
 	if err != nil {
 		return nil, err
@@ -160,4 +198,145 @@ func (c *clients) tlsConfig(serviceName primitives.ServiceName) (*tls.Config, er
 		return c.tlsConfigProvider.GetFrontendClientConfig()
 	}
 	return c.tlsConfigProvider.GetInternodeClientConfig()
+}
+
+func (c *clients) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	resolver := newTestMatchingServiceResolver(c.hostsByService[primitives.MatchingService].All)
+	if resolver.MemberCount() == 0 {
+		return nil, errors.New("no matching gRPC hosts configured")
+	}
+
+	clientProvider := func(clientKey string) (any, func() error, error) {
+		conn, err := c.newConnToAddress(primitives.MatchingService, clientKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		c.matching.clientConnsLock.Lock()
+		c.matching.clientConns = append(c.matching.clientConns, conn)
+		c.matching.clientConnsLock.Unlock()
+		return matchingservice.NewMatchingServiceClient(conn), conn.Close, nil
+	}
+	client := matching.NewClient(
+		matching.DefaultTimeout,
+		matching.DefaultLongPollTimeout,
+		common.NewClientCache(&testMatchingClientKeyResolver{resolver: resolver}, clientProvider, c.logger),
+		c.metricsHandler,
+		c.logger,
+		matching.NewLoadBalancer(c.namespaceIDToName, c.dc, c.testHooks),
+		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(c.dc),
+		resolver,
+		dynamicconfig.MatchingConnectionCloseDelay.Get(c.dc),
+	)
+	if c.metricsHandler != nil {
+		client = matching.NewMetricClient(client, c.metricsHandler, c.logger, c.logger)
+	}
+	return client, nil
+}
+
+func (c *clients) namespaceIDToName(id namespace.ID) (namespace.Name, error) {
+	resp, err := c.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Id: id.String(),
+	})
+	if err != nil {
+		return "", err
+	}
+	return namespace.Name(resp.GetNamespaceInfo().GetName()), nil
+}
+
+type testMatchingClientKeyResolver struct {
+	resolver *testMatchingServiceResolver
+}
+
+func (r *testMatchingClientKeyResolver) Lookup(key string, index int) (string, error) {
+	hosts := r.resolver.LookupN(key, index+1)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
+	}
+	if index >= len(hosts) {
+		index %= len(hosts)
+	}
+	return hosts[index].GetAddress(), nil
+}
+
+func (r *testMatchingClientKeyResolver) GetAllAddresses() ([]string, error) {
+	var addresses []string
+	for _, host := range r.resolver.Members() {
+		addresses = append(addresses, host.GetAddress())
+	}
+	return addresses, nil
+}
+
+type testMatchingServiceResolver struct {
+	mu        sync.Mutex
+	hostInfos []membership.HostInfo
+	listeners map[string]chan<- *membership.ChangedEvent
+}
+
+func newTestMatchingServiceResolver(hosts []string) *testMatchingServiceResolver {
+	hostInfos := make([]membership.HostInfo, 0, len(hosts))
+	for _, host := range hosts {
+		hostInfos = append(hostInfos, membership.NewHostInfoFromAddress(host))
+	}
+	return &testMatchingServiceResolver{
+		hostInfos: hostInfos,
+		listeners: make(map[string]chan<- *membership.ChangedEvent),
+	}
+}
+
+func (r *testMatchingServiceResolver) Lookup(key string) (membership.HostInfo, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.hostInfos) == 0 {
+		return nil, membership.ErrInsufficientHosts
+	}
+	hash := int(farm.Fingerprint32([]byte(key)))
+	return r.hostInfos[hash%len(r.hostInfos)], nil
+}
+
+func (r *testMatchingServiceResolver) LookupN(key string, _ int) []membership.HostInfo {
+	host, err := r.Lookup(key)
+	if err != nil {
+		return nil
+	}
+	return []membership.HostInfo{host}
+}
+
+func (r *testMatchingServiceResolver) AddListener(name string, notifyChannel chan<- *membership.ChangedEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.listeners[name]; ok {
+		return membership.ErrListenerAlreadyExist
+	}
+	r.listeners[name] = notifyChannel
+	return nil
+}
+
+func (r *testMatchingServiceResolver) RemoveListener(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.listeners, name)
+	return nil
+}
+
+func (r *testMatchingServiceResolver) MemberCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.hostInfos)
+}
+
+func (r *testMatchingServiceResolver) AvailableMemberCount() int {
+	return r.MemberCount()
+}
+
+func (r *testMatchingServiceResolver) Members() []membership.HostInfo {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]membership.HostInfo(nil), r.hostInfos...)
+}
+
+func (r *testMatchingServiceResolver) AvailableMembers() []membership.HostInfo {
+	return r.Members()
+}
+
+func (r *testMatchingServiceResolver) RequestRefresh() {
 }

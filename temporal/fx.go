@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -119,12 +120,15 @@ type (
 		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                log.Logger
-		ClientFactoryProvider client.FactoryProvider
-		DynamicConfigClient   dynamicconfig.Client
-		TLSConfigProvider     encryption.TLSConfigProvider
-		EsClient              esclient.Client
-		MetricsHandler        metrics.Handler
+		Logger                     log.Logger
+		ClientFactoryProvider      client.FactoryProvider
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
+		DynamicConfigClient        dynamicconfig.Client
+		TLSConfigProvider          encryption.TLSConfigProvider
+		EsClient                   esclient.Client
+		MetricsHandler             metrics.Handler
+		TestHooks                  testhooks.TestHooks
+		ChasmLibraries             []chasm.Library
 	}
 )
 
@@ -135,7 +139,6 @@ var (
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
-			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
 			FrontendServiceProvider,
@@ -195,6 +198,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
+	persistenceFactoryProvider := PersistenceFactoryProvider()
+
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
@@ -219,6 +224,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			dcClient = dynamicconfig.NewNoopClient()
 		}
 	}
+
+	testHooks := testhooks.NewTestHooks()
 
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
@@ -261,10 +268,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	// check that when static hosts are defined, they are defined for all required hosts
+	// check that when static hosts are defined, they are defined for all requested hosts
 	if len(so.hostsByService) > 0 {
-		for _, service := range DefaultServices {
-			hosts := so.hostsByService[primitives.ServiceName(service)]
+		for service := range so.serviceNames {
+			hosts := so.hostsByService[service]
 			if len(hosts.All) == 0 {
 				return serverOptionsProvider{}, fmt.Errorf("%w: %v", missingServiceInStaticHosts, service)
 			}
@@ -308,12 +315,15 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		AudienceGetter:             so.audienceGetter,
 		TokenProvider:              so.tokenProvider,
 
-		Logger:                logger,
-		ClientFactoryProvider: clientFactoryProvider,
-		DynamicConfigClient:   dcClient,
-		TLSConfigProvider:     tlsConfigProvider,
-		EsClient:              esClient,
-		MetricsHandler:        metricHandler,
+		Logger:                     logger,
+		ClientFactoryProvider:      clientFactoryProvider,
+		PersistenceFactoryProvider: persistenceFactoryProvider,
+		DynamicConfigClient:        dcClient,
+		TLSConfigProvider:          tlsConfigProvider,
+		EsClient:                   esClient,
+		MetricsHandler:             metricHandler,
+		TestHooks:                  testHooks,
+		ChasmLibraries:             so.chasmLibraries,
 	}, nil
 }
 
@@ -380,6 +390,8 @@ type (
 		InstanceID                      resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		TestHooks                       testhooks.TestHooks
+		ChasmLibraries                  []chasm.Library
 	}
 )
 
@@ -461,13 +473,39 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
 			},
+			func() []chasm.Library {
+				return params.ChasmLibraries
+			},
 		),
+		fx.Decorate(func() testhooks.TestHooks {
+			return params.TestHooks
+		}),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
 		chasm.Module,
+		fx.Invoke(ChasmLibrariesInitializer),
 	)
+}
+
+type chasmLibrariesInitializerParams struct {
+	fx.In
+
+	Registry  *chasm.Registry
+	Libraries []chasm.Library
+}
+
+func ChasmLibrariesInitializer(params chasmLibrariesInitializerParams) error {
+	for _, library := range params.Libraries {
+		if library == nil {
+			return errors.New("cannot register nil CHASM library")
+		}
+		if err := params.Registry.Register(library); err != nil {
+			return fmt.Errorf("register CHASM library %q: %w", library.Name(), err)
+		}
+	}
+	return nil
 }
 
 // TaskCategoryRegistryProvider provides an immutable tasks.TaskCategoryRegistry to the server, which is intended to be
@@ -557,7 +595,7 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
-		fx.Supply([]grpc.StreamServerInterceptor{}),
+		fx.Supply([]grpc.StreamServerInterceptor(nil)),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:

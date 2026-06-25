@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -33,8 +32,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -47,7 +44,7 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.uber.org/fx"
+	"go.temporal.io/server/temporal"
 )
 
 type (
@@ -93,19 +90,17 @@ type (
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions                  map[primitives.ServiceName][]fx.Option
-		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DynamicConfigOverrides          map[dynamicconfig.Key]any
-		ArchivalEnabled                 bool
-		EnableMTLS                      bool
-		EnableWorkerService             bool
-		FaultInjectionConfig            *config.FaultInjection
-		NumHistoryShards                int32
-		Logger                          log.Logger
-		SharedCluster                   bool
-		EnableHistoryTaskRecorder       bool
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableWorkerService       bool
+		FaultInjectionConfig      *config.FaultInjection
+		NumHistoryShards          int32
+		Logger                    log.Logger
+		SharedCluster             bool
+		EnableHistoryTaskRecorder bool
+		ServerConfigOverride      func(*config.Config)
+		ServerOptions             []temporal.ServerOption
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -115,25 +110,6 @@ func init() {
 	// But given the size of the test binary, that has a significant performance impact (100 ms or more).
 	// By specifying a checksum here, we can avoid that overhead.
 	sdkworker.SetBinaryChecksum("oss-server-test")
-}
-
-// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
-// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
-// obtain the shard controller for the history service, you can do this:
-//
-//	var shardController shard.Controller
-//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
-//	// now you can use shardController during your test
-//
-// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
-// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
-// each one.
-//
-// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
-	}
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
@@ -152,13 +128,19 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
-func WithArchivalEnabled() TestClusterOption {
+func WithServerConfigOverride(override func(*config.Config)) TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.ArchivalEnabled = true
+		params.ServerConfigOverride = override
 	}
 }
 
-func withMTLS() TestClusterOption {
+func WithServerOptions(options ...temporal.ServerOption) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.ServerOptions = append(params.ServerOptions, options...)
+	}
+}
+
+func WithMTLS() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.EnableMTLS = true
 	}
@@ -199,18 +181,6 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithSharedCluster() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.SharedCluster = true
-	}
-}
-
-func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomHistoryArchiverFactory = factory
-	}
-}
-
-func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomVisibilityArchiverFactory = factory
 	}
 }
 
@@ -322,21 +292,20 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DCRedirectionPolicy:             params.DCRedirectionPolicy,
-		DynamicConfigOverrides:          params.DynamicConfigOverrides,
-		ServiceFxOptions:                params.ServiceOptions,
-		EnableMetricsCapture:            true,
-		EnableArchival:                  params.ArchivalEnabled,
-		EnableMTLS:                      params.EnableMTLS,
-		EnableHistoryTaskRecorder:       params.EnableHistoryTaskRecorder,
-		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
-		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
+		DCRedirectionPolicy:       params.DCRedirectionPolicy,
+		DynamicConfigOverrides:    params.DynamicConfigOverrides,
+		EnableMetricsCapture:      true,
+		EnableMTLS:                params.EnableMTLS,
+		EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+		ServerConfigOverride:      params.ServerConfigOverride,
+		ServerOptions:             params.ServerOptions,
+		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
 		s.isShared = true
 	}
 
@@ -365,14 +334,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
 	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
-}
-
-func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
-	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		return *persistencetests.GetSQLiteFileTestClusterOption()
-	}
-	return defaults
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -411,7 +372,6 @@ func (s *FunctionalTestBase) checkTestShard() {
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
-		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
 		EnableWorkerService: true,
 	}
 	for _, opt := range options {
@@ -759,7 +719,7 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
 // fails t if the cluster was poisoned during t's window. This fails all active tests
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
-// The cluster pool's slot reference is replaced as soon as poison is observed.
+// The pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	if s.t != nil {
 		s.t.addTest(t)
