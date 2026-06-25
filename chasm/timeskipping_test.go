@@ -106,8 +106,9 @@ func (s *nodeSuite) TestCloseTransaction_DoesNotRegenerateAlreadyMaterializedTim
 	root, err := s.newTestTree(s.timeSkippingTaskNodes())
 	s.NoError(err)
 
-	// Time skipping is not enabled (the mock backend's GetTimeSkippingInfo returns nil) and nothing was
-	// mutated, so the normal generation loop must skip the already-Created timer tasks.
+	// Time skipping is not enabled (the mock backend's GetExecutionInfo returns nil, so TimeSkippingInfo
+	// is nil) and nothing was mutated, so the normal generation loop must skip the already-Created timer
+	// tasks.
 	_, err = root.CloseTransaction()
 	s.NoError(err)
 	s.Equal(0, s.nodeBackend.NumTasksAdded())

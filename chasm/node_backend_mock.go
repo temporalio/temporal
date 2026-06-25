@@ -41,7 +41,6 @@ type MockNodeBackend struct {
 	HandleGetNamespaceEntry            func() *namespace.Namespace
 	HandleEndpointRegistry             func() EndpointRegistry
 	HandleSetTimeSkippingConfig        func(config *commonpb.TimeSkippingConfig)
-	HandleGetTimeSkippingInfo          func() *persistencespb.TimeSkippingInfo
 	HandleRecordTimeSkippingTransition func(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error
 
 	// Recorded calls (protected by mu).
@@ -119,13 +118,6 @@ func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingCon
 	if m.HandleSetTimeSkippingConfig != nil {
 		m.HandleSetTimeSkippingConfig(config)
 	}
-}
-
-func (m *MockNodeBackend) GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo {
-	if m.HandleGetTimeSkippingInfo != nil {
-		return m.HandleGetTimeSkippingInfo()
-	}
-	return nil
 }
 
 func (m *MockNodeBackend) RecordTimeSkippingTransition(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error {

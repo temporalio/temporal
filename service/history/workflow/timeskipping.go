@@ -557,13 +557,6 @@ func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingC
 	}
 }
 
-// GetTimeSkippingInfo returns the execution's full TimeSkippingInfo (config + fast-forward info). It
-// is the CHASM framework's window into time-skipping state: the framework reads the config and the
-// fast-forward target/reached flag through here (NodeBackend), not through a component-facing getter.
-func (ms *MutableStateImpl) GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo {
-	return ms.GetExecutionInfo().GetTimeSkippingInfo()
-}
-
 // RecordTimeSkippingTransition records a single time-skipping transition for the execution. It is the
 // archetype-agnostic apply sink shared by both time-skipping front-ends: the CHASM framework's
 // closeTransactionHandleTimeSkipping (which builds the transition for non-workflow CHASM executions)

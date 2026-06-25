@@ -234,26 +234,10 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
-
-		// Time-skipping backend surface. The component-facing config control (SetTimeSkippingConfig) is
-		// exposed to executions through MutableContext, which delegates the mutator here; the framework
-		// itself reads the full TimeSkippingInfo (config AND fast-forward info) via GetTimeSkippingInfo.
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
-		GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo
-		// RecordTimeSkippingTransition records a single time-skipping transition for the execution: it
-		// advances the virtual clock to transition.TargetTime (and disables time skipping when the
-		// fast-forward target was reached). The caller (the framework's closeTransactionHandleTimeSkipping,
-		// or the workflow event path) is responsible for computing the final transition — including the
-		// min of the component candidate and the fast-forward target. archetype selects how the skip is
-		// recorded: the workflow archetype records a history event, others apply it directly to the TSI.
 		RecordTimeSkippingTransition(ctx context.Context, transition TimeSkippingTransition, archetype ArchetypeID) error
 	}
 
-	// nowProvider is an optional capability of a NodeBackend: a backend that owns its own clock
-	// (mutable state, whose clock reflects the execution's time-skipping offset) implements it so
-	// that Node.Now() reads a single, time-skipping-aware clock shared with the rest of the
-	// execution. Backends that do not implement it (e.g. bare test mocks) cause Node.Now() to fall
-	// back to the tree's own timeSource.
 	nowProvider interface {
 		Now() time.Time
 	}
@@ -2131,7 +2115,7 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		// todo: remove after workflows get migrated to CHASM
 		return nil
 	}
-	tsi := n.backend.GetTimeSkippingInfo()
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
 	if !tsi.GetConfig().GetEnabled() {
 		return nil
 	}
@@ -2192,7 +2176,7 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		return nil
 	}
 
-	// step3: record and regenerate tasks.
+	// step3: record and regenerate
 	if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
 		return err
 	}
@@ -2230,7 +2214,7 @@ func (n *Node) validateSerializedTask(
 // after now in as the business wake target, then folds in the fast-forward budget. It returns nil when
 // time skipping is disabled.
 func (n *Node) calculateTimeSkippingTransition(ctx Context) (*TimeSkippingTransition, error) {
-	tsi := n.backend.GetTimeSkippingInfo()
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
 	if !tsi.GetConfig().GetEnabled() {
 		return nil, nil
 	}
