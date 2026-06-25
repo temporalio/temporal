@@ -426,11 +426,11 @@ func (c *TemporalImpl) startHistory() {
 	persistenceFactoryProvider := persistenceClient.FactoryProvider
 	if c.enableTaskQueueRecorder {
 		persistenceFactoryProvider = func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
-			factory := persistenceClient.FactoryProvider(params)
-			return &taskQueueRecordingFactory{
-				Factory: factory,
+			baseFactory := persistenceClient.FactoryProvider(params)
+			return &taskQueueRecordingPersistenceFactory{
+				Factory: baseFactory,
 				logger:  params.Logger,
-				record: func(recorder *TaskQueueRecorder) {
+				setRecorder: func(recorder *TaskQueueRecorder) {
 					c.taskQueueRecorder = recorder
 				},
 			}

@@ -48,19 +48,19 @@ func NewTaskQueueRecorder(delegate persistence.ExecutionManager, logger log.Logg
 	}
 }
 
-type taskQueueRecordingFactory struct {
+type taskQueueRecordingPersistenceFactory struct {
 	persistenceClient.Factory
-	logger log.Logger
-	record func(*TaskQueueRecorder)
+	logger      log.Logger
+	setRecorder func(*TaskQueueRecorder)
 }
 
-func (f *taskQueueRecordingFactory) NewExecutionManager() (persistence.ExecutionManager, error) {
+func (f *taskQueueRecordingPersistenceFactory) NewExecutionManager() (persistence.ExecutionManager, error) {
 	manager, err := f.Factory.NewExecutionManager()
 	if err != nil {
 		return nil, err
 	}
 	recorder := NewTaskQueueRecorder(manager, f.logger)
-	f.record(recorder)
+	f.setRecorder(recorder)
 	return recorder, nil
 }
 
