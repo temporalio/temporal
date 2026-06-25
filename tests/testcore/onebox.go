@@ -423,12 +423,15 @@ func (c *TemporalImpl) startHistory() {
 		c.chasmVisibilityMgr = chasmVisibilityManager
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
+	factoryProvider := persistenceClient.FactoryProvider
 	if c.enableTaskQueueRecorder {
 		c.taskQueueRecorder = NewTaskQueueRecorder(c.logger)
-	}
-	factoryProvider := persistenceClient.FactoryProvider
-	if c.taskQueueRecorder != nil {
-		factoryProvider = c.taskQueueRecordingFactoryProvider
+		factoryProvider = func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
+			return &taskQueueRecordingFactory{
+				Factory:  persistenceClient.FactoryProvider(params),
+				recorder: c.taskQueueRecorder,
+			}
+		}
 	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {

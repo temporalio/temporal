@@ -3,8 +3,10 @@ package testcore
 import (
 	"context"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type taskQueueRecordingFactory struct {
@@ -45,7 +47,12 @@ func (m *taskQueueRecordingExecutionManager) CreateWorkflowExecution(
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 	response, err := m.ExecutionManager.CreateWorkflowExecution(ctx, request)
 	if err == nil && request != nil {
-		m.recordWorkflowSnapshot(request.ShardID, request.RangeID, &request.NewWorkflowSnapshot)
+		m.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.NewWorkflowSnapshot.ExecutionInfo,
+			request.NewWorkflowSnapshot.Tasks,
+		)
 	}
 	return response, err
 }
@@ -56,8 +63,20 @@ func (m *taskQueueRecordingExecutionManager) UpdateWorkflowExecution(
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	response, err := m.ExecutionManager.UpdateWorkflowExecution(ctx, request)
 	if err == nil && request != nil {
-		m.recordWorkflowMutation(request.ShardID, request.RangeID, &request.UpdateWorkflowMutation)
-		m.recordWorkflowSnapshot(request.ShardID, request.RangeID, request.NewWorkflowSnapshot)
+		m.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.UpdateWorkflowMutation.ExecutionInfo,
+			request.UpdateWorkflowMutation.Tasks,
+		)
+		if request.NewWorkflowSnapshot != nil {
+			m.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
 	}
 	return response, err
 }
@@ -68,52 +87,46 @@ func (m *taskQueueRecordingExecutionManager) ConflictResolveWorkflowExecution(
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	response, err := m.ExecutionManager.ConflictResolveWorkflowExecution(ctx, request)
 	if err == nil && request != nil {
-		m.recordWorkflowSnapshot(request.ShardID, request.RangeID, &request.ResetWorkflowSnapshot)
-		m.recordWorkflowSnapshot(request.ShardID, request.RangeID, request.NewWorkflowSnapshot)
-		m.recordWorkflowMutation(request.ShardID, request.RangeID, request.CurrentWorkflowMutation)
+		m.recordWorkflowTasks(
+			request.ShardID,
+			request.RangeID,
+			request.ResetWorkflowSnapshot.ExecutionInfo,
+			request.ResetWorkflowSnapshot.Tasks,
+		)
+		if request.NewWorkflowSnapshot != nil {
+			m.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.NewWorkflowSnapshot.ExecutionInfo,
+				request.NewWorkflowSnapshot.Tasks,
+			)
+		}
+		if request.CurrentWorkflowMutation != nil {
+			m.recordWorkflowTasks(
+				request.ShardID,
+				request.RangeID,
+				request.CurrentWorkflowMutation.ExecutionInfo,
+				request.CurrentWorkflowMutation.Tasks,
+			)
+		}
 	}
 	return response, err
 }
 
-func (m *taskQueueRecordingExecutionManager) recordWorkflowSnapshot(
+func (m *taskQueueRecordingExecutionManager) recordWorkflowTasks(
 	shardID int32,
 	rangeID int64,
-	snapshot *persistence.WorkflowSnapshot,
+	info *persistencespb.WorkflowExecutionInfo,
+	tasksByCategory map[tasks.Category][]tasks.Task,
 ) {
-	if snapshot == nil || snapshot.ExecutionInfo == nil {
+	if info == nil {
 		return
 	}
 	m.recorder.Record(
 		shardID,
 		rangeID,
-		snapshot.ExecutionInfo.NamespaceId,
-		snapshot.ExecutionInfo.WorkflowId,
-		snapshot.Tasks,
+		info.NamespaceId,
+		info.WorkflowId,
+		tasksByCategory,
 	)
-}
-
-func (m *taskQueueRecordingExecutionManager) recordWorkflowMutation(
-	shardID int32,
-	rangeID int64,
-	mutation *persistence.WorkflowMutation,
-) {
-	if mutation == nil || mutation.ExecutionInfo == nil {
-		return
-	}
-	m.recorder.Record(
-		shardID,
-		rangeID,
-		mutation.ExecutionInfo.NamespaceId,
-		mutation.ExecutionInfo.WorkflowId,
-		mutation.Tasks,
-	)
-}
-
-func (c *TemporalImpl) taskQueueRecordingFactoryProvider(
-	params persistenceClient.NewFactoryParams,
-) persistenceClient.Factory {
-	return &taskQueueRecordingFactory{
-		Factory:  persistenceClient.FactoryProvider(params),
-		recorder: c.taskQueueRecorder,
-	}
 }
