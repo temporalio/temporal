@@ -365,7 +365,6 @@ func newInlineClientConn(
 	for qualifiedServerName, server := range servers {
 		serverVal := reflect.ValueOf(server)
 		for reflectMethod := range serverVal.Type().Methods() {
-			reflectMethod := reflectMethod
 			// We intentionally look this up by name to not assume method indexes line
 			// up from type to value
 			methodVal := serverVal.MethodByName(reflectMethod.Name)
