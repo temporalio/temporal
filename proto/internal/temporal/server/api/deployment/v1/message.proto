@@ -150,6 +150,9 @@ message VersionLocalState {
 
   // Cached compute config summary, kept in sync with the WCI on each compute config update.
   temporal.api.compute.v1.ComputeConfigSummary compute_config = 18;
+
+  // Cached compute status, updated when WCI signals this version workflow.
+  temporal.api.deployment.v1.ComputeStatus compute_status = 19;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -233,6 +236,9 @@ message WorkerDeploymentVersionSummary {
   // Compute config summary for this version. Synced from the version workflow on each compute config update.
   // Also set by the deployment workflow at version creation time if a compute config was provided.
   temporal.api.compute.v1.ComputeConfigSummary compute_config = 13;
+
+  // Compute status for this version. Synced from the version workflow when WCI signals a status change.
+  temporal.api.deployment.v1.ComputeStatus compute_status = 14;
 }
 
 // used as Worker Deployment Version workflow update input:

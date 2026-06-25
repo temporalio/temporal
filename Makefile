@@ -420,7 +420,7 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # on the exit code alone, since go fix can exit non-zero without actually
 # modifying any files (see https://github.com/golang/go/issues/77482).
 # Note: go fix automatically skips generated files.
-GOFIX_FLAGS ?= -any -rangeint
+GOFIX_FLAGS ?=
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
