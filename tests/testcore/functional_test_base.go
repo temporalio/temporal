@@ -103,7 +103,7 @@ type (
 		NumHistoryShards                int32
 		Logger                          log.Logger
 		SharedCluster                   bool
-		EnableTaskQueueRecorder         bool
+		EnableHistoryTaskRecorder       bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 	}
@@ -190,9 +190,9 @@ func WithClusterLogger(logger log.Logger) TestClusterOption {
 	}
 }
 
-func WithClusterTaskQueueRecorder() TestClusterOption {
+func WithClusterHistoryTaskRecorder() TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.EnableTaskQueueRecorder = true
+		params.EnableHistoryTaskRecorder = true
 	}
 }
 
@@ -328,7 +328,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMetricsCapture:            true,
 		EnableArchival:                  params.ArchivalEnabled,
 		EnableMTLS:                      params.EnableMTLS,
-		EnableTaskQueueRecorder:         params.EnableTaskQueueRecorder,
+		EnableHistoryTaskRecorder:       params.EnableHistoryTaskRecorder,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
 		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},

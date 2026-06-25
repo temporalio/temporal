@@ -534,7 +534,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsShifted() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithTaskQueueRecorder(),
+		testcore.WithHistoryTaskRecorder(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
@@ -662,7 +662,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 			"WorkflowExecutionExpirationTime, when set, lives in the virtual frame and is shifted by accum")
 	}
 
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),

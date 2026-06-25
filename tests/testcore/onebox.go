@@ -106,10 +106,10 @@ type (
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
 		replicationStreamRecorder *ReplicationStreamRecorder
-		taskQueueRecorder         *TaskQueueRecorder
+		historyTaskRecorder       *HistoryTaskRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		tokenProvider             auth.TokenProvider
-		enableTaskQueueRecorder   bool
+		enableHistoryTaskRecorder bool
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -163,12 +163,12 @@ type (
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
-		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
-		TaskCategoryRegistry     tasks.TaskCategoryRegistry
-		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
-		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
-		TokenProvider            auth.TokenProvider
-		EnableTaskQueueRecorder  bool
+		ServiceFxOptions          map[primitives.ServiceName][]fx.Option
+		TaskCategoryRegistry      tasks.TaskCategoryRegistry
+		HostsByProtocolByService  map[transferProtocol]map[primitives.ServiceName]static.Hosts
+		SpanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider             auth.TokenProvider
+		EnableHistoryTaskRecorder bool
 	}
 
 	listenHostPort string
@@ -212,7 +212,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
-		enableTaskQueueRecorder:          params.EnableTaskQueueRecorder,
+		enableHistoryTaskRecorder:        params.EnableHistoryTaskRecorder,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -424,13 +424,13 @@ func (c *TemporalImpl) startHistory() {
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
 	persistenceFactoryProvider := persistenceClient.FactoryProvider
-	if c.enableTaskQueueRecorder {
+	if c.enableHistoryTaskRecorder {
 		persistenceFactoryProvider = func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
-			return &taskQueueRecordingPersistenceFactory{
+			return &historyTaskRecordingPersistenceFactory{
 				Factory: persistenceClient.FactoryProvider(params),
 				logger:  params.Logger,
-				setRecorder: func(recorder *TaskQueueRecorder) {
-					c.taskQueueRecorder = recorder
+				setRecorder: func(recorder *HistoryTaskRecorder) {
+					c.historyTaskRecorder = recorder
 				},
 			}
 		}
@@ -640,8 +640,8 @@ func (c *TemporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *TemporalImpl) GetTaskQueueRecorder() *TaskQueueRecorder {
-	return c.taskQueueRecorder
+func (c *TemporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	return c.historyTaskRecorder
 }
 
 func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {

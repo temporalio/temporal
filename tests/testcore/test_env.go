@@ -95,7 +95,7 @@ type testOptions struct {
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
-	taskQueueRecorder        bool
+	historyTaskRecorder      bool
 }
 
 type dynamicConfigOverride struct {
@@ -225,12 +225,12 @@ func WithHistoryShardCount(n int32) TestOption {
 	}
 }
 
-func WithTaskQueueRecorder() TestOption {
+func WithHistoryTaskRecorder() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithClusterTaskQueueRecorder())
+		o.clusterOptions = append(o.clusterOptions, WithClusterHistoryTaskRecorder())
 		o.dedicatedReason = "task queue recorder used"
-		o.taskQueueRecorder = true
+		o.historyTaskRecorder = true
 	}
 }
 
@@ -339,8 +339,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
 	}
-	if options.taskQueueRecorder {
-		recorder := cluster.GetTaskQueueRecorder()
+	if options.historyTaskRecorder {
+		recorder := cluster.GetHistoryTaskRecorder()
 		require.NotNil(t, recorder)
 	}
 

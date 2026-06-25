@@ -91,7 +91,7 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
-		EnableTaskQueueRecorder         bool
+		EnableHistoryTaskRecorder       bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -356,7 +356,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
-		EnableTaskQueueRecorder:          clusterConfig.EnableTaskQueueRecorder,
+		EnableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -627,8 +627,8 @@ func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder
 	return tc.host.replicationStreamRecorder
 }
 
-func (tc *TestCluster) GetTaskQueueRecorder() *TaskQueueRecorder {
-	return tc.host.GetTaskQueueRecorder()
+func (tc *TestCluster) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	return tc.host.GetHistoryTaskRecorder()
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {

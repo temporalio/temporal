@@ -690,7 +690,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithTaskQueueRecorder(),
+		testcore.WithHistoryTaskRecorder(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
@@ -726,7 +726,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	elapsed := time.Since(wallStart)
 	s.Less(elapsed, shiftTol, "skip should have shifted the 1h start delay into near-now wall-clock; took %v", elapsed)
 
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),
@@ -892,7 +892,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	env := testcore.NewEnv(
 		s.T(),
-		testcore.WithTaskQueueRecorder(),
+		testcore.WithHistoryTaskRecorder(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
@@ -1055,7 +1055,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	)
 
 	// ── Assertion 5: WorkflowRunTimeoutTask regenerated with shifted timestamp. ─
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),

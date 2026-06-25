@@ -145,7 +145,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		}
 		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
-		clusterConfigs[clusterIndex].EnableTaskQueueRecorder = params.EnableTaskQueueRecorder
+		clusterConfigs[clusterIndex].EnableHistoryTaskRecorder = params.EnableHistoryTaskRecorder
 
 		var err error
 		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
