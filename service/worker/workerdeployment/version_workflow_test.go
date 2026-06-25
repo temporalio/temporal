@@ -12,6 +12,7 @@ import (
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
@@ -2587,6 +2588,100 @@ func (s *VersionWorkflowSuite) Test_ReactivateVersion_IgnoredWhenNotDrainedOrIna
 	}, 10*time.Millisecond)
 
 	// Start workflow with CURRENT status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			CurrentSinceTime:          now,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_SyncValidationStatus_SuccessValidation verifies that a successful WCI validation signal
+// sets ComputeStatus with an empty error message and propagates it to the deployment workflow.
+func (s *VersionWorkflowSuite) Test_SyncValidationStatus_SuccessValidation() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+	validationTime := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(worker_versioning.SignalSyncValidationStatus, wciiface.NewValidationStatusSuccess(validationTime))
+
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.Require().NoError(err)
+			s.Require().NoError(val.Get(queryResp))
+
+			cs := queryResp.VersionState.ComputeStatus
+			s.Require().NotNil(cs)
+			s.Require().NotNil(cs.ProviderValidation)
+			s.Empty(cs.ProviderValidation.ErrorMessage)
+			s.Equal(validationTime, cs.ProviderValidation.LastCheckTime.AsTime())
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			CurrentSinceTime:          now,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_SyncValidationStatus_FailedValidation verifies that a failed WCI validation signal
+// sets ComputeStatus with the error message and propagates it to the deployment workflow.
+func (s *VersionWorkflowSuite) Test_SyncValidationStatus_FailedValidation() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+	validationTime := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(worker_versioning.SignalSyncValidationStatus, wciiface.NewValidationStatusFailed(validationTime, "lambda unreachable"))
+
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.Require().NoError(err)
+			s.Require().NoError(val.Get(queryResp))
+
+			cs := queryResp.VersionState.ComputeStatus
+			s.Require().NotNil(cs)
+			s.Require().NotNil(cs.ProviderValidation)
+			s.Equal("lambda unreachable", cs.ProviderValidation.ErrorMessage)
+			s.Equal(validationTime, cs.ProviderValidation.LastCheckTime.AsTime())
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
 	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),

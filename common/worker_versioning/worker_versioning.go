@@ -59,6 +59,11 @@ const (
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionDelimiter) // 39
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
+
+	// SignalSyncValidationStatus is sent by the WCI workflow to the version workflow
+	// when ValidationStatus changes, so the deployment workflow can maintain an
+	// up-to-date connectivity summary in its memo.
+	SignalSyncValidationStatus = "sync-validation-status"
 )
 
 // FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
