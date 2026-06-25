@@ -41,7 +41,6 @@ func getSearchAttributesHelpersData() searchAttributesHelpersData {
 	historyEventT := reflect.TypeFor[*historypb.HistoryEvent]()
 
 	for attributesGetter := range historyEventT.Methods() {
-		attributesGetter := attributesGetter
 		matches := attributesGetterRegex.FindStringSubmatch(attributesGetter.Name)
 		if len(matches) < 2 {
 			continue

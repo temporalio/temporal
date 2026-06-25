@@ -76,7 +76,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 
 		spanAttrsByKey := makeRequest(nil)
 
-		require.Equal(t,
+		require.JSONEq(t,
 			`{"workflowExecution":{"workflowId":"WF-ID","runId":"RUN-ID"}}`,
 			toStr(t, spanAttrsByKey["rpc.request.payload"].Value))
 		require.Equal(t, "{}", spanAttrsByKey["rpc.response.payload"].Value.AsString())
@@ -88,7 +88,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 
 		spanAttrsByKey := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
 
-		require.Equal(t,
+		require.JSONEq(t,
 			`{"code":13,"message":"Something went wrong"}`,
 			toStr(t, spanAttrsByKey["rpc.response.error"].Value))
 	})

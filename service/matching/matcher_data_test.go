@@ -174,7 +174,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	s.Equal(t, pres.task)
 
 	// finish task
-	pres.task.finish(nil, true)
+	pres.task.finish(taskFinishResult{consumedToken: true})
 	s.True(gotResponse)
 
 	// one more, context should time out again. note two contexts this time.
@@ -244,7 +244,7 @@ func (s *MatcherDataSuite) TestQuery() {
 	s.True(pres.task.isQuery())
 	// wake up getResponse. use some error just to check it's passed through.
 	someError := errors.New("some error")
-	pres.task.finish(someError, true)
+	pres.task.finish(taskFinishResult{err: someError, consumedToken: true})
 
 	resp := <-respC
 	s.False(resp.forwarded)
@@ -437,7 +437,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
 	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
 	res := s.pollFakeTime(time.Second)
 	s.Equal(task1a, res.task)
-	res.task.finish(nil, true) // triggers recycleToken
+	res.task.finish(taskFinishResult{consumedToken: true})
 
 	// Now key1 is limited; add another key1 task (high priority) and a key2 task (lower priority).
 	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
@@ -1077,7 +1077,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 2: // add backlog task with priority
 				tid++
@@ -1090,7 +1090,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 3: // add poller
 				timeout := randms(100)

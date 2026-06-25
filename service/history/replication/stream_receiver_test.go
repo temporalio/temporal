@@ -41,6 +41,7 @@ type (
 		requests []*adminservice.StreamWorkflowReplicationMessagesRequest
 		respChan chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]
 		closed   bool
+		recvErr  error
 	}
 	mockScheduler struct {
 		tasks []TrackableExecutableTask
@@ -123,7 +124,7 @@ func (s *streamReceiverSuite) TestAckMessage_Noop() {
 
 	s.streamReceiver.ackMessage(s.stream)
 
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeUnset() {
@@ -133,7 +134,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeUnset() {
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 	s.NoError(err)
 }
 
@@ -176,7 +177,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Error(err)
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_HasBothWatermark() {
@@ -193,7 +194,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack_
 
 	_, err := s.streamReceiver.ackMessage(s.stream)
 	s.Error(err)
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 }
 
 func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_NoHighPriorityWatermark() {
@@ -207,7 +208,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 	s.NoError(err)
 }
 
@@ -222,7 +223,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack_
 	s.highPriorityTaskTracker.EXPECT().Size().Return(0)
 	s.lowPriorityTaskTracker.EXPECT().Size().Return(0)
 	_, err := s.streamReceiver.ackMessage(s.stream)
-	s.Equal(0, len(s.stream.requests))
+	s.Empty(s.stream.requests)
 	s.NoError(err)
 }
 
@@ -291,7 +292,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Equal(1, len(tasks))
+			s.Len(tasks, 1)
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -299,7 +300,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 
 	err := s.streamReceiver.processMessages(s.stream)
 	s.NoError(err)
-	s.Equal(1, len(s.taskScheduler.tasks))
+	s.Len(s.taskScheduler.tasks, 1)
 	s.IsType(&ExecutableUnknownTask{}, s.taskScheduler.tasks[0])
 	s.Equal(ReceiverModeSingleStack, s.streamReceiver.receiverMode)
 }
@@ -329,8 +330,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
-	s.IsType(&StreamError{}, err)
-	s.Equal(0, len(s.taskScheduler.tasks))
+	s.ErrorAs(err, new(*StreamError))
+	s.Empty(s.taskScheduler.tasks)
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_ReceivedNonPrioritizedTask() {
@@ -356,8 +357,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 
 	// no TrackTasks call should be made
 	err := s.streamReceiver.processMessages(s.stream)
-	s.IsType(&StreamError{}, err)
-	s.Equal(0, len(s.taskScheduler.tasks))
+	s.ErrorAs(err, new(*StreamError))
+	s.Empty(s.taskScheduler.tasks)
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
@@ -408,7 +409,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp1.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Equal(1, len(tasks))
+			s.Len(tasks, 1)
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -417,7 +418,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 		func(highWatermarkInfo WatermarkInfo, tasks ...TrackableExecutableTask) []TrackableExecutableTask {
 			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermark, highWatermarkInfo.Watermark)
 			s.Equal(streamResp2.Resp.GetMessages().ExclusiveHighWatermarkTime.AsTime(), highWatermarkInfo.Timestamp)
-			s.Equal(1, len(tasks))
+			s.Len(tasks, 1)
 			s.IsType(&ExecutableUnknownTask{}, tasks[0])
 			return []TrackableExecutableTask{tasks[0]}
 		},
@@ -425,7 +426,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 
 	err := s.streamReceiver.processMessages(s.stream)
 	s.NoError(err)
-	s.Equal(2, len(s.taskScheduler.tasks))
+	s.Len(s.taskScheduler.tasks, 2)
 	s.Equal(ReceiverModeTieredStack, s.streamReceiver.receiverMode)
 }
 
@@ -522,6 +523,131 @@ func (s *streamReceiverSuite) TestLivenessMonitor() {
 	s.False(s.streamReceiver.IsValid())
 }
 
+func (s *streamReceiverSuite) TestKey() {
+	key := s.streamReceiver.Key()
+	s.Equal(s.streamReceiver.clientShardKey, key.Client)
+	s.Equal(s.streamReceiver.serverShardKey, key.Server)
+}
+
+func (s *streamReceiverSuite) TestSlowSubmissionTimestamp_RecordAndGet() {
+	// Default: no timestamp recorded yet -> zero time.
+	s.True(s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH).IsZero())
+
+	strRecvTS := time.Unix(0, rand.Int63())
+	s.streamReceiver.recordSlowSubmission(enumsspb.TASK_PRIORITY_HIGH, strRecvTS)
+	s.Equal(strRecvTS, s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH))
+
+	// A different priority is still unset.
+	s.True(s.streamReceiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW).IsZero())
+}
+
+func (s *streamReceiverSuite) TestGetTaskTracker() {
+	strRecvHigh, err := s.streamReceiver.getTaskTracker(enumsspb.TASK_PRIORITY_HIGH)
+	s.NoError(err)
+	s.Equal(s.highPriorityTaskTracker, strRecvHigh)
+
+	strRecvUnspecified, err := s.streamReceiver.getTaskTracker(enumsspb.TASK_PRIORITY_UNSPECIFIED)
+	s.NoError(err)
+	s.Equal(s.highPriorityTaskTracker, strRecvUnspecified)
+
+	strRecvLow, err := s.streamReceiver.getTaskTracker(enumsspb.TASK_PRIORITY_LOW)
+	s.NoError(err)
+	s.Equal(s.lowPriorityTaskTracker, strRecvLow)
+
+	_, err = s.streamReceiver.getTaskTracker(enumsspb.TaskPriority(999))
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+func (s *streamReceiverSuite) TestGetTaskSchedulerByPriority() {
+	strRecvHigh, err := s.streamReceiver.getTaskScheduler(enumsspb.TASK_PRIORITY_HIGH)
+	s.NoError(err)
+	s.Equal(s.taskScheduler, strRecvHigh)
+
+	strRecvLow, err := s.streamReceiver.getTaskScheduler(enumsspb.TASK_PRIORITY_LOW)
+	s.NoError(err)
+	s.Equal(s.taskScheduler, strRecvLow)
+
+	_, err = s.streamReceiver.getTaskScheduler(enumsspb.TASK_PRIORITY_UNSPECIFIED)
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+func (s *streamReceiverSuite) TestSetReceiverMode_AlreadySet_NoChange() {
+	s.streamReceiver.receiverMode = ReceiverModeSingleStack
+	// Already set: subsequent setReceiverMode calls are no-ops.
+	s.streamReceiver.setReceiverMode(enumsspb.TASK_PRIORITY_HIGH)
+	s.Equal(ReceiverModeSingleStack, s.streamReceiver.receiverMode)
+}
+
+func (s *streamReceiverSuite) TestSetReceiverMode_FromUnset() {
+	s.streamReceiver.receiverMode = ReceiverModeUnset
+	s.streamReceiver.setReceiverMode(enumsspb.TASK_PRIORITY_LOW)
+	s.Equal(ReceiverModeTieredStack, s.streamReceiver.receiverMode)
+}
+
+func (s *streamReceiverSuite) TestValidateTasksHaveSamePriority_Mismatch() {
+	strRecvTasks := []*replicationspb.ReplicationTask{
+		{Priority: enumsspb.TASK_PRIORITY_HIGH},
+		{Priority: enumsspb.TASK_PRIORITY_LOW},
+	}
+	err := ValidateTasksHaveSamePriority(enumsspb.TASK_PRIORITY_HIGH, strRecvTasks...)
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+}
+
+func (s *streamReceiverSuite) TestValidateTasksHaveSamePriority_AllMatch() {
+	strRecvTasks := []*replicationspb.ReplicationTask{
+		{Priority: enumsspb.TASK_PRIORITY_HIGH},
+		{Priority: enumsspb.TASK_PRIORITY_HIGH},
+	}
+	err := ValidateTasksHaveSamePriority(enumsspb.TASK_PRIORITY_HIGH, strRecvTasks...)
+	s.NoError(err)
+}
+
+func (s *streamReceiverSuite) TestStop_NotStarted_Noop() {
+	// Receiver was never started, so Stop should be a no-op (CAS fails) and not panic.
+	s.streamReceiver.Stop()
+	s.False(s.streamReceiver.IsValid())
+	s.False(s.stream.closed)
+}
+
+func (s *streamReceiverSuite) TestStartStop() {
+	s.highPriorityTaskTracker.EXPECT().LowWatermark().Return(nil).AnyTimes()
+	s.lowPriorityTaskTracker.EXPECT().LowWatermark().Return(nil).AnyTimes()
+	s.highPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+	s.lowPriorityTaskTracker.EXPECT().Size().Return(0).AnyTimes()
+	s.highPriorityTaskTracker.EXPECT().Cancel().AnyTimes()
+	s.lowPriorityTaskTracker.EXPECT().Cancel().AnyTimes()
+
+	s.streamReceiver.Start()
+	s.True(s.streamReceiver.IsValid())
+	// Second Start is a no-op.
+	s.streamReceiver.Start()
+
+	s.streamReceiver.Stop()
+	s.False(s.streamReceiver.IsValid())
+}
+
+func (s *streamReceiverSuite) TestExecuteInterceptedTask() {
+	strRecvCalled := false
+	strRecvTask := executeInterceptedTask{
+		execute: func() error {
+			strRecvCalled = true
+			return nil
+		},
+	}
+	s.NoError(strRecvTask.Execute())
+	s.True(strRecvCalled)
+}
+
+func (s *streamReceiverSuite) TestProcessMessage_RecvError() {
+	strRecvStream := &mockStream{recvErr: serviceerror.NewUnavailable("recv failed")}
+	err := s.streamReceiver.processMessages(strRecvStream)
+	s.Error(err)
+	s.ErrorAs(err, new(*StreamError))
+}
+
 func (s *mockStream) Send(
 	req *adminservice.StreamWorkflowReplicationMessagesRequest,
 ) error {
@@ -530,6 +656,9 @@ func (s *mockStream) Send(
 }
 
 func (s *mockStream) Recv() (<-chan StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse], error) {
+	if s.recvErr != nil {
+		return nil, s.recvErr
+	}
 	return s.respChan, nil
 }
 

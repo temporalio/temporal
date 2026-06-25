@@ -2,8 +2,10 @@ package workerdeployment
 
 import (
 	computepb "go.temporal.io/api/compute/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) *wciiface.WorkerControllerInstanceSpec {
@@ -102,4 +104,19 @@ func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeCon
 		}
 	}
 	return updates
+}
+
+// wciValidationStatusToComputeStatus converts a WCI ValidationStatus to the public ComputeStatus proto.
+// A successful validation results in an empty error_message; a failed validation sets the error_message.
+func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deploymentpb.ComputeStatus {
+	if vs == nil {
+		return nil
+	}
+	pv := &deploymentpb.ComputeStatus_ProviderValidationStatus{
+		LastCheckTime: timestamppb.New(vs.LastValidationTime),
+	}
+	if vs.Status == wciiface.ValidationResultFailed {
+		pv.ErrorMessage = vs.ErrMessage
+	}
+	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
 }

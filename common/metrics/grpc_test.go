@@ -73,21 +73,21 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 				},
 			)
 
-			s.Nil(err)
+			s.NoError(err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			s.Len(trailers, 1)
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			s.Len(propagationContextBlobs, 1)
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
+			s.NoError(err)
 			s.Equal(int64(1234), baggage.CountersInt[anyMetricName])
 			return res, err
 		},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(10, res)
 	s.Assert()
 }
@@ -129,21 +129,21 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 				},
 			)
 
-			s.Nil(err)
+			s.NoError(err)
 			trailers := ssts.CapturedTrailers()
-			s.Equal(1, len(trailers))
+			s.Len(trailers, 1)
 			propagationContextBlobs := trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
-			s.Equal(1, len(propagationContextBlobs))
+			s.Len(propagationContextBlobs, 1)
 			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
-			s.Nil(err)
+			s.NoError(err)
 			s.Nil(baggage.CountersInt)
 			return res, err
 		},
 	)
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(10, res)
 	s.Assert()
 }
