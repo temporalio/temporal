@@ -130,6 +130,8 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 // - the activity is not in a scheduled state
 // - the activity is scheduled but the next dispatch is not in the future
 // Otherwise, it returns false.
+//
+// A terminal activity that is still delivering completion callbacks (including while backing off between retries) is treated as having in-flight work: the delivery is pending and resolves on the target's readiness, not this execution's virtual clock.
 func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
 	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		return true
