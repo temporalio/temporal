@@ -1037,7 +1037,7 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		endExclusiveWatermark,
 	)
 	s.Error(err, "rpc error")
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError() {
@@ -1045,7 +1045,7 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	err := s.streamSender.recvEventLoop()
 	s.Error(err)
 	s.Error(err, "rpc error")
-	s.IsType(&StreamError{}, err)
+	s.ErrorAs(err, new(*StreamError))
 }
 
 func (s *streamSenderSuite) TestLivenessMonitor() {

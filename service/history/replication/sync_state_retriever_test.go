@@ -153,7 +153,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 	)
 	s.Nil(result)
 	s.Error(err)
-	s.IsType(&serviceerror.WorkflowNotReady{}, err)
+	s.ErrorAs(err, new(*serviceerror.WorkflowNotReady))
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
