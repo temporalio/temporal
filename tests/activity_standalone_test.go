@@ -7628,6 +7628,67 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"activity dispatched before its original requested_start_time; unpause did not honor the original delay")
 	})
 
+	// Reset (without RestoreOriginalOptions) of an activity still inside its start_delay window must
+	// honor the remaining delay, mirroring Unpause (#crew-standalone-activities consensus: Reset alters
+	// execution, not scheduling — it does not skip the start delay). A regression that dispatches at
+	// "now" would start the activity before its original requested_start_time.
+	s.Run("ResetDuringDelay_HonorsWallClockTarget", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		// 5s leaves a wide catch margin: a buggy immediate dispatch (actualStart ~= T0 + a few hundred ms
+		// of setup) sits far below the T0+5s target even after adding timerSafetyMargin (1.5s), so the
+		// regression fails robustly; correct code dispatches at ~T0+5s and passes with margin to spare.
+		startDelay := 5 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
+
+		// Reset while still in the delay window, before any worker pickup. No RestoreOriginalOptions:
+		// this exercises the plain-reset path, which must still respect the pending start delay.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+
+		pollCtx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
+		require.False(t, actualStart.IsZero())
+		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedRequested.UnixNano(),
+			"activity dispatched before its original requested_start_time; Reset did not honor the remaining start delay")
+	})
+
 	// If the delay window has already elapsed by the time the activity is unpaused, the activity
 	// should dispatch immediately (no leftover delay to honor).
 	s.Run("PauseDuringDelay_UnpauseAfterDelay_DispatchesImmediately", func(s *standaloneActivityTestSuite) {
