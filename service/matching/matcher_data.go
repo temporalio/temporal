@@ -403,16 +403,29 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 	return reprocess
 }
 
-// findMatch should return the highest priority task+poller match even if the per-task rate
-// limit doesn't allow the task to be matched yet.
+// findMatch returns the highest-priority task+poller pair that is not rate-limited.
+// If no ready pair is found, returns (nil, nil, minDelay) where minDelay is the
+// minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
 // nolint:revive // will improve later
-func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
+func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
 	// tree.Iter() cursor escapes to the heap.
-	var matchedTask *internalTask
-	var matchedPoller *waitingPoller
+
+	// Without a per-key limit the whole-queue ready time is the same for every task, so one
+	// check suffices and we avoid locking readyTimeForTask per task in the scan below. Only
+	// short-circuit when a match is actually possible (tasks and pollers both present) so we
+	// don't arm the rate-limit timer in cases where the full scan would have found nothing.
+	// TODO: reaching into the rate limiter's state like this breaks its encapsulation;
+	// refactor the rate limit logic so findMatch doesn't need to know about it.
+	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
+	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
+		if delay := wholeQueueReady.delay(now); delay > 0 {
+			return nil, nil, delay
+		}
+	}
+
 	d.tasks.tree.Scan(func(task *internalTask) bool {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
@@ -420,6 +433,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 			return true
 		}
 
+		var matched *waitingPoller
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
@@ -440,13 +454,30 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
-
-			matchedTask, matchedPoller = task, poller
-			return false
+			matched = poller
+			break
 		}
-		return true
+		if matched == nil {
+			// no compatible poller for this task; keep scanning later tasks
+			return true
+		}
+
+		// skip per-key rate-limited tasks, tracking the minimum delay so the caller
+		// knows when the soonest one becomes ready
+		if perKeyLimited {
+			delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
+			if delay > 0 {
+				if minDelay == 0 || delay < minDelay {
+					minDelay = delay
+				}
+				return true
+			}
+		}
+
+		matchedTask, matchedPoller = task, matched
+		return false
 	})
-	return matchedTask, matchedPoller
+	return
 }
 
 // call with lock held
@@ -489,19 +520,16 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	now := d.timeSource.Now().UnixNano()
 
 	for {
-		// search for highest priority match
-		task, poller := d.findMatch(allowForwarding)
+		// search for highest-priority ready match; skip per-key rate-limited tasks
+		task, poller, minDelay := d.findMatch(allowForwarding, now)
 		if task == nil || poller == nil {
+			if minDelay > 0 {
+				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
+				return true
+			}
 			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()
 			return false
-		}
-
-		// check ready time
-		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
-		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
-		if delay > 0 {
-			return true // not ready yet, timer will call match later
 		}
 
 		// ready to signal match

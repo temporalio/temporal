@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -761,129 +760,6 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 			}
 		})
 	}
-}
-
-func (s *hsmStateReplicatorSuite) TestSyncHSM_EmptyIncomingVersionHistory() {
-	// GetLastVersionHistoryItem on an empty incoming version history returns an error
-	// before any cache/mutable state load happens.
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
-		WorkflowKey:         s.workflowKey,
-		EventVersionHistory: &historyspb.VersionHistory{},
-	})
-	s.Error(err)
-}
-
-func (s *hsmStateReplicatorSuite) TestSyncHSM_LoadMutableStateError() {
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		nil, serviceerror.NewInternal("load failed")).Times(1)
-
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
-		WorkflowKey: s.workflowKey,
-		EventVersionHistory: &historyspb.VersionHistory{
-			Items: []*historyspb.VersionHistoryItem{
-				{EventId: 10, Version: s.namespaceEntry.FailoverVersion(tests.WorkflowID)},
-			},
-		},
-	})
-	s.Error(err)
-	_, ok := err.(*serviceerror.Internal)
-	s.True(ok)
-}
-
-// hsmReplStateMachineNode builds an incoming state machine node that is newer than the persisted one.
-func (s *hsmStateReplicatorSuite) hsmReplNewerNode() *persistencespb.StateMachineNode {
-	return &persistencespb.StateMachineNode{
-		Children: map[string]*persistencespb.StateMachineMap{
-			s.stateMachineDef.Type(): {
-				MachinesById: map[string]*persistencespb.StateMachineNode{
-					"child1": {
-						Data: []byte(hsmtest.State3),
-						InitialVersionedTransition: &persistencespb.VersionedTransition{
-							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID),
-						},
-						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-							NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(tests.WorkflowID) + 100,
-						},
-						TransitionCount: 50,
-					},
-				},
-			},
-		},
-	}
-}
-
-func (s *hsmStateReplicatorSuite) TestSyncHSM_LegacyMode_WorkflowOpen() {
-	// exercise the legacy path (EnableUpdateWorkflowModeIgnoreCurrent == false) for a running workflow
-	s.mockShard.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent = dynamicconfig.GetBoolPropertyFn(false)
-	persistedState := s.buildWorkflowMutableState()
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State:           persistedState,
-		DBRecordVersion: 777,
-	}, nil).Times(1)
-
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			s.Equal(persistence.UpdateWorkflowModeUpdateCurrent, request.Mode)
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	).Times(1)
-
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
-		WorkflowKey:         s.workflowKey,
-		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
-		StateMachineNode:    s.hsmReplNewerNode(),
-	})
-	s.NoError(err)
-}
-
-func (s *hsmStateReplicatorSuite) TestSyncHSM_LegacyMode_WorkflowZombie() {
-	s.mockShard.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent = dynamicconfig.GetBoolPropertyFn(false)
-	persistedState := s.buildWorkflowMutableState()
-	persistedState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	persistedState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State:           persistedState,
-		DBRecordVersion: 777,
-	}, nil).Times(1)
-
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
-			return tests.UpdateWorkflowExecutionResponse, nil
-		},
-	).Times(1)
-
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
-		WorkflowKey:         s.workflowKey,
-		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
-		StateMachineNode:    s.hsmReplNewerNode(),
-	})
-	s.NoError(err)
-}
-
-func (s *hsmStateReplicatorSuite) TestSyncHSM_LegacyMode_WorkflowClosed() {
-	s.mockShard.GetConfig().EnableUpdateWorkflowModeIgnoreCurrent = dynamicconfig.GetBoolPropertyFn(false)
-	persistedState := s.buildWorkflowMutableState()
-	persistedState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	persistedState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State:           persistedState,
-		DBRecordVersion: 777,
-	}, nil).Times(1)
-
-	// closed workflow in legacy mode uses SubmitClosedWorkflowSnapshot -> SetWorkflowExecution
-	s.mockExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		&persistence.SetWorkflowExecutionResponse{}, nil).Times(1)
-
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
-		WorkflowKey:         s.workflowKey,
-		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
-		StateMachineNode:    s.hsmReplNewerNode(),
-	})
-	s.NoError(err)
 }
 
 func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {

@@ -58,7 +58,7 @@ func NewTestServiceLayeredClient(
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
-		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 	}
 	lc.Append(fx.StopHook(client.Stop))
 	return client, nil

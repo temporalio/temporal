@@ -984,14 +984,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 	}
 
-	// Pinned override is inherited if Task Queue of new run is compatible with the override version.
-	var inheritedPinnedOverride *workflowpb.VersioningOverride
-	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.OverrideIsPinned(o) {
-		inheritedPinnedOverride = o
+	// Pinned and one-time overrides are inherited if Task Queue of new run is compatible with the override version.
+	var inheritedVersioningOverride *workflowpb.VersioningOverride
+	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.GetOverrideTargetDeploymentVersion(o) != nil {
+		inheritedVersioningOverride = o
 		newTQ := attributes.GetTaskQueue().GetName()
 		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
-			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
-			inheritedPinnedOverride = nil
+			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit override if child is in a different namespace
+			inheritedVersioningOverride = nil
 		}
 	}
 
@@ -1091,7 +1091,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
-		inheritedPinnedOverride,
+		inheritedVersioningOverride,
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 		inheritedAutoUpgradeInfo,
@@ -1665,7 +1665,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	shouldTerminateAndStartChild bool,
-	inheritedPinnedOverride *workflowpb.VersioningOverride,
+	inheritedVersioningOverride *workflowpb.VersioningOverride,
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
 	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
@@ -1690,7 +1690,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		Memo:                     attributes.Memo,
 		SearchAttributes:         attributes.SearchAttributes,
 		UserMetadata:             userMetadata,
-		VersioningOverride:       inheritedPinnedOverride,
+		VersioningOverride:       inheritedVersioningOverride,
 		Priority:                 priority,
 		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
