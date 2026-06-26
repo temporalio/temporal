@@ -63,7 +63,7 @@ type CleanupCapableT interface {
 	Cleanup(func())
 }
 
-// Expectations represent log calls we expect to happen in tests.
+// Expectation represents a log call we expect to happen in tests.
 // For error-level logs, expectations also influence whether the log fails the
 // test based on the logger mode.
 type Expectation struct {
