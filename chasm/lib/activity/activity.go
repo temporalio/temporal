@@ -661,7 +661,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 		if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
 			!a.firstDispatchTime().After(ctx.Now(a)) {
-			return nil, serviceerror.NewInvalidArgument(
+			return nil, serviceerror.NewFailedPrecondition(
 				"cannot update start_delay: activity is no longer in its delay window")
 		}
 	}
