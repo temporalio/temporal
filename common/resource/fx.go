@@ -225,7 +225,6 @@ func SearchAttributeValidatorProvider(
 type NamespaceRegistryParams struct {
 	fx.In
 
-	ServiceName                primitives.ServiceName `optional:"true"`
 	Logger                     log.SnTaggedLogger
 	MetricsHandler             metrics.Handler
 	ClusterMetadata            cluster.Metadata
@@ -236,7 +235,7 @@ type NamespaceRegistryParams struct {
 }
 
 func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
-	registry := nsregistry.NewRegistry(
+	return nsregistry.NewRegistry(
 		params.MetadataManager,
 		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
 		params.ClusterMetadata.GetCurrentClusterName(),
@@ -247,7 +246,6 @@ func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registr
 		params.ReplicationResolverFactory,
 		params.NamespaceStateChangedFn,
 	)
-	return registry
 }
 
 func ClientFactoryProvider(
@@ -331,11 +329,7 @@ func MatchingRawClientProvider(
 	clientBean client.Bean,
 	namespaceRegistry namespace.Registry,
 ) (MatchingRawClient, error) {
-	matchingClient, err := clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
-	if err != nil {
-		return nil, err
-	}
-	return matchingClient, nil
+	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 }
 
 func MatchingClientProvider(matchingRawClient MatchingRawClient, dc *dynamicconfig.Collection) MatchingClient {
@@ -412,11 +406,10 @@ func PerServiceDialOptionsProvider(
 ) map[primitives.ServiceName][]grpc.DialOption {
 	trailerInterceptor := interceptor.TrailerToContextMetadataInterceptor(logger)
 	dialOpt := grpc.WithChainUnaryInterceptor(trailerInterceptor)
-	options := map[primitives.ServiceName][]grpc.DialOption{
+	return map[primitives.ServiceName][]grpc.DialOption{
 		primitives.HistoryService:  {dialOpt},
 		primitives.MatchingService: {dialOpt},
 	}
-	return options
 }
 
 func RPCFactoryProvider(

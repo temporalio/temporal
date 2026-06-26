@@ -22,7 +22,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 
 func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
-		testcore.WithClusterOptions(testcore.WithMTLS()),
+		testcore.WithMTLS(),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
