@@ -16,10 +16,12 @@ import (
 	"time"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -326,12 +328,11 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	var matchingRawClient resource.MatchingRawClient
-	var grpcResolver *membership.GRPCResolver
+	clientMembershipMonitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
+	clientMembershipMonitor.Start()
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
-		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -388,7 +389,6 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
@@ -399,8 +399,11 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		// TODO: create matching client without reaching into fx graph
-		c.matching.client = matchingRawClient
+		matchingClient, err := c.newMatchingClient(clientMembershipMonitor, logger)
+		if err != nil {
+			logger.Fatal("unable to create matching test client", tag.Error(err))
+		}
+		c.matching.client = matchingClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -408,7 +411,73 @@ func (c *TemporalImpl) startFrontend() {
 	}
 
 	// Address for SDKs
-	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
+	c.frontendMembershipAddress = membership.GRPCResolverURLForTesting(clientMembershipMonitor, serviceName)
+}
+
+func (c *TemporalImpl) newMatchingClient(
+	membershipMonitor membership.Monitor,
+	logger log.Logger,
+) (resource.MatchingRawClient, error) {
+	rpcFactory, err := c.newClientRPCFactory(membershipMonitor, logger)
+	if err != nil {
+		return nil, err
+	}
+	clientFactory := c.newClientFactoryProvider(c.clusterMetadataConfig, c.mockAdminClient).NewFactory(
+		rpcFactory,
+		membershipMonitor,
+		c.GetMetricsHandler(),
+		dynamicconfig.NewCollection(c.dcClient, c.logger),
+		c.testHooks,
+		c.historyConfig.NumHistoryShards,
+		logger,
+		logger,
+	)
+	return clientFactory.NewMatchingClientWithTimeout(
+		c.namespaceIDToName,
+		matchingclient.DefaultTimeout,
+		matchingclient.DefaultLongPollTimeout,
+	)
+}
+
+func (c *TemporalImpl) newClientRPCFactory(
+	membershipMonitor membership.Monitor,
+	logger log.Logger,
+) (common.RPCFactory, error) {
+	var frontendTLSConfig *tls.Config
+	var err error
+	if c.tlsConfigProvider != nil {
+		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+		}
+	}
+
+	frontendURL := membership.GRPCResolverURLForTesting(membershipMonitor, primitives.FrontendService)
+	return rpc.NewFactory(
+		&config.Config{},
+		primitives.FrontendService,
+		logger,
+		c.GetMetricsHandler(),
+		c.tlsConfigProvider,
+		frontendURL,
+		frontendURL,
+		int(mustPortFromAddress(c.FrontendHTTPAddress())),
+		frontendTLSConfig,
+		nil,
+		resource.PerServiceDialOptionsProvider(logger),
+		membershipMonitor,
+		c.tokenProvider,
+	), nil
+}
+
+func (c *TemporalImpl) namespaceIDToName(id namespace.ID) (namespace.Name, error) {
+	resp, err := c.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Id: id.String(),
+	})
+	if err != nil {
+		return "", err
+	}
+	return namespace.Name(resp.GetNamespaceInfo().GetName()), nil
 }
 
 func (c *TemporalImpl) startHistory() {
