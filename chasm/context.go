@@ -21,12 +21,15 @@ type Context interface {
 	// NOTE: component created in the current transaction won't have a ref
 	// this is a Ref to the component state at the start of the transition
 	Ref(Component) ([]byte, error)
-	// Now returns the current time for this transaction. Stable within a transaction.
-	// In a context of a transaction, this time must be used to allow for framework support of time skipping.
+	// Now returns the current time, stable for the lifetime of this context.
+	// Must be used within a transaction to allow for framework support of time skipping.
+	// Note: Now does not account for pause state; use PauseInfo to incorporate pause duration
+	// into time calculations.
 	Now(Component) time.Time
-	// PauseInfo returns the accumulated pause information for the given component.
-	// The returned struct is a snapshot of the pause state as of the start of this transaction.
-	// Application logic can use this to compute a pause-adjusted time or implement SLA tracking.
+	// PauseInfo returns pause accounting for the given component as of the start of this context.
+	// Because LifecycleStatePaused covers the entire component subtree, the framework accumulates
+	// pause duration on every component in the subtree, not only the one that returned the paused
+	// state. Application logic can use this to compute a pause-adjusted time or implement SLA tracking.
 	PauseInfo(Component) ComponentPauseInfo
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
@@ -72,13 +75,13 @@ type Context interface {
 	goContext() context.Context
 }
 
-// ComponentPauseInfo is a snapshot of a component's pause accounting as of the start of a transaction.
+// ComponentPauseInfo is a snapshot of a component's pause accounting as of the start of this context.
 type ComponentPauseInfo struct {
 	// PausedSince is the wall-clock time when the component entered LifecycleStatePaused,
 	// or nil if the component is not currently paused.
 	PausedSince *time.Time
 	// AccumulatedPauseDuration is the total time spent paused across all completed pause/unpause cycles.
-	// Does not include the current ongoing pause interval (if any); add time.Since(*PausedSince) for that.
+	// Does not include the current ongoing pause interval; add time.Since(*PausedSince) for that.
 	AccumulatedPauseDuration time.Duration
 }
 

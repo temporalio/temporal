@@ -1566,8 +1566,10 @@ func (n *Node) applyPendingComponentMetadata() bool {
 	return dirty
 }
 
-// closeTransactionUpdatePauseInfo updates ChasmPauseInfo for components that
-// transitioned into or out of LifecycleStatePaused this transaction.
+// closeTransactionUpdatePauseInfo updates ChasmPauseInfo for every component node
+// that transitioned into or out of an effective paused state this transaction.
+// A component is effectively paused if it or any ancestor returns LifecycleStatePaused,
+// since paused state covers the entire subtree below the paused component.
 func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 	now := n.timeSource.Now()
 	for _, node := range n.andAllChildren() {
@@ -1586,7 +1588,7 @@ func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 
 		pauseInfo := attrs.GetPauseInfo()
 		wasPaused := pauseInfo != nil && pauseInfo.PausedTime != nil
-		isPaused := component.LifecycleState(immutableContext).IsPaused()
+		isPaused := component.LifecycleState(immutableContext).IsPaused() || node.isAncestorPaused(immutableContext)
 
 		switch {
 		case !wasPaused && isPaused:
@@ -1601,6 +1603,28 @@ func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 		}
 	}
 	return nil
+}
+
+// isAncestorPaused reports whether any ancestor component of this node is currently
+// paused — either by returning LifecycleStatePaused (if deserialized this transaction)
+// or by having PausedTime recorded in its persisted attrs from a prior transaction.
+func (n *Node) isAncestorPaused(ctx Context) bool {
+	for p := n.parent; p != nil; p = p.parent {
+		if !p.isComponent() {
+			continue
+		}
+		// If the ancestor was deserialized this transaction, ask its lifecycle state directly.
+		if c, ok := p.value.(Component); ok {
+			if c.LifecycleState(ctx).IsPaused() {
+				return true
+			}
+		}
+		// If the ancestor was not accessed this transaction, check its persisted pause info.
+		if p.serializedNode.GetMetadata().GetComponentAttributes().GetPauseInfo().GetPausedTime() != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // componentNodePath implements the CHASM Context interface

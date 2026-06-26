@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-
 type (
 	NewPayloadStoreRequest struct {
 		NamespaceID      namespace.ID
