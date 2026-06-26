@@ -127,6 +127,18 @@ func TestByteSlice(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), ownershipcheck.Analyzer, "byteslice")
 }
 
+// TestSliceMutability suppresses borrowed slice findings only when the source is
+// proven to be replaced wholesale with fresh slices and never mutated in place.
+func TestSliceMutability(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), ownershipcheck.Analyzer,
+		"replaceonlyslice",
+		"mutableslice",
+		"slicealiasmutation",
+		"unknownslicemutation",
+		"slicefieldassign",
+	)
+}
+
 // TestInputSet covers noise reduction C: a helper returning one of several inputs
 // resolves to owned when its actual arguments are owned (the false positive), yet
 // stays borrowed when any argument is borrowed.
