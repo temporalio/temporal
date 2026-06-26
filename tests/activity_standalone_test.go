@@ -8562,6 +8562,59 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		)
 	})
 
+	t.Run("ChangeTaskQueue_RedispatchesToNewQueue", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		queueA := testcore.RandomizeStr(t.Name() + "-A")
+		queueB := testcore.RandomizeStr(t.Name() + "-B")
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: queueA},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+		})
+		require.NoError(t, err)
+
+		// Update to queue B before any worker poll.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{TaskQueue: &taskqueuepb.TaskQueue{Name: queueB}},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"task_queue.name"}},
+		})
+		require.NoError(t, err)
+
+		// Poller on queue B picks it up.
+		pollResp, err := env.pollActivityTaskQueue(ctx, queueB)
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp.GetActivityId(), "task was not dispatched from the updated task queue")
+		require.EqualValues(t, 1, pollResp.GetAttempt())
+
+		// Describe reports queue B.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, queueB, descResp.GetInfo().GetTaskQueue())
+		require.False(t, descResp.GetInfo().GetActualStartTime().AsTime().IsZero())
+
+		// There are no tasks on queue A.
+		shortCtx, shortCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer shortCancel()
+		oldQueueResp, err := env.pollActivityTaskQueue(shortCtx, queueA)
+		if err == nil {
+			require.Empty(t, oldQueueResp.GetActivityId(), "task should not be dispatchable from the old task queue after update")
+		}
+	})
+
 	t.Run("ChangeHeartbeatTimeout", func(t *testing.T) {
 		// Poll the activity (STARTED), then shorten heartbeat timeout via update.
 		// The update re-creates the HeartbeatTimeoutTask with the new timeout, so no further
