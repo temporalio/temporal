@@ -466,8 +466,9 @@ type ActivityAttemptState struct {
 	// The worker's control task queue for sending commands (e.g. cancel) via Nexus.
 	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
 	WorkerControlTaskQueue string `protobuf:"bytes,12,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
-	// The serialized ComponentRef captured at start time, used to construct cancel command
-	// task tokens that are byte-identical to poll tokens.
+	// The serialized ComponentRef captured when the task was started. Used to construct
+	// the task token for cancel commands. The token must match what was sent to the
+	// worker in the poll response.
 	StartedComponentRef []byte `protobuf:"bytes,13,opt,name=started_component_ref,json=startedComponentRef,proto3" json:"started_component_ref,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache

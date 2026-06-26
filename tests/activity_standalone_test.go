@@ -2698,8 +2698,7 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 	cancelCmd := executeReq.Commands[0].GetCancelActivity()
 	require.NotNil(t, cancelCmd, "expected CancelActivity command")
 
-	// The cancel command token must be byte-identical to the poll token because the SDK
-	// uses exact byte match to look up the activity to cancel.
+	// The cancel command's task token must match what was sent to the worker in the poll response.
 	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
 }
 
