@@ -25,6 +25,7 @@ type clients struct {
 	logger            log.Logger
 	hostsByService    map[primitives.ServiceName]static.Hosts
 	tlsConfigProvider *encryption.FixedTLSConfigProvider
+	newMatchingClient func() (matchingservice.MatchingServiceClient, error)
 
 	frontend frontendClients
 	history  historyClients
@@ -47,6 +48,7 @@ type historyClients struct {
 }
 
 type matchingClient struct {
+	once   sync.Once
 	client matchingservice.MatchingServiceClient
 }
 
@@ -54,11 +56,13 @@ func newClients(
 	logger log.Logger,
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	tlsConfigProvider *encryption.FixedTLSConfigProvider,
+	newMatchingClient func() (matchingservice.MatchingServiceClient, error),
 ) clients {
 	return clients{
 		logger:            logger,
 		hostsByService:    hostsByService,
 		tlsConfigProvider: tlsConfigProvider,
+		newMatchingClient: newMatchingClient,
 	}
 }
 
@@ -113,6 +117,13 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
+	c.matching.once.Do(func() {
+		client, err := c.newMatchingClient()
+		if err != nil {
+			c.logger.Fatal("unable to create matching test client", tag.Error(err))
+		}
+		c.matching.client = client
+	})
 	return c.matching.client
 }
 

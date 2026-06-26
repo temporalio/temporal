@@ -16,8 +16,8 @@ import (
 	"time"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
@@ -225,6 +225,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.logger,
 		impl.hostsByProtocolByService[grpcProtocol],
 		impl.tlsConfigProvider,
+		impl.newMatchingClient,
 	)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
@@ -239,6 +240,59 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
 	return impl
+}
+
+func (c *TemporalImpl) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	var tlsConfigProvider encryption.TLSConfigProvider
+	var frontendTLSConfig *tls.Config
+	if c.tlsConfigProvider != nil {
+		var err error
+		tlsConfigProvider = c.tlsConfigProvider
+		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+		}
+	}
+
+	monitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
+	monitor.Start()
+	rpcFactory := rpc.NewFactory(
+		&config.Config{},
+		primitives.FrontendService,
+		c.logger,
+		c.GetMetricsHandler(),
+		tlsConfigProvider,
+		c.frontendMembershipAddress,
+		c.frontendMembershipAddress,
+		0,
+		frontendTLSConfig,
+		nil,
+		nil,
+		monitor,
+		c.tokenProvider,
+	)
+	clientFactory := client.NewFactoryProvider().NewFactory(
+		rpcFactory,
+		monitor,
+		c.GetMetricsHandler(),
+		dynamicconfig.NewCollection(c.dcClient, c.logger),
+		c.testHooks,
+		c.historyConfig.NumHistoryShards,
+		c.logger,
+		c.logger,
+	)
+	namespaceIDToName := func(id namespace.ID) (namespace.Name, error) {
+		resp, err := c.metadataMgr.GetNamespace(NewContext(), &persistence.GetNamespaceRequest{ID: id.String()})
+		if err != nil {
+			return "", err
+		}
+		return namespace.Name(resp.Namespace.Info.Name), nil
+	}
+	return clientFactory.NewMatchingClientWithTimeout(
+		namespaceIDToName,
+		matchingclient.DefaultTimeout,
+		matchingclient.DefaultLongPollTimeout,
+	)
 }
 
 func (c *TemporalImpl) Start() error {
@@ -328,8 +382,7 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	clientMembershipMonitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
-	clientMembershipMonitor.Start()
+	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
@@ -389,6 +442,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
+			fx.Populate(&grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
@@ -399,11 +453,6 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		matchingClient, err := c.newMatchingClient(clientMembershipMonitor, logger)
-		if err != nil {
-			logger.Fatal("unable to create matching test client", tag.Error(err))
-		}
-		c.matching.client = matchingClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -411,73 +460,7 @@ func (c *TemporalImpl) startFrontend() {
 	}
 
 	// Address for SDKs
-	c.frontendMembershipAddress = membership.GRPCResolverURLForTesting(clientMembershipMonitor, serviceName)
-}
-
-func (c *TemporalImpl) newMatchingClient(
-	membershipMonitor membership.Monitor,
-	logger log.Logger,
-) (resource.MatchingRawClient, error) {
-	rpcFactory, err := c.newClientRPCFactory(membershipMonitor, logger)
-	if err != nil {
-		return nil, err
-	}
-	clientFactory := c.newClientFactoryProvider(c.clusterMetadataConfig, c.mockAdminClient).NewFactory(
-		rpcFactory,
-		membershipMonitor,
-		c.GetMetricsHandler(),
-		dynamicconfig.NewCollection(c.dcClient, c.logger),
-		c.testHooks,
-		c.historyConfig.NumHistoryShards,
-		logger,
-		logger,
-	)
-	return clientFactory.NewMatchingClientWithTimeout(
-		c.namespaceIDToName,
-		matchingclient.DefaultTimeout,
-		matchingclient.DefaultLongPollTimeout,
-	)
-}
-
-func (c *TemporalImpl) newClientRPCFactory(
-	membershipMonitor membership.Monitor,
-	logger log.Logger,
-) (common.RPCFactory, error) {
-	var frontendTLSConfig *tls.Config
-	var err error
-	if c.tlsConfigProvider != nil {
-		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
-		}
-	}
-
-	frontendURL := membership.GRPCResolverURLForTesting(membershipMonitor, primitives.FrontendService)
-	return rpc.NewFactory(
-		&config.Config{},
-		primitives.FrontendService,
-		logger,
-		c.GetMetricsHandler(),
-		c.tlsConfigProvider,
-		frontendURL,
-		frontendURL,
-		int(mustPortFromAddress(c.FrontendHTTPAddress())),
-		frontendTLSConfig,
-		nil,
-		resource.PerServiceDialOptionsProvider(logger),
-		membershipMonitor,
-		c.tokenProvider,
-	), nil
-}
-
-func (c *TemporalImpl) namespaceIDToName(id namespace.ID) (namespace.Name, error) {
-	resp, err := c.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
-		Id: id.String(),
-	})
-	if err != nil {
-		return "", err
-	}
-	return namespace.Name(resp.GetNamespaceInfo().GetName()), nil
+	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
 }
 
 func (c *TemporalImpl) startHistory() {
