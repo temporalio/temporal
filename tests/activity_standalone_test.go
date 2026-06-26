@@ -6384,9 +6384,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
 		})
 		require.Error(t, err)
-		var invArg *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invArg)
-		require.Contains(t, invArg.Message, "start_delay")
+		var failedPrecond *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecond)
+		require.Contains(t, failedPrecond.Message, "start_delay")
 	})
 
 	s.Run("UpdateNegative_Rejected", func(s *standaloneActivityTestSuite) {
