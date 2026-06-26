@@ -11,7 +11,7 @@ func NewWorkflowTaskToken(
 	workflowID string,
 	runID string,
 	scheduledEventID int64,
-	startedEventId int64,
+	startedEventID int64,
 	startedTime *timestamppb.Timestamp,
 	attempt int32,
 	clock *clockspb.VectorClock,
@@ -22,7 +22,7 @@ func NewWorkflowTaskToken(
 		WorkflowId:       workflowID,
 		RunId:            runID,
 		ScheduledEventId: scheduledEventID,
-		StartedEventId:   startedEventId,
+		StartedEventId:   startedEventID,
 		StartedTime:      startedTime,
 		Attempt:          attempt,
 		Clock:            clock,
@@ -30,12 +30,34 @@ func NewWorkflowTaskToken(
 	}
 }
 
+// NewStandaloneActivityTaskToken builds a task token for a standalone activity.
+// Standalone activities don't use ScheduledEventId, Clock, Version, or StartVersion.
+func NewStandaloneActivityTaskToken(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	activityID string,
+	activityType string,
+	attempt int32,
+	componentRef []byte,
+) *tokenspb.Task {
+	return NewActivityTaskToken(
+		namespaceID, workflowID, runID,
+		0, // scheduledEventId
+		activityID, activityType, attempt,
+		nil, // clock
+		0,   // version
+		0,   // startVersion
+		componentRef,
+	)
+}
+
 func NewActivityTaskToken(
 	namespaceID string,
 	workflowID string,
 	runID string,
 	scheduledEventID int64,
-	activityId string,
+	activityID string,
 	activityType string,
 	attempt int32,
 	clock *clockspb.VectorClock,
@@ -50,7 +72,7 @@ func NewActivityTaskToken(
 		ScheduledEventId: scheduledEventID,
 		ActivityType:     activityType,
 		Attempt:          attempt,
-		ActivityId:       activityId,
+		ActivityId:       activityID,
 		Clock:            clock,
 		Version:          version,
 		StartVersion:     startVersion,

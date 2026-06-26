@@ -164,6 +164,14 @@ message ActivityAttemptState {
   // The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
   // `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
   string sdk_version = 11;
+
+  // The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+  // Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+  string worker_control_task_queue = 12;
+
+  // The serialized ComponentRef captured at start time, used to construct cancel command
+  // task tokens that are byte-identical to poll tokens.
+  bytes started_component_ref = 13;
 }
 
 message ActivityHeartbeatState {

@@ -87,6 +87,7 @@ type library struct {
 
 	handler                           *handler
 	activityDispatchTaskHandler       *activityDispatchTaskHandler
+	cancelCommandDispatchTaskHandler  *cancelCommandDispatchTaskHandler
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler
 	startToCloseTimeoutTaskHandler    *startToCloseTimeoutTaskHandler
@@ -96,6 +97,7 @@ type library struct {
 func newLibrary(
 	handler *handler,
 	activityDispatchTaskHandler *activityDispatchTaskHandler,
+	cancelCommandDispatchTaskHandler *cancelCommandDispatchTaskHandler,
 	scheduleToStartTimeoutTaskHandler *scheduleToStartTimeoutTaskHandler,
 	scheduleToCloseTimeoutTaskHandler *scheduleToCloseTimeoutTaskHandler,
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
@@ -107,6 +109,7 @@ func newLibrary(
 		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
+		cancelCommandDispatchTaskHandler:  cancelCommandDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
 		scheduleToCloseTimeoutTaskHandler: scheduleToCloseTimeoutTaskHandler,
 		startToCloseTimeoutTaskHandler:    startToCloseTimeoutTaskHandler,
@@ -139,6 +142,10 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"heartbeatTimer",
 			l.heartbeatTimeoutTaskHandler,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"cancelCommandDispatch",
+			l.cancelCommandDispatchTaskHandler,
 		),
 	}
 }
