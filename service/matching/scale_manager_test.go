@@ -263,7 +263,9 @@ func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
 }
 
 // TestShadowDecisionDoesNotPersistOrPush verifies that shadow mode observes the
-// scaler decision without applying it.
+// scaler decision without applying it. Entering shadow mode does release a prior
+// managed target to baseline (one write, Target=0), but the scaler's hypothetical
+// decision (2) is never persisted.
 func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
@@ -272,21 +274,39 @@ func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 		Do(func(in PartitionScalerInput) { inputs <- in }).
 		Return(PartitionScalerDecision{NewTarget: 2})
 
-	// Start publishes the initial real state once. The shadow decision must not
-	// publish another state or write to persistence.
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+	// Exactly one DB write: the one-time release to baseline. The scaler decision
+	// (2) must never be persisted.
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(1)
+
+	// Start publishes the initial state; the release publishes once more.
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 1})
 
 	s.sm.AddedTasks(1)
 	in := waitRecv(s, inputs, "shadow scaler call missing")
-	s.Equal(1, in.CurrentTarget)
-	s.Equal(int32(1), s.sm.scaleState.GetTarget())
+	// release happens before the scaler call, so it sees the baseline.
+	s.Equal(0, in.CurrentTarget)
+
+	w := waitRecv(s, dbWrites, "release write missing")
+	s.Equal(int32(0), w.Target)
+	s.Nil(w.PrivateScalerState)
+	s.Equal(int32(0), s.sm.scaleState.GetTarget())
+
+	// the scaler decision (2) must not be persisted
+	assertNoRecv(s, dbWrites, 30*time.Millisecond, "scaler decision must not be persisted")
 }
 
-// TestShadowModeUsesRealStateOnEveryScalerCall verifies that shadow mode does
-// not feed hypothetical target or private state back into later scaler calls.
-func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryScalerCall() {
+// TestShadowModeColdStartsScalerFromBaseline verifies that after releasing a
+// prior managed target on entry, shadow mode feeds the scaler the baseline
+// (Target 0, nil private state) on every call and never feeds hypothetical
+// decisions back into the state.
+func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 	s.settings.ShadowModeLogInterval = time.Minute
 	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
 	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
@@ -302,21 +322,27 @@ func (s *ScaleManagerSuite) TestShadowModeUsesRealStateOnEveryScalerCall() {
 			Return(PartitionScalerDecision{NewTarget: 3, PrivateState: priv2}),
 	)
 
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+	// One release write (Target=0) on entry; shadow decisions never write.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	// Start push + one release push.
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 1, PrivateScalerState: realPriv})
 
 	s.sm.AddedTasks(1)
 	in1 := waitRecv(s, inputs, "first shadow call missing")
-	s.Equal(1, in1.CurrentTarget)
-	s.ProtoEqual(realPriv, in1.PrivateState)
+	s.Equal(0, in1.CurrentTarget)
+	s.Nil(in1.PrivateState)
 
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
-	s.Equal(1, in2.CurrentTarget)
-	s.ProtoEqual(realPriv, in2.PrivateState)
-	s.ProtoEqual(realPriv, s.sm.scaleState.GetPrivateScalerState())
+	s.Equal(0, in2.CurrentTarget)
+	s.Nil(in2.PrivateState)
+
+	// scaler decisions are never applied back into the state
+	s.Equal(int32(0), s.sm.scaleState.GetTarget())
+	s.Nil(s.sm.scaleState.GetPrivateScalerState())
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
@@ -393,7 +419,9 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 		Do(func(in PartitionScalerInput) { inputs <- in }).
 		Return(PartitionScalerDecision{NewTarget: 0})
 
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+	// entering shadow with a managed target releases it to baseline (one write/push).
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 	s.sm.AddedTasks(1)
@@ -413,7 +441,10 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 		Do(func(in PartitionScalerInput) { inputs <- in }).
 		Return(PartitionScalerDecision{NoChange: true})
 
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1)
+	// entering shadow releases the managed target to baseline (one write/push);
+	// the drain path must not write or clear backlog bits.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	initial := &persistencespb.PartitionScaleState{
 		Target:        2,
@@ -449,6 +480,93 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 	}
 
 	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
+}
+
+// TestShadowModeReleasesManagedTargetToBaseline verifies that enabling shadow
+// mode on top of an applied managed target zeroes the target and clears private
+// state (one write), dropping the write side to baseline (Write=0) while
+// preserving read partitions (BacklogState unchanged).
+func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
+	s.settings.ShadowModeLogInterval = time.Minute
+	priv := protoutils.MarshalAny(s.T(), wrapperspb.String("managed-state"))
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(1)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).Times(2)
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:             10,
+		MaxTarget:          10,
+		BacklogState:       bitSet(nil).set(0).set(1).set(2).set(3).set(4).set(5).set(6).set(7).set(8).set(9),
+		PrivateScalerState: priv,
+	}
+	s.startManager(4, initial)
+
+	s.sm.AddedTasks(1)
+
+	w := waitRecv(s, dbWrites, "release write missing")
+	s.Equal(int32(0), w.Target)
+	s.Nil(w.PrivateScalerState)
+	s.Equal(int32(10), bitSet(w.BacklogState).len(), "read partitions must be preserved")
+
+	// Start push (Read=10/Write=10), then the release push (Read=10/Write=0).
+	waitRecv(s, scaleInfos, "start push missing")
+	released := waitRecv(s, scaleInfos, "release push missing")
+	s.Equal(int32(10), released.Read)
+	s.Equal(int32(0), released.Write)
+}
+
+// TestShadowModeLogsOscillationFromBaseline verifies that once a managed target
+// is released to baseline (0), shadow decisions oscillating among positive values
+// are all logged. Releasing removes the stale non-zero baseline that would
+// otherwise short-circuit a decision returning to the prior real target.
+func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
+	s.settings.ShadowModeLogInterval = time.Minute
+
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	shadowLog := logger.Expect(testlogger.Info, "new target")
+	inputs := make(chan PartitionScalerInput, 3)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+	)
+
+	// one release write/push on entry (managed Target=2 -> 0)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
+
+	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "first shadow call missing")
+	waitLogMatches(s, shadowLog, 1, "shadow target 3 not logged")
+
+	s.timeSource.Advance(time.Minute) // past cooldown and cadence
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "second shadow call missing")
+	waitLogMatches(s, shadowLog, 2, "shadow target 2 not logged")
+
+	s.timeSource.Advance(time.Minute)
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "third shadow call missing")
+	waitLogMatches(s, shadowLog, 3, "shadow target 3 after oscillation not logged")
 }
 
 // TestNoChangeDecisionSkipsWrite covers two skip paths: explicit NoChange, and
