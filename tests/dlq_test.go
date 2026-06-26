@@ -99,6 +99,7 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 	w.dlq, err = w.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
 	s.NoError(err)
 	s.T().Cleanup(w.dlq.Close)
+
 	w.systemSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  w.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
