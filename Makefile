@@ -403,6 +403,15 @@ lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
 	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
 
+OWNERSHIP_SINK := ProtoReflect
+OWNERSHIP_SANITIZERS := maps.Clone,slices.Clone,proto.Clone,proto.CloneOf,common.CloneProto
+OWNERSHIP_VALUE_KINDS := map,slice
+# Opaque callees that retain/marshal an argument, as pkgpath.Func#argN (none yet).
+OWNERSHIP_ESCAPE_FUNCS :=
+lint-ownership:
+	@printf $(COLOR) "Checking proto ownership (borrowed maps/slices embedded into responses)..."
+	@go run ./cmd/tools/ownershipcheck -sink='$(OWNERSHIP_SINK)' -sanitizers='$(OWNERSHIP_SANITIZERS)' -value-kinds='$(OWNERSHIP_VALUE_KINDS)' -escape-funcs='$(OWNERSHIP_ESCAPE_FUNCS)' ./...
+
 lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
 	$(call silent_exec, $(API_LINTER) --set-exit-status -I=$(PROTO_ROOT)/internal --descriptor-set-in $(API_BINPB) --config=$(PROTO_ROOT)/api-linter.yaml $(PROTO_FILES))
