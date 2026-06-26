@@ -802,6 +802,9 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
+// hasNewTransactionSideEffects returns true when the transaction has observable
+// effects that must be persisted regardless of whether data bytes changed:
+// new tasks scheduled on this node, or lifecycle termination.
 func (n *Node) hasNewTransactionSideEffects() bool {
 	return len(n.newTasks[n.value]) > 0 || n.terminated
 }
@@ -823,6 +826,10 @@ func (n *Node) serialize() error {
 	}
 }
 
+// serializeComponentNode serializes the component node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeComponentNode() error {
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -841,16 +848,28 @@ func (n *Node) serializeComponentNode() error {
 			}
 		}
 
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+		n.serializedNode.Data = blob
+
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			rc, ok := n.registry.componentFor(n.value)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component type is not registered",
+					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			}
+			// TypeId mismatch on a brand new node indicates node reassignment.
+			existingTypeID := n.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
+			if existingTypeID != 0 && existingTypeID != rc.componentID {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component node TypeId changed on first serialization",
+					fmt.Errorf("existing: %d, new: %d", existingTypeID, rc.componentID),
+				)
+			}
+			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		}
 
-		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1184,6 +1203,10 @@ func (n *Node) deleteChildren(
 	return nil
 }
 
+// serializeDataNode serializes the data node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeDataNode() error {
 	protoValue, ok := n.value.(proto.Message)
 	if !ok {
@@ -1204,6 +1227,10 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+// serializeCollectionNode serializes the collection node.
+// If this method is updated to modify serialized fields beyond
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
@@ -1899,6 +1926,10 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 
+		// Skip writing nodes whose serialized content hasn't changed. A nil
+		// LastUpdateVersionedTransition means the node is brand new and must be written.
+		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
+		// blob, leaving prevData pointing at the original for comparison.
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
@@ -1914,6 +1945,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			return err
 		}
 
+		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
 		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
 			continue

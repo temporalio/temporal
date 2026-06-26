@@ -314,8 +314,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			s.NoError(err)
 
 			rootComponent := tc.initComponent()
-			rootNode.value = rootComponent
-			rootNode.valueState = valueStateNeedSyncStructure
+			err = rootNode.SetRootComponent(rootComponent)
+			s.NoError(err)
 
 			mutations, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -448,8 +448,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			rootNode, err := s.newTestTree(nilSerializedNodes)
 			s.NoError(err)
 
-			rootNode.value = &TestComponent{} // all map fields are nil
-			rootNode.valueState = valueStateNeedSyncStructure
+			err = rootNode.SetRootComponent(&TestComponent{}) // all map fields are nil
+			s.NoError(err)
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -473,8 +473,8 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			default:
 				s.Failf("unexpected mapField", "unknown mapField %q in test case", tc.mapField)
 			}
-			rootNode.value = &rootComponent
-			rootNode.valueState = valueStateNeedSyncStructure
+			err = rootNode.SetRootComponent(&rootComponent)
+			s.NoError(err)
 
 			mutation, err := rootNode.CloseTransaction()
 			s.NoError(err)
@@ -490,8 +490,8 @@ func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
 	rootNode, err := s.newTestTree(nilSerializedNodes)
 	s.NoError(err)
 
-	rootNode.value = &TestComponent{}
-	rootNode.valueState = valueStateNeedSyncStructure
+	err = rootNode.SetRootComponent(&TestComponent{})
+	s.NoError(err)
 
 	mutations, err := rootNode.CloseTransaction()
 	s.NoError(err)
@@ -3314,21 +3314,9 @@ func (s *nodeSuite) testComponentTree() *Node {
 	s.NoError(err)
 	s.Nil(node.value)
 
-	// Get an empty top-level component from the empty tree.
-	err = node.deserialize(reflect.TypeFor[*TestComponent]())
-	s.NoError(err)
-	s.NotNil(node.value)
-	s.IsType(&TestComponent{}, node.value)
-	s.Equal(valueStateSynced, node.valueState)
-
-	tc, err := node.Component(NewMutableContext(context.Background(), node), ComponentRef{componentPath: rootPath})
-	s.NoError(err)
-	s.Equal(valueStateNeedSyncStructure, node.valueState)
-	// Create subcomponents by assigning fields to TestComponent instance.
-	setTestComponentFields(tc.(*TestComponent), s.nodeBackend)
-
-	// Sync tree with subcomponents of TestComponent.
-	err = node.syncSubComponents()
+	tc := &TestComponent{}
+	setTestComponentFields(tc, s.nodeBackend)
+	err = node.SetRootComponent(tc)
 	s.False(node.needsPointerResolution)
 	s.NoError(err)
 	s.Empty(node.mutation.DeletedNodes)
