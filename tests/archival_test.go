@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -23,14 +22,10 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -38,7 +33,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
-	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -55,6 +49,7 @@ type (
 
 	archivalTestEnv struct {
 		*testcore.TestEnv
+
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
 
@@ -65,19 +60,6 @@ type (
 		// Counters to verify custom archivers are being called
 		customHistoryArchiveCalled    atomic.Int32
 		customVisibilityArchiveCalled atomic.Int32
-
-		archiverBase *archivalArchiverBase
-	}
-
-	archivalArchiverBase struct {
-		metadata                 archiver.ArchivalMetadata
-		provider                 provider.ArchiverProvider
-		historyProvider          *config.HistoryArchiverProvider
-		visibilityProvider       *config.VisibilityArchiverProvider
-		historyStoreDirectory    string
-		visibilityStoreDirectory string
-		historyURI               string
-		visibilityURI            string
 	}
 
 	archivalWorkflowInfo struct {
@@ -95,94 +77,6 @@ type (
 		counter *atomic.Int32
 	}
 )
-
-func newArchivalArchiverBase(t *testing.T) *archivalArchiverBase {
-	t.Helper()
-
-	historyStoreDirectory, err := os.MkdirTemp("", "test-history-archival")
-	if err != nil {
-		t.Fatal(err)
-	}
-	visibilityStoreDirectory, err := os.MkdirTemp("", "test-visibility-archival")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg := &config.FilestoreArchiver{
-		FileMode: "0666",
-		DirMode:  "0766",
-	}
-	historyProvider := &config.HistoryArchiverProvider{
-		Filestore: cfg,
-	}
-	visibilityProvider := &config.VisibilityArchiverProvider{
-		Filestore: cfg,
-	}
-	historyURI := filestore.URIScheme + "://" + historyStoreDirectory
-	visibilityURI := filestore.URIScheme + "://" + visibilityStoreDirectory
-	return &archivalArchiverBase{
-		metadata: archiver.NewArchivalMetadata(dynamicconfig.NewNoopCollection(), "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
-			History: config.HistoryArchivalNamespaceDefaults{
-				State: "enabled",
-				URI:   historyURI,
-			},
-			Visibility: config.VisibilityArchivalNamespaceDefaults{
-				State: "enabled",
-				URI:   visibilityURI,
-			},
-		}),
-		historyProvider:          historyProvider,
-		visibilityProvider:       visibilityProvider,
-		historyStoreDirectory:    historyStoreDirectory,
-		visibilityStoreDirectory: visibilityStoreDirectory,
-		historyURI:               historyURI,
-		visibilityURI:            visibilityURI,
-	}
-}
-
-func (a *archivalArchiverBase) applyConfig(cfg *config.Config) {
-	cfg.Archival.History = config.HistoryArchival{
-		State:      config.ArchivalEnabled,
-		EnableRead: true,
-		Provider:   a.historyProvider,
-	}
-	cfg.Archival.Visibility = config.VisibilityArchival{
-		State:      config.ArchivalEnabled,
-		EnableRead: true,
-		Provider:   a.visibilityProvider,
-	}
-	cfg.NamespaceDefaults.Archival.History = config.HistoryArchivalNamespaceDefaults{
-		State: config.ArchivalEnabled,
-		URI:   a.historyURI,
-	}
-	cfg.NamespaceDefaults.Archival.Visibility = config.VisibilityArchivalNamespaceDefaults{
-		State: config.ArchivalEnabled,
-		URI:   a.visibilityURI,
-	}
-}
-
-func (a *archivalArchiverBase) initProvider(
-	executionManager persistence.ExecutionManager,
-	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
-	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
-) {
-	a.provider = provider.NewArchiverProvider(
-		a.historyProvider,
-		a.visibilityProvider,
-		customHistoryArchiverFactory,
-		customVisibilityArchiverFactory,
-		executionManager,
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-	)
-}
-
-func (a *archivalArchiverBase) tearDown() error {
-	err := os.RemoveAll(a.historyStoreDirectory)
-	if visibilityErr := os.RemoveAll(a.visibilityStoreDirectory); visibilityErr != nil && err == nil {
-		err = visibilityErr
-	}
-	return err
-}
 
 // customHistoryArchiver method implementations
 func (c *customHistoryArchiver) Archive(ctx context.Context, uri archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) error {
@@ -217,16 +111,7 @@ func TestArchivalSuite(t *testing.T) {
 }
 
 func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
-	ae := &archivalTestEnv{
-		archiverBase: newArchivalArchiverBase(s.T()),
-	}
-	s.T().Cleanup(func() {
-		s.NoError(ae.archiverBase.tearDown())
-	})
-
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
-	}
+	ae := &archivalTestEnv{}
 
 	// Create custom history archiver factory for custom scheme
 	customHistoryArchiverFactory := provider.CustomHistoryArchiverFactoryFunc(
@@ -257,19 +142,9 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 	)
 
 	ae.TestEnv = testcore.NewEnv(s.T(),
-		testcore.WithClusterOptions(
-			testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
-			testcore.WithServerConfigOverride(ae.archiverBase.applyConfig),
-			testcore.WithServerOptions(
-				temporal.WithCustomHistoryArchiverFactory(customHistoryArchiverFactory),
-				temporal.WithCustomVisibilityArchiverFactory(customVisibilityArchiverFactory),
-			),
-		),
-	)
-	ae.archiverBase.initProvider(
-		ae.GetTestCluster().ExecutionManager(),
-		customHistoryArchiverFactory,
-		customVisibilityArchiverFactory,
+		testcore.WithDynamicConfig(dynamicconfig.ArchivalProcessorArchiveDelay, time.Duration(0)),
+		testcore.WithArchival(),
+		testcore.WithCustomArchivers(customHistoryArchiverFactory, customVisibilityArchiverFactory),
 	)
 
 	var err error
@@ -280,8 +155,8 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		ae.archivalNamespace,
 		0, // Archive right away.
 		enumspb.ARCHIVAL_STATE_ENABLED,
-		ae.archiverBase.historyURI,
-		ae.archiverBase.visibilityURI,
+		ae.GetTestCluster().ArchiverBase().HistoryURI(),
+		ae.GetTestCluster().ArchiverBase().VisibilityURI(),
 	)
 	s.NoError(err)
 
@@ -297,12 +172,13 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		customVisibilityURI,
 	)
 	s.NoError(err)
+
 	return ae
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 	env := s.newTestEnv()
-	s.True(env.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(env.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
@@ -318,7 +194,7 @@ func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 	env := s.newTestEnv()
-	s.True(env.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(env.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
@@ -338,7 +214,7 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 	// s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
 	env := s.newTestEnv()
-	s.True(env.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(env.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
@@ -353,7 +229,7 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
 	env := s.newTestEnv()
-	s.True(env.archiverBase.metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
+	s.True(env.GetTestCluster().ArchiverBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
 
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
@@ -374,7 +250,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
-			response, err := env.FrontendClient().ListArchivedWorkflowExecutions(testcore.NewContext(), request)
+			response, err := env.FrontendClient().ListArchivedWorkflowExecutions(s.Context(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
@@ -402,7 +278,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 
 func (s *ArchivalSuite) TestCustomArchiver() {
 	env := s.newTestEnv()
-	s.True(env.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(env.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	workflowID := "custom-history-archiver-workflow-id"
 	workflowType := "custom-history-archiver-type"
@@ -430,24 +306,23 @@ func (s *ArchivalSuite) TestCustomArchiver() {
 
 // workflowIsArchived asserts that both the workflow history and workflow visibility are archived.
 func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
-	historyURI, err := archiver.NewURI(env.archiverBase.historyURI)
+	historyURI, err := archiver.NewURI(env.GetTestCluster().ArchiverBase().HistoryURI())
 	s.NoError(err)
-	historyArchiver, err := env.archiverBase.provider.GetHistoryArchiver(
+	historyArchiver, err := env.GetTestCluster().ArchiverBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
 	)
 	s.NoError(err)
 
-	visibilityURI, err := archiver.NewURI(env.archiverBase.visibilityURI)
+	visibilityURI, err := archiver.NewURI(env.GetTestCluster().ArchiverBase().VisibilityURI())
 	s.NoError(err)
-	visibilityArchiver, err := env.archiverBase.provider.GetVisibilityArchiver(
+	visibilityArchiver, err := env.GetTestCluster().ArchiverBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
 	)
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		ctx := testcore.NewContext()
 		var historyResponse *archiver.GetHistoryResponse
-		historyResponse, err = historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
+		historyResponse, err = historyArchiver.Get(s.Context(), historyURI, &archiver.GetHistoryRequest{
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -461,7 +336,7 @@ func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID nam
 		}
 		var visibilityResponse *archiver.QueryVisibilityResponse
 		visibilityResponse, err = visibilityArchiver.Query(
-			ctx,
+			s.Context(),
 			visibilityURI,
 			&archiver.QueryVisibilityRequest{
 				NamespaceID: namespaceID.String(),
@@ -493,7 +368,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 
 	s.Eventually(func() bool {
 		_, err := env.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
-			testcore.NewContext(),
+			s.Context(),
 			&persistence.ReadHistoryBranchRequest{
 				ShardID:       shardID,
 				BranchToken:   workflowInfo.branchToken,
@@ -523,7 +398,7 @@ func (s *ArchivalSuite) mutableStateIsDeleted(env *archivalTestEnv, namespaceID 
 	}
 
 	s.Eventually(func() bool {
-		_, err := env.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
+		_, err := env.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(s.Context(), request)
 		if common.IsNotFoundError(err) {
 			return true
 		}
@@ -553,7 +428,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.RunId))
 	workflowInfos := make([]archivalWorkflowInfo, numRuns)
@@ -671,7 +546,7 @@ func (s *ArchivalSuite) getBranchToken(
 	execution *commonpb.WorkflowExecution,
 ) ([]byte, error) {
 
-	descResp, err := env.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+	descResp, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName.String(),
 		Execution: execution,
 		Archetype: chasm.WorkflowArchetype,
