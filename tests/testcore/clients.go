@@ -69,18 +69,22 @@ func newClients(
 	logger log.Logger,
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	tlsConfigProvider *encryption.FixedTLSConfigProvider,
-	dc *dynamicconfig.Collection,
-	testHooks testhooks.TestHooks,
-	metricsHandler metrics.Handler,
 ) clients {
 	return clients{
 		logger:            logger,
 		hostsByService:    hostsByService,
 		tlsConfigProvider: tlsConfigProvider,
-		dc:                dc,
-		testHooks:         testHooks,
-		metricsHandler:    metricsHandler,
 	}
+}
+
+func (c *clients) enableMatchingClientRouting(
+	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
+) {
+	c.dc = dc
+	c.testHooks = testHooks
+	c.metricsHandler = metricsHandler
 }
 
 func (c *clients) AdminClient() adminservice.AdminServiceClient {
@@ -134,6 +138,9 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
+	if c.matching.client != nil {
+		return c.matching.client
+	}
 	c.matching.once.Do(func() {
 		client, err := c.newMatchingClient()
 		if err != nil {
@@ -201,6 +208,10 @@ func (c *clients) tlsConfig(serviceName primitives.ServiceName) (*tls.Config, er
 }
 
 func (c *clients) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	if c.dc == nil {
+		return nil, errors.New("matching client routing is not configured")
+	}
+
 	resolver := newTestMatchingServiceResolver(c.hostsByService[primitives.MatchingService].All)
 	if resolver.MemberCount() == 0 {
 		return nil, errors.New("no matching gRPC hosts configured")

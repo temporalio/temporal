@@ -142,6 +142,8 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.logger,
 		impl.hostsByProtocolByService[grpcProtocol],
 		impl.tlsConfigProvider,
+	)
+	impl.clients.enableMatchingClientRouting(
 		dynamicconfig.NewCollection(impl.dcClient, impl.logger),
 		impl.testHooks,
 		impl.GetMetricsHandler(),
