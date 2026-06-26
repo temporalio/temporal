@@ -153,6 +153,7 @@ func WithClusterOptions(options ...TestClusterOption) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, options...)
+		o.dedicatedReason = "custom cluster options used"
 	}
 }
 
