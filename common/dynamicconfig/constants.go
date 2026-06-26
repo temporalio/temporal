@@ -1563,7 +1563,7 @@ default as namespace cardinality can be high and this requires a metrics collect
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: time.Minute,
+			ShadowModeLogInterval: 0,
 		},
 		`Settings for partition scale manager.`,
 	)
