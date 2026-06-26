@@ -677,7 +677,7 @@ func (s *Scheduler) Describe(
 	info := common.CloneProto(s.Info)
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
 	info.RecentActions = invoker.recentActions()
-	info.FutureActionTimes = generator.GetFutureActionTimes()
+	info.FutureActionTimes = slices.Clone(generator.GetFutureActionTimes())
 	// BufferedStarts holds waiting, running, and recently-completed entries; only the
 	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
 	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
@@ -1007,7 +1007,7 @@ func (s *Scheduler) ListInfo(
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     invoker.recentActions(),
-		FutureActionTimes: generator.FutureActionTimes,
+		FutureActionTimes: slices.Clone(generator.FutureActionTimes),
 	}
 }
 
