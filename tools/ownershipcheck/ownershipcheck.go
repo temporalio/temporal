@@ -2,8 +2,9 @@
 // shared) reference value — a map, slice, pointer, or other kind selected by
 // -value-kinds — being embedded by reference into a "sink" type that escapes the
 // function: a value later serialized or read outside the lock that protected it.
-// Such a value can be mutated by its retained alias during that read, producing
-// "concurrent map iteration and map write" crashes.
+// Such a value can be mutated by its retained alias during that read. Maps are
+// always treated strictly; slices are reported when visible writes may mutate the
+// backing array in place or when the checker cannot prove replace-only writes.
 //
 // The core is domain-agnostic and has no defaults: what counts as a sink, which
 // reference kinds are tracked, and which calls sanitize are configuration (-sink,
@@ -41,7 +42,8 @@ A reference value (-value-kinds: map, slice, pointer, ...) read out of shared st
 (a field, or an accessor/getter that returns an internal field by reference) and
 embedded into a sink type that escapes the function (e.g. a protobuf message
 marshaled by gRPC outside the lock) can be mutated by its retained alias during that
-read. Clone it (maps.Clone) first.`
+read. Maps are strict; slices are strict unless visible writes prove replace-only
+publication. Clone it (maps.Clone or slices.Clone) first.`
 
 // How the file is organized. `run` drives two phases over each package, both built
 // on one generic flow-sensitive walker (flow[T]):
@@ -311,6 +313,7 @@ type checker struct {
 	valueKinds  map[string]bool            // reference kinds tracked as the embedded hazard
 	escapeFuncs map[string]map[int]bool    // funcKey -> escaping arg indices (opaque callees)
 	leafCache   map[types.Type]bool        // memoized reachesLeaf results
+	sliceWrites map[*types.Var]sliceWrite  // field -> whether visible writes can mutate the backing array
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -324,15 +327,388 @@ func run(pass *analysis.Pass) (any, error) {
 		valueKinds:  parseValueKinds(),
 		escapeFuncs: parseEscapeFuncs(),
 		leafCache:   map[types.Type]bool{},
+		sliceWrites: map[*types.Var]sliceWrite{},
 	}
 	for _, ref := range ifaceRefs {
 		if iface := c.resolveInterface(ref); iface != nil {
 			c.sinkIfaces = append(c.sinkIfaces, iface)
 		}
 	}
+	c.collectSliceWrites()
 	c.infer()  // compute & export per-function polar signatures
 	c.report() // flag borrowed values reaching owned-requiring sinks
 	return nil, nil
+}
+
+// ---- slice mutability -------------------------------------------------------
+
+type sliceWrite uint8
+
+const (
+	sliceReplaceOnly sliceWrite = iota + 1
+	sliceUnknown
+	sliceMutates
+)
+
+func (c *checker) collectSliceWrites() {
+	for _, file := range c.pass.Files {
+		for _, d := range file.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			c.collectFuncSliceWrites(fd.Body)
+		}
+	}
+}
+
+func (c *checker) collectFuncSliceWrites(body *ast.BlockStmt) {
+	aliases := map[*types.Var]*types.Var{}
+	fresh := map[*types.Var]bool{}
+	var cases func(*ast.BlockStmt)
+	var walk func([]ast.Stmt)
+	cases = func(body *ast.BlockStmt) {
+		for _, cc := range body.List {
+			cl, ok := cc.(*ast.CaseClause)
+			if !ok {
+				continue
+			}
+			c.collectExprSliceWrites(cl.List, aliases)
+			walk(cl.Body)
+		}
+	}
+	walk = func(stmts []ast.Stmt) {
+		for _, stmt := range stmts {
+			switch s := stmt.(type) {
+			case *ast.AssignStmt:
+				c.collectExprSliceWrites(s.Rhs, aliases)
+				c.collectAssignSliceWrites(s, aliases, fresh)
+			case *ast.ExprStmt:
+				c.collectExprSliceWrites([]ast.Expr{s.X}, aliases)
+			case *ast.ReturnStmt:
+				c.collectExprSliceWrites(s.Results, aliases)
+			case *ast.SendStmt:
+				c.collectExprSliceWrites([]ast.Expr{s.Value}, aliases)
+			case *ast.GoStmt:
+				c.collectExprSliceWrites([]ast.Expr{s.Call}, aliases)
+			case *ast.DeferStmt:
+				c.collectExprSliceWrites([]ast.Expr{s.Call}, aliases)
+			case *ast.DeclStmt:
+				c.collectDeclSliceWrites(s, aliases, fresh)
+			case *ast.BlockStmt:
+				walk(s.List)
+			case *ast.LabeledStmt:
+				walk([]ast.Stmt{s.Stmt})
+			case *ast.IfStmt:
+				if s.Init != nil {
+					walk([]ast.Stmt{s.Init})
+				}
+				c.collectExprSliceWrites([]ast.Expr{s.Cond}, aliases)
+				walk(s.Body.List)
+				if s.Else != nil {
+					walk([]ast.Stmt{s.Else})
+				}
+			case *ast.ForStmt:
+				if s.Init != nil {
+					walk([]ast.Stmt{s.Init})
+				}
+				if s.Cond != nil {
+					c.collectExprSliceWrites([]ast.Expr{s.Cond}, aliases)
+				}
+				walk(s.Body.List)
+				if s.Post != nil {
+					walk([]ast.Stmt{s.Post})
+				}
+			case *ast.RangeStmt:
+				c.collectExprSliceWrites([]ast.Expr{s.X}, aliases)
+				walk(s.Body.List)
+			case *ast.SwitchStmt:
+				if s.Init != nil {
+					walk([]ast.Stmt{s.Init})
+				}
+				if s.Tag != nil {
+					c.collectExprSliceWrites([]ast.Expr{s.Tag}, aliases)
+				}
+				cases(s.Body)
+			case *ast.TypeSwitchStmt:
+				if s.Init != nil {
+					walk([]ast.Stmt{s.Init})
+				}
+				cases(s.Body)
+			case *ast.SelectStmt:
+				for _, cc := range s.Body.List {
+					if comm, ok := cc.(*ast.CommClause); ok {
+						walk(comm.Body)
+					}
+				}
+			}
+		}
+	}
+	walk(body.List)
+}
+
+func (c *checker) collectDeclSliceWrites(ds *ast.DeclStmt, aliases map[*types.Var]*types.Var, fresh map[*types.Var]bool) {
+	gd, ok := ds.Decl.(*ast.GenDecl)
+	if !ok {
+		return
+	}
+	for _, spec := range gd.Specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok {
+			continue
+		}
+		c.collectExprSliceWrites(vs.Values, aliases)
+		if len(vs.Names) != len(vs.Values) {
+			continue
+		}
+		for i, name := range vs.Names {
+			c.bindSliceLocal(name, vs.Values[i], aliases, fresh)
+		}
+	}
+}
+
+func (c *checker) collectAssignSliceWrites(as *ast.AssignStmt, aliases map[*types.Var]*types.Var, fresh map[*types.Var]bool) {
+	if len(as.Lhs) != len(as.Rhs) {
+		return
+	}
+	for i, lhs := range as.Lhs {
+		rhs := as.Rhs[i]
+		if src := c.sliceSource(lhs, aliases); src != nil && isIndexOrSliceMutation(lhs) {
+			c.markSliceWrite(src, sliceMutates)
+			continue
+		}
+		if src := c.sliceSource(lhs, aliases); src != nil {
+			if c.isFreshSlice(rhs, fresh) {
+				c.markSliceWrite(src, sliceReplaceOnly)
+			} else {
+				c.markSliceWrite(src, sliceUnknown)
+			}
+			continue
+		}
+		c.bindSliceLocal(lhs, rhs, aliases, fresh)
+	}
+}
+
+func (c *checker) bindSliceLocal(lhs ast.Expr, rhs ast.Expr, aliases map[*types.Var]*types.Var, fresh map[*types.Var]bool) {
+	id, ok := lhs.(*ast.Ident)
+	if !ok {
+		return
+	}
+	v, _ := c.pass.TypesInfo.ObjectOf(id).(*types.Var)
+	if v == nil {
+		return
+	}
+	if src := c.sliceSource(rhs, aliases); src != nil {
+		aliases[v] = src
+		delete(fresh, v)
+		return
+	}
+	delete(aliases, v)
+	if c.isFreshSlice(rhs, fresh) {
+		fresh[v] = true
+	} else {
+		delete(fresh, v)
+	}
+}
+
+func (c *checker) collectExprSliceWrites(exprs []ast.Expr, aliases map[*types.Var]*types.Var) {
+	for _, expr := range exprs {
+		if expr == nil {
+			continue
+		}
+		ast.Inspect(expr, func(n ast.Node) bool {
+			if _, ok := n.(*ast.FuncLit); ok {
+				return false
+			}
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			c.collectCallSliceWrites(call, aliases)
+			return true
+		})
+	}
+}
+
+func (c *checker) collectCallSliceWrites(call *ast.CallExpr, aliases map[*types.Var]*types.Var) {
+	name := calledName(call)
+	switch {
+	case name == "append":
+		if len(call.Args) > 0 {
+			if src := c.sliceSource(call.Args[0], aliases); src != nil {
+				c.markSliceWrite(src, sliceMutates)
+			}
+		}
+		return
+	case name == "copy":
+		if len(call.Args) > 0 {
+			if src := c.sliceSource(call.Args[0], aliases); src != nil {
+				c.markSliceWrite(src, sliceMutates)
+			}
+		}
+		return
+	case name == "len" || name == "cap":
+		return
+	}
+	if c.isKnownSliceMutator(call) {
+		if len(call.Args) > 0 {
+			if src := c.sliceSource(call.Args[0], aliases); src != nil {
+				c.markSliceWrite(src, sliceMutates)
+			}
+		}
+		return
+	}
+	if c.calleeFunc(call) == nil {
+		return
+	}
+	for _, arg := range call.Args {
+		if src := c.sliceSource(arg, aliases); src != nil {
+			c.markSliceWrite(src, sliceUnknown)
+		}
+	}
+}
+
+func (c *checker) markSliceWrite(field *types.Var, w sliceWrite) {
+	switch c.sliceWrites[field] {
+	case sliceMutates:
+		return
+	case sliceUnknown:
+		if w != sliceMutates {
+			return
+		}
+	}
+	c.sliceWrites[field] = w
+}
+
+func (c *checker) sliceSource(expr ast.Expr, aliases map[*types.Var]*types.Var) *types.Var {
+	switch e := unparen(expr).(type) {
+	case *ast.Ident:
+		v, _ := c.pass.TypesInfo.ObjectOf(e).(*types.Var)
+		if v == nil {
+			return nil
+		}
+		return aliases[v]
+	case *ast.SelectorExpr:
+		if sel := c.pass.TypesInfo.Selections[e]; sel != nil {
+			if v, ok := sel.Obj().(*types.Var); ok && kindOf(v.Type()) == "slice" && !isByteSlice(v.Type()) {
+				return v
+			}
+		}
+	case *ast.SliceExpr:
+		return c.sliceSource(e.X, aliases)
+	case *ast.CallExpr:
+		return c.getterSliceSource(e)
+	case *ast.TypeAssertExpr:
+		return c.sliceSource(e.X, aliases)
+	case *ast.StarExpr:
+		return c.sliceSource(e.X, aliases)
+	}
+	return nil
+}
+
+func (c *checker) getterSliceSource(call *ast.CallExpr) *types.Var {
+	sel, ok := unparen(call.Fun).(*ast.SelectorExpr)
+	if !ok || len(call.Args) != 0 || !strings.HasPrefix(sel.Sel.Name, "Get") {
+		return nil
+	}
+	fn, _ := c.pass.TypesInfo.ObjectOf(sel.Sel).(*types.Func)
+	if fn == nil {
+		return nil
+	}
+	sig, _ := fn.Type().(*types.Signature)
+	if sig == nil || sig.Results().Len() == 0 {
+		return nil
+	}
+	fieldName := strings.TrimPrefix(sel.Sel.Name, "Get")
+	if fieldName == "" {
+		return nil
+	}
+	return fieldByName(receiverBase(sig), fieldName)
+}
+
+func receiverBase(sig *types.Signature) types.Type {
+	if sig == nil || sig.Recv() == nil {
+		return nil
+	}
+	t := sig.Recv().Type()
+	if p, ok := t.(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	if n, ok := t.(*types.Named); ok {
+		return n.Underlying()
+	}
+	return t.Underlying()
+}
+
+func fieldByName(t types.Type, name string) *types.Var {
+	st, ok := t.(*types.Struct)
+	if !ok {
+		return nil
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		if f.Name() == name && kindOf(f.Type()) == "slice" && !isByteSlice(f.Type()) {
+			return f
+		}
+	}
+	return nil
+}
+
+func (c *checker) isFreshSlice(expr ast.Expr, fresh map[*types.Var]bool) bool {
+	switch e := unparen(expr).(type) {
+	case *ast.Ident:
+		if e.Name == "nil" {
+			return true
+		}
+		v, _ := c.pass.TypesInfo.ObjectOf(e).(*types.Var)
+		return v != nil && fresh[v]
+	case *ast.CallExpr:
+		if calledName(e) == "make" && kindOf(c.pass.TypesInfo.TypeOf(e)) == "slice" {
+			return true
+		}
+		if calledName(e) == "append" && len(e.Args) > 0 {
+			return c.isFreshSlice(e.Args[0], fresh)
+		}
+		return c.isSanitizer(e)
+	case *ast.CompositeLit:
+		return kindOf(c.pass.TypesInfo.TypeOf(e)) == "slice"
+	}
+	return false
+}
+
+func (c *checker) isKnownSliceMutator(call *ast.CallExpr) bool {
+	fn := c.calleeFunc(call)
+	if fn == nil || fn.Pkg() == nil {
+		return false
+	}
+	switch fn.Pkg().Path() {
+	case "sort":
+		return fn.Name() == "Slice" || fn.Name() == "SliceStable"
+	case "slices":
+		switch fn.Name() {
+		case "Sort", "SortFunc", "SortStableFunc", "Reverse":
+			return true
+		}
+	}
+	return false
+}
+
+func calledName(call *ast.CallExpr) string {
+	switch fun := unparen(call.Fun).(type) {
+	case *ast.Ident:
+		return fun.Name
+	case *ast.SelectorExpr:
+		return fun.Sel.Name
+	}
+	return ""
+}
+
+func isIndexOrSliceMutation(expr ast.Expr) bool {
+	switch unparen(expr).(type) {
+	case *ast.IndexExpr, *ast.SliceExpr:
+		return true
+	}
+	return false
 }
 
 // resolveInterface finds the interface type named by ref in this package or its
@@ -1142,7 +1518,7 @@ func (fc *flowCtx) checkLiteralFields(cl *ast.CompositeLit, env ownEnv) {
 		if !fc.c.tracked(vt) {
 			continue
 		}
-		if b := fc.classify(kv.Value, env); b.kind == borrowed {
+		if b, ok := fc.reportableBorrowed(vt, kv.Value, env); ok {
 			fc.flag(kv.Value.Pos(),
 				"borrowed "+kindOf(vt)+" embedded into "+typeName(t)+" field "+fieldName(kv.Key)+
 					" without clone; clone it (e.g. maps.Clone) before embedding to avoid a "+
@@ -1174,13 +1550,28 @@ func (fc *flowCtx) checkFieldAssign(as *ast.AssignStmt, env ownEnv) {
 		if _, isLit := unparen(rhs).(*ast.CompositeLit); isLit {
 			continue
 		}
-		if b := fc.classify(rhs, env); b.kind == borrowed {
+		if b, ok := fc.reportableBorrowed(ft, rhs, env); ok {
 			fc.flag(rhs.Pos(),
 				"borrowed "+kindOf(ft)+" assigned to "+typeName(fc.c.pass.TypesInfo.TypeOf(sel.X))+" field "+sel.Sel.Name+
 					" without clone; clone it (e.g. maps.Clone) before assigning to avoid a "+
 					"concurrent-access crash while it is serialized", b.path)
 		}
 	}
+}
+
+func (fc *flowCtx) reportableBorrowed(t types.Type, expr ast.Expr, env ownEnv) (binding, bool) {
+	b := fc.classify(expr, env)
+	if b.kind != borrowed {
+		return b, false
+	}
+	if kindOf(t) != "slice" {
+		return b, true
+	}
+	src := fc.c.sliceSource(expr, nil)
+	if src == nil {
+		return b, true
+	}
+	return b, fc.c.sliceWrites[src] != sliceReplaceOnly
 }
 
 func (fc *flowCtx) checkCallArgsLeak(call *ast.CallExpr, env ownEnv) {
