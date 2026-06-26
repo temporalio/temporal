@@ -4,9 +4,10 @@ A static analyzer that flags a **borrowed** (possibly shared) reference value �
 map, slice, or other kind selected by `-value-kinds` — being embedded by reference
 into a **sink type that escapes the function**: a value later serialized or read
 outside the lock that protected it. By default the sink is a **protobuf message**
-marshaled by gRPC, so a retained alias can be mutated during the marshal, producing
-`concurrent map iteration and map write` crashes. See temporalio/temporal#10706 /
-#10707.
+marshaled by gRPC, so a retained alias can be mutated during the marshal. Maps are
+always strict because protobuf serialization iterates the shared map; borrowed
+slices report when visible writes may mutate the backing array in place or when the
+checker cannot prove replace-only writes. See temporalio/temporal#10706 / #10707.
 
 The **core is domain-agnostic and has no defaults** — it knows nothing about proto.
 In taint-analysis terms the config is the classic triad: *sources* (structural —
@@ -60,7 +61,9 @@ returned proto. A proto that is deep-cloned in place (`return CloneProto(tmp)`),
 marshaled synchronously (`return p.Marshal()`), or read for a local computation
 never reaches an out-of-lock marshal and is not flagged. It is also quiet on the
 common-and-safe case: a value produced locally (`make`/literal/clone) with no
-retained alias is the sole owner. A value rooted at a **parameter** or a **package
+retained alias is the sole owner. A borrowed slice field is also quiet when all
+visible writes replace the field with a fresh slice and no in-place mutation or
+unknown callee is observed. A value rooted at a **parameter** or a **package
 global** is treated as owned. The hazard is specifically shared *instance* state.
 
 ## Running it
@@ -119,11 +122,14 @@ sink/sanitizer config).
 
 ## Tracked value kinds
 
-The proto profile tracks `map,slice` — collections that are *iterated and mutated in
-place* during marshal (`append`/`delete`/key-assign), the loud `concurrent map
-iteration and map write` case. `-value-kinds` can add `pointer` (and `interface`,
-`chan`, `func`) to also flag borrowed sub-message pointers. Three precision rules
-keep that from being noisy:
+The proto profile tracks `map,slice`. Maps are always a hazard because map mutation
+happens in place while protobuf serialization iterates entries. Slices are a hazard
+when visible writes may mutate the backing array in place (`append` to the field,
+index assignment, `copy`, sort/reverse helpers, or an unknown callee) and are
+suppressed only when the checker proves the field is updated by replace-only fresh
+slice publication. `-value-kinds` can add `pointer` (and `interface`, `chan`,
+`func`) to also flag borrowed sub-message pointers. Four precision rules keep that
+from being noisy:
 
 - **Reaches-a-leaf** — a borrowed pointer is flagged only if its pointee
   *transitively reaches* a map or non-byte slice through its **exported** (marshaled)
@@ -131,6 +137,9 @@ keep that from being noisy:
   type/name config) can never produce the crash, so it is silent.
 - **No `[]byte`** — a byte slice is a blob/token, not a mutable collection, so it is
   not a hazard leaf.
+- **Replace-only slices** — a borrowed slice field is silent when all visible writes
+  replace the field with fresh slices and no in-place mutation or unknown callee is
+  observed. In-place writes and unknown calls remain conservative findings.
 - **Input sets** — a helper that returns one of several inputs (e.g. `min(a, b)`)
   resolves to *owned* when its actual arguments are owned, instead of collapsing to
   borrowed and reporting a false positive.
