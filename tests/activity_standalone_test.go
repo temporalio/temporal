@@ -7132,6 +7132,75 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 	})
 
+	s.Run("ResetRestoreOriginal_OnStarted_RecomputesScheduleToCloseDeadline", func(s *standaloneActivityTestSuite) {
+		// Same gap as ResetRestoreOriginal_RecomputesScheduleToStartAndScheduleToClose, but on the
+		// STARTED -> RESET_REQUESTED reset path that bypasses reset(). Two things force a different repro
+		// shape than the SCHEDULED case:
+		//   - start_delay is frozen once STARTED, so we move the ScheduleToClose deadline via the timeout
+		//     field, not start_delay.
+		//   - a STARTED attempt has a live StartToClose timer pinned <= ScheduleToClose; retracting ScС
+		//     (the SCHEDULED test's trick) would drag StartToClose onto the same early deadline and time the
+		//     activity out on the correct path too. So we extend both timeouts, then restore only ScС: the
+		//     restored 2s ScС is the sole terminal timer, flipping the assertion to "must time out by 4s".
+		//
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+		})
+		require.NoError(t, err)
+
+		// Transition to STARTED; worker never responds
+		_, err = env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Extend ScheduleToClose and StartToClose to 8s.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(8 * time.Second),
+				StartToCloseTimeout:    durationpb.New(8 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Reset ScheduleToClose to 2s; recreates ScheduleToClose task at 2s.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// Must time out at the restored 2s deadline. Buggy code keeps the stale 8s task → still alive at 4s.
+		await.Require(s.Context(), t, func(c *await.T) {
+			resp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
+		}, 4*time.Second, 100*time.Millisecond)
+	})
+
 	// The guard accepts the field mask path in either snake_case or camelCase form.
 	s.Run("UpdateCamelCaseFieldMask_Rejected", func(s *standaloneActivityTestSuite) {
 		t := s.T()
