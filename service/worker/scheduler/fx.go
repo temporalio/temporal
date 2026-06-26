@@ -58,7 +58,6 @@ type (
 		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
-		retentionTime                dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -97,7 +96,6 @@ func NewResult(
 			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
-			retentionTime:                dynamicconfig.WorkerSchedulerRetentionTime.Get(dc),
 		},
 	}
 }
@@ -110,7 +108,6 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	nsName := ns.Name().String()
-	retentionTime := s.retentionTime(nsName)
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
 		enableMigration := func() bool {
@@ -120,7 +117,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		migrateWithRunningWorkflows := func() bool {
 			return s.migrateWithRunningWorkflows(nsName)
 		}
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, migrateWithRunningWorkflows, retentionTime)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, migrateWithRunningWorkflows)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 

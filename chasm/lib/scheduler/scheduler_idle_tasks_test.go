@@ -263,8 +263,6 @@ func TestIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
 }
 
 // Exact-equality between recomputed deadline and ScheduledTime must fire.
-// Regression guard: the original strict-equality compare was correct here too,
-// but the new `.After()` semantic must preserve this stable case.
 func TestIdleTask_Validate_ExpirationStableFires(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()

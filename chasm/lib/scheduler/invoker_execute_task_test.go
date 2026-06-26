@@ -528,9 +528,7 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
 }
 
-// Validate must skip Execute when no work is ready. Without this gate, an
-// already-consumed task would re-enter Execute and the no-op would still
-// emit an Execute task (oscillation).
+// Validate must skip Execute when no work is ready.
 func TestExecuteTask_Validate(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	ctx := env.MutableContext()

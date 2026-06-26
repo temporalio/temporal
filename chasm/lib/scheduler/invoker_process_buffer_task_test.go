@@ -17,9 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Validate is currently the only line of defense against a stale ProcessBuffer
-// task firing after a more recent one has already advanced LastProcessedTime.
-// Cover each branch of validateTaskHighWaterMark.
+// Validate that ProcessBufferTask is invalidated by a later high water mark.
 func TestProcessBufferTask_Validate(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()

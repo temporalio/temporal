@@ -298,8 +298,8 @@ func TestHandleNexusCompletion_ReenablesDeferredStarts(t *testing.T) {
 				}
 			}
 			require.NotNil(t, deferred, "previously-deferred start must remain in the buffer")
-			require.GreaterOrEqual(t, deferred.Attempt, int64(1),
-				"deferred start must be re-enabled past 0 (recordCompletedAction) and promoted (inline ProcessBufferTask)")
+			require.Equal(t, int64(1), deferred.Attempt,
+				"deferred start must be re-enabled past 0 (recordCompletedAction) and promoted to exactly 1 (inline ProcessBufferTask)")
 		},
 	}
 
