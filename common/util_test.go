@@ -17,6 +17,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
@@ -242,6 +243,147 @@ func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
 			Message: "Mutable state cache is full",
 		},
 	))
+}
+
+func TestIsSystemResourceExhausted(t *testing.T) {
+	require.True(t, isSystemResourceExhausted(&serviceerror.ResourceExhausted{
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+	}))
+	require.False(t, isSystemResourceExhausted(&serviceerror.ResourceExhausted{
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}))
+	require.False(t, isSystemResourceExhausted(&serviceerror.ResourceExhausted{
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED,
+	}))
+	require.False(t, isSystemResourceExhausted(serviceerror.NewUnavailable("nope")))
+	require.False(t, isSystemResourceExhausted(nil))
+}
+
+// ComputeNextDelay returns a negative sentinel ("done") when retries are
+// exhausted, and a positive duration when another retry should happen.
+func willRetry(d time.Duration) bool { return d >= 0 }
+
+func TestCreateHistoryClientRetryPolicy_SystemREGating(t *testing.T) {
+	systemRE := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		Message: "system overloaded",
+	}
+	unavailable := serviceerror.NewUnavailable("unavailable")
+	nsRE := &serviceerror.ResourceExhausted{Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE}
+
+	t.Run("flag on + system RE bypasses attempt cap", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+		// Pass elapsedTime=0 to isolate the attempt-cap behavior from the
+		// policy's 1-minute expiration; we want to prove the cap is bypassed.
+		for attempt := 1; attempt <= 50; attempt++ {
+			require.True(t, willRetry(policy.ComputeNextDelay(0, attempt, systemRE)),
+				"attempt %d should still retry under flag=on + system RE", attempt)
+		}
+	})
+
+	t.Run("flag off + system RE follows the cap", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return false })
+		require.True(t, willRetry(policy.ComputeNextDelay(0, 1, systemRE)))
+		require.False(t, willRetry(policy.ComputeNextDelay(0, 2, systemRE)))
+	})
+
+	t.Run("flag on + non-RE retryable follows the cap", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+		require.True(t, willRetry(policy.ComputeNextDelay(0, 1, unavailable)))
+		require.False(t, willRetry(policy.ComputeNextDelay(0, 2, unavailable)))
+	})
+
+	t.Run("flag on + namespace RE follows the cap", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+		require.True(t, willRetry(policy.ComputeNextDelay(0, 1, nsRE)))
+		require.False(t, willRetry(policy.ComputeNextDelay(0, 2, nsRE)))
+	})
+}
+
+func TestCreateHistoryClientRetryPolicy_MixedErrorSequence(t *testing.T) {
+	systemRE := &serviceerror.ResourceExhausted{Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM}
+	unavailable := serviceerror.NewUnavailable("unavailable")
+	policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+
+	// First attempt: system RE → extended branch with numAttempts=1.
+	require.True(t, willRetry(policy.ComputeNextDelay(0, 1, systemRE)))
+
+	// Second attempt: Unavailable → capped branch sees numAttempts=2 (== cap)
+	// and returns done. Mixing in a non-RE error mid-sequence ends retries.
+	require.False(t, willRetry(policy.ComputeNextDelay(0, 2, unavailable)))
+
+	// Conversely: non-RE first, then system RE — the extended branch ignores
+	// the cap, so we keep retrying.
+	require.True(t, willRetry(policy.ComputeNextDelay(0, 1, unavailable)))
+	require.True(t, willRetry(policy.ComputeNextDelay(0, 5, systemRE)))
+}
+
+// End-to-end test: drives ThrottleRetryContext against the actual
+// CreateHistoryClientRetryPolicy and verifies (a) flag-on lets retries continue
+// past the standard cap, (b) flag-off enforces the 2-attempt cap, and (c) the
+// caller's context reliably stops a flag-on loop.
+func TestCreateHistoryClientRetryPolicy_ThrottleRetryContext(t *testing.T) {
+	systemRE := func() error {
+		return &serviceerror.ResourceExhausted{
+			Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+		}
+	}
+
+	t.Run("flag off caps at 2 attempts", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return false })
+		attempts := 0
+		op := func(_ context.Context) error {
+			attempts++
+			return systemRE()
+		}
+		err := backoff.ThrottleRetryContext(context.Background(), op, policy, IsServiceClientTransientError)
+		require.Error(t, err)
+		require.Equal(t, 2, attempts, "capped policy should make exactly 2 attempts")
+	})
+
+	t.Run("flag on retries past cap until ctx cancels", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+		attempts := 0
+		op := func(_ context.Context) error {
+			attempts++
+			return systemRE()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err := backoff.ThrottleRetryContext(ctx, op, policy, IsServiceClientTransientError)
+		require.Error(t, err)
+		require.Greater(t, attempts, 2, "extended policy should retry past the standard cap")
+	})
+
+	t.Run("flag on respects ctx cancellation", func(t *testing.T) {
+		policy := CreateHistoryClientRetryPolicy(func() bool { return true })
+		op := func(_ context.Context) error { return systemRE() }
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		err := backoff.ThrottleRetryContext(ctx, op, policy, IsServiceClientTransientError)
+		elapsed := time.Since(start)
+		require.Error(t, err)
+		// Throttle floor is ~1s, so without ctx cancellation this would block
+		// far longer than 1s. The hard cap here proves ctx.Done() is what stops it.
+		require.Less(t, elapsed, 2*time.Second, "ctx timeout should bound the retry loop")
+	})
+}
+
+func TestCreateMatchingClientRetryPolicy_SystemREGating(t *testing.T) {
+	systemRE := &serviceerror.ResourceExhausted{
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+	}
+	policy := CreateMatchingClientRetryPolicy(func() bool { return true })
+	for attempt := 1; attempt <= 50; attempt++ {
+		require.True(t, willRetry(policy.ComputeNextDelay(0, attempt, systemRE)),
+			"matching policy should not give up on system RE at attempt %d", attempt)
+	}
+
+	disabled := CreateMatchingClientRetryPolicy(func() bool { return false })
+	require.True(t, willRetry(disabled.ComputeNextDelay(0, 1, systemRE)))
+	require.False(t, willRetry(disabled.ComputeNextDelay(0, 2, systemRE)))
 }
 
 func TestMultiOperationErrorRetries(t *testing.T) {
