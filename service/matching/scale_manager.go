@@ -355,8 +355,10 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 		return
 	}
 
-	// If shadow mode observes an existing managed scale state, do not persist
-	// drain completion or mutate read partitions.
+	// Reachable only in the brief window after shadow mode is enabled but before
+	// releaseManagedState has zeroed a leftover target>0 (callScaler is still in
+	// cooldown). Shadow mode must not persist drain completion or mutate read
+	// partitions, so bail before applying toClear.
 	if settings.ShadowModeLogInterval > 0 {
 		return
 	}
