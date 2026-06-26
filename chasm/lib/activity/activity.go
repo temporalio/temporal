@@ -204,8 +204,6 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 
 	key := ctx.ExecutionKey()
 
-	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
-	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
 	return &matchingservice.AddActivityTaskRequest{
 		NamespaceId: namespaceID,
 		Execution: &commonpb.WorkflowExecution{

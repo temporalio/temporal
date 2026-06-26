@@ -277,4 +277,3 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		fromStatus:     activity.GetStatus(),
 	})
 }
-
