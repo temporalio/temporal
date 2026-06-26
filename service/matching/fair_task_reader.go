@@ -48,7 +48,7 @@ type (
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
 		// evicted before it could be used to advance ackLevel.
-		evictedAcks *btree.BTreeG[fairLevel]
+		evictedAcks btree.BTreeG[fairLevel]
 
 		// Hold tasks written while a read is pending so we make sure to account for them in
 		// our read level.
@@ -108,7 +108,7 @@ func newFairTaskReader(
 		outstandingTasks: *newFairLevelTreeMap(),
 		readLevel:        initialAckLevel,
 		ackLevel:         initialAckLevel,
-		evictedAcks:      btree.NewBTreeG(fairLevel.less),
+		evictedAcks:      *btree.NewBTreeGOptions(fairLevel.less, btree.Options{NoLocks: true}),
 
 		// gc state
 		lastGCTime: time.Now(),
