@@ -975,6 +975,16 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 		chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
 	)
+	// Recreate the ScheduleToClose task at dispatchTime + timeout
+	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		a.ScheduleToCloseStamp++
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: a.scheduleToCloseDeadline()},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.ScheduleToCloseStamp},
+		)
+	}
+
 	a.emitOnResetMetrics(event.handler)
 }
 
