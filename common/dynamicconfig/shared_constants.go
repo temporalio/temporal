@@ -185,6 +185,11 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
+	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
+	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
+	// is evaluated and logged at that cadence but decisions are not applied. If the partition
+	// scaler is disabled, shadow mode does not log.
+	ShadowModeLogInterval time.Duration
 }
 
 type SimplePartitionScalerSettings struct {

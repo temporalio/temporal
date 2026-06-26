@@ -1576,10 +1576,11 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
-			MaxRate:            0.33,
-			BatchSize:          100,
-			BackgroundInterval: 23 * time.Second,
-			DrainBufferTime:    15 * time.Second,
+			MaxRate:               0.33,
+			BatchSize:             100,
+			BackgroundInterval:    23 * time.Second,
+			DrainBufferTime:       15 * time.Second,
+			ShadowModeLogInterval: 0,
 		},
 		`Settings for partition scale manager.`,
 	)

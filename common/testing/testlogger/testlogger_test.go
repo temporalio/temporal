@@ -92,6 +92,24 @@ func TestTestLogger_ExpectationsMatch(t *testing.T) {
 
 }
 
+func TestTestLogger_InfoExpectationMatchCount(t *testing.T) {
+	tl := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	expected := tl.Expect(testlogger.Info, "expected info", tag.String("key", "value"))
+	require.False(t, expected.Matched())
+	require.Zero(t, expected.MatchCount())
+
+	tl.Info("expected info", tag.String("key", "other"))
+	require.False(t, expected.Matched())
+	require.Zero(t, expected.MatchCount())
+
+	tl.Info("expected info", tag.String("key", "value"))
+	require.True(t, expected.Matched())
+	require.Equal(t, int64(1), expected.MatchCount())
+
+	tl.Info("expected info", tag.String("key", "value"))
+	require.Equal(t, int64(2), expected.MatchCount())
+}
+
 func assertFails(t *testing.T, level testlogger.Level, msg string, tags []tag.Tag) {
 	mt := &mockT{T: t}
 	tl := testlogger.NewTestLogger(mt, testlogger.FailOnAnyUnexpectedError)
