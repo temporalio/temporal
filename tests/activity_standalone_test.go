@@ -7060,6 +7060,78 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"start_delay should not be restored when the activity has already dispatched")
 	})
 
+	s.Run("ResetRestoreOriginal_RecomputesScheduleToStartAndScheduleToClose", func(s *standaloneActivityTestSuite) {
+		// Create an activity with a long delay and a short ScheduleToClose.
+		// Update it to get rid of the delay -> pulls the ScheduleToClose in to a short deadline.
+		// Reset the delay back to the long value -> pushes the ScheduleToClose dedline out to delay + ScheduleToClose
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalStartDelay := 4 * time.Second
+		scheduleToCloseTimeout := 2 * time.Second
+
+		// Create it with ScheduleToClose deadline = 2s + 4s
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartDelay:             durationpb.New(originalStartDelay),
+		})
+		require.NoError(t, err)
+		describe := func() *workflowservice.DescribeActivityExecutionResponse {
+			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			return resp
+		}
+		desc := describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		// Update start_delay to 0: recreates the ScheduleToClose deadline = 0s + 2s.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(0)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+		desc = describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(0+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		// Reset start_delay to 4s: recreates ScheduleToClose deadline = 2s + 4s
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+		desc = describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		require.Never(t, func() bool {
+			return describe().GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 3500*time.Millisecond, 200*time.Millisecond,
+			"ScheduleToStart and ScheduleToClose timeouts should have been pushed back to 6s by the start delay")
+
+	})
+
 	// The guard accepts the field mask path in either snake_case or camelCase form.
 	s.Run("UpdateCamelCaseFieldMask_Rejected", func(s *standaloneActivityTestSuite) {
 		t := s.T()
