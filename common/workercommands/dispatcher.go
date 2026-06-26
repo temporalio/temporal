@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	DispatchTimeout  = time.Second * 10 * debug.TimeoutMultiplier
+	DispatchTimeout = time.Second * 10 * debug.TimeoutMultiplier
 	MaxTaskAttempts = 3
 
 	// Nexus service and operation names for worker commands.
