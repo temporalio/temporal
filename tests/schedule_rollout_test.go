@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -15,6 +16,7 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -51,12 +53,12 @@ func TestScheduleRollout(t *testing.T) {
 	// Register two additional namespaces that opt into the CHASM rollout.
 	v2FullName := testcore.RandomizeStr("sched-rollout-v2full")
 	v2FullNsID, err := s.RegisterNamespace(namespace.Name(v2FullName), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.NoError(err)
+	require.NoError(t, err)
 	v2FullID := v2FullNsID.String()
 
 	v2HalfName := testcore.RandomizeStr("sched-rollout-v2half")
 	v2HalfNsID, err := s.RegisterNamespace(namespace.Name(v2HalfName), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
-	s.NoError(err)
+	require.NoError(t, err)
 	v2HalfID := v2HalfNsID.String()
 
 	// Apply the rollout settings independently per namespace.
@@ -110,7 +112,7 @@ func TestScheduleRollout(t *testing.T) {
 			Identity:   "rollout-test",
 			RequestId:  testcore.RandomizeStr("req"),
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 	}
 
 	// createdOnV2 reports whether the schedule lives on the CHASM (V2) stack. The CHASM
@@ -119,7 +121,7 @@ func TestScheduleRollout(t *testing.T) {
 	// discriminator used by the existing sentinel tests.
 	createdOnV2 := func(nsName, nsID, sid string) bool {
 		var v2 bool
-		s.Eventually(func() bool {
+		await.RequireTruef(t, func() bool {
 			_, descErr := cluster.SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
@@ -140,7 +142,7 @@ func TestScheduleRollout(t *testing.T) {
 
 	countV2 := func(nsName, nsID, prefix string, n int) int {
 		v2 := 0
-		for i := 0; i < n; i++ {
+		for range n {
 			sid := testcore.RandomizeStr(prefix)
 			createSchedule(nsName, sid)
 			if createdOnV2(nsName, nsID, sid) {
@@ -153,7 +155,7 @@ func TestScheduleRollout(t *testing.T) {
 	// The dynamic config overrides may take a moment to propagate to the frontend.
 	// Wait until a freshly-created schedule in the 100% namespace routes to V2 before
 	// running the deterministic assertions below.
-	s.Eventually(func() bool {
+	await.RequireTruef(t, func() bool {
 		sid := testcore.RandomizeStr("rollout-probe")
 		createSchedule(v2FullName, sid)
 		return createdOnV2(v2FullName, v2FullID, sid)
@@ -179,7 +181,7 @@ func TestScheduleRollout(t *testing.T) {
 		const n = 100
 		v2 := countV2(v2HalfName, v2HalfID, "v2half", n)
 		t.Logf("50%% namespace: %d/%d schedules created on V2 (V1: %d)", v2, n, n-v2)
-		s.Greater(v2, 0, "at least some schedules should be created on V2 at 50%%")
+		s.Positive(v2, "at least some schedules should be created on V2 at 50%%")
 		s.Less(v2, n, "at least some schedules should be created on V1 at 50%%")
 		s.GreaterOrEqual(v2, 25, "V2 count should be near 50%% (lower bound)")
 		s.LessOrEqual(v2, 75, "V2 count should be near 50%% (upper bound)")
