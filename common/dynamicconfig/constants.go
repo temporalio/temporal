@@ -330,6 +330,14 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 Setting this to 0 prevents the search attribute from being set when a problem is detected, and unset when the problem is resolved.`,
 	)
 
+	NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute = NewNamespaceIntSetting(
+		"system.numConsecutiveActivityRetryProblemsToTriggerSearchAttribute",
+		0,
+		`NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute is the minimum number of activity retry
+attempts before the TemporalReportedProblems search attribute is updated with activity retry failure
+information. Setting this to 0 (the default) disables this feature.`,
+	)
+
 	PollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
 		"system.pollWaitForNamespaceRateLimitToken",
 		false,

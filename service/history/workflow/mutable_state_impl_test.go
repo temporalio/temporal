@@ -8923,6 +8923,118 @@ func (s *mutableStateSuite) TestCalculateTimeSkippingTransition() {
 	})
 }
 
+// newReportedProblemsReproMutableState creates a minimal MutableStateImpl suitable for
+// unit-testing UpdateReportedProblemsSearchAttribute. wftThreshold and activityThreshold
+// map to NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute and
+// NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute respectively.
+// The caller is responsible for setting up taskGenerator expectations.
+func newReportedProblemsReproMutableState(t *testing.T, wftThreshold, activityThreshold int) (*MutableStateImpl, *MockTaskGenerator) {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+
+	cfg := tests.NewDynamicConfig()
+	cfg.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = func(string) int { return wftThreshold }
+	cfg.NumConsecutiveActivityRetryProblemsToTriggerSearchAttribute = func(string) int { return activityThreshold }
+
+	mockShard := shard.NewTestContext(ctrl, &persistencespb.ShardInfo{ShardId: 0, RangeId: 1}, cfg)
+	t.Cleanup(mockShard.StopForTest)
+
+	reg := hsm.NewRegistry()
+	require.NoError(t, RegisterStateMachine(reg))
+	mockShard.SetStateMachineRegistry(reg)
+
+	mockEventsCache := events.NewMockCache(ctrl)
+	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	mockShard.SetEventsCacheForTesting(mockEventsCache)
+
+	namespaceEntry := tests.GlobalNamespaceEntry
+	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), namespaceEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
+
+	ms := NewMutableState(mockShard, mockEventsCache, mockShard.GetLogger(), namespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC())
+
+	mockTaskGen := NewMockTaskGenerator(ctrl)
+	ms.taskGenerator = mockTaskGen
+
+	return ms, mockTaskGen
+}
+
+// reportedProblemsForRepro decodes the TemporalReportedProblems keyword-list from the
+// mutable state's search attributes and returns the entries as a string slice. Returns nil
+// if the attribute is absent.
+func reportedProblemsForRepro(t *testing.T, ms *MutableStateImpl) []string {
+	t.Helper()
+	payload := ms.executionInfo.SearchAttributes[sadefs.TemporalReportedProblems]
+	if payload == nil {
+		return nil
+	}
+	decoded, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
+	require.NoError(t, err)
+	problems, ok := decoded.([]string)
+	require.True(t, ok, "expected []string from TemporalReportedProblems payload")
+	return problems
+}
+
+// TestReportedProblems_MixedWFTAndActivity verifies that when WFT reporting is disabled
+// (threshold = 0) but activity retry reporting is enabled (threshold = 2), a recompute that
+// finds a pending activity at attempt 2 includes the activity entry but does NOT include a
+// WFT entry — even when LastWorkflowTaskFailure is non-nil (stale state from a prior config).
+func TestReportedProblems_MixedWFTAndActivity(t *testing.T) {
+	ms, taskGen := newReportedProblemsReproMutableState(t, 0 /* wftThreshold */, 2 /* activityThreshold */)
+
+	// Simulate stale LastWorkflowTaskFailure state (e.g., left over from when the WFT threshold
+	// was previously > 0).
+	ms.executionInfo.LastWorkflowTaskFailure = &persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause{
+		LastWorkflowTaskFailureCause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+	}
+
+	// Activity has reached the retry threshold.
+	ms.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+		ScheduledEventId: 1,
+		ActivityId:       "activity",
+		Attempt:          2,
+	}
+
+	taskGen.EXPECT().GenerateUpsertVisibilityTask().Return(nil)
+	require.NoError(t, ms.UpdateReportedProblemsSearchAttribute())
+
+	problems := reportedProblemsForRepro(t, ms)
+	require.Contains(t, problems, "category=ActivityRetryFailed",
+		"activity entry should appear when activity threshold is met")
+	require.NotContains(t, problems, "category=WorkflowTaskFailed",
+		"WFT entry should not appear when WFT threshold is 0 (disabled), even with stale LastWorkflowTaskFailure")
+}
+
+// TestReportedProblems_ActivityClearedAfterAttemptReset verifies that the
+// category=ActivityRetryFailed entry is removed from TemporalReportedProblems when an
+// activity's attempt count drops below the threshold (e.g., via ResetActivity or
+// UnpauseWithReset). UpdateActivity triggers this recompute whenever the attempt changes.
+func TestReportedProblems_ActivityClearedAfterAttemptReset(t *testing.T) {
+	ms, taskGen := newReportedProblemsReproMutableState(t, 0 /* wftThreshold */, 2 /* activityThreshold */)
+
+	// Prime the SA: activity at attempt 2 meets the threshold.
+	ms.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+		ScheduledEventId: 1,
+		ActivityId:       "activity",
+		Attempt:          2,
+	}
+	taskGen.EXPECT().GenerateUpsertVisibilityTask().Return(nil)
+	require.NoError(t, ms.UpdateReportedProblemsSearchAttribute())
+	require.Contains(t, reportedProblemsForRepro(t, ms), "category=ActivityRetryFailed",
+		"precondition: SA entry should be present before reset")
+
+	// Simulate what UpdateActivity does when attempt changes (e.g., ResetActivity sets Attempt=1).
+	ms.pendingActivityInfoIDs[1].Attempt = 1
+
+	taskGen.EXPECT().GenerateUpsertVisibilityTask().Return(nil)
+	require.NoError(t, ms.maybeUpdateActivityReportedProblems())
+
+	problems := reportedProblemsForRepro(t, ms)
+	require.NotContains(t, problems, "category=ActivityRetryFailed",
+		"activity entry should be cleared once attempt count drops below threshold")
+
 // TestToRealTime tests ms.ToRealTime() exhaustively as this function is also used by executions that don't
 // use time skipping and need to be tested thoroughly. This function converts virtual time to wall-clock time.
 func (s *mutableStateSuite) TestToRealTime() {
