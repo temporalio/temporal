@@ -343,7 +343,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 
 	historyClient = history.NewRetryableClient(
 		historyClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(func() bool { return false }),
 		common.IsResourceExhausted,
 	)
 	var token []byte
