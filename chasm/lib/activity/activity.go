@@ -695,16 +695,8 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		attempt.CurrentRetryInterval = durationpb.New(newInterval)
 	}
 
-	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
-	// Increment the stamp so the previous task is invalidated by the Validate check.
-	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
-		a.ScheduleToCloseStamp++
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{ScheduledTime: deadline},
-			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
-		)
-	}
+	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
+	a.reissueScheduleToClose(ctx)
 
 	attempt.Stamp++
 
@@ -1033,6 +1025,10 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 			a.StartDelay = common.CloneProto(ogOptions.GetStartDelay())
 			resetTime = a.dispatchTimeRespectingStartDelay(resetTime)
 		}
+
+		// Restoring options can move the ScheduleToClose deadline (via the timeout or start_delay).
+		// Recreate the task here for all reset paths (STARTED/ RESET_REQUESTED and keepPaused)
+		a.reissueScheduleToClose(ctx)
 	}
 
 	switch a.Status {
@@ -1291,6 +1287,20 @@ func (a *Activity) dispatchTimeRespectingStartDelay(t time.Time) time.Time {
 		return dispatchTime
 	}
 	return t
+}
+
+// reissueScheduleToClose bumps ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
+// at the current deadline. Called whenever an operation can change the deadline (UpdateOptions,
+// Reset(RestoreOriginalOptions)).
+func (a *Activity) reissueScheduleToClose(ctx chasm.MutableContext) {
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		a.ScheduleToCloseStamp++
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
+		)
+	}
 }
 
 // scheduleToCloseDeadline returns the absolute time at which the ScheduleToClose timeout expires,
