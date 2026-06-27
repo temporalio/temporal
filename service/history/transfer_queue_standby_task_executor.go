@@ -502,7 +502,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		}
 
 		if !childStarted {
-			return &struct{}{}, nil
+			return &startChildExecutionPostActionInfo{}, nil
 		}
 
 		if childTargetNamespaceID == "" {
@@ -515,6 +515,11 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			}
 			childTargetNamespaceID = targetNamespaceEntry.ID().String()
 		}
+		childWorkflowKey := definition.NewWorkflowKey(
+			childTargetNamespaceID,
+			childStartedWorkflowID,
+			childStartedRunID,
+		)
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 			NamespaceId: childTargetNamespaceID,
@@ -531,7 +536,9 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 			// Case 2: Target workflow is not in the desired state.
 			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
-			return &struct{}{}, nil
+			return &startChildExecutionPostActionInfo{
+				childWorkflowKey: &childWorkflowKey,
+			}, nil
 		default:
 			// Case 3: Verification itself failed.
 			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
@@ -552,7 +559,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			t.checkStartChildExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -688,6 +695,35 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 		ctx,
 		taskWorkflowKey(taskInfo),
 		getTaskArchetypeID(taskInfo),
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+	}
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOnSourceBeforeDiscard(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo any,
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	startChildInfo, ok := postActionInfo.(*startChildExecutionPostActionInfo)
+	if !ok || startChildInfo.childWorkflowKey == nil {
+		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
+	}
+
+	if !executionExistsOnSource(
+		ctx,
+		*startChildInfo.childWorkflowKey,
+		chasm.WorkflowArchetypeID,
 		logger,
 		t.clusterName,
 		t.clientBean,
