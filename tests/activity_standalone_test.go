@@ -7199,6 +7199,80 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		}, 4*time.Second, 100*time.Millisecond)
 	})
 
+	// Reset during a running attempt is a DEFERRED reset: the activity goes to RESET_REQUESTED, the
+	// worker keeps running the in-flight attempt under its current terms, and the reset lands (attempt
+	// count -> 1, re-dispatch) only when the worker yields. So RestoreOriginalOptions must leave the
+	// running attempt UNDISTURBED: the restore of the per-attempt options (StartToClose / Heartbeat)
+	// must be deferred until the reset lands on the next attempt — not applied to the in-flight attempt.
+	//   - ScheduleToClose is exempt: it is a lifetime budget, not a per-attempt timer, so it is restored
+	//     immediately (see ResetRestoreOriginal_OnStarted_RecomputesScheduleToCloseDeadline).
+	//   - start_delay is already skipped for a started attempt (it only governs the first dispatch).
+	//
+	// The bug: the restore block mutates the option fields (incl. StartToClose) immediately, before
+	// entering RESET_REQUESTED, while the running attempt's StartToClose timer still fires at the
+	// pre-restore (updated) deadline. So the reported StartToClose and the value actually enforced on
+	// the in-flight attempt disagree.
+	//
+	// Note on what is/isn't observable: the running attempt's StartToClose timer fires at the UPDATED
+	// value (30s) under both buggy and correct code (correct code leaves it alone; buggy code leaves it
+	// stale) — so the timeout firing time cannot distinguish them. The discriminator is the reported
+	// field: buggy code restores it to 60s immediately; correct (deferred) code leaves it at 30s, the
+	// value the in-flight attempt is actually governed by, until the reset lands on the next attempt.
+	s.Run("ResetRestoreOriginal_OnStarted_DefersPerAttemptOptionRestore", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		// Original StartToClose = 60s; updated to 30s below. No timer fires during the test.
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(60 * time.Second),
+		})
+		require.NoError(t, err)
+
+		// Transition to STARTED; the worker never responds.
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		// Update StartToClose to 30s: the in-flight attempt is now governed by 30s.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartToCloseTimeout: durationpb.New(30 * time.Second)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Reset(RestoreOriginalOptions) -> RESET_REQUESTED. The in-flight attempt should still be governed by 30s.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// The in-flight attempt should report 30s. The restored 60s must not take effect until the
+		// reset lands on the next attempt.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 30*time.Second, descResp.GetInfo().GetStartToCloseTimeout().AsDuration(),
+			"running attempt must keep its current StartToClose (30s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands on the next attempt, not report the restored 60s mid-attempt")
+	})
+
 	// The guard accepts the field mask path in either snake_case or camelCase form.
 	s.Run("UpdateCamelCaseFieldMask_Rejected", func(s *standaloneActivityTestSuite) {
 		t := s.T()
