@@ -135,7 +135,7 @@ func (q *QueueStore) ReadMessages(
 		maxCount,
 	).WithContext(ctx)
 
-	iter := query.Iter()
+	iter := query.PageSize(maxCount).Iter()
 
 	var result []*persistence.QueueMessage
 	message := make(map[string]any)
