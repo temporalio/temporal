@@ -1015,10 +1015,23 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
 		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
 		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
-		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
-		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
 		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
 		a.Priority = common.CloneProto(ogOptions.GetPriority())
+
+		// StartToClose and Heartbeat are per-attempt timeouts. If a worker is currently running an
+		// attempt, restoring them now would move the in-flight attempt's deadlines; instead defer the
+		// restore to the reset landing (TransitionResetAttemptFailedTo{Scheduled,Paused}) so it takes
+		// effect on the next attempt and the in-flight attempt is left undisturbed. With no running
+		// attempt there are no live per-attempt timers, so restore immediately.
+		switch a.Status {
+		case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+			a.ResetRestoreOptions = true
+		default:
+			a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+			a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
+		}
 
 		// start_delay only governs the first dispatch. Once the first attempt has started, restoring
 		// the original value would shift ScheduleToClose without affecting dispatch timing.
@@ -1027,7 +1040,8 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		}
 
 		// Restoring options can move the ScheduleToClose deadline (via the timeout or start_delay).
-		// Recreate the task here for all reset paths (STARTED/ RESET_REQUESTED and keepPaused)
+		// ScheduleToClose is a lifetime budget (not a per-attempt timer), so recreate it now for all
+		// reset paths.
 		a.reissueScheduleToClose(ctx)
 	}
 
@@ -1301,6 +1315,20 @@ func (a *Activity) reissueScheduleToClose(ctx chasm.MutableContext) {
 			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
 		)
 	}
+}
+
+// applyDeferredOptionRestore applies a per-attempt option restore (StartToClose / Heartbeat) that a
+// reset deferred because a worker was running an attempt at reset time (see handleReset). Called from
+// the reset landing transitions so the restored values take effect on the next attempt — whose
+// StartToClose / Heartbeat timers are emitted at the following TransitionStarted from these fields.
+func (a *Activity) applyDeferredOptionRestore() {
+	if !a.ResetRestoreOptions {
+		return
+	}
+	a.ResetRestoreOptions = false
+	ogOptions := a.GetOriginalOptions()
+	a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
+	a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
 }
 
 // scheduleToCloseDeadline returns the absolute time at which the ScheduleToClose timeout expires,
