@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -33,8 +35,19 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// OpenTelemetry attribute keys for Nexus inbound spans. Standard http.* attributes are set by
+// the otelhttp wrapper; the temporal.* attributes carry Temporal-domain semantics.
+const (
+	namespaceAttrKey      = telemetry.TemporalNamespaceKey
+	nexusEndpointAttrKey  = telemetry.NexusEndpointKey
+	nexusServiceAttrKey   = telemetry.NexusServiceKey
+	nexusOperationAttrKey = telemetry.NexusOperationKey
+	nexusRequestIDAttrKey = telemetry.NexusRequestIDKey
 )
 
 const (
@@ -333,6 +346,34 @@ type nexusHandler struct {
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
+// annotateInboundSpan sets Temporal-domain attributes from the resolved operation context
+// on the active Nexus HTTP server span.
+func annotateInboundSpan(
+	ctx context.Context,
+	oc *operationContext,
+	service, operation, requestID string,
+) {
+	telemetry.AnnotateNexusSpan(ctx, telemetry.NexusSpanAttributes{
+		Request:       true,
+		NamespaceName: oc.namespaceName,
+		Endpoint:      oc.endpointName,
+		Service:       service,
+		Operation:     operation,
+		RequestID:     requestID,
+	})
+}
+
+// recordInboundSpanStatus records the terminal status on the active Nexus HTTP server span. It is
+// designed to be called from deferred statements with a pointer to the handler's named
+// return value so it can see the final error.
+func recordInboundSpanStatus(ctx context.Context, errPtr *error) {
+	if errPtr != nil && *errPtr != nil {
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(*errPtr)
+		span.SetStatus(codes.Error, (*errPtr).Error())
+	}
+}
+
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
 // Resolves the context's namespace name to a registered Namespace.
 func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (*operationContext, error) {
@@ -397,6 +438,9 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+
+	annotateInboundSpan(ctx, oc, service, operation, options.RequestID)
+	defer recordInboundSpanStatus(ctx, &retErr)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -636,6 +680,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+
+	annotateInboundSpan(ctx, oc, service, operation, "")
+	defer recordInboundSpanStatus(ctx, &retErr)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{

@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -424,6 +426,8 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -450,6 +454,7 @@ func RPCFactoryProvider(
 		perServiceDialOptions,
 		monitor,
 		tokenProvider,
+		rpc.WithOTELTracing(tracerProvider, propagator),
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive

@@ -10,6 +10,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -48,7 +52,22 @@ func newTestNexusOperationHTTPHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	namespaceRegistry namespace.Registry,
 ) (*NexusOperationHTTPHandler, *mux.Router) {
+	return newTestNexusOperationHTTPHandlerWithTracing(endpointRegistry, namespaceRegistry, nil, nil)
+}
+
+func newTestNexusOperationHTTPHandlerWithTracing(
+	endpointRegistry commonnexus.EndpointRegistry,
+	namespaceRegistry namespace.Registry,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
+) (*NexusOperationHTTPHandler, *mux.Router) {
 	logger := log.NewTestLogger()
+	if tracerProvider == nil {
+		tracerProvider = sdktrace.NewTracerProvider()
+	}
+	if propagator == nil {
+		propagator = propagation.TraceContext{}
+	}
 	h := &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
@@ -58,6 +77,8 @@ func newTestNexusOperationHTTPHandler(
 		enpointRegistry:        endpointRegistry,
 		namespaceRegistry:      namespaceRegistry,
 		preprocessErrorCounter: metrics.CounterFunc(func(int64, ...metrics.Tag) {}),
+		tracerProvider:         tracerProvider,
+		propagator:             propagator,
 	}
 	router := mux.NewRouter()
 	h.RegisterRoutes(router)
@@ -148,4 +169,88 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "invalid endpoint target", failure.Message)
+}
+
+// TestDispatchNexusTaskByEndpoint_OuterSpan verifies that the otelhttp wrapper produces a
+// server span named after the Nexus route, extracts the W3C TraceContext from the incoming
+// request, and links the resulting span to the upstream trace.
+func TestDispatchNexusTaskByEndpoint_OuterSpan(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+
+	reg := nexustest.FakeEndpointRegistry{
+		OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {
+			return nil, serviceerror.NewNotFound("endpoint not found")
+		},
+	}
+	_, router := newTestNexusOperationHTTPHandlerWithTracing(reg, nil, tp, propagation.TraceContext{})
+
+	// Build an upstream traceparent and inject it into the outgoing request.
+	upstreamTracer := tp.Tracer("test-upstream")
+	upstreamCtx, upstreamSpan := upstreamTracer.Start(context.Background(), "upstream")
+	upstreamTraceID := upstreamSpan.SpanContext().TraceID()
+	upstreamSpanID := upstreamSpan.SpanContext().SpanID()
+
+	path := "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path("test-endpoint-id") + "/test-service/test-operation"
+	req := httptest.NewRequest(http.MethodPost, path, nil)
+	propagation.TraceContext{}.Inject(upstreamCtx, propagation.HeaderCarrier(req.Header))
+	upstreamSpan.End()
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	// Find the server span produced by the otelhttp wrapper.
+	var serverSpan sdktrace.ReadOnlySpan
+	for _, s := range recorder.Ended() {
+		if s.SpanKind() == trace.SpanKindServer {
+			serverSpan = s
+			break
+		}
+	}
+	require.NotNil(t, serverSpan, "expected an otelhttp server span")
+	require.Equal(t, "DispatchNexusTaskByEndpoint", serverSpan.Name())
+	require.Equal(t, upstreamTraceID, serverSpan.SpanContext().TraceID(),
+		"server span should inherit trace id from upstream traceparent")
+	require.Equal(t, upstreamSpanID, serverSpan.Parent().SpanID(),
+		"server span parent should reference upstream span")
+
+	// otelhttp sets http.* semconv attributes on the server span. Spot-check one.
+	hasMethod := false
+	for _, kv := range serverSpan.Attributes() {
+		if string(kv.Key) == "http.request.method" || string(kv.Key) == "http.method" {
+			hasMethod = true
+			require.Equal(t, http.MethodPost, kv.Value.AsString())
+		}
+	}
+	require.True(t, hasMethod, "expected http method attribute on server span")
+}
+
+// TestDispatchNexusTaskByEndpoint_NoUpstreamSpan verifies the wrapper still creates a span
+// when no traceparent is present (i.e., the span has a fresh trace id with no parent).
+func TestDispatchNexusTaskByEndpoint_NoUpstreamSpan(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+
+	reg := nexustest.FakeEndpointRegistry{
+		OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {
+			return nil, serviceerror.NewNotFound("endpoint not found")
+		},
+	}
+	_, router := newTestNexusOperationHTTPHandlerWithTracing(reg, nil, tp, propagation.TraceContext{})
+
+	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	require.GreaterOrEqual(t, len(recorder.Ended()), 1, "expected at least one recorded span")
+	var serverSpan sdktrace.ReadOnlySpan
+	for _, s := range recorder.Ended() {
+		if s.SpanKind() == trace.SpanKindServer {
+			serverSpan = s
+			break
+		}
+	}
+	require.NotNil(t, serverSpan)
+	require.Equal(t, "DispatchNexusTaskByEndpoint", serverSpan.Name())
+	require.False(t, serverSpan.Parent().IsValid(), "expected no parent span when no traceparent header is set")
 }
