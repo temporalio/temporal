@@ -1848,25 +1848,9 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 				continue
 			}
 
-			childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-			if childNamespaceID.IsEmpty() {
-				// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-				// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-				var err error
-				childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-				switch err.(type) {
-				case nil:
-				case *serviceerror.NamespaceNotFound:
-					// If child namespace is deleted there is nothing to close.
-					continue
-				default:
-					return err
-				}
-			}
-
 			executions = append(executions, parentclosepolicy.RequestDetail{
 				Namespace:   childInfo.Namespace,
-				NamespaceID: childNamespaceID.String(),
+				NamespaceID: childInfo.GetNamespaceId(),
 				WorkflowID:  childInfo.StartedWorkflowId,
 				RunID:       childInfo.StartedRunId,
 				Policy:      childInfo.ParentClosePolicy,
@@ -1912,18 +1896,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-			var err error
-			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-			if err != nil {
-				return err
-			}
-		}
 		_, err := t.historyRawClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceId: childNamespaceID.String(),
+			NamespaceId: childInfo.GetNamespaceId(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1941,19 +1915,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-			var err error
-			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-			if err != nil {
-				return err
-			}
-		}
-
 		_, err := t.historyRawClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			NamespaceId: childNamespaceID.String(),
+			NamespaceId: childInfo.GetNamespaceId(),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
