@@ -7225,7 +7225,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		// Original StartToClose = 60s; updated to 30s below. No timer fires during the test.
+		// Original StartToClose=60s / Heartbeat=50s; updated to 30s / 20s below. No timer fires during the test.
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
@@ -7234,6 +7234,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(60 * time.Second),
+			HeartbeatTimeout:    durationpb.New(50 * time.Second),
 		})
 		require.NoError(t, err)
 
@@ -7242,17 +7243,20 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
 
-		// Update StartToClose to 30s: the in-flight attempt is now governed by 30s.
+		// Update the per-attempt timeouts: the in-flight attempt is now governed by StartToClose=30s, Heartbeat=20s.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
-			Namespace:       env.Namespace().String(),
-			ActivityId:      activityID,
-			RunId:           startResp.RunId,
-			ActivityOptions: &activitypb.ActivityOptions{StartToCloseTimeout: durationpb.New(30 * time.Second)},
-			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout"}},
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(30 * time.Second),
+				HeartbeatTimeout:    durationpb.New(20 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "heartbeat_timeout"}},
 		})
 		require.NoError(t, err)
 
-		// Reset(RestoreOriginalOptions) -> RESET_REQUESTED. The in-flight attempt should still be governed by 30s.
+		// Reset(RestoreOriginalOptions) -> RESET_REQUESTED. The in-flight attempt should be left undisturbed.
 		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
@@ -7261,8 +7265,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// The in-flight attempt should report 30s. The restored 60s must not take effect until the
-		// reset lands on the next attempt.
+		// The in-flight attempt must still report its current per-attempt timeouts (StartToClose=30s,
+		// Heartbeat=20s). The restored originals (60s / 50s) must not take effect until the reset lands
+		// on the next attempt.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -7270,7 +7275,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, 30*time.Second, descResp.GetInfo().GetStartToCloseTimeout().AsDuration(),
-			"running attempt must keep its current StartToClose (30s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands on the next attempt, not report the restored 60s mid-attempt")
+			"running attempt must keep its current StartToClose (30s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands, not report the restored 60s mid-attempt")
+		require.Equal(t, 20*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
+			"running attempt must keep its current Heartbeat (20s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands, not report the restored 50s mid-attempt")
 	})
 
 	// The guard accepts the field mask path in either snake_case or camelCase form.
@@ -10155,6 +10162,157 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			require.NoError(c, dErr)
 			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, dr.GetInfo().GetStatus())
 		}, 10*time.Second, 200*time.Millisecond)
+	})
+
+	// CancelWhilePauseRequested: cancelling a STARTED activity that has a pending pause
+	// (PAUSE_REQUESTED) is accepted and recorded — cancel takes precedence over the pending pause.
+	// The worker is still running, so it is deferred (CANCEL_REQUESTED), not immediate.
+	t.Run("CancelWhilePauseRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+		env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Pause the STARTED activity → PAUSE_REQUESTED.
+		_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "test-cancel", descResp.GetInfo().GetCanceledReason(),
+			"cancel should be recorded even with a pending pause")
+	})
+
+	// CancelWhileResetRequested: cancelling a STARTED activity that has a pending reset
+	// (RESET_REQUESTED) is accepted and recorded — cancel takes precedence; deferred (CANCEL_REQUESTED).
+	t.Run("CancelWhileResetRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+		env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		// Reset the STARTED activity → RESET_REQUESTED.
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "test-cancel", descResp.GetInfo().GetCanceledReason(),
+			"cancel should be recorded even with a pending reset")
+	})
+
+	// PauseWhileResetRequested: pausing a STARTED activity that has a pending reset (RESET_REQUESTED)
+	// is rejected — RESET_REQUESTED is a non-pausable state.
+	t.Run("PauseWhileResetRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+		env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-pause",
+		})
+		require.Error(t, err)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	// UpdateWhileCancelRequested: updating options on a STARTED activity that has a pending cancel
+	// (CANCEL_REQUESTED) is allowed — the worker is still running and the update applies to it.
+	t.Run("UpdateWhileCancelRequested", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+		env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := env.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			Identity:   "test-identity",
+			Reason:     "test-cancel",
+			RequestId:  env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           runID,
+			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(15 * time.Second)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 15*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
+			"update should apply to the running attempt even with a pending cancel")
 	})
 
 	// TerminateWhilePaused: design doc says PAUSED + terminate → TERMINATED.
