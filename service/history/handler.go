@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2165,9 +2167,109 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		opErr,
 	)
 	if err != nil {
+		// Cross-tree fallback (HSM token -> CHASM op). The completion token is an HSM StateMachineRef,
+		// but a workflow reset can rebuild the op into the CHASM tree (reset routes op creation by the
+		// current nexusoperation.enableChasmWorkflowOperations policy; see mutable_state_rebuilder.go).
+		// When that happens the HSM completion path returns NotFound. Both trees key ops by
+		// ScheduledEventId, which we recover from the HSM ref, then complete the op in the CHASM tree.
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			if fallbackErr := h.completeNexusOperationChasmFallback(ctx, request); fallbackErr != nil {
+				// Preserve the original HSM NotFound when the op is in neither tree.
+				// Surface any other fallback error as-is.
+				if errors.As(fallbackErr, new(*serviceerror.NotFound)) {
+					return nil, h.convertError(err)
+				}
+				return nil, h.convertError(fallbackErr)
+			}
+			return &historyservice.CompleteNexusOperationResponse{}, nil
+		}
 		return nil, h.convertError(err)
 	}
 	return &historyservice.CompleteNexusOperationResponse{}, nil
+}
+
+// completeNexusOperationChasmFallback completes a Nexus operation that lives in the CHASM tree, given
+// an HSM-format completion request. It recovers the ScheduledEventId from the HSM StateMachineRef and
+// resolves the op via the root CHASM Workflow component (Operations[scheduledEventId]).
+//
+// It returns a *serviceerror.NotFound if the op does not exist in the CHASM tree either
+func (h *Handler) completeNexusOperationChasmFallback(
+	ctx context.Context,
+	request *historyservice.CompleteNexusOperationRequest,
+) error {
+	// Only attempt CHASM resolution when CHASM is enabled for the namespace
+	const msgOperationNotFound = "operation not found"
+	nsEntry, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetCompletion().GetNamespaceId()))
+	if err != nil {
+		return serviceerror.NewNotFound(msgOperationNotFound)
+	}
+	if !h.config.EnableChasm(nsEntry.Name().String()) {
+		return serviceerror.NewNotFound(msgOperationNotFound)
+	}
+
+	scheduledEventID, err := scheduledEventIDFromStateMachineRef(request.GetCompletion().GetRef())
+	if err != nil {
+		// Not recoverable from this token; nothing to fall back to.
+		return serviceerror.NewNotFound(msgOperationNotFound)
+	}
+
+	completion, err := chasmNexusCompletionFromHSMRequest(request)
+	if err != nil {
+		return err
+	}
+
+	// Complete the op on the CURRENT run (empty RunID). The token's RunID refers to the run at scheduling
+	// time, but a reset (the very scenario that moved the op to the CHASM tree) creates a new current run.
+	return h.applyChasmNexusCompletionOnCurrentRun(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: request.GetCompletion().GetNamespaceId(),
+			BusinessID:  request.GetCompletion().GetWorkflowId(),
+		},
+		scheduledEventID,
+		completion,
+	)
+}
+
+// chasmNexusCompletionFromHSMRequest converts an HSM-format CompleteNexusOperationRequest into the
+// CHASM ChasmNexusCompletion message consumed by Operation.HandleNexusCompletion.
+func chasmNexusCompletionFromHSMRequest(
+	request *historyservice.CompleteNexusOperationRequest,
+) (*persistencespb.ChasmNexusCompletion, error) {
+	completion := &persistencespb.ChasmNexusCompletion{
+		StartTime:      request.GetStartTime(),
+		RequestId:      request.GetCompletion().GetRequestId(),
+		Links:          request.GetLinks(),
+		OperationToken: request.GetOperationToken(),
+	}
+	if request.GetState() == string(nexus.OperationStateSucceeded) {
+		completion.Outcome = &persistencespb.ChasmNexusCompletion_Success{Success: request.GetSuccess()}
+		return completion, nil
+	}
+	temporalFailure, err := commonnexus.NexusFailureToTemporalFailure(
+		commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+	)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("unable to convert failure")
+	}
+	completion.Outcome = &persistencespb.ChasmNexusCompletion_Failure{Failure: temporalFailure}
+	return completion, nil
+}
+
+// scheduledEventIDFromStateMachineRef extracts the ScheduledEventId from an HSM StateMachineRef. The
+// op node is the last key in the path, whose Id is the ScheduledEventId encoded as a decimal string
+// (see components/nexusoperations/events.go).
+func scheduledEventIDFromStateMachineRef(ref *persistencespb.StateMachineRef) (int64, error) {
+	path := ref.GetPath()
+	if len(path) == 0 {
+		return 0, serviceerror.NewInvalidArgument("state machine ref has empty path")
+	}
+	last := path[len(path)-1]
+	id, err := strconv.ParseInt(last.GetId(), 10, 64)
+	if err != nil {
+		return 0, serviceerror.NewInvalidArgumentf("state machine key id %q is not a valid scheduled event ID", last.GetId())
+	}
+	return id, nil
 }
 
 func (h *Handler) CompleteNexusOperationChasm(
@@ -2226,10 +2328,253 @@ func (h *Handler) CompleteNexusOperationChasm(
 		},
 		completion)
 	if err != nil {
+		// The completion token's ComponentRef encodes the run as of schedule time. A workflow reset closes that run and
+		// rebuilds the op on a new current run; keeping the op in the CHASM tree (flag on) or moving it to the HSM tree
+		// (flag off, or a CHASM create error; see mutable_state_rebuilder.go). So a completion arriving after a reset
+		// fails against that now-closed schedule-time run. Resolve the op by ScheduledEventId (stable across reset and
+		// across trees) on the CURRENT run and complete it wherever the rebuild placed it.
+		if resolved, fallbackErr := h.completeNexusOperationAfterReset(ctx, ref, request, completion); resolved {
+			if fallbackErr != nil {
+				// The op was located on the current run but the completion was rejected (e.g. request-id
+				// mismatch -> NotFound), or it turned out to be in neither tree. Preserve the original
+				// CHASM error for a stable "operation not found"; surface any other fallback error as-is.
+				if errors.As(fallbackErr, new(*serviceerror.NotFound)) {
+					return nil, h.convertError(err)
+				}
+				return nil, h.convertError(fallbackErr)
+			}
+			return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+		}
 		return nil, h.convertError(err)
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+// completeNexusOperationAfterReset re-resolves a CHASM completion against the CURRENT run after the schedule-time
+// (token) run was closed by a reset, and completes the op wherever the rebuild placed it. It recovers the
+// ScheduledEventId from the ComponentRef and, depending on where the op now lives, completes it in the CHASM tree on
+// the current run or falls back to the HSM tree.
+// Returns resolved=false when there is nothing to fall back to, so the caller keeps the original error.
+func (h *Handler) completeNexusOperationAfterReset(
+	ctx context.Context,
+	ref *persistencespb.ChasmComponentRef,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+	completion *persistencespb.ChasmNexusCompletion,
+) (resolved bool, err error) {
+	scheduledEventID, err := scheduledEventIDFromComponentPath(ref.GetComponentPath())
+	if err != nil {
+		// Not recoverable from this token; nothing to fall back to.
+		return false, nil
+	}
+	// A legitimate Nexus completion token references the op under the root CHASM Workflow component, so
+	// its ref carries the Workflow archetype. The fallback below re-resolves the op against the Workflow
+	// root (lookupChasmOpOnCurrentRun / applyChasmNexusCompletionOnCurrentRun), which would silently
+	// ignore the token's claimed archetype. Reject any other archetype here so a wrong-archetype token
+	// keeps its original NotFound rather than being completed against the Workflow tree.
+	if ref.GetArchetypeId() != chasm.WorkflowArchetypeID {
+		return false, nil
+	}
+	// The namespace and business IDs come from the ChasmComponentRef: a CHASM completion token populates
+	// the marshaled ComponentRef rather than the legacy NamespaceId/WorkflowId fields on the completion.
+	namespaceID := ref.GetNamespaceId()
+	businessID := ref.GetBusinessId()
+	// Guard against driving CHASM reads/writes on an execution with no real CHASM tree (a noopChasmTree).
+	nsEntry, nsErr := h.namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
+	if nsErr != nil || !h.config.EnableChasm(nsEntry.Name().String()) {
+		return false, nil
+	}
+	// A token whose schedule-time run does not exist (e.g. a bogus run ID) is not a reset case and must keep its
+	// original NotFound rather than being re-targeted at the current run.
+	if !h.scheduleTimeRunExists(ctx, chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: businessID, RunID: ref.GetRunId()}) {
+		return false, nil
+	}
+	// An empty RunID resolves the current (reset-created) run.
+	currentRun := chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: businessID}
+	present, lookupErr := h.lookupChasmOpOnCurrentRun(ctx, currentRun, scheduledEventID)
+	if lookupErr != nil {
+		// Current run unreadable (execution gone / not CHASM-enabled): nothing to fall back to, so the
+		// caller keeps the original completion error.
+		return false, nil
+	}
+	if present {
+		return true, h.applyChasmNexusCompletionOnCurrentRun(ctx, currentRun, scheduledEventID, completion)
+	}
+	// Current run is readable but the op is absent from its CHASM tree: it was rebuilt into the HSM tree
+	// (or it exists in neither, in which case the HSM fallback returns NotFound).
+	return true, h.completeNexusOperationHSMFallback(ctx, ref, request)
+}
+
+// scheduleTimeRunExists reports whether the run identified by execKey (the run as of schedule time, taken from the
+// completion token's ChasmComponentRef) is a real run of the execution. A reset closes that run but leaves it
+// readable; a bogus/garbage run ID does not resolve at all. Reads do not trip the events-after-workflow-finish write
+// validation, so a closed (reset) run reads back successfully while a nonexistent run returns NotFound. An empty RunID
+// is treated as not-a-reset (there is no stale schedule-time run to recover from).
+func (h *Handler) scheduleTimeRunExists(ctx context.Context, execKey chasm.ExecutionKey) bool {
+	if execKey.RunID == "" {
+		return false
+	}
+	_, err := chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](execKey),
+		func(*chasmworkflow.Workflow, chasm.Context, chasm.NoValue) (chasm.NoValue, error) {
+			return nil, nil
+		},
+		nil,
+	)
+	return err == nil
+}
+
+// lookupChasmOpOnCurrentRun reports whether the Nexus op identified by scheduledEventID is present in the CHASM tree of
+// the execution identified by execKey. Callers pass an execKey with an empty RunID so the lookup resolves the CURRENT
+// run. A non-nil error means the run could not be read (execution gone / not CHASM-enabled); callers decline the
+// fallback and keep the original error in that case.
+func (h *Handler) lookupChasmOpOnCurrentRun(
+	ctx context.Context,
+	execKey chasm.ExecutionKey,
+	scheduledEventID int64,
+) (bool, error) {
+	return chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](execKey),
+		func(wf *chasmworkflow.Workflow, _ chasm.Context, _ chasm.NoValue) (bool, error) {
+			_, ok := wf.Operations[scheduledEventID]
+			return ok, nil
+		},
+		nil,
+	)
+}
+
+// applyChasmNexusCompletionOnCurrentRun completes the op at Operations[scheduledEventID] in the CHASM tree of the
+// execution identified by execKey. Callers pass an execKey with an empty RunID so the completion targets the CURRENT
+// run. It is shared by the HSM-token -> CHASM-op fallback (completeNexusOperationChasmFallback) and the after-reset
+// CHASM-token -> CHASM-op path (completeNexusOperationAfterReset).
+func (h *Handler) applyChasmNexusCompletionOnCurrentRun(
+	ctx context.Context,
+	execKey chasm.ExecutionKey,
+	scheduledEventID int64,
+	completion *persistencespb.ChasmNexusCompletion,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](execKey),
+		func(wf *chasmworkflow.Workflow, mutableCtx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			field, ok := wf.Operations[scheduledEventID]
+			if !ok {
+				// Op is not in the CHASM tree on the current run.
+				return nil, serviceerror.NewNotFound("operation not found")
+			}
+			op := field.Get(mutableCtx)
+			return nil, op.HandleNexusCompletion(mutableCtx, completion)
+		},
+		completion,
+	)
+	return err
+}
+
+// completeNexusOperationHSMFallback completes a Nexus operation that has been rebuilt into the HSM
+// tree, given a CHASM-format completion request. It recovers the ScheduledEventId from the
+// ComponentRef and drives the existing HSM completion handler with a synthesized StateMachineRef.
+func (h *Handler) completeNexusOperationHSMFallback(
+	ctx context.Context,
+	ref *persistencespb.ChasmComponentRef,
+	request *historyservice.CompleteNexusOperationChasmRequest,
+) error {
+	scheduledEventID, err := scheduledEventIDFromComponentPath(ref.GetComponentPath())
+	if err != nil {
+		return serviceerror.NewNotFound("operation not found")
+	}
+
+	namespaceID := ref.GetNamespaceId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(namespaceID),
+		ref.GetBusinessId(),
+	)
+	if err != nil {
+		return err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+
+	opErr, err := nexusOperationErrorFromChasmRequest(request)
+	if err != nil {
+		return err
+	}
+
+	// RunID is intentionally empty: the op moved to HSM via a reset that created a new current run.
+	// The HSM completion handler resolves the current run and (via its NEXUS-329 run-fallback) tolerates
+	// the run having changed since the token was minted.
+	hsmRef := hsm.Ref{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID, ref.GetBusinessId(), ""),
+		StateMachineRef: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{
+				{
+					Type: nexusoperations.OperationMachineType,
+					Id:   strconv.FormatInt(scheduledEventID, 10),
+				},
+			},
+		},
+	}
+	return h.nexusCompletionHandler.Handle(
+		ctx,
+		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
+		hsmRef,
+		request.GetCompletion().GetRequestId(),
+		request.GetOperationToken(),
+		request.GetStartTime(),
+		request.GetLinks(),
+		request.GetSuccess(),
+		opErr,
+	)
+}
+
+// nexusOperationErrorFromChasmRequest converts a CHASM completion request's outcome into the
+// *nexus.OperationError the HSM completion handler expects (nil for a successful completion). The
+// CHASM request carries a Temporal failure; the HSM path expects a Nexus OperationError.
+func nexusOperationErrorFromChasmRequest(
+	request *historyservice.CompleteNexusOperationChasmRequest,
+) (*nexus.OperationError, error) {
+	failure, ok := request.GetOutcome().(*historyservice.CompleteNexusOperationChasmRequest_Failure)
+	if !ok {
+		// Success (or no failure set): no operation error.
+		return nil, nil
+	}
+	nexusFailure, err := commonnexus.TemporalFailureToNexusFailure(failure.Failure)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("unable to convert failure")
+	}
+	recvdErr, err := nexusrpc.DefaultFailureConverter().FailureToError(nexusFailure)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("unable to convert failure to error")
+	}
+	opErr, ok := recvdErr.(*nexus.OperationError)
+	if !ok {
+		opErr = &nexus.OperationError{
+			State:   nexus.OperationStateFailed,
+			Message: "nexus operation completed unsuccessfully",
+			Cause:   recvdErr,
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
+		}
+	}
+	return opErr, nil
+}
+
+// scheduledEventIDFromComponentPath extracts the ScheduledEventId (the chasm.Map[int64] key) from a
+// CHASM ComponentRef component path of the form ["Operations", "<scheduledEventId>"].
+func scheduledEventIDFromComponentPath(componentPath []string) (int64, error) {
+	if len(componentPath) == 0 {
+		return 0, serviceerror.NewInvalidArgument("component ref has empty component path")
+	}
+	last := componentPath[len(componentPath)-1]
+	id, err := strconv.ParseInt(last, 10, 64)
+	if err != nil {
+		return 0, serviceerror.NewInvalidArgumentf("component path segment %q is not a valid scheduled event ID", last)
+	}
+	return id, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

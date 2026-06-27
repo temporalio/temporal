@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -147,8 +148,9 @@ type (
 
 		stateMachineRegistry *hsm.Registry
 
-		chasmRegistry    *chasm.Registry
-		endpointRegistry chasm.EndpointRegistry
+		chasmRegistry         *chasm.Registry
+		chasmWorkflowRegistry *chasmworkflow.Registry
+		endpointRegistry      chasm.EndpointRegistry
 
 		businessIDRateLimiters cache.Cache
 	}
@@ -2062,6 +2064,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	endpointRegistry chasm.EndpointRegistry,
 	handoverTrackerFactory HandoverTrackerFactory,
 ) (*ContextImpl, error) {
@@ -2112,6 +2115,7 @@ func newContext(
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
+		chasmWorkflowRegistry:   chasmWorkflowRegistry,
 		endpointRegistry:        endpointRegistry,
 		businessIDRateLimiters: cache.New(
 			historyConfig.BusinessIDReuseLimiterCacheSize(),
@@ -2229,6 +2233,10 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 
 func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
+}
+
+func (s *ContextImpl) ChasmWorkflowRegistry() *chasmworkflow.Registry {
+	return s.chasmWorkflowRegistry
 }
 
 func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {

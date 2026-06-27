@@ -6,6 +6,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -15,10 +16,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -682,11 +685,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		default:
-			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
-			if !ok {
-				return nil, serviceerror.NewInvalidArgumentf("Unknown event type: %v", event.GetEventType())
-			}
-			if err := def.Apply(b.mutableState.HSM(), event); err != nil {
+			if err := b.applyStateMachineEvent(ctx, event); err != nil {
 				return nil, err
 			}
 		}
@@ -710,6 +709,114 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		},
 		newRunHistory,
 	)
+}
+
+// applyStateMachineEvent applies a state-machine-backed history event (e.g. Nexus operation events)
+// during state rebuild (replication / reset).
+//   - The CREATE event (NexusOperationScheduled) is routed by the per-namespace feature flag
+//     nexusoperation.enableChasmWorkflowOperations: flag ON -> create in the CHASM tree; flag OFF ->
+//     HSM tree (legacy behavior).
+//   - All OTHER (non-create) events try HSM first; if the event type is unknown to HSM, or the HSM
+//     component for the op can't be found (ErrStateMachineNotFound), we fall back to the CHASM
+//     workflow tree.
+func (b *MutableStateRebuilderImpl) applyStateMachineEvent(
+	ctx context.Context,
+	event *historypb.HistoryEvent,
+) error {
+	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+		return b.applyNexusOperationScheduledEvent(ctx, event)
+	}
+
+	// Non-create events: HSM-first, CHASM-fallback.
+	err := b.applyHSMEvent(event)
+	if err == nil {
+		return nil
+	}
+	// Only fall back to CHASM when HSM doesn't own this op (component not found). Any other HSM error
+	// (including a genuinely unknown event type) is returned as-is.
+	if !errors.Is(err, hsm.ErrStateMachineNotFound) {
+		return err
+	}
+	applied, chasmErr := b.applyChasmEvent(ctx, event)
+	if chasmErr != nil {
+		return chasmErr
+	}
+	if !applied {
+		// Neither tree could apply it; surface the original HSM error to preserve existing semantics.
+		return err
+	}
+	return nil
+}
+
+// applyNexusOperationScheduledEvent (re)creates a Nexus operation during state rebuild, choosing the
+// backing tree by the per-namespace nexusoperation.enableChasmWorkflowOperations flag. Unlike non-create events,
+// the create is not "probed" against an existing component (none exists yet) — instead it is routed by current
+// creation policy. This means a reset realigns an op to whichever framework new ops would be created in today.
+func (b *MutableStateRebuilderImpl) applyNexusOperationScheduledEvent(
+	ctx context.Context,
+	event *historypb.HistoryEvent,
+) error {
+	if !b.mutableState.ChasmEnabled() || b.shard.ChasmWorkflowRegistry() == nil {
+		return b.applyHSMEvent(event)
+	}
+	nsName := b.mutableState.GetNamespaceEntry().Name().String()
+	if !b.shard.GetConfig().EnableChasmNexusWorkflowOperations(nsName) {
+		// Flag off: legacy path, create the op in the HSM tree.
+		return b.applyHSMEvent(event)
+	}
+
+	applied, err := b.applyChasmEvent(ctx, event)
+	if err != nil {
+		// CHASM create failed; fall back to HSM.
+		b.logger.Warn(
+			"Nexus operation CHASM create failed during state rebuild; falling back to HSM tree",
+			tag.WorkflowNamespace(nsName),
+			tag.WorkflowScheduledEventID(event.GetEventId()),
+			tag.Error(err),
+		)
+		return b.applyHSMEvent(event)
+	}
+	if !applied {
+		// CHASM didn't claim the event (registry/component unavailable); fall back to HSM.
+		return b.applyHSMEvent(event)
+	}
+	return nil
+}
+
+// applyHSMEvent applies an event to the HSM tree
+func (b *MutableStateRebuilderImpl) applyHSMEvent(event *historypb.HistoryEvent) error {
+	def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
+	if !ok {
+		return serviceerror.NewInvalidArgumentf("Unknown event type: %v", event.GetEventType())
+	}
+	return def.Apply(b.mutableState.HSM(), event)
+}
+
+// applyChasmEvent applies an event to the CHASM workflow tree. Returns (true, nil) if applied,
+// (false, nil) if CHASM is disabled / the registry is unavailable / the event type is unknown to
+// CHASM, and (false, err) for a fatal error.
+func (b *MutableStateRebuilderImpl) applyChasmEvent(
+	ctx context.Context,
+	event *historypb.HistoryEvent,
+) (bool, error) {
+	chasmWorkflowRegistry := b.shard.ChasmWorkflowRegistry()
+	if chasmWorkflowRegistry == nil || !b.mutableState.ChasmEnabled() {
+		return false, nil
+	}
+	def, ok := chasmWorkflowRegistry.EventDefinitionByEventType(event.GetEventType())
+	if !ok {
+		return false, nil
+	}
+	// Ensure the root CHASM workflow component exists before applying.
+	b.mutableState.EnsureChasmWorkflowComponent(ctx)
+	wf, chasmCtx, err := b.mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := def.Apply(chasmCtx, wf, event); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (b *MutableStateRebuilderImpl) applyNewRunHistory(
