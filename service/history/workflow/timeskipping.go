@@ -211,9 +211,10 @@ type timeSkippingTransition struct {
 	DisabledAfterFastForward bool
 }
 
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
+//
+// todo@time-skipping: the methods will be used by CHASM so keep as public.
 func NewTimeSkippingTransition(currentTime time.Time) *timeSkippingTransition {
 	return &timeSkippingTransition{CurrentTime: currentTime}
 }
@@ -380,19 +381,23 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 ) (needRegenTasks bool) {
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// 1. calculate the time skipping transition (all conditions gated inside it)
+		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
+		if !ms.isWorkflowSkippable() {
+			return false
+		}
+		// 2. find the next skip target; if there is none, time skipping is not needed
 		transition := ms.findNextSkipTarget()
 		if !transition.IsValid() {
 			return false
 		}
-		// 2. state change
+		// 3. state change
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
 		if err != nil {
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 3. task regeneration
+		// 4. task regeneration
 		return true
 	case historyi.TransactionPolicyPassive:
 		return false
