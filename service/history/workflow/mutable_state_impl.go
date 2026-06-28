@@ -1912,10 +1912,6 @@ func (ms *MutableStateImpl) Now() time.Time {
 	return ms.timeSource.Now()
 }
 
-func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	return accumulatedSkippedDuration(ms.executionInfo)
-}
-
 // GetWorkflowCloseTime returns workflow closed time, returns a zero time for open workflow
 func (ms *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (time.Time, error) {
 	if ms.executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && ms.executionInfo.CloseTime == nil {
@@ -9928,19 +9924,6 @@ func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationp
 	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
 		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
 	}
-}
-
-// wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
-// wrapper. The closure captures ms so the offset tracks ms.executionInfo.TimeSkippingInfo as it
-// evolves — no need to re-wrap when TimeSkippingInfo is created or replaced. Called once per MS
-// lifetime from the constructors; the type-assertion guard makes any repeat call a no-op.
-func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
-	if _, ok := ms.timeSource.(*clock.TimeSkippingTimeSourceWrapper); ok {
-		return
-	}
-	ms.timeSource = clock.WrapTimeSourceWithTimeSkipping(
-		ms.timeSource, ms.accumulatedSkippedDuration)
-	ms.hBuilder.SetTimeSource(ms.timeSource)
 }
 
 func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {

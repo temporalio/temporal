@@ -1,8 +1,10 @@
 package workflow
 
 import (
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -156,194 +158,86 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 	})
 
 }
-func (s *mutableStateSuite) TestWorkflowHasInflightWorkToPreventTimeSkipping() {
 
-	s.Run("FalseWhenNoPendingWork", func() {
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.False(hasPendingWork)
-		s.Empty(reason)
+func (s *mutableStateSuite) TestIsWorkflowSkippable() {
+
+	// base case: ensures the other tests modifications are the reason to make the workflow not skippable
+	s.Run("BaseCase", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true}}
+		s.True(s.mutableState.isWorkflowSkippable())
 	})
 
-	s.Run("TrueWhenPendingWorkflowTask", func() {
+	// config tests: nil safe, and false safe proof
+	s.Run("FalseWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("FalseWhenConfigNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("FalseWhenConfigDisabled", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
+		}
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	// state and status tests
+	s.Run("FalseWhenWorkflowNotRunning", func() {
+		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	s.Run("FalseWhenPaused", func() {
+		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.False(s.mutableState.isWorkflowSkippable())
+	})
+
+	// inflight work tests
+	s.Run("FalseWhenPendingWorkflowTask", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
 		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending workflow task", reason)
+		s.True(s.mutableState.HasPendingWorkflowTask())
+		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
-	s.Run("TrueWhenPendingActivity", func() {
+	s.Run("FalseWhenPendingActivity", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
 		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
+		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
-	s.Run("FalseWhenPendingActivityInRetryBackoff", func() {
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			Attempt:          2,
-			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
+	s.Run("FalseWhenPendingSignalExternal", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.False(hasPendingWork)
-		s.Empty(reason)
-	})
-
-	s.Run("TrueWhenActivityStarted", func() {
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			Attempt:          2,
-			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
-			StartedEventId:   10,
-		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
-	})
-
-	// A running activity that cannot be retried (no retry policy) must still block:
-	// the STARTED state short-circuits before the retry-policy check.
-	s.Run("TrueWhenActivityStartedNotRetryable", func() {
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   false,
-			Attempt:          1,
-			StartedEventId:   10,
-		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
-	})
-
-	// A first-attempt scheduled activity that has not failed yet (attempt 1) is not
-	// in backoff and must block even if it has a retry policy.
-	s.Run("TrueWhenActivityFirstAttemptScheduled", func() {
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			Attempt:          1,
-			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
-		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
-	})
-
-	s.Run("TrueWhenActivityPausedInBackoff", func() {
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			Attempt:          2,
-			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
-			Paused:           true,
-		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
-	})
-
-	s.Run("TrueWhenActivityScheduledNow", func() {
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			ScheduledTime:    timestamppb.New(now.Add(-time.Hour)),
-		}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending activity", reason)
-	})
-
-	s.Run("TrueWhenPendingChildExecution", func() {
-		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending child execution", reason)
-	})
-
-	s.Run("TrueWhenPendingNexusOperation", func() {
-		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
-			},
-		}, []byte("token"))
-		s.Require().NoError(err)
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending nexus operations", reason)
-	})
-
-	s.Run("TrueWhenPendingSignalExternal", func() {
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingSignalInfoIDs[1] = &persistencespb.SignalInfo{}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending signal external", reason)
+		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
-	s.Run("TrueWhenPendingRequestCancelExternal", func() {
+	s.Run("FalseWhenPendingRequestCancelExternal", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingRequestCancelInfoIDs[1] = &persistencespb.RequestCancelInfo{}
-		hasPendingWork, reason := s.mutableState.hasInflightWork()
-		s.True(hasPendingWork)
-		s.Equal("has pending request cancel external", reason)
-	})
-
-}
-
-func (s *mutableStateSuite) TestWorkflowIsSkippable() {
-
-	s.Run("FalseWhenTimeSkippingInfoNil", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenConfigNil", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenConfigDisabled", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: false},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenWorkflowNotRunning", func() {
-		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingWorkflowTask", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
-		s.True(s.mutableState.HasPendingWorkflowTask())
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingActivity", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
@@ -351,7 +245,6 @@ func (s *mutableStateSuite) TestWorkflowIsSkippable() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
@@ -360,7 +253,6 @@ func (s *mutableStateSuite) TestWorkflowIsSkippable() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
 			EventTime: timestamppb.Now(),
 			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
@@ -371,198 +263,13 @@ func (s *mutableStateSuite) TestWorkflowIsSkippable() {
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
-	s.Run("FalseWhenNoPendingTimersAndNoFastForward", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenPendingTimerAndNoFastForward", func() {
+	// conditions that won't impact the workflow skippability
+	s.Run("TrueWhenPendingTimersExist", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
 		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
 		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenFastForwardAndNoPendingTimer", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
-			},
-			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-			},
-		}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenFastForwardAndPendingTimer", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
-			},
-			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-			},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPaused", func() {
-		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenOnlyActivityInRetryBackoff", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		now := s.mutableState.Now()
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
-			ScheduledEventId: 1,
-			HasRetryPolicy:   true,
-			Attempt:          2,
-			ScheduledTime:    timestamppb.New(now.Add(time.Hour)),
-		}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-}
-
-func (s *mutableStateSuite) TestShouldExecuteTimeSkipping() {
-	// Each s.Run() gets a fresh mutable state via SetupSubTest().
-	// The default state is RUNNING with no pending work.
-
-	s.Run("FalseWhenTimeSkippingInfoNil", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenConfigNil", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenConfigDisabled", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: false},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenWorkflowNotRunning", func() {
-		s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingWorkflowTask", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.mutableState.executionInfo.WorkflowTaskScheduledEventId = 1
-		s.True(s.mutableState.HasPendingWorkflowTask())
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingActivity", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingChildExecution", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.mutableState.pendingChildExecutionInfoIDs[1] = &persistencespb.ChildExecutionInfo{}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPendingNexusOperation", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		_, err := nexusoperations.AddChild(s.mutableState.HSM(), "op-1", &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-			Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-				NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
-			},
-		}, []byte("token"))
-		s.Require().NoError(err)
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenNoPendingTimersAndNoFastForward", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.False(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenPendingTimerAndNoFastForward", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenFastForwardAndNoPendingTimer", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
-			},
-			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-			},
-		}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("TrueWhenFastForwardAndPendingTimer", func() {
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
-			},
-			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-			},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.True(s.mutableState.isWorkflowSkippable())
-	})
-
-	s.Run("FalseWhenPaused", func() {
-		s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
-		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
-		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
 	s.Run("TrueWhenOnlyActivityInRetryBackoff", func() {
@@ -835,5 +542,159 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		newTarget := s.mutableState.Now().Add(time.Hour)
 		s.mutableState.applyFastForward(eventID, nil)
 		s.WithinDuration(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo().GetTargetTime().AsTime(), newTarget, 1*time.Second)
+	})
+}
+
+// TestTimeSkippingTransition covers the pure TimeSkippingTransition data structure:
+// its constructor, validity check, earliest-future-time tracking, and fast-forward
+// gating. It needs no mutable state, so it is a plain test rather than a suite method.
+func TestTimeSkippingTransition(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("New sets only the current time", func(t *testing.T) {
+		tr := NewTimeSkippingTransition(base)
+		require.Equal(t, base, tr.CurrentTime)
+		require.True(t, tr.TargetTime.IsZero())
+		require.False(t, tr.DisabledAfterFastForward)
+		require.False(t, tr.IsValid(), "a transition with no target and no disable signal is invalid")
+	})
+
+	// Invariant 1: every method is nil-safe — on a nil receiver, and (for GateByFastForward)
+	// on a nil/absent fast-forward argument.
+	t.Run("nil safe", func(t *testing.T) {
+		var nilTr *timeSkippingTransition
+		require.False(t, nilTr.IsValid(), "nil transition is never valid")
+		require.NotPanics(t, func() { nilTr.TrackEarliestFutureTime(base.Add(time.Hour)) })
+		require.NotPanics(t, func() {
+			nilTr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
+		})
+
+		// A nil or empty fast-forward must be a no-op, not a spurious disable. A nil proto
+		// timestamp's AsTime() is the Unix epoch (not the Go zero time), so this guards against
+		// treating "no fast-forward" as a past target.
+		tr := NewTimeSkippingTransition(base)
+		require.NotPanics(t, func() { tr.GateByFastForward(nil) })
+		tr.GateByFastForward(nil)
+		require.True(t, tr.TargetTime.IsZero())
+		require.False(t, tr.DisabledAfterFastForward)
+
+		tr.GateByFastForward(&persistencespb.FastForwardInfo{}) // non-nil ff, nil target time
+		require.True(t, tr.TargetTime.IsZero())
+		require.False(t, tr.DisabledAfterFastForward)
+		require.False(t, tr.IsValid())
+	})
+
+	// Invariant 2: TrackEarliestFutureTime keeps the earliest strictly-trackable future time
+	// and ignores anything that is not a usable future skip target.
+	t.Run("earliest future time", func(t *testing.T) {
+		t.Run("ignores zero and past candidates", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(time.Time{})          // zero candidate
+			tr.TrackEarliestFutureTime(base.Add(-time.Hour)) // past candidate
+			require.True(t, tr.TargetTime.IsZero())
+		})
+
+		t.Run("keeps the earliest of several future candidates", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
+			require.Equal(t, base.Add(3*time.Hour), tr.TargetTime)
+
+			tr.TrackEarliestFutureTime(base.Add(time.Hour)) // earlier wins
+			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+
+			tr.TrackEarliestFutureTime(base.Add(2 * time.Hour)) // later is ignored
+			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+		})
+
+		t.Run("accepts a candidate equal to the current time", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base)
+			require.Equal(t, base, tr.TargetTime)
+		})
+	})
+
+	// Invariant 3: when no earlier skip target exists the fast-forward target is taken; when a
+	// fast-forward is absent/reached/zero it is a no-op; a target at or before now also disables.
+	t.Run("fast-forward fallback and gating", func(t *testing.T) {
+		t.Run("taken as the target when nothing earlier exists", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
+			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
+			require.False(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.IsValid())
+		})
+
+		t.Run("an earlier tracked target wins over a later fast-forward", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(time.Hour))
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(3 * time.Hour))})
+			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+			require.False(t, tr.DisabledAfterFastForward)
+		})
+
+		t.Run("an earlier fast-forward wins over a later tracked target", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
+			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
+			require.False(t, tr.DisabledAfterFastForward)
+		})
+
+		t.Run("ignores an already-reached fast-forward", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{
+				HasReached: true,
+				TargetTime: timestamppb.New(base.Add(time.Hour)),
+			})
+			require.True(t, tr.TargetTime.IsZero())
+			require.False(t, tr.DisabledAfterFastForward)
+		})
+
+		t.Run("ignores a zero-valued target time", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(time.Time{})})
+			require.True(t, tr.TargetTime.IsZero())
+			require.False(t, tr.DisabledAfterFastForward)
+		})
+
+		t.Run("target equal to current disables and sets the target", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base)})
+			require.True(t, base.Equal(tr.TargetTime))
+			require.True(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.IsValid())
+		})
+
+		t.Run("past target disables as a bare signal", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(-time.Hour))})
+			require.True(t, tr.TargetTime.IsZero(), "a past target is not a future skip target")
+			require.True(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.IsValid())
+		})
+	})
+
+	// Invariant 4: without a current time the transition is always invalid and no setter can
+	// make it valid — every field is relative to the current time.
+	t.Run("no current time always invalid", func(t *testing.T) {
+		t.Run("a directly-set target is still invalid", func(t *testing.T) {
+			tr := &timeSkippingTransition{TargetTime: base.Add(time.Hour)}
+			require.False(t, tr.IsValid())
+		})
+
+		t.Run("a directly-set disable signal is still invalid", func(t *testing.T) {
+			tr := &timeSkippingTransition{DisabledAfterFastForward: true}
+			require.False(t, tr.IsValid())
+		})
+
+		t.Run("setters are no-ops without a current time", func(t *testing.T) {
+			tr := &timeSkippingTransition{}
+			tr.TrackEarliestFutureTime(base)
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
+			require.True(t, tr.TargetTime.IsZero())
+			require.False(t, tr.DisabledAfterFastForward)
+			require.False(t, tr.IsValid())
+		})
 	})
 }

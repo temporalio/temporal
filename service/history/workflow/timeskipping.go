@@ -192,7 +192,7 @@ func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
 // =============================================================================
 // Time Skipping Runtime Data Structure
 // =============================================================================
-type TimeSkippingTransition struct {
+type timeSkippingTransition struct {
 	CurrentTime              time.Time
 	TargetTime               time.Time
 	DisabledAfterFastForward bool
@@ -200,19 +200,20 @@ type TimeSkippingTransition struct {
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
-func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
-	return &TimeSkippingTransition{CurrentTime: currentTime}
+func NewTimeSkippingTransition(currentTime time.Time) *timeSkippingTransition {
+	return &timeSkippingTransition{CurrentTime: currentTime}
 }
 
 // IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
-// signal. Nil-safe.
-func (t *TimeSkippingTransition) IsValid() bool {
-	return t != nil && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
+// signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
+// derived relative to the current time, so without it there is nothing to apply.
+func (t *timeSkippingTransition) IsValid() bool {
+	return t != nil && !t.CurrentTime.IsZero() && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
 }
 
 // TrackEarliestFutureTime tracks the earliest future time from the candidate,
 // and the final target time will be the target time to skip to.
-func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
+func (t *timeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
 		return
 	}
@@ -221,11 +222,13 @@ func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 	}
 }
 
-func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
-	if ff.GetHasReached() || ff.GetTargetTime().AsTime().IsZero() {
+// GateByFastForward should be called as a last step in finding a skip target,
+func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
+	if t == nil || t.CurrentTime.IsZero() {
 		return
 	}
-	if t == nil || t.CurrentTime.IsZero() {
+	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil ||
+		ff.GetTargetTime().AsTime().IsZero() {
 		return
 	}
 	ffTargetTime := ff.GetTargetTime().AsTime()
@@ -239,39 +242,10 @@ func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================
 
-// Workflow-based execution time skipping checks:
-func (ms *MutableStateImpl) hasInflightWork() (bool, string) {
-	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
-	if ms.HasPendingWorkflowTask() {
-		return true, "has pending workflow task"
-	}
-	// A pending activity blocks time skipping unless it has failed and is still
-	// waiting out its retry backoff (next attempt strictly in the future) — that one
-	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
-	// strict future check is what keeps a just-scheduled or already-due activity (next
-	// attempt <= now) blocking.
-	for _, ai := range ms.GetPendingActivityInfos() {
-		// if this activity is just a retry with backoff scheduled in the future
-		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
-			continue
-		}
-		return true, "has pending activity"
-	}
-	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
-		return true, "has pending nexus operations"
-	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
-		return true, "has pending child execution"
-	}
-	if len(ms.GetPendingSignalExternalInfos()) > 0 {
-		return true, "has pending signal external"
-	}
-	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
-		return true, "has pending request cancel external"
-	}
-	return false, ""
-}
-
+// isWorkflowSkippable checks if current workflow can skip time,
+// if checks if time skipping is enabled, if the workflow has in-flight work,
+// and if the workflow is at the correct state and status to skip time.
+// And if there is a time point to skip to is not the scope of this method.
 func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	noSkippingReason := ""
 	defer func() {
@@ -301,22 +275,48 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	}
 
 	// (3) gate by inflight work
-	if hasPendingWork, detailedReason := ms.hasInflightWork(); hasPendingWork {
-		noSkippingReason = fmt.Sprintf("pending work: %s", detailedReason)
+	// HasPendingWorkflowTask covers both normal and speculative workflow tasks
+	if ms.HasPendingWorkflowTask() {
+		noSkippingReason = "has pending workflow task"
+		return false
+	}
+	// A pending activity blocks time skipping unless it has failed and is still
+	// waiting out its retry backoff (next attempt strictly in the future) — that one
+	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
+	// strict future check is what keeps a just-scheduled or already-due activity (next
+	// attempt <= now) blocking.
+	for _, ai := range ms.GetPendingActivityInfos() {
+		// if this activity is just a retry with backoff scheduled in the future
+		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
+			continue
+		}
+		noSkippingReason = "has pending activity"
+		return false
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		noSkippingReason = "has pending nexus operations"
+		return false
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		noSkippingReason = "has pending child execution"
+		return false
+	}
+	if len(ms.GetPendingSignalExternalInfos()) > 0 {
+		noSkippingReason = "has pending signal external"
+		return false
+	}
+	if len(ms.GetPendingRequestCancelExternalInfos()) > 0 {
+		noSkippingReason = "has pending request cancel external"
 		return false
 	}
 	return true
 }
 
-func (ms *MutableStateImpl) calculateWorkflowTimeSkippingTransition() (*TimeSkippingTransition, error) {
-
-	// 1: gate by skippable check
-	if !ms.isWorkflowSkippable() {
-		return nil, nil
-	}
-
-	// 2: find next skip target, is there is no target, time skipping is not needed
-	var transition *TimeSkippingTransition
+// findNextSkipTarget finds the next skip target from the pending timers, activity-retries,
+// workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
+// it should only be called after isWorkflowSkippable returns true
+func (ms *MutableStateImpl) findNextSkipTarget() (*timeSkippingTransition, error) {
+	var transition *timeSkippingTransition
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		transition.TrackEarliestFutureTime(timerInfo.ExpiryTime.AsTime())
 	}
@@ -371,7 +371,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. calculate the time skipping transition (all conditions gated inside it)
-		transition, err := ms.calculateWorkflowTimeSkippingTransition()
+		transition, err := ms.findNextSkipTarget()
 		if err != nil {
 			ms.logger.Error("failed to calculate time-skipping transition", tag.Error(err))
 			return false
