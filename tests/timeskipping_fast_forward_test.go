@@ -10,7 +10,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -23,7 +22,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingFastForwardFunctionalSuite struct {
@@ -445,19 +443,16 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
 }
 
-// TestFastForward_RunTimeoutBeforeFastForward is a two-phase test:
+// TestFastForward_RunTimeoutBeforeFastForward proves the run timeout is a skip target that
+// is reached ahead of a later fast-forward:
 //
-//  1. Workflow starts with time-skipping enabled but NO fast-forward. The workflow is
-//     idle (blocking on a condition) so there are no skip candidates. The
-//     run/execution timeout alone must NOT advance virtual time — it is not a
-//     skip target. The workflow stays RUNNING indefinitely in real time.
-//
-//  2. A fast-forward larger than the run timeout is added via
-//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the fast-forward
-//     as the only skip candidate, which is then capped at the run timeout
-//     (5 min < 10 min fast-forward). Virtual time advances to the run timeout and the
-//     workflow is TIMED_OUT. The single transition carries DisabledAfterBound=false
-//     (the cap fired before the fast-forward was reached).
+//   - Workflow starts with time-skipping enabled, a 5 min run timeout, and a 10 min
+//     fast-forward. The workflow is idle (blocking on a condition) with no user timers.
+//   - The earliest skip target is the run timeout (5 min < 10 min fast-forward), so the
+//     close-tx after the first WFT skips virtual time to the run timeout and the workflow
+//     is TIMED_OUT — quickly in wall-clock time, well before either real duration elapses.
+//   - The single transition carries DisabledAfterFastForward=false: the workflow stopped at
+//     the run timeout before the fast-forward target was ever reached.
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBeforeFastForward() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
@@ -472,6 +467,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 		return workflow.Await(ctx, func() bool { return false })
 	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
 
+	startWall := time.Now()
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
@@ -481,48 +477,29 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBefor
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 		WorkflowRunTimeout:  durationpb.New(runTimeout),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true}, // no fastForward yet
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled:     true,
+			FastForward: durationpb.New(fastForward),
+		},
 	})
 	s.NoError(err)
 	runID := startResp.RunId
 
-	// Phase 1: wait for the SDK worker to complete the first WFT (workflow blocks
-	// on Await). After the close-tx there are no skip candidates, so virtual time
-	// must not have advanced and no TimeSkippingTransitioned event should exist.
-	s.AwaitTruef(func() bool {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-		return hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
-	}, 10*time.Second, 200*time.Millisecond, "first WFT must complete")
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-	s.Empty(s.findTransitionedEvents(hist),
-		"run/execution timeout alone is not a skip target — no transition must have fired")
-
-	// Phase 2: add fast-forward > run timeout. The update's close-tx finds
-	// the fast-forward as the skip candidate, caps it at the run timeout, and the
-	// workflow is timed out.
-	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(fastForward),
-			},
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
-	})
-	s.NoError(err)
-
+	// The workflow is idle (blocked on Await) with the run timeout as its earliest skip
+	// target, so it skips straight to the run timeout and times out — without waiting out
+	// 5 min of real time.
 	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
 	err = run.Get(ctx, nil)
 	var timeoutErr *sdktemporal.TimeoutError
 	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
 
-	hist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	s.Less(time.Since(startWall), runTimeout,
+		"time skipping must reach the run timeout in far less than the 5 min real run timeout")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
+	s.Len(transitions, 1, "exactly one transition: skip to the run timeout")
 	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
-		"run timeout caps the skip before fast-forward is reached: DisabledAfterFastForward must be false")
+		"the run timeout is reached before the later fast-forward: DisabledAfterFastForward must be false")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }

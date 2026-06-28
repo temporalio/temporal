@@ -723,9 +723,9 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
 		s.Equal(fastForwardTarget, tr.TargetTime)
-		// Future fast-forward target: it is the skip destination but is not yet reached,
-		// so time skipping is not disabled on this transition.
-		s.False(tr.DisabledAfterFastForward)
+		// The fast-forward is the earliest target (earlier than the timer), so skipping to it
+		// consumes the budget and disables time skipping on this transition.
+		s.True(tr.DisabledAfterFastForward)
 	})
 
 	s.Run("Backoff_NotChildAndExecutionTimeFuture_IsCandidate", func() {
@@ -878,7 +878,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
 		s.Equal(fastForwardTarget, tr.TargetTime)
-		s.False(tr.DisabledAfterFastForward, "future fast-forward target is not yet reached")
+		s.True(tr.DisabledAfterFastForward, "fast-forward is the earliest target: skipping to it disables time skipping")
 	})
 
 	s.Run("FastForwardLaterThanExecutionTimeout_TimeoutWins", func() {
@@ -904,7 +904,9 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
 		s.Equal(fastForwardTarget, tr.TargetTime, "a zero-valued timeout must not cap the skip")
-		s.False(tr.DisabledAfterFastForward)
+		// The fast-forward is the only (and therefore earliest) target, so it is reached and
+		// time skipping is disabled.
+		s.True(tr.DisabledAfterFastForward)
 	})
 
 	s.Run("FastForwardAtNow_DisablesAfterFastForward", func() {
@@ -1013,14 +1015,16 @@ func TestTimeSkippingTransition(t *testing.T) {
 		})
 	})
 
-	// Invariant 3: when no earlier skip target exists the fast-forward target is taken; when a
-	// fast-forward is absent/reached/zero it is a no-op; a target at or before now also disables.
+	// Invariant 3: the fast-forward target is taken — and disables time skipping — exactly when
+	// it is the earliest target (nothing earlier tracked). When a real candidate is earlier the
+	// fast-forward is not reached and skipping stays enabled. An absent/reached/zero fast-forward
+	// is a no-op.
 	t.Run("fast-forward fallback and gating", func(t *testing.T) {
-		t.Run("taken as the target when nothing earlier exists", func(t *testing.T) {
+		t.Run("taken as the target and disables when nothing earlier exists", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
 			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
-			require.False(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
 
@@ -1032,12 +1036,12 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
-		t.Run("an earlier fast-forward wins over a later tracked target", func(t *testing.T) {
+		t.Run("an earlier fast-forward wins over a later tracked target and disables", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
 			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
-			require.False(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.DisabledAfterFastForward)
 		})
 
 		t.Run("ignores an already-reached fast-forward", func(t *testing.T) {

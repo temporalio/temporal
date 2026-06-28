@@ -244,10 +244,17 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 		return
 	}
 	ffTargetTime := ff.GetTargetTime().AsTime()
-	t.TrackEarliestFutureTime(ffTargetTime)
-	if !ffTargetTime.After(t.CurrentTime) {
-		t.DisabledAfterFastForward = true
+	// If a real candidate is scheduled strictly before the fast-forward target, we skip to
+	// that and the fast-forward budget is not yet exhausted — leave time skipping enabled.
+	if !t.TargetTime.IsZero() && t.TargetTime.Before(ffTargetTime) {
+		return
 	}
+	// Otherwise the fast-forward target is the earliest target: skip to it (clamped to the
+	// present by TrackEarliestFutureTime) and disable time skipping — the budget is reached.
+	// This is what lets the budget cap a chain of runs: a run with no earlier candidate
+	// consumes the remaining budget by skipping to the fast-forward and disabling.
+	t.TrackEarliestFutureTime(ffTargetTime)
+	t.DisabledAfterFastForward = true
 }
 
 // =============================================================================
@@ -355,12 +362,19 @@ func (ms *MutableStateImpl) findNextSkipTarget() *timeSkippingTransition {
 			transition.TrackEarliestFutureTime(executionTime)
 		}
 	}
-	// allow skipping to the run/execution timeout
-	if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
-		transition.TrackEarliestFutureTime(t.AsTime())
-	}
-	if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
-		transition.TrackEarliestFutureTime(t.AsTime())
+	if ms.HadOrHasWorkflowTask() {
+		// The run/execution timeout is a valid skip target, but only once the workflow has
+		// actually started executing (it has had a workflow task). For example, a freshly-created child has a
+		// brief window — start event applied, first workflow task not yet scheduled — where it
+		// looks idle with no timers. If the timeout were an unconditional target, the child would
+		// skip all the way to its run timeout before ever running its first task, so it never sets
+		// its internal timers.
+		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			transition.TrackEarliestFutureTime(t.AsTime())
+		}
+		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
+			transition.TrackEarliestFutureTime(t.AsTime())
+		}
 	}
 
 	// fast-forward is also a target time, and this is the furthest target time a time skipping can skip to
