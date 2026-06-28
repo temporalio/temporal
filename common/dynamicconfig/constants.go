@@ -3298,6 +3298,11 @@ When enabled, the scavenger will delete completed workflow execution data that a
 The configured value will be divided by the number of worker hosts to get the per host rps limit. 
 0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
+	EnableBatchActivityOperators = NewNamespaceBoolSetting(
+		"worker.enableEnableBatchActivityOperators",
+		true,
+		`EnableBatchActivityOperators decides whether to support batch cancel, terminate or delete on standalone activities in our worker`,
+	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ParentCloseMaxConcurrentActivityExecutionSize",
 		1000,

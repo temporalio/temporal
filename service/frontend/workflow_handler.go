@@ -5649,6 +5649,15 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	if !wh.config.EnableBatchActivityOperators(request.Namespace) {
+		switch op := request.Operation.(type) {
+		case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+			return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported for this namespace", op)
+		}
+	}
+
 	if err := batcher.ValidateBatchOperation(request); err != nil {
 		return nil, err
 	}
