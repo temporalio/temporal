@@ -1025,8 +1025,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		// attempt there are no live per-attempt timers, so restore immediately.
 		switch a.Status {
 		case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
-			activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+			activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 			a.ResetRestoreOptions = true
 		default:
 			a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
@@ -1049,6 +1048,11 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		// A reset is already pending on this running attempt. Accepting an overlapping reset is a
+		// separate semantics question; for now reject it clearly rather than falling through to the
+		// "not running" default below (the worker is still running the attempt).
+		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending reset")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
 			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.

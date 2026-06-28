@@ -145,7 +145,7 @@ message ActivityState {
   google.protobuf.Timestamp first_attempt_started_time = 19;
 
   // Set when a reset with restore_original_options=true is requested while a worker is running an
-  // attempt (STARTED / PAUSE_REQUESTED / RESET_REQUESTED). The per-attempt option restore
+  // attempt (STARTED / PAUSE_REQUESTED). The per-attempt option restore
   // (start_to_close / heartbeat timeouts) is deferred so the in-flight attempt is left undisturbed;
   // it is applied when the worker yields and the activity transitions out of RESET_REQUESTED, so the
   // restored values take effect on the next attempt. ScheduleToClose (lifetime) is restored
