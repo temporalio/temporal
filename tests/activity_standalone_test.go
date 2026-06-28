@@ -12482,6 +12482,50 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 
+	// ResetWhileResetRequested_Rejected: a reset issued while a reset is already pending (the
+	// activity is RESET_REQUESTED, worker still running the attempt) is rejected with a clear
+	// message and leaves the activity untouched. Accepting a second/overlapping reset is a separate
+	// semantics question deferred for now; this pins the current behavior as an explicit rejection
+	// rather than the misleading "activity execution is not running".
+	t.Run("ResetWhileResetRequested_Rejected", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, _ := startAttemptWithTimeouts(ctx, t, activityID, 60*time.Second, 50*time.Second)
+
+		// Change a per-attempt option so a leaked restore from the rejected reset would be detectable.
+		updateTimeouts(ctx, t, activityID, startResp.GetRunId(), 30*time.Second, 20*time.Second)
+
+		// First reset -> RESET_REQUESTED (deferred reset of the running attempt). The reset handler
+		// runs synchronously, so the activity is in RESET_REQUESTED once this returns. (RESET_REQUESTED
+		// surfaces externally as runState STARTED — the worker is still running its attempt.)
+		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+
+		// Second reset while a reset is already pending must be rejected with a clear message — the
+		// worker is still running the attempt, so "activity execution is not running" would be wrong.
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.Contains(t, err.Error(), "pending reset")
+
+		// The rejected reset must leave the activity untouched: still running its attempt
+		// (RESET_REQUESTED, surfaced as STARTED), options unchanged.
+		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.GetInfo().GetRunState())
+		require.Equal(t, 30*time.Second, desc.GetInfo().GetStartToCloseTimeout().AsDuration())
+		require.Equal(t, 20*time.Second, desc.GetInfo().GetHeartbeatTimeout().AsDuration())
+	})
+
 	// StartToCloseTimeoutWhileResetRequested: a STARTED activity with a pending reset must still
 	// observe its StartToClose timeout. The worker stops responding, the timer fires, the retry
 	// path consumes the reset-request and lands the activity in SCHEDULED with the attempt count
