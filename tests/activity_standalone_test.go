@@ -12343,6 +12343,145 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
+	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and
+	// polls it to STARTED, returning the start response, the in-flight task token, and the task queue.
+	startAttemptWithTimeouts := func(ctx context.Context, t *testing.T, activityID string, startToClose, heartbeat time.Duration) (
+		*workflowservice.StartActivityExecutionResponse, []byte,
+	) {
+		t.Helper()
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(startToClose),
+			HeartbeatTimeout:    durationpb.New(heartbeat),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(10 * time.Second),
+				BackoffCoefficient: 1.0,
+				MaximumAttempts:    10,
+			},
+			RequestId: testcore.RandomizeStr(activityID),
+		})
+		require.NoError(t, err)
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		return startResp, pollResp.GetTaskToken()
+	}
+
+	updateTimeouts := func(ctx context.Context, t *testing.T, activityID, runID string, startToClose, heartbeat time.Duration) {
+		t.Helper()
+		_, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(startToClose),
+				HeartbeatTimeout:    durationpb.New(heartbeat),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "heartbeat_timeout"}},
+		})
+		require.NoError(t, err)
+	}
+
+	// ResetRestoreOriginal_Started_AppliesDeferredRestoreOnReschedule covers the *apply* half of the
+	// deferred per-attempt option restore. ResetRestoreOriginal_OnStarted_DefersPerAttemptOptionRestore
+	// (in TestStartDelay) only checks that the restore is deferred while the attempt is in flight; this
+	// drives the attempt to fail with retries remaining so the reset lands in SCHEDULED, and checks the
+	// next attempt actually carries the restored timeouts. Without applyDeferredOptionRestore the next
+	// attempt would keep the in-flight (updated) values.
+	t.Run("ResetRestoreOriginal_Started_AppliesDeferredRestoreOnReschedule", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, taskToken := startAttemptWithTimeouts(ctx, t, activityID, 60*time.Second, 50*time.Second)
+
+		// In-flight attempt is now governed by 30s/20s.
+		updateTimeouts(ctx, t, activityID, startResp.GetRunId(), 30*time.Second, 20*time.Second)
+
+		// Reset with RestoreOriginalOptions while running -> RESET_REQUESTED, restore deferred.
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// Worker yields with retries remaining -> reset lands in SCHEDULED at attempt 1 and the deferred
+		// restore is applied, so the next attempt carries the original 60s/50s.
+		failRetryable(ctx, t, taskToken, 0)
+
+		await.Require(ctx, t, func(c *await.T) {
+			desc, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.GetInfo().GetRunState())
+			require.EqualValues(c, 1, desc.GetInfo().GetAttempt())
+			require.Equal(c, 60*time.Second, desc.GetInfo().GetStartToCloseTimeout().AsDuration(),
+				"next attempt must carry the restored StartToClose (60s); the deferred restore must be applied on the reset landing")
+			require.Equal(c, 50*time.Second, desc.GetInfo().GetHeartbeatTimeout().AsDuration(),
+				"next attempt must carry the restored Heartbeat (50s)")
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
+	// ResetRestoreOriginal_KeepPaused_AppliesDeferredRestoreOnPausedLanding is the same as the test
+	// above but for the PAUSED landing: reset with KeepPaused on a paused (PAUSE_REQUESTED) running
+	// attempt, then fail it. The reset lands in PAUSED via TransitionResetAttemptFailedToPaused, which
+	// must also apply the deferred restore so the paused activity carries the original timeouts.
+	t.Run("ResetRestoreOriginal_KeepPaused_AppliesDeferredRestoreOnPausedLanding", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, taskToken := startAttemptWithTimeouts(ctx, t, activityID, 60*time.Second, 50*time.Second)
+
+		updateTimeouts(ctx, t, activityID, startResp.GetRunId(), 30*time.Second, 20*time.Second)
+
+		// Pause the running attempt -> PAUSE_REQUESTED.
+		pauseActivity(ctx, t, activityID, startResp.GetRunId())
+		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
+
+		// Reset with RestoreOriginalOptions + KeepPaused -> RESET_REQUESTED, restore deferred, pause kept.
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
+			KeepPaused:             true,
+		})
+		require.NoError(t, err)
+
+		// Worker yields -> reset lands in PAUSED at attempt 1 and the deferred restore is applied.
+		failRetryable(ctx, t, taskToken, 0)
+
+		await.Require(ctx, t, func(c *await.T) {
+			desc, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.GetInfo().GetRunState())
+			require.EqualValues(c, 1, desc.GetInfo().GetAttempt())
+			require.Equal(c, 60*time.Second, desc.GetInfo().GetStartToCloseTimeout().AsDuration(),
+				"paused next attempt must carry the restored StartToClose (60s)")
+			require.Equal(c, 50*time.Second, desc.GetInfo().GetHeartbeatTimeout().AsDuration(),
+				"paused next attempt must carry the restored Heartbeat (50s)")
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
 	// StartToCloseTimeoutWhileResetRequested: a STARTED activity with a pending reset must still
 	// observe its StartToClose timeout. The worker stops responding, the timer fires, the retry
 	// path consumes the reset-request and lands the activity in SCHEDULED with the attempt count
