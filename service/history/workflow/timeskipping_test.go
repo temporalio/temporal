@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/components/nexusoperations"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -917,6 +918,30 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.Equal(baseTime, tr.TargetTime)
 		s.True(tr.DisabledAfterFastForward)
 	})
+}
+
+// TestCloseTransactionHandleWorkflowTimeSkipping verifies the skippability gate is wired into the
+// active-policy path: even when a valid skip target exists (a user timer), a non-skippable workflow
+// (here, nil time-skipping config) must not skip — needRegenTasks is false and no state changes.
+func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
+	// A valid skip target exists: a user timer one hour in the (virtual) future.
+	s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+		TimerId:    "t1",
+		ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
+	}
+	// ...but time skipping is not enabled (nil config), so the workflow is not skippable.
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
+	s.mutableState.timeSkippingInfoUpdated = false
+
+	// Make the intent explicit: the target is real, but the gate must reject the workflow.
+	s.Require().True(s.mutableState.findNextSkipTarget().IsValid(), "the user timer is a valid skip target")
+	s.Require().False(s.mutableState.isWorkflowSkippable(), "nil config means not skippable")
+
+	needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+		context.Background(), historyi.TransactionPolicyActive)
+
+	s.False(needRegen, "the gate must prevent skipping even though a valid target exists")
+	s.False(s.mutableState.timeSkippingInfoUpdated, "a gated-out transaction must not change state")
 }
 
 // TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
