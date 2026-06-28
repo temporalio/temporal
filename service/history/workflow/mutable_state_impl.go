@@ -4145,51 +4145,6 @@ func (ms *MutableStateImpl) AddWorkflowTaskFailedEvent(
 	)
 }
 
-// AddWorkflowExecutionTimeSkippingTransitionedEvent adds a workflow execution time skipping transitioned event to the mutable state.
-// This should only be called only when `ShouldExecuteTimeSkipping` returns true.
-func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
-	ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error) {
-	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
-	if err := ms.checkMutability(opTag); err != nil {
-		return nil, err
-	}
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-		targetTime, disabledAfterFastForward)
-	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
-}
-
-// ApplyWorkflowExecutionTimeSkippingTransitionedEvent applies the WorkflowExecutionTimeSkippingTransitionedEvent to the mutable state.
-func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
-
-	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
-	tsi := ms.executionInfo.GetTimeSkippingInfo()
-
-	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
-	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
-	if tsi == nil {
-		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
-		return invalidTransitionError
-	}
-	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
-		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
-		return invalidTransitionError
-	}
-
-	// update time
-	if !timeNotSet(attr.TargetTime) {
-		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
-		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
-	}
-	// update enabled state
-	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
-	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.FastForwardInfo.HasReached = true
-	}
-
-	ms.timeSkippingInfoUpdated = true
-	return nil
-}
-
 func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
 	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }

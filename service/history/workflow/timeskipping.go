@@ -6,6 +6,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -316,7 +317,7 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 // workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
 // it should only be called after isWorkflowSkippable returns true
 func (ms *MutableStateImpl) findNextSkipTarget() (*timeSkippingTransition, error) {
-	var transition *timeSkippingTransition
+	transition := NewTimeSkippingTransition(ms.Now())
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		transition.TrackEarliestFutureTime(timerInfo.ExpiryTime.AsTime())
 	}
@@ -397,6 +398,48 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		)
 		return false
 	}
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
+	ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+		targetTime, disabledAfterFastForward)
+	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
+
+	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
+	if tsi == nil {
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		return invalidTransitionError
+	}
+	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
+		return invalidTransitionError
+	}
+
+	// update time
+	if !timeNotSet(attr.TargetTime) {
+		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
+		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
+	}
+	// update enabled state
+	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
+	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
+		tsi.FastForwardInfo.HasReached = true
+	}
+
+	ms.timeSkippingInfoUpdated = true
+	return nil
 }
 
 func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkipping(
