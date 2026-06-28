@@ -97,6 +97,49 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		s.Nil(stateProp.GetFastForwardTargetTime())
 		s.Equal(time.Hour, stateProp.GetInitialSkippedDuration().AsDuration())
 	})
+
+	// Regression: with no accumulated duration the stateProp starts nil; an active
+	// (not-yet-reached) fast-forward must still be propagated without a nil deref.
+	s.Run("FastForwardPropagatedWhenNoAccumulatedDuration", func() {
+		src := &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{
+					Enabled:     true,
+					FastForward: durationpb.New(3 * time.Hour),
+				},
+				// no AccumulatedSkippedDuration
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime: fixedTS,
+					HasReached: false,
+				},
+			},
+		}
+		tsc, stateProp := propagateTimeSkippingToNextRun(src)
+		s.Require().NotNil(tsc)
+		s.True(tsc.GetEnabled())
+		s.Require().NotNil(stateProp)
+		s.Nil(stateProp.GetInitialSkippedDuration(), "no virtual time accumulated yet")
+		s.Require().NotNil(stateProp.GetFastForwardTargetTime())
+		s.Equal(fixed, stateProp.GetFastForwardTargetTime().AsTime())
+	})
+
+	s.Run("NothingPropagatedWhenNoAccumAndNoFastForward", func() {
+		src := &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			},
+		}
+		tsc, stateProp := propagateTimeSkippingToNextRun(src)
+		s.Require().NotNil(tsc, "enabled config is still propagated")
+		s.True(tsc.GetEnabled())
+		s.Nil(stateProp, "no accumulated time and no active fast-forward means nothing to propagate")
+	})
+
+	s.Run("NilTimeSkippingInfoPropagatesNothing", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{})
+		s.Nil(tsc)
+		s.Nil(stateProp)
+	})
 }
 
 func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
@@ -358,6 +401,18 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
+	// update assumes the TS info was already initialized; updating a workflow that never
+	// started time skipping is an internal error and must not initialize it as a side effect.
+	s.Run("ErrorWhenTimeSkippingInfoNil", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		err := s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true}, 8)
+		s.Error(err)
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo(), "must not initialize TS info on update")
+		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated on a failed update")
+	})
+
 	s.Run("UpdateTimeSkippingInfo_UpdateWithNil", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
@@ -562,8 +617,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		runTimeout := fixedBase.Add(2 * time.Hour)
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runTimeout)
 
-		transition, err := s.mutableState.findNextSkipTarget()
-		s.Require().NoError(err)
+		transition := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(transition)
 		s.True(transition.IsValid())
 		s.True(runTimeout.Equal(transition.TargetTime))
@@ -574,8 +628,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		execTimeout := fixedBase.Add(3 * time.Hour)
 		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(execTimeout)
 
-		transition, err := s.mutableState.findNextSkipTarget()
-		s.Require().NoError(err)
+		transition := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(transition)
 		s.True(transition.IsValid())
 		s.True(execTimeout.Equal(transition.TargetTime))
@@ -588,8 +641,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(runTimeout)
 		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(execTimeout)
 
-		transition, err := s.mutableState.findNextSkipTarget()
-		s.Require().NoError(err)
+		transition := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(transition)
 		s.True(runTimeout.Equal(transition.TargetTime), "the earlier run timeout must win")
 	})
@@ -599,8 +651,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(fixedBase.Add(-time.Hour))
 		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(fixedBase.Add(-2 * time.Hour))
 
-		transition, err := s.mutableState.findNextSkipTarget()
-		s.Require().NoError(err)
+		transition := s.mutableState.findNextSkipTarget()
 		s.Nil(transition, "timeouts in the past cannot be skip targets")
 	})
 }

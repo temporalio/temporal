@@ -5907,9 +5907,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			ms.initTimeSkippingInfo(tsc, nil, event.GetEventId())
+			if err := ms.initTimeSkippingInfo(tsc, nil, event.GetEventId()); err != nil {
+				return err
+			}
 		} else {
-			ms.updateTimeSkippingInfo(tsc, event.GetEventId())
+			if err := ms.updateTimeSkippingInfo(tsc, event.GetEventId()); err != nil {
+				return err
+			}
 		}
 	}
 
