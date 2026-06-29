@@ -990,15 +990,22 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 }
 
 // handleReset handles the activity execution reset.
-// For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
+//
+// For SCHEDULED and PAUSED activities (no worker running): re-dispatches at attempt 1, honoring
+// any pending start_delay or retry backoff. A PAUSED activity is unpaused first — unless
+// keepPaused is set, in which case the counter is reset to 1 but the activity stays PAUSED until
+// a later unpause.
+//
 // For STARTED activities: transitions to RESET_REQUESTED. The worker is notified via
 // ActivityReset=true on its next heartbeat response and continues to use its existing task token.
 // When the worker yields (failure or timeout with retries remaining), the activity transitions
 // back to SCHEDULED at attempt 1 via TransitionResetAttemptFailedToScheduled.
+//
+// RestoreOriginalOptions follows the same split: applied immediately for a non-running activity,
+// and deferred for a running one, so the in-flight attempt is not disturbed — every restored option
+// takes effect on the new attempt 1.
+//
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
-// RestoreOriginalOptions follows the same split: applied immediately for a non-running activity, and
-// deferred to the reset landing for a running one, so the in-flight attempt is never disturbed — every
-// restored option takes effect on the new attempt 1.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 	keepPaused := frontendReq.GetKeepPaused()
@@ -1020,11 +1027,12 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
-		// A reset is already pending on this running attempt. Accepting an overlapping reset is a
-		// separate semantics question; for now reject it clearly rather than falling through to the
-		// "not running" default below (the worker is still running the attempt).
+		// A reset is already pending on this running attempt. For now we reject a second reset
+		// request clearly.
+		// TODO (dan): define desired behavior and implement
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending reset")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		// The worker is still executing.
 		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
 			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
 			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
@@ -1034,11 +1042,8 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 				return nil, err
 			}
 		}
-		// The worker is still executing under its existing task token. Defer ALL mutations to the reset
-		// landing so the in-flight attempt is left completely undisturbed: the option restore, the
-		// heartbeat clear, and the attempt-count rewind all take effect when the worker yields and the
-		// activity lands at attempt 1 (TransitionResetAttemptFailedTo{Scheduled,Paused}). Transitioning
-		// to RESET_REQUESTED keeps heartbeat/completion calls authenticating in the meantime.
+		// Defer mutations (option restore, heartbeat details clear, attempt-count rewind) so that
+		// the in-flight attempt is undisturbed.
 		if restore {
 			a.ResetRestoreOptions = true
 		}
@@ -1055,8 +1060,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		return &activitypb.ResetActivityExecutionResponse{}, nil
 
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-		// No worker is running, so restore takes effect immediately: it governs the next dispatch when
-		// the activity is unpaused. Covers both the keepPaused early return and the fallthrough below.
+		// No worker is running; restore takes effect immediately.
 		if restore {
 			a.restoreOriginalOptions(ctx)
 		}
@@ -1295,9 +1299,8 @@ func (a *Activity) dispatchTimeRespectingStartDelay(t time.Time) time.Time {
 	return t
 }
 
-// reissueScheduleToClose bumps ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
-// at the current deadline. Called whenever an operation can change the deadline (UpdateOptions,
-// Reset(RestoreOriginalOptions)).
+// reissueScheduleToClose bumps the ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
+// at the current deadline.
 func (a *Activity) reissueScheduleToClose(ctx chasm.MutableContext) {
 	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
 		a.ScheduleToCloseStamp++
@@ -1310,9 +1313,7 @@ func (a *Activity) reissueScheduleToClose(ctx chasm.MutableContext) {
 }
 
 // applyDeferredOptionRestore applies a Reset(RestoreOriginalOptions) that was deferred because a
-// worker was running an attempt at reset time (see handleReset). Called from the reset landing
-// transitions so the restored options take effect on the next attempt, leaving the in-flight attempt
-// undisturbed.
+// worker was running an attempt at reset time (see handleReset).
 func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 	if !a.ResetRestoreOptions {
 		return
@@ -1321,12 +1322,9 @@ func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
 	a.restoreOriginalOptions(ctx)
 }
 
-// restoreOriginalOptions resets the activity's options to the values it was originally scheduled with
-// (Reset(RestoreOriginalOptions)) and re-arms the ScheduleToClose timer at the resulting deadline.
-// start_delay is restored only if the activity has never started, since it governs the first dispatch
-// alone. Callers invoke this at the point the activity (re)starts at attempt 1: immediately for a
-// non-running activity, or deferred to the reset landing for a running one (see
-// applyDeferredOptionRestore), so a running attempt is never disturbed.
+// restoreOriginalOptions resets the activity's options to the values it was originally scheduled
+// with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
+// only if the activity has never started.
 func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
 	og := a.GetOriginalOptions()
 	a.TaskQueue = common.CloneProto(og.GetTaskQueue())
