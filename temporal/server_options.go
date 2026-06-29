@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
@@ -59,6 +60,7 @@ type (
 		searchAttributesMapper          searchattribute.Mapper
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
+		eventHandler                    events.Handler
 		tokenProvider                   auth.TokenProvider
 	}
 )

@@ -10,6 +10,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -73,6 +74,8 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

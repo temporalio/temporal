@@ -13,6 +13,7 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
 	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
 	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
@@ -441,6 +442,7 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
+		EmitReplicationLifecycleEvents:                dynamicconfig.EmitReplicationLifecycleEvents.Get(dc),
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),

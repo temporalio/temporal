@@ -24,6 +24,7 @@ import (
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
+	commonevents "go.temporal.io/server/common/events"
 	finalizer "go.temporal.io/server/common/finalizer"
 	locks "go.temporal.io/server/common/locks"
 	log "go.temporal.io/server/common/log"
@@ -452,6 +453,20 @@ func (m *MockShardContext) GetLogger() log.Logger {
 func (mr *MockShardContextMockRecorder) GetLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockShardContext)(nil).GetLogger))
+}
+
+// GetEventHandler mocks base method.
+func (m *MockShardContext) GetEventHandler() commonevents.Handler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventHandler")
+	ret0, _ := ret[0].(commonevents.Handler)
+	return ret0
+}
+
+// GetEventHandler indicates an expected call of GetEventHandler.
+func (mr *MockShardContextMockRecorder) GetEventHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventHandler", reflect.TypeOf((*MockShardContext)(nil).GetEventHandler))
 }
 
 // GetMetricsHandler mocks base method.
@@ -1269,6 +1284,20 @@ func (m *MockControllableContext) GetLogger() log.Logger {
 func (mr *MockControllableContextMockRecorder) GetLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockControllableContext)(nil).GetLogger))
+}
+
+// GetEventHandler mocks base method.
+func (m *MockControllableContext) GetEventHandler() commonevents.Handler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventHandler")
+	ret0, _ := ret[0].(commonevents.Handler)
+	return ret0
+}
+
+// GetEventHandler indicates an expected call of GetEventHandler.
+func (mr *MockControllableContextMockRecorder) GetEventHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventHandler", reflect.TypeOf((*MockControllableContext)(nil).GetEventHandler))
 }
 
 // GetMetricsHandler mocks base method.

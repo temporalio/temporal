@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -594,6 +595,7 @@ Loop:
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
+			s.emitReplicationSent(task, item)
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
@@ -658,6 +660,102 @@ Loop:
 			},
 		},
 	})
+}
+
+// emitReplicationSent emits a best-effort "sent" ReplicationLifecycle event for the supported
+// replication task types. It never affects control flow.
+func (s *StreamSenderImpl) emitReplicationSent(
+	task *replicationspb.ReplicationTask,
+	item tasks.Task,
+) {
+	handler := s.shardContext.GetEventHandler()
+	if handler == nil {
+		return
+	}
+	if !s.config.EmitReplicationLifecycleEvents() {
+		return
+	}
+
+	var taskType string
+	switch task.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		taskType = commonevents.ReplTaskSyncWorkflowState
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		taskType = commonevents.ReplTaskSyncVersionedTransition
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		taskType = commonevents.ReplTaskVerifyVersionedTransition
+	default:
+		return
+	}
+
+	nsID := item.GetNamespaceID()
+	nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(nsID))
+	if err != nil {
+		nsName = namespace.EmptyName
+	}
+
+	payload := commonevents.ReplicationLifecyclePayload{
+		Phase:       commonevents.ReplicationSent,
+		TaskType:    taskType,
+		Shard:       s.serverShardKey.ShardID,
+		Namespace:   nsName.String(),
+		NamespaceID: nsID,
+		WorkflowID:  item.GetWorkflowID(),
+		RunID:       item.GetRunID(),
+	}
+	if vt := task.GetVersionedTransition(); vt != nil {
+		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+		payload.TransitionCount = vt.GetTransitionCount()
+	}
+
+	if attr := task.GetVerifyVersionedTransitionTaskAttributes(); attr != nil {
+		// verify ships no history batch, so use the task's target event id as next_event_id.
+		payload.NextEventID = attr.GetNextEventId()
+		payload.NewRunID = attr.GetNewRunId()
+	}
+
+	if rawTaskInfo := task.GetRawTaskInfo(); rawTaskInfo != nil {
+		payload.FirstEventID = rawTaskInfo.GetFirstEventId()
+		payload.NextEventID = rawTaskInfo.GetNextEventId()
+	} else if svtTask, ok := item.(*tasks.SyncVersionedTransitionTask); ok {
+		payload.FirstEventID = svtTask.FirstEventID
+		payload.NextEventID = svtTask.NextEventID
+	}
+	if attr := task.GetSyncVersionedTransitionTaskAttributes(); attr != nil {
+		payload.IsFirstSync = attr.GetVersionedTransitionArtifact().GetIsFirstSync()
+	}
+
+	// parent info, extracted from the mutable state carried in the task payload (child->parent
+	// only). The verify task ships no mutable state, so it contributes no parent info here.
+	populateSentParentInfo(&payload, task)
+
+	commonevents.EmitReplicationLifecycle(handler, payload)
+}
+
+// populateSentParentInfo records the child->parent identity from the mutable state carried in the
+// task payload, when present. Task types that ship no mutable state (e.g. verify) are a no-op.
+func populateSentParentInfo(payload *commonevents.ReplicationLifecyclePayload, task *replicationspb.ReplicationTask) {
+	switch task.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		if ms := task.GetSyncWorkflowStateTaskAttributes().GetWorkflowState(); ms != nil {
+			payload.PopulateParentInfo(ms.GetExecutionInfo())
+		}
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		art := task.GetSyncVersionedTransitionTaskAttributes().GetVersionedTransitionArtifact()
+		if art == nil {
+			return
+		}
+		if snap := art.GetSyncWorkflowStateSnapshotAttributes(); snap != nil {
+			if ms := snap.GetState(); ms != nil {
+				payload.PopulateParentInfo(ms.GetExecutionInfo())
+			}
+		} else if mut := art.GetSyncWorkflowStateMutationAttributes(); mut != nil {
+			if m := mut.GetStateMutation(); m != nil {
+				payload.PopulateParentInfo(m.GetExecutionInfo())
+			}
+		}
+	default:
+	}
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {

@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -80,6 +81,8 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
