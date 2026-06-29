@@ -164,6 +164,7 @@ func createWorkflowMutationFunction(
 		currentExecutionState.State,
 		currentExecutionState.Status,
 		currentExecutionState.RequestIds,
+		currentExecutionState.FirstExecutionRunId,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,

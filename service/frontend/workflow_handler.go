@@ -590,11 +590,12 @@ func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
 	}
 
 	return &workflowservice.StartWorkflowExecutionResponse{
-		RunId:             resp.GetRunId(),
-		Started:           resp.Started,
-		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
-		Link:              resp.GetLink(),
-		Status:            resp.GetStatus(),
+		RunId:               resp.GetRunId(),
+		FirstExecutionRunId: resp.GetFirstExecutionRunId(),
+		Started:             resp.Started,
+		EagerWorkflowTask:   resp.GetEagerWorkflowTask(),
+		Link:                resp.GetLink(),
+		Status:              resp.GetStatus(),
 	}, nil
 }
 

@@ -1919,6 +1919,100 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 
 }
 
+// TestStartWorkflowExecution_FirstExecutionRunId covers the contract that StartWorkflowExecution
+// (both the response and the WorkflowExecutionAlreadyStarted error) carries first_execution_run_id
+// pointing at the head of the continue-as-new chain. For workflows that have never been continued
+// as new, this should equal the current run id; the chained case is covered in continue_as_new_test.go.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
+	s.Run("brand new start", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		requireStartedAndRunning(s.T(), we)
+		s.Equal(we.RunId, we.FirstExecutionRunId)
+	})
+
+	s.Run("use existing dedup", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		req.RequestId = uuid.NewString()
+		req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		requireNotStartedButRunning(s.T(), we1)
+		s.Equal(we0.RunId, we1.RunId)
+		s.Equal(we0.RunId, we1.FirstExecutionRunId)
+	})
+
+	s.Run("fail policy error carries first execution run id", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		req.RequestId = uuid.NewString()
+		// Default conflict policy is FAIL.
+		_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		s.ErrorAs(err, &already)
+		s.Equal(we0.RunId, already.RunId)
+		s.Equal(we0.RunId, already.FirstExecutionRunId)
+	})
+
+	s.Run("retried request dedup", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		// Re-issue with same RequestId: server dedupes against the started request.
+		we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		s.Equal(we0.RunId, we1.RunId)
+		s.Equal(we0.RunId, we1.FirstExecutionRunId)
+	})
+}
+
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
 	t.Helper()
 	require.False(t, resp.Started)

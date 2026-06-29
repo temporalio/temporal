@@ -2989,6 +2989,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	ms.approximateSize -= ms.executionState.Size()
+	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
