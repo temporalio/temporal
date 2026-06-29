@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -46,6 +47,7 @@ type (
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler
+		GetEventHandler() commonevents.Handler
 		GetTimeSource() clock.TimeSource
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)

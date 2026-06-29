@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -125,6 +126,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
+		EventHandler          events.Handler
 	}
 )
 
@@ -202,6 +204,16 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		if err != nil {
 			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
 		}
+	}
+
+	// EventHandler: validate the global event catalog (fail fast on duplicate names),
+	// then select the handler — custom if injected, else the default JSON-log handler.
+	if _, err = events.BuildCatalog(); err != nil {
+		return serverOptionsProvider{}, fmt.Errorf("invalid event catalog: %w", err)
+	}
+	eventHandler := so.eventHandler
+	if eventHandler == nil {
+		eventHandler = events.NewLogHandler(logger)
 	}
 
 	// DynamicConfigClient
@@ -314,6 +326,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
+		EventHandler:          eventHandler,
 	}, nil
 }
 
@@ -359,6 +372,7 @@ type (
 		NamespaceLogger                 resource.NamespaceLogger
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
+		EventHandler                    events.Handler
 		EsClient                        esclient.Client
 		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
@@ -451,6 +465,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+			},
+			func() events.Handler {
+				return params.EventHandler.WithTags(events.Tag{Key: "service_name", Value: string(serviceName)})
 			},
 			func() esclient.Client {
 				return params.EsClient

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -594,6 +595,8 @@ Loop:
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
+			// TODO: gate behind dynamic config before production
+			s.emitReplicationSent(task, item)
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
@@ -658,6 +661,82 @@ Loop:
 			},
 		},
 	})
+}
+
+// emitReplicationSent emits a best-effort "sent" ReplicationLifecycle event for the supported
+// replication task types. It never affects control flow.
+func (s *StreamSenderImpl) emitReplicationSent(
+	task *replicationspb.ReplicationTask,
+	item tasks.Task,
+) {
+	handler := s.shardContext.GetEventHandler()
+	if handler == nil {
+		return
+	}
+
+	var taskType string
+	switch task.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		taskType = commonevents.ReplTaskSyncWorkflowState
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		taskType = commonevents.ReplTaskSyncVersionedTransition
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		taskType = commonevents.ReplTaskVerifyVersionedTransition
+	default:
+		return
+	}
+
+	nsID := item.GetNamespaceID()
+	nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(nsID))
+	if err != nil {
+		nsName = namespace.EmptyName
+	}
+
+	payload := commonevents.ReplicationLifecyclePayload{
+		Phase:       commonevents.ReplicationSent,
+		TaskType:    taskType,
+		Shard:       s.serverShardKey.ShardID,
+		Namespace:   nsName.String(),
+		NamespaceID: nsID,
+		WorkflowID:  item.GetWorkflowID(),
+		RunID:       item.GetRunID(),
+	}
+	if vt := task.GetVersionedTransition(); vt != nil {
+		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+		payload.TransitionCount = vt.GetTransitionCount()
+	}
+
+	switch task.GetTaskType() {
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		if attr := task.GetSyncWorkflowStateTaskAttributes(); attr != nil {
+			payload.IsForceReplication = attr.GetIsForceReplication()
+		}
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		if attr := task.GetSyncVersionedTransitionTaskAttributes(); attr != nil {
+			payload.ArchetypeID = attr.GetArchetypeId()
+		}
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		if attr := task.GetVerifyVersionedTransitionTaskAttributes(); attr != nil {
+			payload.ArchetypeID = attr.GetArchetypeId()
+			payload.VerifyNextEventID = attr.GetNextEventId()
+			payload.NewRunID = attr.GetNewRunId()
+		}
+	}
+
+	if rawTaskInfo := task.GetRawTaskInfo(); rawTaskInfo != nil {
+		payload.FirstEventID = rawTaskInfo.GetFirstEventId()
+		payload.NextEventID = rawTaskInfo.GetNextEventId()
+		payload.IsFirstTask = rawTaskInfo.GetIsFirstTask()
+	} else if svtTask, ok := item.(*tasks.SyncVersionedTransitionTask); ok {
+		payload.FirstEventID = svtTask.FirstEventID
+		payload.NextEventID = svtTask.NextEventID
+		payload.IsFirstTask = svtTask.IsFirstTask
+	}
+	if attr := task.GetSyncVersionedTransitionTaskAttributes(); attr != nil {
+		payload.IsFirstSync = attr.GetVersionedTransitionArtifact().GetIsFirstSync()
+	}
+
+	commonevents.EmitReplicationLifecycle(handler, payload)
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
