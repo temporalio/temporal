@@ -7132,15 +7132,17 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 	})
 
-	s.Run("ResetRestoreOriginal_OnStarted_RecomputesScheduleToCloseDeadline", func(s *standaloneActivityTestSuite) {
-		// Similar to ResetRestoreOriginal_RecomputesScheduleToStartAndScheduleToClose, but on the
-		// STARTED -> RESET_REQUESTED reset path. The tests differ for two reasons:
-		//   - start_delay is frozen once STARTED, so we move the ScheduleToClose deadline via the timeout
-		//     field, not start_delay.
-		//   - a STARTED attempt has a live StartToClose timer pinned <= ScheduleToClose; the
-		//     SCHEDULED test retracts ScheduleToClose, but this would drag StartToClose with it and
-		//     so the activity would still time out correctly. Instead we extend both timeouts, then
-		//     restore only ScheduleToClose.
+	s.Run("ResetRestoreOriginal_OnStarted_DefersScheduleToCloseRestore", func(s *standaloneActivityTestSuite) {
+		// Reset(RestoreOriginalOptions) on a STARTED attempt must NOT move the in-flight attempt's
+		// ScheduleToClose deadline. Reset means "restart at attempt 1"; every restored option — including
+		// the ScheduleToClose lifetime budget — takes effect only when the reset lands on the next
+		// attempt, never on the attempt that happens to be running when the reset is issued.
+		//
+		// Setup: create with ScheduleToClose=2s (so the restored original is short). Start it, then extend
+		// ScheduleToClose and StartToClose to 8s so the in-flight attempt is governed by 8s.
+		// Reset(RestoreOriginalOptions) restores the 2s originals. If the restore leaked onto the in-flight
+		// attempt the activity would time out at the 2s deadline; correct (deferred) behavior leaves the
+		// running attempt on its current 8s budget.
 		t := s.T()
 		env := s.newTestEnv()
 
@@ -7165,7 +7167,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// Extend ScheduleToClose and StartToClose to 8s.
+		// Extend ScheduleToClose and StartToClose to 8s: the in-flight attempt is now governed by 8s.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -7178,7 +7180,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// Reset ScheduleToClose to 2s; recreates ScheduleToClose task at 2s.
+		// Reset(RestoreOriginalOptions): restores ScheduleToClose to 2s. The restore must be deferred to
+		// the reset landing, leaving the in-flight attempt on its current 8s deadline.
 		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
@@ -7187,37 +7190,33 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// Must time out at the restored 2s deadline. Buggy code keeps the stale 8s task → still alive at 4s.
-		await.Require(s.Context(), t, func(c *await.T) {
-			resp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		// The in-flight attempt must not time out at the restored 2s deadline. Buggy code re-arms
+		// ScheduleToClose at 2s immediately → TIMED_OUT within ~2s; correct code leaves it at 8s.
+		require.Never(t, func() bool {
+			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      startResp.RunId,
 			})
-			require.NoError(c, err)
-			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
-		}, 4*time.Second, 100*time.Millisecond)
+			require.NoError(t, err)
+			return resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 4*time.Second, 200*time.Millisecond,
+			"in-flight attempt must keep its current 8s ScheduleToClose; RestoreOriginalOptions must defer the restore of the 2s original to the reset landing")
 	})
 
 	// Reset during a running attempt is a DEFERRED reset: the activity goes to RESET_REQUESTED, the
 	// worker keeps running the in-flight attempt under its current terms, and the reset lands (attempt
-	// count -> 1, re-dispatch) only when the worker yields. So RestoreOriginalOptions must leave the
-	// running attempt UNDISTURBED: the restore of the per-attempt options (StartToClose / Heartbeat)
-	// must be deferred until the reset lands on the next attempt — not applied to the in-flight attempt.
-	//   - ScheduleToClose is exempt: it is a lifetime budget, not a per-attempt timer, so it is restored
-	//     immediately (see ResetRestoreOriginal_OnStarted_RecomputesScheduleToCloseDeadline).
-	//   - start_delay is already skipped for a started attempt (it only governs the first dispatch).
+	// count -> 1, re-dispatch) only when the worker yields. RestoreOriginalOptions must leave the running
+	// attempt UNDISTURBED: EVERY restored option takes effect only when the reset lands on the next
+	// attempt — none may be applied to, or reported for, the in-flight attempt. This includes the
+	// ScheduleToClose lifetime budget (see ResetRestoreOriginal_OnStarted_DefersScheduleToCloseRestore
+	// for the timer-firing proof) as well as RetryPolicy and Priority. start_delay is already skipped for
+	// a started attempt (it only governs the first dispatch).
 	//
-	// The bug: the restore block mutates the option fields (incl. StartToClose) immediately, before
-	// entering RESET_REQUESTED, while the running attempt's StartToClose timer still fires at the
-	// pre-restore (updated) deadline. So the reported StartToClose and the value actually enforced on
-	// the in-flight attempt disagree.
-	//
-	// Note on what is/isn't observable: the running attempt's StartToClose timer fires at the UPDATED
-	// value (30s) under both buggy and correct code (correct code leaves it alone; buggy code leaves it
-	// stale) — so the timeout firing time cannot distinguish them. The discriminator is the reported
-	// field: buggy code restores it to 60s immediately; correct (deferred) code leaves it at 30s, the
-	// value the in-flight attempt is actually governed by, until the reset lands on the next attempt.
+	// The bug: the restore block mutates the option fields immediately, before entering RESET_REQUESTED,
+	// so the reported options diverge from the values the in-flight attempt is actually governed by. The
+	// discriminator here is the reported state during RESET_REQUESTED: it must still reflect the updated
+	// (pre-restore) values, not the restored originals.
 	s.Run("ResetRestoreOriginal_OnStarted_DefersPerAttemptOptionRestore", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
@@ -7225,16 +7224,24 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		// Original StartToClose=60s / Heartbeat=50s; updated to 30s / 20s below. No timer fires during the test.
+		// Originals: long timeouts and a distinctive retry policy / priority, restored on the reset
+		// landing. Updated to different values below; no timer fires during the test.
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(60 * time.Second),
-			HeartbeatTimeout:    durationpb.New(50 * time.Second),
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(120 * time.Second),
+			StartToCloseTimeout:    durationpb.New(60 * time.Second),
+			HeartbeatTimeout:       durationpb.New(50 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(10 * time.Second),
+				BackoffCoefficient: 2.0,
+				MaximumAttempts:    5,
+			},
+			Priority: &commonpb.Priority{PriorityKey: 1},
 		})
 		require.NoError(t, err)
 
@@ -7243,16 +7250,25 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
 
-		// Update the per-attempt timeouts: the in-flight attempt is now governed by StartToClose=30s, Heartbeat=20s.
+		// Update every option: the in-flight attempt is now governed by these (updated) values.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 			ActivityOptions: &activitypb.ActivityOptions{
-				StartToCloseTimeout: durationpb.New(30 * time.Second),
-				HeartbeatTimeout:    durationpb.New(20 * time.Second),
+				ScheduleToCloseTimeout: durationpb.New(90 * time.Second),
+				StartToCloseTimeout:    durationpb.New(30 * time.Second),
+				HeartbeatTimeout:       durationpb.New(20 * time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval:    durationpb.New(7 * time.Second),
+					BackoffCoefficient: 3.0,
+					MaximumAttempts:    9,
+				},
+				Priority: &commonpb.Priority{PriorityKey: 4},
 			},
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "heartbeat_timeout"}},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
+				"schedule_to_close_timeout", "start_to_close_timeout", "heartbeat_timeout", "retry_policy", "priority",
+			}},
 		})
 		require.NoError(t, err)
 
@@ -7265,19 +7281,107 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// The in-flight attempt must still report its current per-attempt timeouts (StartToClose=30s,
-		// Heartbeat=20s). The restored originals (60s / 50s) must not take effect until the reset lands
-		// on the next attempt.
+		// During RESET_REQUESTED, Describe must still report the updated (in-flight) values for every
+		// option. The restored originals must not surface until the reset lands on the next attempt.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 30*time.Second, descResp.GetInfo().GetStartToCloseTimeout().AsDuration(),
-			"running attempt must keep its current StartToClose (30s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands, not report the restored 60s mid-attempt")
-		require.Equal(t, 20*time.Second, descResp.GetInfo().GetHeartbeatTimeout().AsDuration(),
-			"running attempt must keep its current Heartbeat (20s); RestoreOriginalOptions must defer the per-attempt restore until the reset lands, not report the restored 50s mid-attempt")
+		got := descResp.GetInfo()
+		require.Equal(t, 30*time.Second, got.GetStartToCloseTimeout().AsDuration(),
+			"running attempt must keep its current StartToClose (30s); RestoreOriginalOptions must defer the restore until the reset lands")
+		require.Equal(t, 20*time.Second, got.GetHeartbeatTimeout().AsDuration(),
+			"running attempt must keep its current Heartbeat (20s); RestoreOriginalOptions must defer the restore until the reset lands")
+		require.Equal(t, 90*time.Second, got.GetScheduleToCloseTimeout().AsDuration(),
+			"running attempt must keep its current ScheduleToClose (90s); RestoreOriginalOptions must defer the restore until the reset lands")
+		require.Equal(t, 7*time.Second, got.GetRetryPolicy().GetInitialInterval().AsDuration(),
+			"running attempt must keep its current RetryPolicy; RestoreOriginalOptions must defer the restore until the reset lands")
+		require.EqualValues(t, 9, got.GetRetryPolicy().GetMaximumAttempts(),
+			"running attempt must keep its current RetryPolicy; RestoreOriginalOptions must defer the restore until the reset lands")
+		require.EqualValues(t, 4, got.GetPriority().GetPriorityKey(),
+			"running attempt must keep its current Priority; RestoreOriginalOptions must defer the restore until the reset lands")
+	})
+
+	// Companion to the two deferral tests above: once the worker yields and the reset LANDS on the next
+	// attempt, the restored options must take effect. Deferral must not mean "dropped." (This passes both
+	// before and after the in-flight-deferral fix; it guards the landing path.)
+	s.Run("ResetRestoreOriginal_OnStarted_AppliesRestoredOptionsOnLanding", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(15 * time.Minute),
+			StartToCloseTimeout:    durationpb.New(60 * time.Second),
+			HeartbeatTimeout:       durationpb.New(50 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp1, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+
+		// Update the per-attempt timeouts for the in-flight attempt.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(30 * time.Second),
+				HeartbeatTimeout:    durationpb.New(20 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"start_to_close_timeout", "heartbeat_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Reset(RestoreOriginalOptions) while STARTED -> RESET_REQUESTED (restore deferred).
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// Worker yields with a retryable failure -> the reset lands at attempt 1, applying the restore.
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp1.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable:   false,
+						NextRetryDelay: durationpb.New(0),
+					},
+				},
+			},
+			Identity: env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		// The new attempt is dispatched at attempt 1 under the RESTORED per-attempt timeouts (60s / 50s).
+		pollResp2, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp2.GetAttempt(), "reset lands at attempt 1")
+		require.Equal(t, 60*time.Second, pollResp2.GetStartToCloseTimeout().AsDuration(),
+			"new attempt must run under the restored StartToClose (60s)")
+		require.Equal(t, 50*time.Second, pollResp2.GetHeartbeatTimeout().AsDuration(),
+			"new attempt must run under the restored Heartbeat (50s)")
 	})
 
 	// The guard accepts the field mask path in either snake_case or camelCase form.
