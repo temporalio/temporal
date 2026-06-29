@@ -187,11 +187,25 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
+// NewEmbeddedActivity creates an activity component to be embedded as a child of another component
+// (the parent), which must implement ActivityStore. The parent is wired automatically via the Store
+// ParentPtr from the component's position in the tree, so terminal transitions delegate completion to
+// the parent's RecordCompleted. Unlike a standalone activity, an embedded activity owns no Visibility
+// or completion Callbacks: the parent is responsible for those. The caller must apply
+// TransitionScheduled to begin dispatch.
 func NewEmbeddedActivity(
 	ctx chasm.MutableContext,
 	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
+	requestData *activitypb.ActivityRequestData,
+) (*Activity, error) {
+	activity := &Activity{
+		ActivityState: state,
+		LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		RequestData:   chasm.NewDataField(ctx, requestData),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
+	return activity, nil
 }
 
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {

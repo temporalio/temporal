@@ -351,6 +351,40 @@ func TestNewStandaloneActivity_UserMetadataDualWrite(t *testing.T) {
 	require.Same(t, md, activity.RequestData.Get(ctx).GetUserMetadata()) //nolint:staticcheck // exercising legacy field
 }
 
+func TestNewEmbeddedActivity(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	state := &activitypb.ActivityState{
+		ActivityType:        &commonpb.ActivityType{Name: "T"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "Q"},
+		StartToCloseTimeout: durationpb.New(time.Minute),
+	}
+	requestData := &activitypb.ActivityRequestData{
+		Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("in")}}},
+	}
+
+	activity, err := NewEmbeddedActivity(ctx, state, requestData)
+	require.NoError(t, err)
+
+	require.Same(t, state, activity.ActivityState)
+	require.Equal(t, requestData, activity.RequestData.Get(ctx))
+	require.NotNil(t, activity.LastAttempt.Get(ctx))
+	require.NotNil(t, activity.Outcome.Get(ctx))
+	require.False(t, activity.GetScheduleTime().AsTime().IsZero())
+
+	// Embedded activities own no visibility or completion callbacks; the parent does.
+	_, ok := activity.Visibility.TryGet(ctx)
+	require.False(t, ok)
+	require.Nil(t, activity.Callbacks)
+
+	// Status is unset until TransitionScheduled is applied by the caller.
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED, activity.StateMachineState())
+}
+
 // TestEffectiveUserMetadata_PrefersFrameworkLocation ensures the helper used by
 // readers (Describe, etc.) returns the framework-level user metadata when both
 // the new and legacy locations are populated.
