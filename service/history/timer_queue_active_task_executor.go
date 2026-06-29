@@ -927,14 +927,31 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
+	// todo@time-skipping: chasm execution path is not implemented yet.
+	if !mutableState.IsWorkflow() {
+		release(nil)
+		return nil
+	}
+
 	if !mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
 		return consts.ErrWorkflowCompleted
 	}
 
-	if !fastForwardTaskIsLive(mutableState, task) {
+	// task staleness check
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		release(nil)
 		return errNoTimerFired
+	}
+	ff := tsi.GetFastForwardInfo()
+	if ff.GetTargetTime() == nil || ff.GetHasReached() || ff.GetStamp() != task.Stamp {
+		release(nil)
+		return errNoTimerFired
+	}
+	ffVersion := ff.GetVersion()
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, task.Version, task); err != nil {
+		return err
 	}
 
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
@@ -943,22 +960,6 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return err
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
-}
-
-// fastForwardTaskIsLive returns false when the task should be dropped silently —
-// either time skipping has been disabled since the task was emitted, or the fast-forward this
-// task was associated with has been superseded (different SourceEventId) or already fired
-// (HasReached=true). Dropping is harmless: the new fast-forward, if any, has its own wake-up task.
-func fastForwardTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
-	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil || !tsi.GetConfig().GetEnabled() {
-		return false
-	}
-	fastForward := tsi.GetFastForwardInfo()
-	if fastForward == nil || fastForward.GetTargetTime() == nil || fastForward.GetSourceEventId() == 0 || fastForward.GetHasReached() {
-		return false
-	}
-	return fastForward.GetSourceEventId() == task.EventID
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
