@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	CollectionService_StartCollectionExecution_FullMethodName    = "/temporal.server.chasm.lib.collection.proto.v1.CollectionService/StartCollectionExecution"
 	CollectionService_DescribeCollectionExecution_FullMethodName = "/temporal.server.chasm.lib.collection.proto.v1.CollectionService/DescribeCollectionExecution"
+	CollectionService_AddCollectionItems_FullMethodName          = "/temporal.server.chasm.lib.collection.proto.v1.CollectionService/AddCollectionItems"
 	CollectionService_CloseCollectionExecution_FullMethodName    = "/temporal.server.chasm.lib.collection.proto.v1.CollectionService/CloseCollectionExecution"
 	CollectionService_DeleteCollectionExecution_FullMethodName   = "/temporal.server.chasm.lib.collection.proto.v1.CollectionService/DeleteCollectionExecution"
 )
@@ -32,6 +33,7 @@ const (
 type CollectionServiceClient interface {
 	StartCollectionExecution(ctx context.Context, in *StartCollectionExecutionRequest, opts ...grpc.CallOption) (*StartCollectionExecutionResponse, error)
 	DescribeCollectionExecution(ctx context.Context, in *DescribeCollectionExecutionRequest, opts ...grpc.CallOption) (*DescribeCollectionExecutionResponse, error)
+	AddCollectionItems(ctx context.Context, in *AddCollectionItemsRequest, opts ...grpc.CallOption) (*AddCollectionItemsResponse, error)
 	CloseCollectionExecution(ctx context.Context, in *CloseCollectionExecutionRequest, opts ...grpc.CallOption) (*CloseCollectionExecutionResponse, error)
 	DeleteCollectionExecution(ctx context.Context, in *DeleteCollectionExecutionRequest, opts ...grpc.CallOption) (*DeleteCollectionExecutionResponse, error)
 }
@@ -62,6 +64,15 @@ func (c *collectionServiceClient) DescribeCollectionExecution(ctx context.Contex
 	return out, nil
 }
 
+func (c *collectionServiceClient) AddCollectionItems(ctx context.Context, in *AddCollectionItemsRequest, opts ...grpc.CallOption) (*AddCollectionItemsResponse, error) {
+	out := new(AddCollectionItemsResponse)
+	err := c.cc.Invoke(ctx, CollectionService_AddCollectionItems_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *collectionServiceClient) CloseCollectionExecution(ctx context.Context, in *CloseCollectionExecutionRequest, opts ...grpc.CallOption) (*CloseCollectionExecutionResponse, error) {
 	out := new(CloseCollectionExecutionResponse)
 	err := c.cc.Invoke(ctx, CollectionService_CloseCollectionExecution_FullMethodName, in, out, opts...)
@@ -86,6 +97,7 @@ func (c *collectionServiceClient) DeleteCollectionExecution(ctx context.Context,
 type CollectionServiceServer interface {
 	StartCollectionExecution(context.Context, *StartCollectionExecutionRequest) (*StartCollectionExecutionResponse, error)
 	DescribeCollectionExecution(context.Context, *DescribeCollectionExecutionRequest) (*DescribeCollectionExecutionResponse, error)
+	AddCollectionItems(context.Context, *AddCollectionItemsRequest) (*AddCollectionItemsResponse, error)
 	CloseCollectionExecution(context.Context, *CloseCollectionExecutionRequest) (*CloseCollectionExecutionResponse, error)
 	DeleteCollectionExecution(context.Context, *DeleteCollectionExecutionRequest) (*DeleteCollectionExecutionResponse, error)
 	mustEmbedUnimplementedCollectionServiceServer()
@@ -100,6 +112,9 @@ func (UnimplementedCollectionServiceServer) StartCollectionExecution(context.Con
 }
 func (UnimplementedCollectionServiceServer) DescribeCollectionExecution(context.Context, *DescribeCollectionExecutionRequest) (*DescribeCollectionExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeCollectionExecution not implemented")
+}
+func (UnimplementedCollectionServiceServer) AddCollectionItems(context.Context, *AddCollectionItemsRequest) (*AddCollectionItemsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddCollectionItems not implemented")
 }
 func (UnimplementedCollectionServiceServer) CloseCollectionExecution(context.Context, *CloseCollectionExecutionRequest) (*CloseCollectionExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseCollectionExecution not implemented")
@@ -156,6 +171,24 @@ func _CollectionService_DescribeCollectionExecution_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CollectionService_AddCollectionItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddCollectionItemsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CollectionServiceServer).AddCollectionItems(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CollectionService_AddCollectionItems_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CollectionServiceServer).AddCollectionItems(ctx, req.(*AddCollectionItemsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CollectionService_CloseCollectionExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CloseCollectionExecutionRequest)
 	if err := dec(in); err != nil {
@@ -206,6 +239,10 @@ var CollectionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeCollectionExecution",
 			Handler:    _CollectionService_DescribeCollectionExecution_Handler,
+		},
+		{
+			MethodName: "AddCollectionItems",
+			Handler:    _CollectionService_AddCollectionItems_Handler,
 		},
 		{
 			MethodName: "CloseCollectionExecution",

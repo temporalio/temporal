@@ -19,6 +19,11 @@ service CollectionService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  rpc AddCollectionItems(AddCollectionItemsRequest) returns (AddCollectionItemsResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc CloseCollectionExecution(CloseCollectionExecutionRequest) returns (CloseCollectionExecutionResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

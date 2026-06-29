@@ -65,7 +65,7 @@ func (h *handler) DescribeCollectionExecution(
 ) (resp *collectionpb.DescribeCollectionExecutionResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	state, err := chasm.ReadComponent(
+	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*Collection](chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
@@ -74,13 +74,24 @@ func (h *handler) DescribeCollectionExecution(
 		(*Collection).Describe,
 		req,
 	)
-	if err != nil {
-		return nil, err
-	}
+}
 
-	return &collectionpb.DescribeCollectionExecutionResponse{
-		State: state,
-	}, nil
+func (h *handler) AddCollectionItems(
+	ctx context.Context,
+	req *collectionpb.AddCollectionItemsRequest,
+) (resp *collectionpb.AddCollectionItemsResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Collection](chasm.ExecutionKey{
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  req.GetCollectionId(),
+		}),
+		(*Collection).AddItems,
+		req,
+	)
+	return resp, err
 }
 
 func (h *handler) CloseCollectionExecution(

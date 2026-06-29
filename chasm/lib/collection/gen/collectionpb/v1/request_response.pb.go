@@ -11,8 +11,11 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/api/common/v1"
+	v11 "go.temporal.io/api/taskqueue/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -21,6 +24,181 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// ActivityOperation is the per-item operation spec for the record arm (an embedded activity).
+type ActivityOperation struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ActivityType        *v1.ActivityType       `protobuf:"bytes,1,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
+	TaskQueue           *v11.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	Input               *v1.Payloads           `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	StartToCloseTimeout *durationpb.Duration   `protobuf:"bytes,4,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ActivityOperation) Reset() {
+	*x = ActivityOperation{}
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ActivityOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ActivityOperation) ProtoMessage() {}
+
+func (x *ActivityOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ActivityOperation.ProtoReflect.Descriptor instead.
+func (*ActivityOperation) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ActivityOperation) GetActivityType() *v1.ActivityType {
+	if x != nil {
+		return x.ActivityType
+	}
+	return nil
+}
+
+func (x *ActivityOperation) GetTaskQueue() *v11.TaskQueue {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return nil
+}
+
+func (x *ActivityOperation) GetInput() *v1.Payloads {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+func (x *ActivityOperation) GetStartToCloseTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.StartToCloseTimeout
+	}
+	return nil
+}
+
+// CollectionItem is one unit of work. For now an item maps 1-1 with an operation, and the only
+// supported operation kind is an activity.
+type CollectionItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Activity      *ActivityOperation     `protobuf:"bytes,2,opt,name=activity,proto3" json:"activity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CollectionItem) Reset() {
+	*x = CollectionItem{}
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CollectionItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CollectionItem) ProtoMessage() {}
+
+func (x *CollectionItem) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CollectionItem.ProtoReflect.Descriptor instead.
+func (*CollectionItem) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CollectionItem) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *CollectionItem) GetActivity() *ActivityOperation {
+	if x != nil {
+		return x.Activity
+	}
+	return nil
+}
+
+type ItemDescription struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ItemDescription) Reset() {
+	*x = ItemDescription{}
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ItemDescription) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ItemDescription) ProtoMessage() {}
+
+func (x *ItemDescription) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ItemDescription.ProtoReflect.Descriptor instead.
+func (*ItemDescription) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ItemDescription) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *ItemDescription) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
 
 type StartCollectionExecutionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -35,7 +213,7 @@ type StartCollectionExecutionRequest struct {
 
 func (x *StartCollectionExecutionRequest) Reset() {
 	*x = StartCollectionExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +225,7 @@ func (x *StartCollectionExecutionRequest) String() string {
 func (*StartCollectionExecutionRequest) ProtoMessage() {}
 
 func (x *StartCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +238,7 @@ func (x *StartCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCollectionExecutionRequest.ProtoReflect.Descriptor instead.
 func (*StartCollectionExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StartCollectionExecutionRequest) GetNamespaceId() string {
@@ -93,7 +271,7 @@ type StartCollectionExecutionResponse struct {
 
 func (x *StartCollectionExecutionResponse) Reset() {
 	*x = StartCollectionExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -105,7 +283,7 @@ func (x *StartCollectionExecutionResponse) String() string {
 func (*StartCollectionExecutionResponse) ProtoMessage() {}
 
 func (x *StartCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -118,7 +296,7 @@ func (x *StartCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCollectionExecutionResponse.ProtoReflect.Descriptor instead.
 func (*StartCollectionExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartCollectionExecutionResponse) GetRunId() string {
@@ -138,7 +316,7 @@ type DescribeCollectionExecutionRequest struct {
 
 func (x *DescribeCollectionExecutionRequest) Reset() {
 	*x = DescribeCollectionExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +328,7 @@ func (x *DescribeCollectionExecutionRequest) String() string {
 func (*DescribeCollectionExecutionRequest) ProtoMessage() {}
 
 func (x *DescribeCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,7 +341,7 @@ func (x *DescribeCollectionExecutionRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DescribeCollectionExecutionRequest.ProtoReflect.Descriptor instead.
 func (*DescribeCollectionExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DescribeCollectionExecutionRequest) GetNamespaceId() string {
@@ -184,13 +362,14 @@ type DescribeCollectionExecutionResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	State                *CollectionState       `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	ApproximateStateSize int32                  `protobuf:"varint,2,opt,name=approximate_state_size,json=approximateStateSize,proto3" json:"approximate_state_size,omitempty"`
+	Items                []*ItemDescription     `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DescribeCollectionExecutionResponse) Reset() {
 	*x = DescribeCollectionExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -202,7 +381,7 @@ func (x *DescribeCollectionExecutionResponse) String() string {
 func (*DescribeCollectionExecutionResponse) ProtoMessage() {}
 
 func (x *DescribeCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -215,7 +394,7 @@ func (x *DescribeCollectionExecutionResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use DescribeCollectionExecutionResponse.ProtoReflect.Descriptor instead.
 func (*DescribeCollectionExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DescribeCollectionExecutionResponse) GetState() *CollectionState {
@@ -232,6 +411,109 @@ func (x *DescribeCollectionExecutionResponse) GetApproximateStateSize() int32 {
 	return 0
 }
 
+func (x *DescribeCollectionExecutionResponse) GetItems() []*ItemDescription {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type AddCollectionItemsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	CollectionId  string                 `protobuf:"bytes,2,opt,name=collection_id,json=collectionId,proto3" json:"collection_id,omitempty"`
+	Items         []*CollectionItem      `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddCollectionItemsRequest) Reset() {
+	*x = AddCollectionItemsRequest{}
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddCollectionItemsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddCollectionItemsRequest) ProtoMessage() {}
+
+func (x *AddCollectionItemsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddCollectionItemsRequest.ProtoReflect.Descriptor instead.
+func (*AddCollectionItemsRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AddCollectionItemsRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *AddCollectionItemsRequest) GetCollectionId() string {
+	if x != nil {
+		return x.CollectionId
+	}
+	return ""
+}
+
+func (x *AddCollectionItemsRequest) GetItems() []*CollectionItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type AddCollectionItemsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddCollectionItemsResponse) Reset() {
+	*x = AddCollectionItemsResponse{}
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddCollectionItemsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddCollectionItemsResponse) ProtoMessage() {}
+
+func (x *AddCollectionItemsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddCollectionItemsResponse.ProtoReflect.Descriptor instead.
+func (*AddCollectionItemsResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
+}
+
 type CloseCollectionExecutionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -242,7 +524,7 @@ type CloseCollectionExecutionRequest struct {
 
 func (x *CloseCollectionExecutionRequest) Reset() {
 	*x = CloseCollectionExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +536,7 @@ func (x *CloseCollectionExecutionRequest) String() string {
 func (*CloseCollectionExecutionRequest) ProtoMessage() {}
 
 func (x *CloseCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +549,7 @@ func (x *CloseCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseCollectionExecutionRequest.ProtoReflect.Descriptor instead.
 func (*CloseCollectionExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CloseCollectionExecutionRequest) GetNamespaceId() string {
@@ -292,7 +574,7 @@ type CloseCollectionExecutionResponse struct {
 
 func (x *CloseCollectionExecutionResponse) Reset() {
 	*x = CloseCollectionExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -304,7 +586,7 @@ func (x *CloseCollectionExecutionResponse) String() string {
 func (*CloseCollectionExecutionResponse) ProtoMessage() {}
 
 func (x *CloseCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[5]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -317,7 +599,7 @@ func (x *CloseCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseCollectionExecutionResponse.ProtoReflect.Descriptor instead.
 func (*CloseCollectionExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{10}
 }
 
 type DeleteCollectionExecutionRequest struct {
@@ -332,7 +614,7 @@ type DeleteCollectionExecutionRequest struct {
 
 func (x *DeleteCollectionExecutionRequest) Reset() {
 	*x = DeleteCollectionExecutionRequest{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +626,7 @@ func (x *DeleteCollectionExecutionRequest) String() string {
 func (*DeleteCollectionExecutionRequest) ProtoMessage() {}
 
 func (x *DeleteCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[6]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +639,7 @@ func (x *DeleteCollectionExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCollectionExecutionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCollectionExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeleteCollectionExecutionRequest) GetNamespaceId() string {
@@ -396,7 +678,7 @@ type DeleteCollectionExecutionResponse struct {
 
 func (x *DeleteCollectionExecutionResponse) Reset() {
 	*x = DeleteCollectionExecutionResponse{}
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -408,7 +690,7 @@ func (x *DeleteCollectionExecutionResponse) String() string {
 func (*DeleteCollectionExecutionResponse) ProtoMessage() {}
 
 func (x *DeleteCollectionExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[7]
+	mi := &file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -421,14 +703,26 @@ func (x *DeleteCollectionExecutionResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DeleteCollectionExecutionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCollectionExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
 }
 
 var File_temporal_server_chasm_lib_collection_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/collection/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.collection.proto.v1\x1a;temporal/server/chasm/lib/collection/proto/v1/message.proto\"\x88\x01\n" +
+	"Dtemporal/server/chasm/lib/collection/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.collection.proto.v1\x1a;temporal/server/chasm/lib/collection/proto/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\"\xab\x02\n" +
+	"\x11ActivityOperation\x12I\n" +
+	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x126\n" +
+	"\x05input\x18\x03 \x01(\v2 .temporal.api.common.v1.PayloadsR\x05input\x12N\n" +
+	"\x16start_to_close_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x13startToCloseTimeout\"\x87\x01\n" +
+	"\x0eCollectionItem\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\\\n" +
+	"\bactivity\x18\x02 \x01(\v2@.temporal.server.chasm.lib.collection.proto.v1.ActivityOperationR\bactivity\"B\n" +
+	"\x0fItemDescription\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"\x88\x01\n" +
 	"\x1fStartCollectionExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1d\n" +
@@ -438,10 +732,16 @@ const file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"l\n" +
 	"\"DescribeCollectionExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
-	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\"\xb1\x01\n" +
+	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\"\x87\x02\n" +
 	"#DescribeCollectionExecutionResponse\x12T\n" +
 	"\x05state\x18\x01 \x01(\v2>.temporal.server.chasm.lib.collection.proto.v1.CollectionStateR\x05state\x124\n" +
-	"\x16approximate_state_size\x18\x02 \x01(\x05R\x14approximateStateSize\"i\n" +
+	"\x16approximate_state_size\x18\x02 \x01(\x05R\x14approximateStateSize\x12T\n" +
+	"\x05items\x18\x03 \x03(\v2>.temporal.server.chasm.lib.collection.proto.v1.ItemDescriptionR\x05items\"\xb8\x01\n" +
+	"\x19AddCollectionItemsRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
+	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12S\n" +
+	"\x05items\x18\x03 \x03(\v2=.temporal.server.chasm.lib.collection.proto.v1.CollectionItemR\x05items\"\x1c\n" +
+	"\x1aAddCollectionItemsResponse\"i\n" +
 	"\x1fCloseCollectionExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\"\"\n" +
@@ -465,25 +765,41 @@ func file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_r
 	return file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_goTypes = []any{
-	(*StartCollectionExecutionRequest)(nil),     // 0: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionRequest
-	(*StartCollectionExecutionResponse)(nil),    // 1: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
-	(*DescribeCollectionExecutionRequest)(nil),  // 2: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest
-	(*DescribeCollectionExecutionResponse)(nil), // 3: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
-	(*CloseCollectionExecutionRequest)(nil),     // 4: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
-	(*CloseCollectionExecutionResponse)(nil),    // 5: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
-	(*DeleteCollectionExecutionRequest)(nil),    // 6: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
-	(*DeleteCollectionExecutionResponse)(nil),   // 7: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
-	(*CollectionState)(nil),                     // 8: temporal.server.chasm.lib.collection.proto.v1.CollectionState
+	(*ActivityOperation)(nil),                   // 0: temporal.server.chasm.lib.collection.proto.v1.ActivityOperation
+	(*CollectionItem)(nil),                      // 1: temporal.server.chasm.lib.collection.proto.v1.CollectionItem
+	(*ItemDescription)(nil),                     // 2: temporal.server.chasm.lib.collection.proto.v1.ItemDescription
+	(*StartCollectionExecutionRequest)(nil),     // 3: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionRequest
+	(*StartCollectionExecutionResponse)(nil),    // 4: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
+	(*DescribeCollectionExecutionRequest)(nil),  // 5: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest
+	(*DescribeCollectionExecutionResponse)(nil), // 6: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
+	(*AddCollectionItemsRequest)(nil),           // 7: temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsRequest
+	(*AddCollectionItemsResponse)(nil),          // 8: temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsResponse
+	(*CloseCollectionExecutionRequest)(nil),     // 9: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
+	(*CloseCollectionExecutionResponse)(nil),    // 10: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
+	(*DeleteCollectionExecutionRequest)(nil),    // 11: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
+	(*DeleteCollectionExecutionResponse)(nil),   // 12: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
+	(*v1.ActivityType)(nil),                     // 13: temporal.api.common.v1.ActivityType
+	(*v11.TaskQueue)(nil),                       // 14: temporal.api.taskqueue.v1.TaskQueue
+	(*v1.Payloads)(nil),                         // 15: temporal.api.common.v1.Payloads
+	(*durationpb.Duration)(nil),                 // 16: google.protobuf.Duration
+	(*CollectionState)(nil),                     // 17: temporal.server.chasm.lib.collection.proto.v1.CollectionState
 }
 var file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_depIdxs = []int32{
-	8, // 0: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse.state:type_name -> temporal.server.chasm.lib.collection.proto.v1.CollectionState
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	13, // 0: temporal.server.chasm.lib.collection.proto.v1.ActivityOperation.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	14, // 1: temporal.server.chasm.lib.collection.proto.v1.ActivityOperation.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	15, // 2: temporal.server.chasm.lib.collection.proto.v1.ActivityOperation.input:type_name -> temporal.api.common.v1.Payloads
+	16, // 3: temporal.server.chasm.lib.collection.proto.v1.ActivityOperation.start_to_close_timeout:type_name -> google.protobuf.Duration
+	0,  // 4: temporal.server.chasm.lib.collection.proto.v1.CollectionItem.activity:type_name -> temporal.server.chasm.lib.collection.proto.v1.ActivityOperation
+	17, // 5: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse.state:type_name -> temporal.server.chasm.lib.collection.proto.v1.CollectionState
+	2,  // 6: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse.items:type_name -> temporal.server.chasm.lib.collection.proto.v1.ItemDescription
+	1,  // 7: temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsRequest.items:type_name -> temporal.server.chasm.lib.collection.proto.v1.CollectionItem
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_init() }
@@ -498,7 +814,7 @@ func file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_i
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_collection_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

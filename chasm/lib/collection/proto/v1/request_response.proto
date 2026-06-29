@@ -3,8 +3,31 @@ syntax = "proto3";
 package temporal.server.chasm.lib.collection.proto.v1;
 
 import "chasm/lib/collection/proto/v1/message.proto";
+import "google/protobuf/duration.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/collection/gen/collectionpb;collectionpb";
+
+// ActivityOperation is the per-item operation spec for the record arm (an embedded activity).
+message ActivityOperation {
+  temporal.api.common.v1.ActivityType activity_type = 1;
+  temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+  temporal.api.common.v1.Payloads input = 3;
+  google.protobuf.Duration start_to_close_timeout = 4;
+}
+
+// CollectionItem is one unit of work. For now an item maps 1-1 with an operation, and the only
+// supported operation kind is an activity.
+message CollectionItem {
+  string item_id = 1;
+  ActivityOperation activity = 2;
+}
+
+message ItemDescription {
+  string item_id = 1;
+  string status = 2;
+}
 
 message StartCollectionExecutionRequest {
   // Internal namespace ID (UUID).
@@ -26,7 +49,16 @@ message DescribeCollectionExecutionRequest {
 message DescribeCollectionExecutionResponse {
   CollectionState state = 1;
   int32 approximate_state_size = 2;
+  repeated ItemDescription items = 3;
 }
+
+message AddCollectionItemsRequest {
+  string namespace_id = 1;
+  string collection_id = 2;
+  repeated CollectionItem items = 3;
+}
+
+message AddCollectionItemsResponse {}
 
 message CloseCollectionExecutionRequest {
   string namespace_id = 1;

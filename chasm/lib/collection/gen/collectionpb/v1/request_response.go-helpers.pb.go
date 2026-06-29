@@ -5,6 +5,117 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Marshal an object of type ActivityOperation to the protobuf v3 wire format
+func (val *ActivityOperation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivityOperation from the protobuf v3 wire format
+func (val *ActivityOperation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivityOperation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivityOperation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivityOperation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivityOperation
+	switch t := that.(type) {
+	case *ActivityOperation:
+		that1 = t
+	case ActivityOperation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CollectionItem to the protobuf v3 wire format
+func (val *CollectionItem) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CollectionItem from the protobuf v3 wire format
+func (val *CollectionItem) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CollectionItem) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CollectionItem values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CollectionItem) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CollectionItem
+	switch t := that.(type) {
+	case *CollectionItem:
+		that1 = t
+	case CollectionItem:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ItemDescription to the protobuf v3 wire format
+func (val *ItemDescription) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ItemDescription from the protobuf v3 wire format
+func (val *ItemDescription) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ItemDescription) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ItemDescription values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ItemDescription) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ItemDescription
+	switch t := that.(type) {
+	case *ItemDescription:
+		that1 = t
+	case ItemDescription:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type StartCollectionExecutionRequest to the protobuf v3 wire format
 func (val *StartCollectionExecutionRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -145,6 +256,80 @@ func (this *DescribeCollectionExecutionResponse) Equal(that interface{}) bool {
 	case *DescribeCollectionExecutionResponse:
 		that1 = t
 	case DescribeCollectionExecutionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddCollectionItemsRequest to the protobuf v3 wire format
+func (val *AddCollectionItemsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddCollectionItemsRequest from the protobuf v3 wire format
+func (val *AddCollectionItemsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddCollectionItemsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddCollectionItemsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddCollectionItemsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddCollectionItemsRequest
+	switch t := that.(type) {
+	case *AddCollectionItemsRequest:
+		that1 = t
+	case AddCollectionItemsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddCollectionItemsResponse to the protobuf v3 wire format
+func (val *AddCollectionItemsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddCollectionItemsResponse from the protobuf v3 wire format
+func (val *AddCollectionItemsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddCollectionItemsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddCollectionItemsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddCollectionItemsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddCollectionItemsResponse
+	switch t := that.(type) {
+	case *AddCollectionItemsResponse:
+		that1 = t
+	case AddCollectionItemsResponse:
 		that1 = &t
 	default:
 		return false

@@ -27,34 +27,39 @@ var File_temporal_server_chasm_lib_collection_proto_v1_service_proto protoreflec
 
 const file_temporal_server_chasm_lib_collection_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	";temporal/server/chasm/lib/collection/proto/v1/service.proto\x12-temporal.server.chasm.lib.collection.proto.v1\x1aDtemporal/server/chasm/lib/collection/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x83\a\n" +
+	";temporal/server/chasm/lib/collection/proto/v1/service.proto\x12-temporal.server.chasm.lib.collection.proto.v1\x1aDtemporal/server/chasm/lib/collection/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xca\b\n" +
 	"\x11CollectionService\x12\xd6\x01\n" +
 	"\x18StartCollectionExecution\x12N.temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionRequest\x1aO.temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_id\x12\xdf\x01\n" +
-	"\x1bDescribeCollectionExecution\x12Q.temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest\x1aR.temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_id\x12\xd6\x01\n" +
+	"\x1bDescribeCollectionExecution\x12Q.temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest\x1aR.temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_id\x12\xc4\x01\n" +
+	"\x12AddCollectionItems\x12H.temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsRequest\x1aI.temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_id\x12\xd6\x01\n" +
 	"\x18CloseCollectionExecution\x12N.temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest\x1aO.temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_id\x12\xd9\x01\n" +
 	"\x19DeleteCollectionExecution\x12O.temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest\x1aP.temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse\"\x19\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x0f\x1a\rcollection_idBJZHgo.temporal.io/server/chasm/lib/collection/gen/collectionpb;collectionpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_collection_proto_v1_service_proto_goTypes = []any{
 	(*StartCollectionExecutionRequest)(nil),     // 0: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionRequest
 	(*DescribeCollectionExecutionRequest)(nil),  // 1: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest
-	(*CloseCollectionExecutionRequest)(nil),     // 2: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
-	(*DeleteCollectionExecutionRequest)(nil),    // 3: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
-	(*StartCollectionExecutionResponse)(nil),    // 4: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
-	(*DescribeCollectionExecutionResponse)(nil), // 5: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
-	(*CloseCollectionExecutionResponse)(nil),    // 6: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
-	(*DeleteCollectionExecutionResponse)(nil),   // 7: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
+	(*AddCollectionItemsRequest)(nil),           // 2: temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsRequest
+	(*CloseCollectionExecutionRequest)(nil),     // 3: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
+	(*DeleteCollectionExecutionRequest)(nil),    // 4: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
+	(*StartCollectionExecutionResponse)(nil),    // 5: temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
+	(*DescribeCollectionExecutionResponse)(nil), // 6: temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
+	(*AddCollectionItemsResponse)(nil),          // 7: temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsResponse
+	(*CloseCollectionExecutionResponse)(nil),    // 8: temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
+	(*DeleteCollectionExecutionResponse)(nil),   // 9: temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
 }
 var file_temporal_server_chasm_lib_collection_proto_v1_service_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.collection.proto.v1.CollectionService.StartCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionRequest
 	1, // 1: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DescribeCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionRequest
-	2, // 2: temporal.server.chasm.lib.collection.proto.v1.CollectionService.CloseCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
-	3, // 3: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DeleteCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
-	4, // 4: temporal.server.chasm.lib.collection.proto.v1.CollectionService.StartCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
-	5, // 5: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DescribeCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
-	6, // 6: temporal.server.chasm.lib.collection.proto.v1.CollectionService.CloseCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
-	7, // 7: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DeleteCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
+	2, // 2: temporal.server.chasm.lib.collection.proto.v1.CollectionService.AddCollectionItems:input_type -> temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsRequest
+	3, // 3: temporal.server.chasm.lib.collection.proto.v1.CollectionService.CloseCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionRequest
+	4, // 4: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DeleteCollectionExecution:input_type -> temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionRequest
+	5, // 5: temporal.server.chasm.lib.collection.proto.v1.CollectionService.StartCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.StartCollectionExecutionResponse
+	6, // 6: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DescribeCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.DescribeCollectionExecutionResponse
+	7, // 7: temporal.server.chasm.lib.collection.proto.v1.CollectionService.AddCollectionItems:output_type -> temporal.server.chasm.lib.collection.proto.v1.AddCollectionItemsResponse
+	8, // 8: temporal.server.chasm.lib.collection.proto.v1.CollectionService.CloseCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.CloseCollectionExecutionResponse
+	9, // 9: temporal.server.chasm.lib.collection.proto.v1.CollectionService.DeleteCollectionExecution:output_type -> temporal.server.chasm.lib.collection.proto.v1.DeleteCollectionExecutionResponse
+	5, // [5:10] is the sub-list for method output_type
+	0, // [0:5] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
