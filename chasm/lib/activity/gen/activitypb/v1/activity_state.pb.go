@@ -241,11 +241,10 @@ type ActivityState struct {
 	// pre-dispatch rescheduling paths.
 	FirstAttemptStartedTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=first_attempt_started_time,json=firstAttemptStartedTime,proto3" json:"first_attempt_started_time,omitempty"`
 	// Set when a reset with restore_original_options=true is requested while a worker is running an
-	// attempt (STARTED / PAUSE_REQUESTED). The per-attempt option restore
-	// (start_to_close / heartbeat timeouts) is deferred so the in-flight attempt is left undisturbed;
-	// it is applied when the worker yields and the activity transitions out of RESET_REQUESTED, so the
-	// restored values take effect on the next attempt. ScheduleToClose (lifetime) is restored
-	// immediately and is not governed by this flag.
+	// attempt (STARTED / PAUSE_REQUESTED). The entire option restore is deferred so the in-flight
+	// attempt is left undisturbed; it is applied when the worker yields and the activity transitions
+	// out of RESET_REQUESTED, so the restored values take effect on the next attempt. For a non-running
+	// activity (SCHEDULED / PAUSED) the restore is applied immediately and this flag is not set.
 	ResetRestoreOptions bool `protobuf:"varint,20,opt,name=reset_restore_options,json=resetRestoreOptions,proto3" json:"reset_restore_options,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
