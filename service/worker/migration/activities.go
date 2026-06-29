@@ -221,6 +221,48 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplic
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
+// classifyShardReplicationStatus determines a shard's catchup readiness for a remote
+// cluster. It guards against an uninitialized/unreported ack watermark: if the remote has
+// no recorded ack for this shard (AckedTaskId == 0 with a nil or epoch visibility time)
+// while the shard has produced tasks, the naive lag math would yield a bogus
+// now-since-1970 timeLag and a maxTaskId-sized laggingTasks that read as "infinitely
+// behind" and fail catchup forever. That case is returned as not-ready with zero lag
+// values, so it neither pollutes the Max* stats nor masquerades as real lag. The watermark
+// is typically zero only transiently (e.g. a freshly (re)created replication stream that
+// has not reported its first ack yet).
+func classifyShardReplicationStatus(
+	localShard *historyservice.ShardReplicationStatus,
+	remoteProgress *historyservice.ShardReplicationStatusPerCluster,
+	requiredMinTaskID int64,
+	allowedLaggingTasks int64,
+	allowedLagging time.Duration,
+) shardStatus {
+	ackVisUnset := remoteProgress.AckedTaskVisibilityTime == nil ||
+		remoteProgress.AckedTaskVisibilityTime.AsTime().Equal(time.Unix(0, 0))
+	if localShard.MaxReplicationTaskId > 0 && remoteProgress.AckedTaskId == 0 && ackVisUnset {
+		// Not ready, but leave laggingTasks/timeLag at zero so this shard can't win the
+		// Max* comparisons in the caller (i.e. can't surface the bogus now-since-1970 lag).
+		return shardStatus{
+			shardID: localShard.GetShardId(),
+			isReady: false,
+		}
+	}
+
+	laggingTasks := localShard.MaxReplicationTaskId - remoteProgress.AckedTaskId
+	timeLag := localShard.MaxReplicationTaskVisibilityTime.AsTime().Sub(remoteProgress.AckedTaskVisibilityTime.AsTime())
+
+	fullyCaughtUp := localShard.MaxReplicationTaskId == remoteProgress.AckedTaskId
+	passedRequiredMinimum := remoteProgress.AckedTaskId >= requiredMinTaskID
+	withinLagTolerance := laggingTasks <= allowedLaggingTasks || timeLag <= allowedLagging
+
+	return shardStatus{
+		shardID:      localShard.GetShardId(),
+		laggingTasks: laggingTasks,
+		timeLag:      timeLag,
+		isReady:      fullyCaughtUp || (passedRequiredMinimum && withinLagTolerance),
+	}
+}
+
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
@@ -257,21 +299,13 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
 
-		laggingTasks := localShard.MaxReplicationTaskId - remoteShardProgress.AckedTaskId
-		timeLag := localShard.MaxReplicationTaskVisibilityTime.AsTime().Sub(remoteShardProgress.AckedTaskVisibilityTime.AsTime())
-
-		fullyCaughtUp := localShard.MaxReplicationTaskId == remoteShardProgress.AckedTaskId
-		passedRequiredMinimum := remoteShardProgress.AckedTaskId >= requiredMinTaskIDPerShard[localShard.ShardId]
-		withinLagTolerance := laggingTasks <= waitRequest.AllowedLaggingTasks || timeLag <= waitRequest.AllowedLagging
-
-		status := shardStatus{
-			shardID:      localShard.GetShardId(),
-			laggingTasks: laggingTasks,
-			timeLag:      timeLag,
-			isReady:      fullyCaughtUp || (passedRequiredMinimum && withinLagTolerance),
-		}
-
-		shardStatuses = append(shardStatuses, status)
+		shardStatuses = append(shardStatuses, classifyShardReplicationStatus(
+			localShard,
+			remoteShardProgress,
+			requiredMinTaskIDPerShard[localShard.ShardId],
+			waitRequest.AllowedLaggingTasks,
+			waitRequest.AllowedLagging,
+		))
 	}
 
 	var (
@@ -288,10 +322,13 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
-		} else {
-			notReadyShardCount++
+			continue
 		}
 
+		notReadyShardCount++
+
+		// No-ack-watermark shards carry zero lag values, so they naturally never win the
+		// comparisons below — no special-casing needed to keep the Max* stats clean.
 		if status.laggingTasks > maxLaggingTasks {
 			maxLaggingTasks = status.laggingTasks
 			maxLaggingTasksShardID = status.shardID
@@ -307,6 +344,14 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	a.MetricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.TargetClusterTag(waitRequest.RemoteCluster))
+
+	// emit the not-ready shard count (namespace-tagged) so the catchup failure mode is
+	// observable per namespace during a failover.
+	a.MetricsHandler.Gauge(metrics.CatchUpNotReadyShardCountGauge.Name()).Record(
+		float64(notReadyShardCount),
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.NamespaceTag(waitRequest.Namespace),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
 
 	isReady := notReadyShardCount == 0
