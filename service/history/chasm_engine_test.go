@@ -1228,6 +1228,60 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	s.Equal(activityID, <-newActivityID)
 }
 
+// TestPollComponent_ShardClosed verifies that a poll blocked waiting for notifications returns a
+// ShardOwnershipLostError as soon as the shard moves off this host, rather than blocking until the
+// context deadline.
+func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	resolvedKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+	pollRef := chasm.NewComponentRef[*testComponent](resolvedKey)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(
+				resolvedKey,
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil),
+		}, nil).
+		AnyTimes()
+
+	pollErr := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// Predicate is never satisfied, so the poll subscribes and blocks.
+		_, err := s.engine.pollComponent(
+			ctx,
+			pollRef,
+			func(chasm.Context, chasm.Component) (bool, error) {
+				return false, nil
+			},
+		)
+		pollErr <- err
+	}()
+
+	// Let the poll park in its select, then move the shard off this host.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	s.mockShard.UnloadForOwnershipLost()
+
+	select {
+	case err := <-pollErr:
+		var solErr *persistence.ShardOwnershipLostError
+		s.ErrorAs(err, &solErr)
+		s.Equal(s.mockShard.GetShardID(), solErr.ShardID)
+	case <-time.After(5 * time.Second):
+		s.FailNow("poll did not return after shard close")
+	}
+}
+
 // TestPollComponent_StaleState tests that PollComponent returns a user-friendly Unavailable error
 // when the submitted component reference is ahead of persisted state (e.g. due to namespace
 // failover).
