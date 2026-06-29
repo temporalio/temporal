@@ -1249,12 +1249,20 @@ type FastForwardInfo struct {
 	TargetTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=target_time,json=targetTime,proto3" json:"target_time,omitempty"`
 	// Indicates whether this fast-forward has already been reached, used for idempotency checks.
 	HasReached bool `protobuf:"varint,2,opt,name=has_reached,json=hasReached,proto3" json:"has_reached,omitempty"`
-	// Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
-	// WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
-	// configuration. This is used as the task event ID for the time-skipping timer task,
-	// enabling reset and replication-conflict resolution to identify obsolete fast-forward tasks
-	// via the standard staleness check.
-	SourceEventId int64 `protobuf:"varint,3,opt,name=source_event_id,json=sourceEventId,proto3" json:"source_event_id,omitempty"`
+	// Monotonic counter bumped every time the fast-forward is (re)applied (i.e. whenever the
+	// TimeSkippingConfig is initialized or updated). Carried on the time-skipping timer task and
+	// compared at firing time: a task whose stamp does not match the current fast-forward's stamp
+	// has been superseded and is silently dropped. Event-free, so it works for both workflow and
+	// CHASM executions and survives failover (replicated, monotonic). Mirrors ActivityInfo.stamp.
+	Stamp int32 `protobuf:"varint,4,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Namespace failover version at which this fast-forward was (re)installed. Carried on the
+	// time-skipping timer task and validated at firing time via CheckTaskVersion. This is stored
+	// (rather than read from MutableState.GetCurrentVersion() at firing time) because the current
+	// version tracks the active cluster's failover version and changes on every failover, whereas
+	// the reference version a task is validated against must be stable for the life of the task.
+	// Mirrors how other timer tasks validate against a persisted per-entity version
+	// (ActivityInfo.version, the workflow start version).
+	Version       int64 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1303,9 +1311,16 @@ func (x *FastForwardInfo) GetHasReached() bool {
 	return false
 }
 
-func (x *FastForwardInfo) GetSourceEventId() int64 {
+func (x *FastForwardInfo) GetStamp() int32 {
 	if x != nil {
-		return x.SourceEventId
+		return x.Stamp
+	}
+	return 0
+}
+
+func (x *FastForwardInfo) GetVersion() int64 {
+	if x != nil {
+		return x.Version
 	}
 	return 0
 }
@@ -5072,13 +5087,14 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
 	"\x11fast_forward_info\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.FastForwardInfoR\x0ffastForwardInfo\x12\x80\x01\n" +
-	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x97\x01\n" +
+	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\xb6\x01\n" +
 	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +
 	"\vhas_reached\x18\x02 \x01(\bR\n" +
-	"hasReached\x12&\n" +
-	"\x0fsource_event_id\x18\x03 \x01(\x03R\rsourceEventId\"\xa8\x01\n" +
+	"hasReached\x12\x14\n" +
+	"\x05stamp\x18\x04 \x01(\x05R\x05stamp\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversionJ\x04\b\x03\x10\x04R\x0fsource_event_id\"\xa8\x01\n" +
 	"\x19LastNotifiedTargetVersion\x12b\n" +
 	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\x12'\n" +
 	"\x0frevision_number\x18\x02 \x01(\x03R\x0erevisionNumber\"\x9d\x01\n" +

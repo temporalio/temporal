@@ -25,7 +25,6 @@ import (
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
-	currentEventID int64,
 ) error {
 	initialSkip := timeSkippingStatePropagation.GetInitialSkippedDuration()
 	if config == nil && initialSkip == nil {
@@ -42,21 +41,20 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
-	ms.applyFastForward(currentEventID, timeSkippingStatePropagation.GetFastForwardTargetTime())
+	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
-	currentEventID int64,
 ) error {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 	if tsi == nil {
 		return serviceerror.NewInternal("time skipping info not initialized when updating")
 	}
 	ms.executionInfo.TimeSkippingInfo.Config = config
-	ms.applyFastForward(currentEventID, nil)
+	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
@@ -65,7 +63,7 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 // This method should be called whenever the TimeSkippingConfig is initialized or updated.
 // An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
 // the FastForwardInfo should never be nil.
-func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTargetTime *timestamppb.Timestamp) {
+func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.Timestamp) {
 
 	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	tsi := ms.executionInfo.TimeSkippingInfo
@@ -86,16 +84,21 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
 	}
 
+	// Bump the stamp off the previous fast-forward (0 when none) before installing the fresh one.
+	stamp := tsi.GetFastForwardInfo().GetStamp() + 1
+
 	// always install a fresh fast-forward bound
 	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
-		TargetTime:    timestamppb.New(targetTime),
-		SourceEventId: currentEventID,
-		HasReached:    false,
+		TargetTime: timestamppb.New(targetTime),
+		HasReached: false,
+		Stamp:      stamp,
+		Version:    ms.GetCurrentVersion(),
 	}
 	ms.AddTasks(&tasks.TimeSkippingTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
-		EventID:             currentEventID,
+		Version:             tsi.FastForwardInfo.Version,
+		Stamp:               stamp,
 	})
 }
 

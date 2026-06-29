@@ -344,18 +344,23 @@ message TimeSkippingInfo {
 }
 
 message FastForwardInfo {
+  reserved 3;
+  reserved "source_event_id";
+
   // Target time for the fast-forward, expressed in virtual time.
   google.protobuf.Timestamp target_time = 1;
 
   // Indicates whether this fast-forward has already been reached, used for idempotency checks.
   bool has_reached = 2;
 
-  // Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
-  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
-  // configuration. This is used as the task event ID for the time-skipping timer task,
-  // enabling reset and replication-conflict resolution to identify obsolete fast-forward tasks
-  // via the standard staleness check.
-  int64 source_event_id = 3;
+  // This is a monotonically increasing counter that is used to identify the version of the fast-forward.
+  // It is bumped every time the fast-forward is set.
+  // It is used to validate the time skipping fast-forward timer task.
+  int32 stamp = 4;
+
+  // This is the NamespaceFailoverVersion at which this fast-forward was configured.
+  // It is used to validate the time skipping fast-forward timer task.
+  int64 version = 5;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
