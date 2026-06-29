@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -99,15 +100,11 @@ func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperation
 	}
 	request.Links = make([]*commonpb.Link, len(ctx.Links))
 	for i, link := range ctx.Links {
-		wLink, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
+		commonLink, err := convertCallerLink(link)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgumentf("Cannot convert %v link %v: %v", link.Type, link.URL, err)
 		}
-		request.Links[i] = &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: wLink,
-			},
-		}
+		request.Links[i] = commonLink
 	}
 
 	if err := o.validator.ValidateSignalWithStartRequest(request); err != nil {
@@ -120,6 +117,28 @@ func (o SignalWithStartOperationProcessor) ProcessInput(ctx chasm.NexusOperation
 			BusinessID:  request.WorkflowId,
 		},
 	}, nil
+}
+
+// convertCallerLink converts a caller's Nexus link into the matching commonpb.Link variant so it can
+// be recorded on the started/signaled target workflow. Workflow callers produce WorkflowEvent links;
+// CHASM Nexus-operation callers (standalone operations, Collections) produce NexusOperation links.
+func convertCallerLink(link nexus.Link) (*commonpb.Link, error) {
+	switch link.Type {
+	case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+		we, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
+		if err != nil {
+			return nil, err
+		}
+		return &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: we}}, nil
+	case string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName()):
+		no, err := commonnexus.ConvertNexusLinkToLinkNexusOperation(link)
+		if err != nil {
+			return nil, err
+		}
+		return &commonpb.Link{Variant: &commonpb.Link_NexusOperation_{NexusOperation: no}}, nil
+	default:
+		return nil, fmt.Errorf("unsupported link type %q", link.Type)
+	}
 }
 
 func NewWorkflowServiceNexusServiceProcessor(

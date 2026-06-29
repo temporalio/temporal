@@ -43,6 +43,7 @@ const (
 	urlPathNamespaceKey           = "namespace"
 	urlPathWorkflowIDKey          = "workflowID"
 	urlPathActivityIDKey          = "activityID"
+	urlPathOperationIDKey         = "operationID"
 	urlPathRunIDKey               = "runID"
 	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
 	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
@@ -55,11 +56,12 @@ const (
 )
 
 var (
-	rePatternNamespace  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
-	rePatternWorkflowID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
-	rePatternActivityID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
-	rePatternRunID      = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
-	urlPathRE           = regexp.MustCompile(fmt.Sprintf(
+	rePatternNamespace   = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
+	rePatternWorkflowID  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
+	rePatternActivityID  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
+	rePatternOperationID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathOperationIDKey)
+	rePatternRunID       = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
+	urlPathRE            = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/workflows/%s/%s/history$`,
 		rePatternNamespace,
 		rePatternWorkflowID,
@@ -69,6 +71,12 @@ var (
 		`^/namespaces/%s/activities/%s/%s/details$`,
 		rePatternNamespace,
 		rePatternActivityID,
+		rePatternRunID,
+	))
+	urlPathNexusOperationRE = regexp.MustCompile(fmt.Sprintf(
+		`^/namespaces/%s/nexus-operations/%s/%s/details$`,
+		rePatternNamespace,
+		rePatternOperationID,
 		rePatternRunID,
 	))
 	eventReferenceType     = string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name())
@@ -92,6 +100,47 @@ func ConvertLinkNexusOperationToNexusLink(no *commonpb.Link_NexusOperation) nexu
 		URL:  u,
 		Type: string(no.ProtoReflect().Descriptor().FullName()),
 	}
+}
+
+// ConvertNexusLinkToLinkNexusOperation converts a Nexus Link to Link_NexusOperation.
+func ConvertNexusLinkToLinkNexusOperation(link nexus.Link) (*commonpb.Link_NexusOperation, error) {
+	no := &commonpb.Link_NexusOperation{}
+	if link.Type != string(no.ProtoReflect().Descriptor().FullName()) {
+		return nil, fmt.Errorf(
+			"cannot parse link type %q to %q",
+			link.Type,
+			no.ProtoReflect().Descriptor().FullName(),
+		)
+	}
+
+	if link.URL.Scheme != urlSchemeTemporalKey {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_NexusOperation: invalid scheme: %s",
+			link.URL.Scheme,
+		)
+	}
+
+	matches := urlPathNexusOperationRE.FindStringSubmatch(link.URL.EscapedPath())
+	if len(matches) != 4 {
+		return nil, errors.New("failed to parse link to Link_NexusOperation: malformed URL path")
+	}
+
+	var err error
+	no.Namespace, err = url.PathUnescape(matches[urlPathNexusOperationRE.SubexpIndex(urlPathNamespaceKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_NexusOperation: %w", err)
+	}
+
+	no.OperationId, err = url.PathUnescape(matches[urlPathNexusOperationRE.SubexpIndex(urlPathOperationIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_NexusOperation: %w", err)
+	}
+
+	no.RunId, err = url.PathUnescape(matches[urlPathNexusOperationRE.SubexpIndex(urlPathRunIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_NexusOperation: %w", err)
+	}
+	return no, nil
 }
 
 // ConvertLinkActivityToNexusLink converts a Link_Activity type to Nexus Link.

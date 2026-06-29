@@ -56,6 +56,25 @@ func TestConvertLinkNexusOperationToNexusLink(t *testing.T) {
 	require.Equal(t, "temporal:///namespaces/ns/nexus-operations/op-id/run-id/details", output.URL.String())
 }
 
+func TestConvertNexusLinkToLinkNexusOperation(t *testing.T) {
+	input := &commonpb.Link_NexusOperation{
+		Namespace:   "ns",
+		OperationId: "op-id",
+		RunId:       "run-id",
+	}
+
+	output, err := commonnexus.ConvertNexusLinkToLinkNexusOperation(
+		commonnexus.ConvertLinkNexusOperationToNexusLink(input),
+	)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, input, output)
+
+	_, err = commonnexus.ConvertNexusLinkToLinkNexusOperation(
+		commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{Namespace: "ns"}),
+	)
+	require.Error(t, err)
+}
+
 func TestConvertLinkActivityToNexusLink(t *testing.T) {
 	input := &commonpb.Link_Activity{
 		Namespace:  "ns",
