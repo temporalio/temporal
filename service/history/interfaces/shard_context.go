@@ -58,6 +58,8 @@ type (
 
 		GetEngine(ctx context.Context) (Engine, error)
 
+		GetLifecycleContext() context.Context
+
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)
 		CurrentVectorClock() *clockspb.VectorClock
