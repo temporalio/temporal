@@ -28,6 +28,8 @@ type (
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
 		GetRemoteFrontendClient(string) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
+		// Close releases the bean's clients on shutdown.
+		Close()
 	}
 
 	frontendClient struct {
@@ -114,6 +116,12 @@ func (h *clientBeanImpl) registerClientEviction() {
 
 func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return h.historyClient
+}
+
+func (h *clientBeanImpl) Close() {
+	if s, ok := h.historyClient.(interface{ Stop() }); ok {
+		s.Stop()
+	}
 }
 
 func (h *clientBeanImpl) GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
