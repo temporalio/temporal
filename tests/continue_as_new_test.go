@@ -1072,3 +1072,104 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	}
 	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
 }
+
+// TestStartAfterContinueAsNew_FirstExecutionRunId verifies that once a workflow has been continued
+// as new, subsequent StartWorkflowExecution calls (both the USE_EXISTING response and the FAIL
+// WorkflowExecutionAlreadyStarted error) report the original (head-of-chain) run id in
+// first_execution_run_id, even though the current run id is the post-CAN run.
+func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
+
+	id := "functional-start-after-can-first-run-test"
+	wt := "functional-start-after-can-first-run-test-type"
+	tl := "functional-start-after-can-first-run-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+	s.NoError(err)
+	s.Equal(we0.RunId, we0.FirstExecutionRunId, "brand-new start should set FirstExecutionRunId to RunId")
+
+	// Drive exactly one CAN. After the WT completes, the second run is RUNNING with no further
+	// pollers, so the subsequent StartWorkflowExecution calls below land on a live workflow.
+	didCAN := false
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if !didCAN {
+			didCAN = true
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        workflowType,
+						TaskQueue:           taskQueue,
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}}, nil
+		}
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("done"),
+				},
+			},
+		}}, nil
+	}
+	poller := &testcore.TaskPoller{
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              env.Logger,
+		T:                   s.T(),
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	// Confirm the post-CAN run is current and distinct from the original.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	s.NoError(err)
+	currentRunID := descResp.WorkflowExecutionInfo.Execution.GetRunId()
+	s.NotEqual(we0.RunId, currentRunID, "post-CAN run id should differ from original")
+	s.Equal(we0.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
+
+	// FAIL conflict policy: error should expose the original run id as the first execution run id.
+	failReq := *startReq
+	failReq.RequestId = uuid.NewString()
+	failReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+	_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), &failReq)
+	var already *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &already)
+	s.Equal(currentRunID, already.RunId, "AlreadyStarted error should reference the current run")
+	s.Equal(we0.RunId, already.FirstExecutionRunId, "AlreadyStarted error should expose head-of-chain run id")
+
+	// USE_EXISTING dedup: response carries the original run id as first_execution_run_id.
+	useExistingReq := *startReq
+	useExistingReq.RequestId = uuid.NewString()
+	useExistingReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &useExistingReq)
+	s.NoError(err)
+	s.False(we2.Started)
+	s.Equal(currentRunID, we2.RunId)
+	s.Equal(we0.RunId, we2.FirstExecutionRunId)
+}

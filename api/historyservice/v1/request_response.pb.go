@@ -371,8 +371,11 @@ type StartWorkflowExecutionResponse struct {
 	Started           bool                              `protobuf:"varint,4,opt,name=started,proto3" json:"started,omitempty"`
 	Status            v12.WorkflowExecutionStatus       `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
 	Link              *v14.Link                         `protobuf:"bytes,6,opt,name=link,proto3" json:"link,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Run ID of the first execution in the chain. Equals run_id unless the current run is the result
+	// of a continue-as-new chain. May be empty when the server could not determine it.
+	FirstExecutionRunId string `protobuf:"bytes,7,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionResponse) Reset() {
@@ -445,6 +448,13 @@ func (x *StartWorkflowExecutionResponse) GetLink() *v14.Link {
 		return x.Link
 	}
 	return nil
+}
+
+func (x *StartWorkflowExecutionResponse) GetFirstExecutionRunId() string {
+	if x != nil {
+		return x.FirstExecutionRunId
+	}
+	return ""
 }
 
 type GetMutableStateRequest struct {
@@ -10615,14 +10625,15 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion\x12s\n" +
 	"\x1binherited_auto_upgrade_info\x18\x10 \x01(\v24.temporal.api.deployment.v1.InheritedAutoUpgradeInfoR\x18inheritedAutoUpgradeInfo\x12|\n" +
 	"\x1fdeclined_target_version_upgrade\x18\x11 \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12{\n" +
-	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v24.temporal.api.common.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xfc\x02\n" +
+	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v24.temporal.api.common.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xb1\x03\n" +
 	"\x1eStartWorkflowExecutionResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12?\n" +
 	"\x05clock\x18\x02 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12n\n" +
 	"\x13eager_workflow_task\x18\x03 \x01(\v2>.temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponseR\x11eagerWorkflowTask\x12\x18\n" +
 	"\astarted\x18\x04 \x01(\bR\astarted\x12F\n" +
 	"\x06status\x18\x05 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x120\n" +
-	"\x04link\x18\x06 \x01(\v2\x1c.temporal.api.common.v1.LinkR\x04link\"\xda\x03\n" +
+	"\x04link\x18\x06 \x01(\v2\x1c.temporal.api.common.v1.LinkR\x04link\x123\n" +
+	"\x16first_execution_run_id\x18\a \x01(\tR\x13firstExecutionRunId\"\xda\x03\n" +
 	"\x16GetMutableStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x123\n" +
