@@ -105,6 +105,23 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
 }
 
+// NewEmbeddedOperation creates a Nexus operation component to be embedded as a child of another
+// component (the parent), which must implement OperationStore. An embedded operation delegates its
+// transitions to the parent and sources its invocation input from the parent (both via the
+// auto-wired Store ParentPtr), so the parent is responsible for retaining the request data. Unlike a
+// standalone operation it owns no Visibility (the parent does). The caller must apply
+// TransitionScheduled to begin invocation.
+func NewEmbeddedOperation(
+	ctx chasm.MutableContext,
+	state *nexusoperationpb.OperationState,
+	requestData *nexusoperationpb.OperationRequestData,
+) (*Operation, error) {
+	op := NewOperation(state)
+	op.ScheduledTime = timestamppb.New(ctx.Now(op))
+	op.RequestData = chasm.NewDataField(ctx, requestData)
+	return op, nil
+}
+
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,

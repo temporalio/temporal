@@ -100,6 +100,38 @@ func TestIsWaitStageReached(t *testing.T) {
 	require.ElementsMatch(t, allWaitStages, coveredWaitStages)
 }
 
+func TestNewEmbeddedOperation(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+		},
+	}
+
+	state := &nexusoperationpb.OperationState{
+		Endpoint:  "__temporal_system",
+		Service:   "svc",
+		Operation: "op",
+		RequestId: "req-id",
+	}
+	requestData := &nexusoperationpb.OperationRequestData{
+		Input: &commonpb.Payload{Data: []byte("in")},
+	}
+
+	op, err := NewEmbeddedOperation(ctx, state, requestData)
+	require.NoError(t, err)
+
+	require.Same(t, state, op.OperationState)
+	require.Equal(t, requestData, op.RequestData.Get(ctx))
+	require.False(t, op.GetScheduledTime().AsTime().IsZero())
+
+	// Embedded operations own no visibility; the parent does.
+	_, ok := op.Visibility.TryGet(ctx)
+	require.False(t, ok)
+
+	// Status is unset until TransitionScheduled is applied by the caller.
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_UNSPECIFIED, op.StateMachineState())
+}
+
 func newScheduledTestOperation(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
 	t.Helper()
 	op := newTestOperation()
