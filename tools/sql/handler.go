@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
+	"strings"
 
 	"github.com/urfave/cli"
 	"go.temporal.io/server/common/auth"
@@ -114,6 +116,30 @@ func DoDropDatabase(cfg *config.SQL, defaultDb string, logger log.Logger) error 
 	return nil
 }
 
+// resolvePassword returns the SQL password to use given the literal --password
+// value and the --password-file path. Exactly one of the two should be
+// supplied: passing both is rejected so an operator gets a clear error rather
+// than silently picking one. The file's contents are returned with a single
+// trailing newline trimmed (the convention POSIX `echo` and most editors
+// produce). See #10028.
+func resolvePassword(password, passwordFile string, readFile func(string) ([]byte, error)) (string, error) {
+	if password != "" && passwordFile != "" {
+		return "", fmt.Errorf("both --%s and --%s were provided; choose one",
+			schema.CLIOptPassword, schema.CLIOptPasswordFile)
+	}
+	if passwordFile == "" {
+		return password, nil
+	}
+	b, err := readFile(passwordFile)
+	if err != nil {
+		return "", fmt.Errorf("reading --%s %q: %w", schema.CLIOptPasswordFile, passwordFile, err)
+	}
+	// Trim a single trailing newline so files written by `echo "..." > pw` work
+	// out of the box; keep any other whitespace intact in case the password
+	// genuinely contains it.
+	return strings.TrimSuffix(string(b), "\n"), nil
+}
+
 func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg := new(config.SQL)
 
@@ -121,7 +147,15 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	port := cli.GlobalInt(schema.CLIOptPort)
 	cfg.ConnectAddr = fmt.Sprintf("%s:%v", host, port)
 	cfg.User = cli.GlobalString(schema.CLIOptUser)
-	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
+	password, err := resolvePassword(
+		cli.GlobalString(schema.CLIOptPassword),
+		cli.GlobalString(schema.CLIOptPasswordFile),
+		os.ReadFile,
+	)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Password = password
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
 
