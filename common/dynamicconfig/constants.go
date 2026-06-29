@@ -1079,6 +1079,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		1,
 		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
 	)
+	FrontendEnableBatchActivityOperators = NewNamespaceBoolSetting(
+		"frontend.enableBatchActivityOperators",
+		true,
+		`FrontendEnableBatchActivityOperators decides whether to support batch cancel, terminate or delete on standalone activities in the frontend`,
+	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
@@ -3297,11 +3302,6 @@ When enabled, the scavenger will delete completed workflow execution data that a
 		`AdminBatcherGlobalRPS controls the rps of all admin batch operations across all worker hosts.
 The configured value will be divided by the number of worker hosts to get the per host rps limit. 
 0 means no global limit and each host will use AdminBatcherHostRPS.`,
-	)
-	EnableBatchActivityOperators = NewNamespaceBoolSetting(
-		"worker.enableBatchActivityOperators",
-		true,
-		`EnableBatchActivityOperators decides whether to support batch cancel, terminate or delete on standalone activities in our worker`,
 	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ParentCloseMaxConcurrentActivityExecutionSize",
