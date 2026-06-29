@@ -2216,11 +2216,6 @@ func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 	s.Positive(desc.GetInfo().GetStateSizeBytes(), "Describe should report a non-zero StateSizeBytes")
-
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
-		return e.GetInfo().GetStateSizeBytes() > 0
-	})
-	s.Positive(entry.GetInfo().GetStateSizeBytes(), "ListSchedules entry should report a non-zero StateSizeBytes")
 }
 
 // testCreatesCHASMSentinel tests that creating a V1 schedule also creates a

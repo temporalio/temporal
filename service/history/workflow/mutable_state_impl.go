@@ -2678,6 +2678,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		if newTQ != previousExecutionInfo.GetTaskQueue() && !newTQInPinnedVersion {
 			pinnedOverride = nil
 		}
+	} else if oneTimeTarget := worker_versioning.GetOverrideOneTimeTargetVersion(o); oneTimeTarget != nil {
+		ms.logger.Warn("Unexpected one-time versioning override found during continue-as-new inheritance",
+			tag.WorkflowNamespace(ms.GetNamespaceEntry().Name().String()),
+			tag.WorkflowID(previousExecutionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(previousExecutionState.GetExecutionState().GetRunId()),
+			tag.Deployment(oneTimeTarget.GetDeploymentName()),
+			tag.BuildId(oneTimeTarget.GetBuildId()))
 	}
 
 	// New run initiated by ContinueAsNew of an AUTO_UPGRADE workflow execution will inherit the previous run's
@@ -6021,8 +6028,9 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			}
 		}
 
-		if o := ms.GetExecutionInfo().VersioningInfo.VersioningOverride; worker_versioning.OverrideIsPinned(o) {
-			ms.GetExecutionInfo().WorkerDeploymentName = o.GetPinned().GetVersion().GetDeploymentName()
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(ms.GetExecutionInfo().VersioningInfo.VersioningOverride); v != nil {
+			// Existing pinned overrides update WorkerDeploymentName immediately; keep one-time overrides aligned.
+			ms.GetExecutionInfo().WorkerDeploymentName = v.GetDeploymentName()
 		}
 	} else if vi := ms.GetExecutionInfo().GetVersioningInfo(); vi != nil {
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
@@ -9628,8 +9636,8 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 // GetEffectiveDeployment returns the effective deployment in the following order:
 //  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 //     new deployment
-//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+//     pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Deployment: this is returned when there is no transition and no override (the most
 //     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -9642,18 +9650,10 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 
 func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		worker_versioning.OverrideIsPinned(override) {
-		if v := override.GetPinned().GetVersion(); v != nil {
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(override); v != nil {
 			return v.GetDeploymentName()
 		}
-		//nolint:staticcheck // SA1019: worker versioning v0.31
-		if vs := override.GetPinnedVersion(); vs != "" {
-			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(vs)
-			return v.GetDeploymentName()
-		}
-		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return override.GetDeployment().GetSeriesName()
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return v.GetDeploymentName()
@@ -9663,17 +9663,10 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 
 func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		worker_versioning.OverrideIsPinned(override) {
-		if v := override.GetPinned().GetVersion(); v != nil {
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if v := worker_versioning.GetOverrideTargetDeploymentVersion(override); v != nil {
 			return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
 		}
-		//nolint:staticcheck // SA1019: worker versioning v0.31
-		if vs := override.GetPinnedVersion(); vs != "" {
-			return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs))
-		}
-		//nolint:staticcheck // SA1019: worker versioning v0.30
-		return worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(override.GetDeployment()))
 	}
 	if v := versioningInfo.GetDeploymentVersion(); v != nil {
 		return worker_versioning.ExternalWorkerDeploymentVersionToString(v)
@@ -9686,7 +9679,7 @@ func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() enumspb.Versioning
 	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
 		if override.GetAutoUpgrade() {
 			return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-		} else if worker_versioning.OverrideIsPinned(override) {
+		} else if worker_versioning.GetOverrideTargetDeploymentVersion(override) != nil {
 			return enumspb.VERSIONING_BEHAVIOR_PINNED
 		}
 		//nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
@@ -9716,8 +9709,8 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
 //  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {

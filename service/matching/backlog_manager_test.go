@@ -983,3 +983,85 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	elapsed := time.Since(start)
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
 }
+
+// TestBacklogDelivery_WritePathWakesStuckReader verifies the write-path recovery for stuck fair readers.
+// When the fair task reader is in state {atEnd=false, readPending=false, backoffTimer=nil},
+// a write via SpoolTask calls wroteNewTasks -> mergeTasks(mergeWrite). The fix adds a call
+// to maybeReadTasksLocked() in the write path, which triggers a DB read that picks up the
+// task and delivers it to the matcher.
+func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader() {
+	if !s.fairness {
+		s.T().Skip("only applies to fair backlog manager")
+	}
+
+	s.setupToCaptureTasks()
+
+	// Enable the write-path recovery dynamic config for this test.
+	s.cfgcli.OverrideValue(dynamicconfig.MatchingForceReadTasksOnWrite.Key(), true)
+
+	// Set up initial qkey in DB so the initial read finds an empty queue.
+	qkey := s.ptqMgr.QueueKey()
+	_, err := s.taskMgr.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{
+		RangeID: 1,
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
+			NamespaceId: qkey.NamespaceId(),
+			Name:        qkey.PersistenceName(),
+			TaskType:    qkey.TaskType(),
+		},
+	})
+	s.Require().NoError(err)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	// Wait for the initial empty read to complete (reader reaches atEnd=true).
+	await.RequireTrue(s.T(), func() bool {
+		return s.taskMgr.getGetTasksCount(qkey) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Put the reader into the stuck state: atEnd=false, readPending=false, backoffTimer=nil.
+	blm := s.blm.(*fairBacklogManagerImpl)
+	blm.subqueueLock.Lock()
+	reader := blm.subqueues[subqueueZero]
+	blm.subqueueLock.Unlock()
+
+	reader.lock.Lock()
+	reader.atEnd = false
+	reader.lock.Unlock()
+
+	// Install a capturing metrics handler with namespace tag to verify the stuck metric
+	// is emitted with the correct namespace (as it would be in production).
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	blm.metricsHandler = captureHandler.WithTags(metrics.NamespaceTag("test-namespace"))
+
+	// Record the current DB read count before writing.
+	readCountBefore := s.taskMgr.getGetTasksCount(qkey)
+	capturedBefore := s.capturedTasksLen()
+
+	// Write a task via SpoolTask. The writer calls wroteNewTasks -> mergeTasks(mergeWrite).
+	// With the fix, mergeTasks now calls maybeReadTasksLocked() for write-mode merges,
+	// which triggers a DB read to pick up the task.
+	s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		CreateTime: timestamp.TimeNowPtrUtc(),
+	}))
+
+	// Assert the fix: the write path triggers a DB read and the task reaches the matcher.
+	await.RequireTrue(s.T(), func() bool {
+		return s.capturedTasksLen() > capturedBefore
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Assert that additional DB reads were triggered by the write path.
+	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
+		"DB reads should have been triggered after SpoolTask to pick up the written task")
+
+	// Assert that the stuck detection metric was emitted exactly once with namespace tag.
+	snap := capture.Snapshot()
+	recordings := snap[metrics.FairReaderStuckDetected.Name()]
+	s.Require().Len(recordings, 1, "fair_reader_stuck_detected metric should have been emitted exactly once")
+	s.Require().Equal(int64(1), recordings[0].Value)
+	s.Require().Equal("test-namespace", recordings[0].Tags["namespace"])
+}

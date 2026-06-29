@@ -88,9 +88,9 @@ func (s *contextSuite) TestContextHasDeadline() {
 func (s *contextSuite) TestAwaitUsesSuiteContext() {
 	type key struct{}
 
-	testcontext.New(s.T(), testcontext.WithContextDecorator(key{}, func(ctx context.Context) context.Context {
+	testcontext.AttachDecorator(s.T(), key{}, func(ctx context.Context) context.Context {
 		return context.WithValue(ctx, key{}, "decorated")
-	}))
+	})
 
 	s.Await(func(s *contextSuite) {
 		s.Equal("decorated", s.Context().Value(key{}))

@@ -71,7 +71,7 @@ func (w *fairTaskWriter) appendTask(
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan error)
+	ch := make(chan error, 1)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,

@@ -2149,7 +2149,7 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 ) {
 	historyClient = history.NewRetryableClient(
 		historyClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(func() bool { return false }),
 		common.IsServiceClientTransientError,
 	)
 	for _, batch := range eventBatches {
@@ -2191,7 +2191,7 @@ func (s *NDCFunctionalTestSuite) importEvents(
 
 	historyClient = history.NewRetryableClient(
 		historyClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(func() bool { return false }),
 		common.IsResourceExhausted,
 	)
 	var token []byte

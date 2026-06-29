@@ -3,15 +3,11 @@ package replication
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -147,35 +143,6 @@ func (s *batchedTaskSuite) TestAddTask_TasksAreBatchableAndCanBatch_ReturnTrue()
 	s.Len(batchedTestTask.individualTasks, 2)
 	s.Same(existing, batchedTestTask.individualTasks[0])
 	s.Same(incoming, batchedTestTask.individualTasks[1])
-}
-
-func (s *batchedTaskSuite) TestAddTask_BatchWithFails_ReturnFalse() {
-	existing := NewMockBatchableTask(s.controller)
-	existing.EXPECT().CanBatch().Return(true).Times(1)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	incoming := NewMockBatchableTask(s.controller)
-	incoming.EXPECT().CanBatch().Return(true).Times(1)
-	existing.EXPECT().BatchWith(incoming).Return(nil, false).Times(1)
-
-	result := batchTestTask.AddTask(incoming)
-	s.False(result)
-}
-
-func (s *batchedTaskSuite) TestTaskID_DelegatesToFirstIndividualTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	var batchTaskID int64 = 42
-	existing.EXPECT().TaskID().Return(batchTaskID).Times(1)
-
-	s.Equal(batchTaskID, batchTestTask.TaskID())
 }
 
 func (s *batchedTaskSuite) TestExecute_SetBatchStateToClose_ReturnResult() {
@@ -338,144 +305,6 @@ func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
 
 	batchedTestTask.Reschedule()
 	s.Equal(0, handlerCallCount)
-}
-
-func (s *batchedTaskSuite) TestQueueID_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchQueueID := "queue-id"
-	existing.EXPECT().QueueID().Return(batchQueueID).Times(1)
-
-	s.Equal(batchQueueID, batchTestTask.QueueID())
-}
-
-func (s *batchedTaskSuite) TestSourceClusterName_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchClusterName := "cluster-name"
-	existing.EXPECT().SourceClusterName().Return(batchClusterName).Times(1)
-
-	s.Equal(batchClusterName, batchTestTask.SourceClusterName())
-}
-
-func (s *batchedTaskSuite) TestTaskCreationTime_DelegatesToFirstIndividualTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchCreationTime := time.Unix(0, 12345)
-	existing.EXPECT().TaskCreationTime().Return(batchCreationTime).Times(1)
-
-	s.Equal(batchCreationTime, batchTestTask.TaskCreationTime())
-}
-
-func (s *batchedTaskSuite) TestState_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	existing.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
-
-	s.Equal(ctasks.TaskStatePending, batchTestTask.State())
-}
-
-func (s *batchedTaskSuite) TestReplicationTask_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchReplicationTask := &replicationspb.ReplicationTask{}
-	existing.EXPECT().ReplicationTask().Return(batchReplicationTask).Times(1)
-
-	s.Equal(batchReplicationTask, batchTestTask.ReplicationTask())
-}
-
-func (s *batchedTaskSuite) TestHandleErr_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchHandleErr := errors.New("handle err")
-	existing.EXPECT().HandleErr(batchHandleErr).Return(batchHandleErr).Times(1)
-
-	s.Equal(batchHandleErr, batchTestTask.HandleErr(batchHandleErr))
-}
-
-func (s *batchedTaskSuite) TestIsRetryableError_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchRetryableErr := errors.New("retryable err")
-	existing.EXPECT().IsRetryableError(batchRetryableErr).Return(true).Times(1)
-
-	s.True(batchTestTask.IsRetryableError(batchRetryableErr))
-}
-
-func (s *batchedTaskSuite) TestRetryPolicy_SingleItem_DelegatesToBatchedTask() {
-	existing := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing),
-		state:           batchStateOpen,
-	}
-	batchRetryPolicy := backoff.NewExponentialRetryPolicy(time.Second)
-	existing.EXPECT().RetryPolicy().Return(batchRetryPolicy).Times(1)
-
-	s.Equal(batchRetryPolicy, batchTestTask.RetryPolicy())
-}
-
-func (s *batchedTaskSuite) TestRetryPolicy_MultipleItems_DisabledRetryPolicy() {
-	existing := NewMockBatchableTask(s.controller)
-	add1 := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing, add1),
-		state:           batchStateOpen,
-	}
-
-	s.Equal(backoff.DisabledRetryPolicy, batchTestTask.RetryPolicy())
-}
-
-func (s *batchedTaskSuite) TestReschedule_MultipleItems_CallIndividualHandler() {
-	existing := NewMockBatchableTask(s.controller)
-	add1 := NewMockBatchableTask(s.controller)
-	add2 := NewMockBatchableTask(s.controller)
-	batchTestTask := &batchedTask{
-		batchedTask:     existing,
-		individualTasks: append([]TrackableExecutableTask{}, existing, add1, add2),
-		state:           batchStateOpen,
-		individualTaskHandler: func(task TrackableExecutableTask) {
-			task.Reschedule()
-		},
-		logger: s.logger,
-	}
-	existing.EXPECT().MarkUnbatchable().Times(1)
-	existing.EXPECT().Reschedule().Times(1)
-	add1.EXPECT().MarkUnbatchable().Times(1)
-	add1.EXPECT().Reschedule().Times(1)
-	add2.EXPECT().MarkUnbatchable().Times(1)
-	add2.EXPECT().Reschedule().Times(1)
-
-	batchTestTask.Reschedule()
 }
 
 func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandler() {

@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -417,6 +418,17 @@ func (n *Node) setValueState(state valueState) {
 	}
 }
 
+func (n *Node) clearAncestorNodeValues(parent *Node) {
+	for node := parent; node != nil; node = node.parent {
+		if node.serializedNode == nil || !node.isComponent() || node.value == nil {
+			continue
+		}
+
+		node.setValue(nil)
+		node.setValueState(valueStateNeedDeserialize)
+	}
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs access rule, and task validation checks
@@ -704,7 +716,7 @@ func assertStructPointer(t reflect.Type) error {
 		return nil
 	}
 
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
 		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
@@ -790,6 +802,13 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
+// hasNewTransactionSideEffects returns true when the transaction has observable
+// effects that must be persisted regardless of whether data bytes changed:
+// new tasks scheduled on this node, or lifecycle termination.
+func (n *Node) hasNewTransactionSideEffects() bool {
+	return len(n.newTasks[n.value]) > 0 || n.terminated
+}
+
 // serialize sets or updates serializedValue field of the node n with serialized value.
 // It sets node's valueState to valueStateSynced and updates LastUpdateVersionedTransition.
 func (n *Node) serialize() error {
@@ -807,6 +826,10 @@ func (n *Node) serialize() error {
 	}
 }
 
+// serializeComponentNode serializes the component node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeComponentNode() error {
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -825,16 +848,28 @@ func (n *Node) serializeComponentNode() error {
 			}
 		}
 
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+		n.serializedNode.Data = blob
+
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			rc, ok := n.registry.componentFor(n.value)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component type is not registered",
+					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			}
+			// TypeId mismatch on a brand new node indicates node reassignment.
+			existingTypeID := n.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
+			if existingTypeID != 0 && existingTypeID != rc.componentID {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component node TypeId changed on first serialization",
+					fmt.Errorf("existing: %d, new: %d", existingTypeID, rc.componentID),
+				)
+			}
+			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		}
 
-		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1168,6 +1203,10 @@ func (n *Node) deleteChildren(
 	return nil
 }
 
+// serializeDataNode serializes the data node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeDataNode() error {
 	protoValue, ok := n.value.(proto.Message)
 	if !ok {
@@ -1188,6 +1227,10 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+// serializeCollectionNode serializes the collection node.
+// If this method is updated to modify serialized fields beyond
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
@@ -1619,7 +1662,7 @@ func (n *Node) AddTask(
 		return
 	}
 
-	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
+	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})
@@ -1878,8 +1921,34 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+
+		// Skip writing nodes whose serialized content hasn't changed. A nil
+		// LastUpdateVersionedTransition means the node is brand new and must be written.
+		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
+		// blob, leaving prevData pointing at the original for comparison.
+		prevVersionedTransition := common.CloneProto(
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+		)
+		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+			prevVersionedTransition != nil &&
+			!node.hasNewTransactionSideEffects()
+		var prevData *commonpb.DataBlob
+		if skipIfClean {
+			prevData = node.serializedNode.Data
+		}
+
 		if err := node.serialize(); err != nil {
 			return err
+		}
+
+		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
+		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
+			continue
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
@@ -1891,10 +1960,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 				fmt.Errorf("found at path %s", nodePath))
 		}
 
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
 		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,
@@ -2562,9 +2627,11 @@ func (n *Node) applyDeletions(
 			continue
 		}
 
+		parent := node.parent
 		if err := node.delete(isSystemUpdates); err != nil {
 			return err
 		}
+		n.clearAncestorNodeValues(parent)
 	}
 
 	return nil
@@ -2585,6 +2652,7 @@ func (n *Node) applyUpdates(
 			// Node doesn't exist, we need to create it.
 			newNode := n.setSerializedNode(path, encodedPath, updatedNode)
 			newNode.resetTaskStatus()
+			n.clearAncestorNodeValues(newNode.parent)
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
 				delete(n.systemMutation.DeletedNodes, encodedPath)
@@ -2626,9 +2694,7 @@ func (n *Node) applyUpdates(
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
 			node.serializedNode = updatedNode
-
-			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
-			// Parent node is pointing to the Node struct.
+			n.clearAncestorNodeValues(node.parent)
 		}
 	}
 
@@ -2754,6 +2820,8 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// Only record the deletion if the node was previously persisted.
+	//
 	// TODO: consider remove entries from UpdatedNodes map as well
 	// if the same node is updated and then deleted in the same transaction.
 	//
@@ -2764,10 +2832,12 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
 	//   first with a deletion only mutation for tombstone nodes, and then an
 	//   update only mutation.
-	if isSystemDelete {
-		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
-	} else {
-		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		if isSystemDelete {
+			n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+		} else {
+			n.mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
 	}
 
 	n.cleanupCachedTasks()
@@ -3138,7 +3208,7 @@ func deserializeTask(
 	}
 
 	taskGoType := registrableTask.goType
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 	}
 	taskValue = reflect.New(taskGoType)
@@ -3194,7 +3264,7 @@ func serializeTask(
 	taskGoType := registrableTask.goType
 
 	// Handle pointer to struct.
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 		taskValue = taskValue.Elem()
 	}

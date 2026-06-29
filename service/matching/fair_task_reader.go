@@ -48,7 +48,7 @@ type (
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
 		// evicted before it could be used to advance ackLevel.
-		evictedAcks *btree.BTreeG[fairLevel]
+		evictedAcks btree.BTreeG[fairLevel]
 
 		// Hold tasks written while a read is pending so we make sure to account for them in
 		// our read level.
@@ -108,7 +108,7 @@ func newFairTaskReader(
 		outstandingTasks: *newFairLevelTreeMap(),
 		readLevel:        initialAckLevel,
 		ackLevel:         initialAckLevel,
-		evictedAcks:      btree.NewBTreeG(fairLevel.less),
+		evictedAcks:      *btree.NewBTreeGOptions(fairLevel.less, btree.Options{NoLocks: true}),
 
 		// gc state
 		lastGCTime: time.Now(),
@@ -386,6 +386,18 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
 
+	// Detect stuck reader: no tasks in memory, not at end, no read goroutine running, no
+	// retry pending. In this state, written tasks go only to DB (filtered above readLevel)
+	// and nothing will trigger a read. The root cause is still under investigation.
+	// TODO: remove this once the root cause is found and fixed.
+	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
+		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
+		tr.backlogMgr.throttledLogger.Warn("fair task reader stuck: atEnd=false, loadedTasks=0, no read pending")
+		if tr.backlogMgr.config.ForceReadTasksOnWrite() {
+			tr.maybeReadTasksLocked()
+		}
+	}
+
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
@@ -418,10 +430,10 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// If write/read race or we have to re-read a range, we may read something we had
 			// already added to the matcher or acked. Ignore tasks we already have.
 			continue
-		} else if _, have := tr.evictedAcks.Delete(level); have {
-			// This task was already acked but the ack was evicted. Skip it.
-			continue
 		}
+		// Note: tasks whose acks were evicted (present in evictedAcks) flow through here as
+		// regular tasks and are turned back into acks in the final loop below, the same way
+		// expired tasks are handled.
 		merged.Put(level, t)
 	}
 
@@ -483,17 +495,26 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.evictedAcks.PopMax()
 	}
 
-	var hasExpired bool
 	internalTasks := make([]*internalTask, 0, len(tasks))
 	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
+		if _, have := tr.evictedAcks.Delete(level); have {
+			// This task was already acked, but its ack was evicted from memory before it could
+			// advance the ack level, and now we've re-read it. Add it back as a pre-acked (nil)
+			// entry (like an expired task) so it advances the ack level, instead of re-delivering
+			// it to the matcher. We remove it from the cache since it's tracked in
+			// outstandingTasks again; if it later gets evicted above the read level, it'll be
+			// re-cached then. Note its level is <= readLevel here (it made the in-memory cut), so
+			// the eviction above won't have touched it.
+			tr.outstandingTasks.Put(level, nil)
+			continue
+		}
 		if IsTaskExpired(t) {
 			// Expired tasks are added as pre-acked (nil) so they participate in
 			// readLevel calculation above and advance ackLevel + get GC'd below.
 			tr.outstandingTasks.Put(level, nil)
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
-			hasExpired = true
 			continue
 		}
 		task := newInternalTaskFromBacklog(t, tr.completeTask)
@@ -506,10 +527,9 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		internalTasks = append(internalTasks, task)
 	}
 
-	if hasExpired {
-		// Advance ack level past any expired tasks we just added as pre-acked.
-		tr.advanceAckLevelLocked()
-	}
+	// Advance the ack level past any pre-acked (nil) entries we just added: expired tasks and
+	// acks we re-inserted from the evicted-ack cache. Harmless if we added none.
+	tr.advanceAckLevelLocked()
 
 	// Update atEnd:
 	// If we did a read and didn't get to the end, we can't possibly be at the end.

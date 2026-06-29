@@ -1,4 +1,4 @@
-package history
+package nexus
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
-func TestDispatchResponseToError_SyncSuccess(t *testing.T) {
+func TestMatchingDispatchResponseToError_SyncSuccess(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -25,11 +25,11 @@ func TestDispatchResponseToError_SyncSuccess(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.NoError(t, err)
 }
 
-func TestDispatchResponseToError_AsyncSuccess(t *testing.T) {
+func TestMatchingDispatchResponseToError_AsyncSuccess(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -45,17 +45,17 @@ func TestDispatchResponseToError_AsyncSuccess(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.NoError(t, err)
 }
 
-func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
+func TestMatchingDispatchResponseToError_RequestTimeout(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
 			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
@@ -63,7 +63,7 @@ func TestDispatchResponseToError_RequestTimeout(t *testing.T) {
 	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 }
 
-func TestDispatchResponseToError_WorkerFailure(t *testing.T) {
+func TestMatchingDispatchResponseToError_WorkerFailure(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
 			Failure: &failurepb.Failure{
@@ -76,7 +76,7 @@ func TestDispatchResponseToError_WorkerFailure(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var appErr *temporal.ApplicationError
@@ -84,7 +84,7 @@ func TestDispatchResponseToError_WorkerFailure(t *testing.T) {
 	require.Equal(t, "SomeError", appErr.Type())
 }
 
-func TestDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T) {
+func TestMatchingDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -105,7 +105,7 @@ func TestDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T)
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var appErr *temporal.ApplicationError
@@ -113,7 +113,7 @@ func TestDispatchResponseToError_OperationFailure_ApplicationError(t *testing.T)
 	require.Equal(t, "SomeError", appErr.Type())
 }
 
-func TestDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
+func TestMatchingDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
 			Response: &nexuspb.Response{
@@ -132,16 +132,16 @@ func TestDispatchResponseToError_OperationFailure_CanceledError(t *testing.T) {
 			},
 		},
 	}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var cancelErr *temporal.CanceledError
 	require.ErrorAs(t, err, &cancelErr)
 }
 
-func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
+func TestMatchingDispatchResponseToError_EmptyOutcome(t *testing.T) {
 	resp := &matchingservice.DispatchNexusTaskResponse{}
-	err := dispatchResponseToError(resp)
+	err := MatchingDispatchResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError
@@ -151,7 +151,7 @@ func TestDispatchResponseToError_EmptyOutcome(t *testing.T) {
 
 func TestStartOperationResponseToError_EmptyVariant(t *testing.T) {
 	resp := &nexuspb.StartOperationResponse{}
-	err := startOperationResponseToError(resp)
+	err := StartOperationResponseToError(resp)
 	require.Error(t, err)
 
 	var handlerErr *nexus.HandlerError

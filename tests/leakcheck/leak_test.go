@@ -36,7 +36,6 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
 
 	// TODO: worker-service and persistence goroutine leaks.
-	goleak.IgnoreTopFunction("go.temporal.io/server/common/persistence.(*healthSignalAggregatorImpl).emitMetricsLoop"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/quotas.(*MapRequestRateLimiterImpl[...]).cleanupLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
@@ -54,7 +53,6 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase"),
 	objectleak.WithExpected("FunctionalTestBase.Logger*"),
 	objectleak.WithExpected("FunctionalTestBase.Suite*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.archiverBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),

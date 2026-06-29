@@ -22,7 +22,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -59,19 +58,8 @@ type (
 
 	// TestCluster is a testcore struct for functional tests
 	TestCluster struct {
-		testBase     *persistencetests.TestBase
-		archiverBase *ArchiverBase
-		host         *TemporalImpl
-	}
-
-	// ArchiverBase is a testcore struct for archiver provider being used in functional tests
-	ArchiverBase struct {
-		metadata                 archiver.ArchivalMetadata
-		provider                 provider.ArchiverProvider
-		historyStoreDirectory    string
-		visibilityStoreDirectory string
-		historyURI               string
-		visibilityURI            string
+		testBase *persistencetests.TestBase
+		host     *TemporalImpl
 	}
 
 	// TestClusterConfig are config for a test cluster
@@ -91,6 +79,7 @@ type (
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		EnableMTLS                      bool
 		EnableMetricsCapture            bool
+		EnableHistoryTaskRecorder       bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
@@ -113,22 +102,6 @@ const (
 	httpProtocol transferProtocol = "http"
 	grpcProtocol transferProtocol = "grpc"
 )
-
-func (a *ArchiverBase) Metadata() archiver.ArchivalMetadata {
-	return a.metadata
-}
-
-func (a *ArchiverBase) Provider() provider.ArchiverProvider {
-	return a.provider
-}
-
-func (a *ArchiverBase) HistoryURI() string {
-	return a.historyURI
-}
-
-func (a *ArchiverBase) VisibilityURI() string {
-	return a.visibilityURI
-}
 
 func (f *defaultTestClusterFactory) NewCluster(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 	return newClusterWithPersistenceTestBaseFactory(t, clusterConfig, logger, f.tbFactory)
@@ -227,7 +200,7 @@ func newClusterWithPersistenceTestBaseFactory(
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
-	archiverBase := newArchiverBase(
+	archiverMetadata, archiverProvider := newArchivalMetadataAndProvider(
 		clusterConfig.EnableArchival,
 		clusterConfig.CustomHistoryArchiverFactory,
 		clusterConfig.CustomVisibilityArchiverFactory,
@@ -339,8 +312,8 @@ func newClusterWithPersistenceTestBaseFactory(
 		Logger:                           logger,
 		ESConfig:                         clusterConfig.ESConfig,
 		ESClient:                         esClient,
-		ArchiverMetadata:                 archiverBase.metadata,
-		ArchiverProvider:                 archiverBase.provider,
+		ArchiverMetadata:                 archiverMetadata,
+		ArchiverProvider:                 archiverProvider,
 		FrontendConfig:                   clusterConfig.FrontendConfig,
 		HistoryConfig:                    clusterConfig.HistoryConfig,
 		MatchingConfig:                   clusterConfig.MatchingConfig,
@@ -351,10 +324,11 @@ func newClusterWithPersistenceTestBaseFactory(
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
-		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
+		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverMetadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 		TokenProvider:                    clusterConfig.TokenProvider,
+		EnableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
@@ -371,7 +345,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		return nil, err
 	}
 
-	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
+	return &TestCluster{testBase: testBase, host: cluster}, nil
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
@@ -486,34 +460,25 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 	}
 }
 
-func newArchiverBase(
+// TODO: remove when onebox uses temporal.NewServerFx and archival wiring comes from production config.
+func newArchivalMetadataAndProvider(
 	enabled bool,
 	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
 	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
-) *ArchiverBase {
+) (archiver.ArchivalMetadata, provider.ArchiverProvider) {
 	dcCollection := dynamicconfig.NewNoopCollection()
 	if !enabled {
-		return &ArchiverBase{
-			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider: provider.NewArchiverProvider(nil, nil, nil, nil, nil, logger, metrics.NoopMetricsHandler),
-		}
+		return archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
+			provider.NewArchiverProvider(nil, nil, nil, nil, nil, logger, metrics.NoopMetricsHandler)
 	}
 
-	historyStoreDirectory, err := os.MkdirTemp("", "test-history-archival")
-	if err != nil {
-		logger.Fatal("Failed to create temp dir for history archival", tag.Error(err))
-	}
-	visibilityStoreDirectory, err := os.MkdirTemp("", "test-visibility-archival")
-	if err != nil {
-		logger.Fatal("Failed to create temp dir for visibility archival", tag.Error(err))
-	}
 	cfg := &config.FilestoreArchiver{
 		FileMode: "0666",
 		DirMode:  "0766",
 	}
-	provider := provider.NewArchiverProvider(
+	archiverProvider := provider.NewArchiverProvider(
 		&config.HistoryArchiverProvider{
 			Filestore: cfg,
 		},
@@ -526,23 +491,16 @@ func newArchiverBase(
 		logger,
 		metrics.NoopMetricsHandler,
 	)
-	return &ArchiverBase{
-		metadata: archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
-			History: config.HistoryArchivalNamespaceDefaults{
-				State: "enabled",
-				URI:   "testScheme://test/history/archive/path",
-			},
-			Visibility: config.VisibilityArchivalNamespaceDefaults{
-				State: "enabled",
-				URI:   "testScheme://test/visibility/archive/path",
-			},
-		}),
-		provider:                 provider,
-		historyStoreDirectory:    historyStoreDirectory,
-		visibilityStoreDirectory: visibilityStoreDirectory,
-		historyURI:               filestore.URIScheme + "://" + historyStoreDirectory,
-		visibilityURI:            filestore.URIScheme + "://" + visibilityStoreDirectory,
-	}
+	return archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
+		History: config.HistoryArchivalNamespaceDefaults{
+			State: "enabled",
+			URI:   "testScheme://test/history/archive/path",
+		},
+		Visibility: config.VisibilityArchivalNamespaceDefaults{
+			State: "enabled",
+			URI:   "testScheme://test/visibility/archive/path",
+		},
+	}), archiverProvider
 }
 
 // TearDownCluster tears down the test cluster
@@ -554,22 +512,12 @@ func (tc *TestCluster) TearDownCluster() error {
 			errs = multierr.Combine(errs, err)
 		}
 	}
-	if err := os.RemoveAll(tc.archiverBase.historyStoreDirectory); err != nil {
-		errs = multierr.Combine(errs, err)
-	}
-	if err := os.RemoveAll(tc.archiverBase.visibilityStoreDirectory); err != nil {
-		errs = multierr.Combine(errs, err)
-	}
 	return errs
 }
 
 // TODO (alex): remove this method. Replace usages with concrete methods.
 func (tc *TestCluster) TestBase() *persistencetests.TestBase {
 	return tc.testBase
-}
-
-func (tc *TestCluster) ArchiverBase() *ArchiverBase {
-	return tc.archiverBase
 }
 
 func (tc *TestCluster) FrontendClient() workflowservice.WorkflowServiceClient {
@@ -601,7 +549,7 @@ func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 
 // ExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
-	return tc.host.GetExecutionManager()
+	return tc.host.executionManager
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.
@@ -625,8 +573,8 @@ func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder
 	return tc.host.replicationStreamRecorder
 }
 
-func (tc *TestCluster) GetTaskQueueRecorder() *TaskQueueRecorder {
-	return tc.host.GetTaskQueueRecorder()
+func (tc *TestCluster) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	return tc.host.GetHistoryTaskRecorder()
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {

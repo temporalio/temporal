@@ -822,6 +822,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		vb = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	}
 
+	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions))
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -832,15 +835,33 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.SdkMetadata,
 		request.MeteringMetadata,
 		deploymentName,
-		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
+		wftDeployment,
 		vb,
 	)
+
+	override := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+	// Capture the pending one-time target before afterAddWorkflowTaskCompletedEvent,
+	// which clears the override when this WFT completes on the target version.
+	var oneTimeTarget *deploymentpb.WorkerDeploymentVersion
+	if oneTime := override.GetOneTime(); oneTime != nil {
+		oneTimeTarget = oneTime.GetTargetDeploymentVersion()
+	}
 
 	wftScheduleToClose := event.GetEventTime().AsTime().Sub(workflowTask.ScheduledTime)
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits, wftScheduleToClose)
 	if err != nil {
 		return nil, err
+	}
+	// afterAddWorkflowTaskCompletedEvent clears the one-time override. Emit fulfillment
+	// telemetry only on this live completion path, not when applying rebuilt history.
+	if oneTimeTarget != nil && wftCompletedOnTargetVersion(wftDeployment, oneTimeTarget) {
+		metrics.WorkerDeploymentVersioningOneTimeOverrideCounter.With(m.metricsHandler).Record(1)
+		m.ms.logger.Info("One-time versioning override fulfilled",
+			tag.WorkflowNamespace(m.ms.GetNamespaceEntry().Name().String()),
+			tag.WorkflowID(m.ms.GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(m.ms.GetExecutionState().GetRunId()),
+			tag.Deployment(oneTimeTarget.GetDeploymentName()),
+			tag.BuildId(oneTimeTarget.GetBuildId()))
 	}
 
 	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
@@ -1358,6 +1379,11 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 		versioningInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
 	}
+	if oneTime := versioningInfo.GetVersioningOverride().GetOneTime(); oneTime != nil &&
+		wftCompletedOnTargetVersion(wftDeployment, oneTime.GetTargetDeploymentVersion()) {
+		// Clear before computing effective deployment/behavior so the worker-reported base state takes effect.
+		versioningInfo.VersioningOverride = nil
+	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
 	wfDeploymentAfter := m.ms.GetEffectiveDeployment()
@@ -1407,6 +1433,17 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 	return nil
+}
+
+func wftCompletedOnTargetVersion(
+	wftDeployment *deploymentpb.Deployment,
+	targetVersion *deploymentpb.WorkerDeploymentVersion,
+) bool {
+	completedVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(wftDeployment)
+	return targetVersion != nil &&
+		completedVersion != nil &&
+		targetVersion.GetDeploymentName() == completedVersion.GetDeploymentName() &&
+		targetVersion.GetBuildId() == completedVersion.GetBuildId()
 }
 
 func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
