@@ -730,6 +730,7 @@ func (e *ChasmEngine) pollComponent(
 
 	var ch <-chan struct{}
 	var unsubscribe func()
+	var shardContext historyi.ShardContext
 	defer func() {
 		if unsubscribe != nil {
 			unsubscribe()
@@ -737,10 +738,11 @@ func (e *ChasmEngine) pollComponent(
 	}()
 
 	checkPredicateOrSubscribe := func() ([]byte, error) {
-		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
+		sc, executionLease, err := e.getExecutionLease(ctx, requestRef)
 		if err != nil {
 			return nil, err
 		}
+		shardContext = sc
 		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
@@ -771,6 +773,11 @@ func (e *ChasmEngine) pollComponent(
 			ref, err = checkPredicateOrSubscribe()
 			if err != nil || ref != nil {
 				return ref, err
+			}
+		case <-shardContext.GetLifecycleContext().Done():
+			return nil, &persistence.ShardOwnershipLostError{
+				ShardID: shardContext.GetShardID(),
+				Msg:     "shard closed",
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
