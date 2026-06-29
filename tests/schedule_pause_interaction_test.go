@@ -70,7 +70,6 @@ func TestScheduleCHASMPauseInteraction(t *testing.T) {
 
 func runSchedulePauseOverlapMatrix(t *testing.T, newContext contextFactory) {
 	for _, policy := range allOverlapPolicies {
-		policy := policy
 		t.Run(policy.String(), func(t *testing.T) {
 			testSchedulePauseOverlap(t, newContext, policy)
 		})
@@ -79,7 +78,6 @@ func runSchedulePauseOverlapMatrix(t *testing.T, newContext contextFactory) {
 
 func runSchedulePauseRecoveryMatrix(t *testing.T, newContext contextFactory) {
 	for _, policy := range allOverlapPolicies {
-		policy := policy
 		// Recovery is only interesting for policies whose schedule was blocked
 		// by the paused workflow. Policies that keep progressing never stall,
 		// and may have already closed the paused workflow (e.g. TERMINATE_OTHER
