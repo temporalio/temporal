@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.collection.proto.v1;
+
+import "chasm/lib/collection/proto/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/collection/gen/collectionpb;collectionpb";
+
+message StartCollectionExecutionRequest {
+  // Internal namespace ID (UUID).
+  string namespace_id = 1;
+  // User-facing business ID of the Map.
+  string collection_id = 2;
+  string request_id = 3;
+}
+
+message StartCollectionExecutionResponse {
+  string run_id = 1;
+}
+
+message DescribeCollectionExecutionRequest {
+  string namespace_id = 1;
+  string collection_id = 2;
+}
+
+message DescribeCollectionExecutionResponse {
+  CollectionState state = 1;
+  int32 approximate_state_size = 2;
+}
+
+message CloseCollectionExecutionRequest {
+  string namespace_id = 1;
+  string collection_id = 2;
+}
+
+message CloseCollectionExecutionResponse {}
+
+message DeleteCollectionExecutionRequest {
+  string namespace_id = 1;
+  string collection_id = 2;
+  string reason = 3;
+  string identity = 4;
+}
+
+message DeleteCollectionExecutionResponse {}

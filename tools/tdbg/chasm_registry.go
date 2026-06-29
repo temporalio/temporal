@@ -2,6 +2,7 @@ package tdbg
 
 import (
 	"go.temporal.io/server/chasm"
+	chasmcollection "go.temporal.io/server/chasm/lib/collection"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -24,6 +25,10 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 	}
 
 	if err := registry.Register(chasmtests.Library); err != nil {
+		return nil, err
+	}
+
+	if err := registry.Register(chasmcollection.NewComponentOnlyLibrary()); err != nil {
 		return nil, err
 	}
 

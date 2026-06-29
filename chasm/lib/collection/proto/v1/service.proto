@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.collection.proto.v1;
+
+import "chasm/lib/collection/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/collection/gen/collectionpb;collectionpb";
+
+service CollectionService {
+  rpc StartCollectionExecution(StartCollectionExecutionRequest) returns (StartCollectionExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc DescribeCollectionExecution(DescribeCollectionExecutionRequest) returns (DescribeCollectionExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc CloseCollectionExecution(CloseCollectionExecutionRequest) returns (CloseCollectionExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc DeleteCollectionExecution(DeleteCollectionExecutionRequest) returns (DeleteCollectionExecutionResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "collection_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}

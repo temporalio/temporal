@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.collection.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/collection/gen/collectionpb;collectionpb";
+
+message CollectionState {
+  bool closed = 1;
+  bool canceled = 2;
+}
