@@ -1,4 +1,4 @@
-﻿module go.temporal.io/server
+module go.temporal.io/server
 
 go 1.26.4
 
