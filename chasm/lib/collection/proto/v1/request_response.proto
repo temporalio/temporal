@@ -17,11 +17,23 @@ message ActivityOperation {
   google.protobuf.Duration start_to_close_timeout = 4;
 }
 
-// CollectionItem is one unit of work. For now an item maps 1-1 with an operation, and the only
-// supported operation kind is an activity.
+// NexusOperation is the per-item operation spec for the execution arm (an embedded Nexus operation).
+// Defaults to the System Nexus Endpoint when endpoint is empty.
+message NexusOperation {
+  string endpoint = 1;
+  string service = 2;
+  string operation = 3;
+  temporal.api.common.v1.Payload input = 4;
+  google.protobuf.Duration schedule_to_close_timeout = 5;
+}
+
+// CollectionItem is one unit of work. For now an item maps 1-1 with an operation.
 message CollectionItem {
   string item_id = 1;
-  ActivityOperation activity = 2;
+  oneof operation {
+    ActivityOperation activity = 2;
+    NexusOperation nexus = 3;
+  }
 }
 
 message ItemDescription {

@@ -10,14 +10,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/collection"
 	collectionpb "go.temporal.io/server/chasm/lib/collection/gen/collectionpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -44,6 +47,8 @@ func (s *CollectionTestSuite) SetupSuite() {
 			dynamicconfig.DeleteNamespaceUseChasmDeleteExecution.Key(): true,
 			// Needed because completion flows through the standalone-activity frontend handler.
 			activity.Enabled.Key(): true,
+			// Needed for the Nexus arm: SignalWithStart via the System Nexus Endpoint.
+			dynamicconfig.EnableSignalWithStartFromWorkflow.Key(): true,
 		}),
 	)
 
@@ -115,11 +120,13 @@ func (s *CollectionTestSuite) TestCollectionActivityArm() {
 		CollectionId: collectionID,
 		Items: []*collectionpb.CollectionItem{{
 			ItemId: itemID,
-			Activity: &collectionpb.ActivityOperation{
-				ActivityType:        tv.ActivityType(),
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-				Input:               &commonpb.Payloads{Payloads: []*commonpb.Payload{input}},
-				StartToCloseTimeout: durationpb.New(time.Minute),
+			Operation: &collectionpb.CollectionItem_Activity{
+				Activity: &collectionpb.ActivityOperation{
+					ActivityType:        tv.ActivityType(),
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+					Input:               &commonpb.Payloads{Payloads: []*commonpb.Payload{input}},
+					StartToCloseTimeout: durationpb.New(time.Minute),
+				},
 			},
 		}},
 	})
@@ -155,6 +162,76 @@ func (s *CollectionTestSuite) TestCollectionActivityArm() {
 		items := descResp.GetItems()
 		return len(items) == 1 && items[0].GetStatus() == completed
 	}, collectionTestTimeout, 100*time.Millisecond)
+}
+
+func (s *CollectionTestSuite) TestCollectionNexusArm() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, collectionTestTimeout)
+	defer cancel()
+
+	collectionID := tv.Any().String()
+	itemID := "nexus-item-0"
+	targetWorkflowID := tv.Any().String()
+	targetTaskQueue := tv.Any().String()
+
+	_, err := s.handler.StartCollectionExecution(ctx, &collectionpb.StartCollectionExecutionRequest{
+		NamespaceId:  s.NamespaceID().String(),
+		CollectionId: collectionID,
+		RequestId:    tv.Any().String(),
+	})
+	s.NoError(err)
+
+	// The item performs SignalWithStartWorkflowExecution against a target workflow, via the SNE.
+	swsReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:   targetWorkflowID,
+		SignalName:   "test-signal",
+		WorkflowType: &commonpb.WorkflowType{Name: "target-workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: targetTaskQueue},
+	}
+
+	_, err = s.handler.AddCollectionItems(ctx, &collectionpb.AddCollectionItemsRequest{
+		NamespaceId:  s.NamespaceID().String(),
+		CollectionId: collectionID,
+		Items: []*collectionpb.CollectionItem{{
+			ItemId: itemID,
+			Operation: &collectionpb.CollectionItem_Nexus{
+				Nexus: &collectionpb.NexusOperation{
+					Service:                workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
+					Operation:              "SignalWithStartWorkflowExecution",
+					Input:                  payloads.MustEncodeSingle(swsReq),
+					ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	succeeded := nexusoperationpb.OPERATION_STATUS_SUCCEEDED.String()
+	s.Eventually(func() bool {
+		descCtx, descCancel := context.WithTimeout(s.chasmContext, 5*time.Second)
+		defer descCancel()
+		descResp, derr := s.handler.DescribeCollectionExecution(descCtx, &collectionpb.DescribeCollectionExecutionRequest{
+			NamespaceId:  s.NamespaceID().String(),
+			CollectionId: collectionID,
+		})
+		s.NoError(derr)
+		items := descResp.GetItems()
+		return len(items) == 1 && items[0].GetStatus() == succeeded
+	}, collectionTestTimeout, 100*time.Millisecond)
+
+	// The SWS should have started the target workflow.
+	descWF, err := s.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+	})
+	s.NoError(err)
+	s.NotNil(descWF.GetWorkflowExecutionInfo())
+	_, _ = s.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: targetWorkflowID},
+		Reason:            "test cleanup",
+	})
 }
 
 func (s *CollectionTestSuite) TestCollectionStart_AlreadyRunning() {
