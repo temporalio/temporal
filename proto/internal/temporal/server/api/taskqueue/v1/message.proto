@@ -177,6 +177,10 @@ message VersionedEphemeralData {
 message PartitionScaleInfo {
   int32 read = 1;
   int32 write = 2;
+  // Backlog counts per partition, 8 bits per partition (see common/number/compact8.go).
+  bytes backlog_counts = 3;
+  // Backlog load balancing config from scaler, in compact8 format.
+  int32 backlog_cap = 4;
 
   // version identifies a specific version of the scale state, which changes when the target
   // number of partitions (i.e. the write count) changes. It may not change for other changes
@@ -191,4 +195,8 @@ message PartitionScaleInfo {
 message ClientPartitionCounts {
   int32 read = 1;
   int32 write = 2;
+  // Backlog counts per partition, 8 bits per partition (see common/number/compact8.go).
+  bytes backlog_count = 3;
+  // Backlog load balancing config from scaler, in compact8 format.
+  int32 backlog_cap = 4;
 }

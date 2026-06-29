@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/proto"
 )
@@ -156,7 +157,7 @@ func (sm *scaleManager) backgroundWork(ctx context.Context) error {
 			// call scaler even if batch == 0, to allow scale down when no tasks are coming in
 			sm.callScaler()
 			// check child partitions periodically
-			sm.updateDrainState(ctx)
+			sm.updateBacklogAndDrainState(ctx)
 		}
 	}
 }
@@ -190,10 +191,13 @@ func (sm *scaleManager) callScaler() {
 	decision := sm.partitionScaler.OnTasks(PartitionScalerInput{
 		NumTasks:      tasks,
 		CurrentTarget: int(sm.scaleState.GetTarget()),
+		BacklogCounts: sm.scaleState.GetBacklogCounts(),
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
+	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
 	if decision.NoChange ||
-		decision.NewTarget == int(sm.scaleState.GetTarget()) {
+		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
+			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) {
 		return
 	}
 
@@ -207,6 +211,8 @@ func (sm *scaleManager) callScaler() {
 	newState.Target = target
 	newState.MaxTarget = max(newState.MaxTarget, target)
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
+	newState.BacklogCounts = scaleState.GetBacklogCounts()
+	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
 
 	mayHaveBacklog := target
@@ -318,12 +324,16 @@ func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQ
 	}
 }
 
-func (sm *scaleManager) updateDrainState(ctx context.Context) {
+func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	scaleState := sm.scaleState
 	read := scaleStateToReadCount(scaleState)
 	if read == 0 {
 		return
 	}
+
+	prevBacklog := scaleState.GetBacklogCounts()
+	newBacklog := make([]byte, read)
+	backlogChanged := false
 
 	// check if we should evaluate drain state
 	settings := sm.settings()
@@ -334,15 +344,21 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 	var toClear []int32
 
 	for id := range read {
-		// note: right now, this call is useless if checkDrain is false, or for partitions < write.
-		// later we'll need these calls to update backlog and other stats, so we just do it always
-		// now to simplify the future diff.
 		callCtx, cancel := context.WithTimeout(ctx, ioTimeout)
 		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id))
 		cancel()
 		if err != nil {
 			continue
 		}
+
+		// update backlog count
+		total := totalBacklogFromDescribeResponse(res)
+		var prev number.Compact8
+		if id < int32(len(prevBacklog)) {
+			prev = prevBacklog[id]
+		}
+		newBacklog[id] = number.UpdateCompact8(total, prev)
+		backlogChanged = backlogChanged || newBacklog[id] != prev
 
 		// check drain state for partitions in the draining range
 		if checkDrain &&
@@ -353,7 +369,7 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 		}
 	}
 
-	if len(toClear) == 0 {
+	if !backlogChanged && len(toClear) == 0 {
 		return
 	}
 
@@ -369,21 +385,27 @@ func (sm *scaleManager) updateDrainState(ctx context.Context) {
 	if newState == nil {
 		newState = &persistencespb.PartitionScaleState{}
 	}
+	newState.BacklogCounts = newBacklog
 	for _, i := range toClear {
 		newState.BacklogState = bitSet(newState.BacklogState).clear(i)
 	}
 
-	// sync to db (must be persisted before taking effect)
-	if err := sm.scaleDB.UpdateScaleState(newState, true); err != nil {
+	// sync to DB only when drain bits changed (must be persisted before taking effect).
+	// for backlog-count-only updates, update in-memory state only (will be persisted
+	// periodically).
+	needSync := len(toClear) > 0
+	if err := sm.scaleDB.UpdateScaleState(newState, needSync); err != nil {
 		sm.logger.Error("failed to update state", tag.Error(err), tag.Operation("drain"))
 		return
 	}
 
-	sm.logger.Info("drain",
-		tag.Any("drained-partitions", toClear),
-		tag.Int32("target", info.Write),
-		tag.Int32("prev-read", info.Read),
-		tag.Int32("read", bitSet(newState.BacklogState).len()))
+	if len(toClear) > 0 {
+		sm.logger.Info("drain",
+			tag.Any("drained-partitions", toClear),
+			tag.Int32("target", info.Write),
+			tag.Int32("prev-read", info.Read),
+			tag.Int32("read", bitSet(newState.BacklogState).len()))
+	}
 
 	sm.setState(newState)
 }
@@ -420,8 +442,10 @@ func scaleStateToReadCount(scaleState *persistencespb.PartitionScaleState) int32
 func scaleStateToInfo(scaleState *persistencespb.PartitionScaleState) *taskqueuespb.PartitionScaleInfo {
 	// note if scaleState == nil, read and write will both be 0
 	return &taskqueuespb.PartitionScaleInfo{
-		Read:    scaleStateToReadCount(scaleState),
-		Write:   scaleState.GetTarget(),
-		Version: scaleState.GetTargetVersion(),
+		Read:          scaleStateToReadCount(scaleState),
+		Write:         scaleState.GetTarget(),
+		Version:       scaleState.GetTargetVersion(),
+		BacklogCounts: scaleState.GetBacklogCounts(),
+		BacklogCap:    scaleState.GetBacklogCap(),
 	}
 }
