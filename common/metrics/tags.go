@@ -71,6 +71,7 @@ const (
 	falseValue                                     = "false"
 	trueValue                                      = "true"
 	errorPrefix                                    = "*"
+	ScalerShadowModeTagName                        = "scaler_shadow_mode"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -592,4 +593,12 @@ func HeaderCallsiteTag(kind string) Tag {
 
 func TimeoutTypeTag(timeoutType string) Tag {
 	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}
+
+func ScalerShadowModeTag(enabled bool) Tag {
+	v := falseValue
+	if enabled {
+		v = trueValue
+	}
+	return Tag{Key: ScalerShadowModeTagName, Value: v}
 }

@@ -629,6 +629,16 @@ const (
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
+// Matching task dropped reason tag values
+const (
+	DroppedTaskReasonNotFound      = "not_found"
+	DroppedTaskReasonInternalError = "internal_error"
+	DroppedTaskReasonDataLoss      = "data_loss"
+	DroppedTaskReasonExpiredRead   = "expired_read"
+	DroppedTaskReasonExpiredMemory = "expired_memory"
+	DroppedTaskReasonInvalid       = "invalid"
+)
+
 var (
 	ServiceRequests = NewCounterDef(
 		"service_requests",
@@ -922,12 +932,17 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter        = NewCounterDef("queue_actions")
-	ActivityE2ELatency        = NewTimerDef(
+	TaskSchedulerThrottled       = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueuePredicateResolutionLoss = NewCounterDef(
+		"queue_predicate_resolution_loss",
+		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
+			"or falling back to the universal predicate, causing extra tasks to be reprocessed. Tagged by reason."),
+	)
+	ActivityE2ELatency = NewTimerDef(
 		"activity_end_to_end_latency",
 		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
 	)
@@ -1204,7 +1219,7 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1244,6 +1259,10 @@ var (
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
 	)
+	DroppedTasksCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
+	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
 		WithDescription("Count of tasks that were completed after being dropped from the matcher"),
@@ -1251,6 +1270,10 @@ var (
 	TaskRetryTransient = NewCounterDef(
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
+	)
+	FairReaderStuckDetected = NewCounterDef(
+		"fair_reader_stuck_detected",
+		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
@@ -1533,6 +1556,7 @@ var (
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
+	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

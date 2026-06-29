@@ -155,6 +155,15 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
 	)
+	RetryUnboundedOnSystemResourceExhausted = NewGlobalBoolSetting(
+		"system.retryUnboundedOnSystemResourceExhausted",
+		false,
+		`RetryUnboundedOnSystemResourceExhausted controls retry behavior of inter-service
+calls (frontend, CHASM, etc.) to history and matching on system-scoped ResourceExhausted
+errors. When false (the default), these calls follow the standard 2-attempt cap. When
+true, they ignore the attempt cap and keep retrying for up to the policy's expiration
+interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
@@ -1519,6 +1528,14 @@ second per poller by one physical queue manager`,
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
 	)
+	MatchingFairnessPassDither = NewTaskQueueBoolSetting(
+		"matching.fairnessPassDither",
+		false,
+		`When true, dither the starting pass of new/reset fairness keys over their initial
+stride instead of starting them all at the ack level. This spreads low-weight keys ahead
+in pass-space so they don't clump at the front after a counter reset (e.g. partition
+movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new keys.`,
+	)
 	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
 		"matching.fairnessKeyRateLimitCacheSize",
 		2000,
@@ -1559,12 +1576,27 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
-			MaxRate:            0.33,
-			BatchSize:          100,
-			BackgroundInterval: 23 * time.Second,
-			DrainBufferTime:    15 * time.Second,
+			MaxRate:               0.33,
+			BatchSize:             100,
+			BackgroundInterval:    23 * time.Second,
+			DrainBufferTime:       15 * time.Second,
+			ShadowModeLogInterval: 0,
 		},
 		`Settings for partition scale manager.`,
+	)
+	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
+		"matching.partitionScaler",
+		ConvertSimplePartitionScalerSettings,
+		SimplePartitionScalerSettings{},
+		`Settings for simple partition scaler.`,
+	)
+
+	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
+		"matching.forceReadTasksOnWrite",
+		false,
+		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
+read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
+This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
 	)
 
 	// Worker registry settings
@@ -1916,6 +1948,12 @@ unlimited. When the predicate size is surpassed for a given scope, the predicate
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
+	)
+	QueueShrinkPredicateMaxPendingKeys = NewGlobalIntSetting(
+		"history.queueShrinkPredicateMaxPendingKeys",
+		10,
+		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
+keys.`,
 	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",

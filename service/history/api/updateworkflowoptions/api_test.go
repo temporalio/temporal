@@ -100,6 +100,18 @@ var (
 			PinnedVersion: "X.B",
 		},
 	}
+	oneTimeOverrideOptions = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_OneTime{
+				OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+					TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+						DeploymentName: "X",
+						BuildId:        "C",
+					},
+				},
+			},
+		},
+	}
 )
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
@@ -159,6 +171,52 @@ func TestMergeOptions_PartialMask(t *testing.T) {
 	_, _, err = mergeWorkflowExecutionOptions(emptyOptions, unpinnedOverrideOptions, timeSkippingPartialMask)
 	require.Error(t, err)
 
+}
+
+func TestMergeOptions_VersionOverrideNestedMask(t *testing.T) {
+	testCases := []struct {
+		name string
+		mask *fieldmaskpb.FieldMask
+	}{
+		{
+			name: "one_time field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time"}},
+		},
+		{
+			name: "one_time target version field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version"}},
+		},
+		{
+			name: "one_time target version deployment name field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.deployment_name"}},
+		},
+		{
+			name: "one_time target version build id field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.one_time.target_deployment_version.build_id"}},
+		},
+		{
+			name: "pinned oneof field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.pinned"}},
+		},
+		{
+			name: "pinned nested version field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.pinned.version"}},
+		},
+		{
+			name: "auto_upgrade oneof field",
+			mask: &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.auto_upgrade"}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := proto.Clone(pinnedOverrideOptionsB).(*workflowpb.WorkflowExecutionOptions)
+			requested := proto.Clone(oneTimeOverrideOptions).(*workflowpb.WorkflowExecutionOptions)
+
+			_, _, err := mergeWorkflowExecutionOptions(input, requested, tc.mask)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestMergeOptions_EmptyMask(t *testing.T) {

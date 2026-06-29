@@ -52,11 +52,9 @@ func (p *frontendProxy) serve() {
 		}
 		idx := int(p.next.Add(1)-1) % len(p.backends)
 		p.connCount[idx].Add(1)
-		p.wg.Add(1)
-		go func() {
-			defer p.wg.Done()
+		p.wg.Go(func() {
 			p.proxyConn(conn, p.backends[idx])
-		}()
+		})
 	}
 }
 

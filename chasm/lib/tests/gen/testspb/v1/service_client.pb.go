@@ -56,7 +56,7 @@ func NewTestServiceLayeredClient(
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
-		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 	}, nil
 }
 func (c *TestServiceLayeredClient) callTestNoRetry(

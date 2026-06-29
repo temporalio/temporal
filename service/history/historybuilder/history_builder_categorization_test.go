@@ -465,7 +465,7 @@ func TestHistoryBuilder_HasAnyBufferedEvent(t *testing.T) {
 func TestHistoryBuilder_NumBufferedEvents(t *testing.T) {
 	t.Run("when buffers are empty should produce 0", func(t *testing.T) {
 		s := newSUT()
-		if s.HistoryBuilder.NumBufferedEvents() != 0 {
+		if s.NumBufferedEvents() != 0 {
 			t.Error("empty history has buffered events")
 		}
 	})
@@ -478,7 +478,7 @@ func TestHistoryBuilder_NumBufferedEvents(t *testing.T) {
 		s.AddActivityTaskCompletedEvent()
 		s.AddActivityTaskCompletedEvent()
 		if s.NumBufferedEvents() != 9 {
-			t.Errorf("wrong event count expected 9 got %d", s.HistoryBuilder.NumBufferedEvents())
+			t.Errorf("wrong event count expected 9 got %d", s.NumBufferedEvents())
 		}
 
 	})

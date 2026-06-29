@@ -1490,6 +1490,10 @@ func (s *ContextImpl) IsValid() bool {
 	return s.state < contextStateStopping
 }
 
+func (s *ContextImpl) GetLifecycleContext() context.Context {
+	return s.lifecycleCtx
+}
+
 func (s *ContextImpl) stoppedForOwnershipLost() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
@@ -2288,10 +2292,7 @@ func (s *ContextImpl) newDetachedContext(
 	var cancel context.CancelFunc
 	deadline, ok := ctx.Deadline()
 	if ok {
-		timeout := deadline.Sub(s.GetTimeSource().Now())
-		if timeout < minContextTimeout {
-			timeout = minContextTimeout
-		}
+		timeout := max(deadline.Sub(s.GetTimeSource().Now()), minContextTimeout)
 		detachedContext, cancel = context.WithTimeout(detachedContext, timeout)
 	} else {
 		cancel = func() {}
