@@ -302,7 +302,7 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	}
 	// A pending activity blocks time skipping unless it has failed and is still
 	// waiting out its retry backoff (next attempt strictly in the future) — that one
-	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
+	// is a skip target, not in-flight work (see findNextSkipTarget). The
 	// strict future check is what keeps a just-scheduled or already-due activity (next
 	// attempt <= now) blocking.
 	for _, ai := range ms.GetPendingActivityInfos() {
@@ -486,10 +486,9 @@ func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkippi
 
 // applyTimeSkippingTransition mutates the execution's TimeSkippingInfo for a single skip transition:
 // it advances AccumulatedSkippedDuration by (TargetTime - CurrentTime), toggles Config.Enabled, and
-// marks the fast-forward target reached. It is the archetype-agnostic core shared by the workflow
-// event path (ApplyWorkflowExecutionTimeSkippingTransitionedEvent) and the CHASM close-transaction
-// path (RecordTimeSkippingTransition); the workflow path records the transition as a history event while
-// CHASM (which has no history) applies it directly, but the TSI mutation is identical.
+// marks the fast-forward target reached. This is the CHASM (non-workflow) apply path, invoked by
+// RecordTimeSkippingTransition; the workflow path applies the equivalent mutation from its history
+// event in ApplyWorkflowExecutionTimeSkippingTransitionedEvent.
 //
 // A zero TargetTime means "no skip" (only valid together with DisabledAfterFastForward, e.g. a bound
 // hit exactly). transition.CurrentTime must be in the virtual frame (ms.Now() / the event's virtual
@@ -558,9 +557,9 @@ func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingC
 }
 
 // RecordTimeSkippingTransition records a single time-skipping transition for the execution. It is the
-// archetype-agnostic apply sink shared by both time-skipping front-ends: the CHASM framework's
-// closeTransactionHandleTimeSkipping (which builds the transition for non-workflow CHASM executions)
-// and the workflow event path (closeTransactionHandleTimeSkipping -> shouldExecuteTimeSkipping). The
+// archetype-aware apply sink: the CHASM framework's closeTransactionHandleTimeSkipping calls it for
+// non-workflow executions after building the transition, and the fast-forward wake timer executor
+// calls it (for either archetype) to disable time skipping once the fast-forward target is hit. The
 // caller is responsible for computing the final transition — including the min of the component
 // candidate and the fast-forward target; this method only records it.
 //

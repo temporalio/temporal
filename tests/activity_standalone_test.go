@@ -146,8 +146,8 @@ func (s *standaloneActivityTestSuite) TestTimeSkipping_StartDelayAndRetryBackoff
 	env := s.newTestEnv()
 	t := s.T()
 
-	// Standalone activities only opt into time skipping when the namespace flag is on.
-	env.GetTestCluster().OverrideDynamicConfig(t, dynamicconfig.TimeSkippingEnabled, []dynamicconfig.ConstrainedValue{
+	// Standalone activities only opt into time skipping when the SAA-specific namespace flag is on.
+	env.GetTestCluster().OverrideDynamicConfig(t, activity.TimeSkippingEnabled, []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()}, Value: true},
 	})
 

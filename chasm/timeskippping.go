@@ -52,7 +52,7 @@ type TimeSkippingRuntimeGate interface {
 type TimeSkippingRuntimeTargetProvider interface {
 	// FindNextTargetTime provides a customized strategy to find the next skip target.
 	// The framework will provided a initilalized transition, and the implementation should just call
-	// transition.CompareAndSetTargetTime to set the target time, and it is allowed to leave the transition unchanged.
+	// transition.TrackEarliestFutureTime to set the target time, and it is allowed to leave the transition unchanged.
 	FindNextTargetTime(ctx Context, transition *TimeSkippingTransition)
 }
 
@@ -71,15 +71,16 @@ func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 }
 
 // IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
-// signal. Nil-safe.
+// signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
+// derived relative to the current time, so without it there is nothing to apply.
 func (t *TimeSkippingTransition) IsValid() bool {
-	return t != nil && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
+	return t != nil && !t.CurrentTime.IsZero() && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
 }
 
-// CompareAndSetTargetTime folds a business wake candidate (virtual time) in, keeping the earliest one at
+// TrackEarliestFutureTime folds a business wake candidate (virtual time) in, keeping the earliest one at
 // or after CurrentTime. Zero or past candidates (and a nil/uninitialized transition) are ignored. It
 // never touches DisabledAfterFastForward — only the fast-forward budget disables time skipping.
-func (t *TimeSkippingTransition) CompareAndSetTargetTime(candidate time.Time) {
+func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
 		return
 	}
@@ -92,15 +93,23 @@ func (t *TimeSkippingTransition) CompareAndSetTargetTime(candidate time.Time) {
 // reaching it disables time skipping. It MUST be called AFTER all business candidates have been folded,
 // because the budget is a ceiling.
 func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
-	if ff.GetHasReached() || ff.GetTargetTime().AsTime().IsZero() {
-		return
-	}
 	if t == nil || t.CurrentTime.IsZero() {
 		return
 	}
-	ffTargetTime := ff.GetTargetTime().AsTime()
-	t.CompareAndSetTargetTime(ffTargetTime)
-	if !ffTargetTime.After(t.CurrentTime) {
-		t.DisabledAfterFastForward = true
+	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil ||
+		ff.GetTargetTime().AsTime().IsZero() {
+		return
 	}
+	ffTargetTime := ff.GetTargetTime().AsTime()
+	// If a real candidate is scheduled strictly before the fast-forward target, we skip to
+	// that and the fast-forward budget is not yet exhausted — leave time skipping enabled.
+	if !t.TargetTime.IsZero() && t.TargetTime.Before(ffTargetTime) {
+		return
+	}
+	// Otherwise the fast-forward target is the earliest target: skip to it (clamped to the
+	// present by TrackEarliestFutureTime) and disable time skipping — the budget is reached.
+	// This is what lets the budget cap a chain of runs: a run with no earlier candidate
+	// consumes the remaining budget by skipping to the fast-forward and disabling.
+	t.TrackEarliestFutureTime(ffTargetTime)
+	t.DisabledAfterFastForward = true
 }

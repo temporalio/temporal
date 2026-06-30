@@ -1730,6 +1730,8 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
+	// time skippign should be called at the end of the transaction,
+	// so that all invalid tasks are deleted.
 	if err := n.closeTransactionHandleTimeSkipping(); err != nil {
 		return NodesMutation{}, err
 	}
@@ -2174,11 +2176,11 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 	// framework owns the transition: it constructs it here, then applies the fast-forward budget and the
 	// validity gate below.
 	transition := NewTimeSkippingTransition(n.Now(nil))
-	if provider, ok := rootComponent.(TimeSkippingRuntimeTargetProvider); ok {
-		provider.FindNextTargetTime(immutableContext, transition)
-	} else {
-		n.defaultFindNextTargetTime(transition)
-	}
+	// if provider, ok := rootComponent.(TimeSkippingRuntimeTargetProvider); ok {
+	// 	provider.FindNextTargetTime(immutableContext, transition)
+	// } else {
+	n.defaultFindNextTargetTime(transition)
+	// }
 	transition.GateByFastForward(tsi.GetFastForwardInfo())
 	if !transition.IsValid() {
 		return nil
@@ -2195,29 +2197,6 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 		return err
 	}
 	return nil
-}
-
-// validateSerializedTask deserializes a serialized component task on this node and runs its validator
-// against current component state, returning true only if the task is still valid. It mirrors the
-// per-task validation in closeTransactionCleanupInvalidTasks and is used by the time-skipping paths
-// (calculateTimeSkippingTransition, regenerateTasksForTimeSkipping) so that an invalidated task — e.g. a
-// timeout whose activity already executed — is neither chosen as a skip target nor re-stamped. The component
-// value is hydrated first (prepareComponentValue is idempotent).
-func (n *Node) validateSerializedTask(
-	ctx Context,
-	task *persistencespb.ChasmComponentAttributes_Task,
-) (bool, error) {
-	if err := n.prepareComponentValue(ctx); err != nil {
-		return false, err
-	}
-	taskInstance, err := n.deserializeComponentTask(task)
-	if err != nil {
-		return false, err
-	}
-	return n.validateTask(ctx, TaskAttributes{
-		ScheduledTime: task.GetScheduledTime().AsTime(),
-		Destination:   task.GetDestination(),
-	}, taskInstance)
 }
 
 func (n *Node) defaultFindNextTargetTime(transition *TimeSkippingTransition) error {
@@ -2239,23 +2218,13 @@ func (n *Node) defaultFindNextTargetTime(transition *TimeSkippingTransition) err
 				if !scheduledTime.After(now) {
 					continue
 				}
-				transition.CompareAndSetTargetTime(scheduledTime)
+				transition.TrackEarliestFutureTime(scheduledTime)
 			}
 		}
 	}
 	return nil
 }
 
-// regenerateChasmTasksForTimeSkipping re-emits physical timer tasks after a time-skipping transition
-// so their wall-clock visibility reflects the new accumulated skip.
-//
-// "Regenerate all" by default: every CategoryTimer task (pure and side-effect) across the tree is
-// reset to physicalTaskStatusNone and re-generated. BOTH pure and side-effect tasks can be
-// future-scheduled (CategoryTimer) tasks that need re-stamping.Immediate Transfer/Outbound/Visibility
-// tasks are left untouched.
-//
-// Invalidated tasks are excluded: each task is validated (validateSerializedTask) before being reset or
-// re-stamped, so a task whose validator now rejects it is left alone rather than re-emitted.
 func (n *Node) regenerateChasmTasksForTimeSkipping(ctx Context) error {
 	archetypeID := n.ArchetypeID()
 
@@ -2272,25 +2241,11 @@ func (n *Node) regenerateChasmTasksForTimeSkipping(ctx Context) error {
 			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
 				continue
 			}
-			valid, err := node.validateSerializedTask(ctx, sideEffectTask)
-			if err != nil {
-				return err
-			}
-			if !valid {
-				continue
-			}
 			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
 			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
 		}
 
 		for _, pureTask := range componentAttr.GetPureTasks() {
-			valid, err := node.validateSerializedTask(ctx, pureTask)
-			if err != nil {
-				return err
-			}
-			if !valid {
-				continue
-			}
 			pureTask.PhysicalTaskStatus = physicalTaskStatusNone
 			if firstPureTask == nil || comparePureTasks(pureTask, firstPureTask) < 0 {
 				firstPureTask = pureTask
@@ -2918,13 +2873,6 @@ func (n *Node) applyUpdates(
 	return nil
 }
 
-// RefreshTasks resets the physical task status of every task in the tree so they are re-generated on
-// the next CloseTransaction. It needs no time-skipping-specific logic: regeneration re-emits each task
-// through MutableState.AddTasks, which applies ToRealTime to scheduled (CategoryTimer) tasks — i.e. it
-// subtracts the execution's current accumulatedSkippedDuration (already in mutable state). So a refresh
-// naturally re-stamps timer tasks at the correct wall-clock fire time for time skipping, just as the
-// scoped closeTransactionRegenerateTimerTasks does after a skip; both rely on the same AddTasks ->
-// ToRealTime conversion.
 func (n *Node) RefreshTasks() error {
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when

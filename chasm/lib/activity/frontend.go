@@ -92,6 +92,12 @@ func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workf
 	if !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetTimeSkippingConfig() != nil && !h.config.TimeSkippingEnabled(req.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf(
+			"The Time-Skipping feature is not enabled for namespace %s",
+			req.GetNamespace(),
+		)
+	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
