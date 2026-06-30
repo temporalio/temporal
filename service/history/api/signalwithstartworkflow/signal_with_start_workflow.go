@@ -68,9 +68,9 @@ func startAndSignalWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, string, bool, error) {
+) (runID string, firstExecutionRunID string, started bool, err error) {
 	workflowID := signalWithStartRequest.GetWorkflowId()
-	runID := uuid.New().String()
+	runID = uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
 	newMutableState, err := api.NewWorkflowWithSignal(
 		shard,
@@ -228,7 +228,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	requestID string,
-) (string, string, bool, error) {
+) (runID string, firstExecutionRunID string, started bool, err error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
@@ -270,7 +270,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	switch failedErr := err.(type) {
 	case nil:
 		// Brand-new run: head of the chain == this run id.
-		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+		runID = newWorkflowLease.GetContext().GetWorkflowKey().RunID
 		return runID, runID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if _, ok := failedErr.RequestIDs[requestID]; ok {

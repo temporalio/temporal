@@ -75,11 +75,13 @@ type creationParams struct {
 }
 
 // mutableStateInfo is a container for the relevant mutable state information to generate a start response with an eager
-// workflow task.
+// workflow task and to recover head-of-chain identity for legacy workflows missing
+// WorkflowExecutionState.first_execution_run_id.
 type mutableStateInfo struct {
-	branchToken  []byte
-	lastEventID  int64
-	workflowTask *historyi.WorkflowTaskInfo
+	branchToken         []byte
+	lastEventID         int64
+	workflowTask        *historyi.WorkflowTaskInfo
+	firstExecutionRunID string
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
@@ -324,6 +326,15 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	// CurrentWorkflowConditionFailedError is built from the persisted WorkflowExecutionState blob,
+	// which may not yet carry first_execution_run_id on workflows persisted before that field
+	// existed. In that case, load mutable state once to recover the canonical head-of-chain run id
+	// (which checks ExecutionState, then ExecutionInfo, then the WorkflowExecutionStarted event).
+	if currentWorkflowConditionFailed.FirstExecutionRunID == "" && currentWorkflowConditionFailed.RunID != "" {
+		if info, err := s.getMutableStateInfo(ctx, currentWorkflowConditionFailed.RunID); err == nil {
+			currentWorkflowConditionFailed.FirstExecutionRunID = info.firstExecutionRunID
+		}
+	}
 	request := s.request.StartRequest
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
 	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
@@ -495,7 +506,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 			// extract information from MutableState in case this is an eager start
 			mutableState := workflowLease.GetMutableState()
-			mutableStateInfo, err = extractMutableStateInfo(mutableState)
+			mutableStateInfo, err = extractMutableStateInfo(ctx, mutableState)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -605,11 +616,13 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 		return nil, err
 	}
 
-	return extractMutableStateInfo(ms)
+	return extractMutableStateInfo(ctx, ms)
 }
 
-// extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.
-func extractMutableStateInfo(mutableState historyi.MutableState) (*mutableStateInfo, error) {
+// extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task
+// and recovers the head-of-chain run id (used by the dedup / conflict path for legacy workflows whose
+// persisted WorkflowExecutionState predates first_execution_run_id).
+func extractMutableStateInfo(ctx context.Context, mutableState historyi.MutableState) (*mutableStateInfo, error) {
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -624,10 +637,16 @@ func extractMutableStateInfo(mutableState historyi.MutableState) (*mutableStateI
 		workflowTask = *workflowTaskSource
 	}
 
+	firstRunID, err := mutableState.GetFirstRunID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &mutableStateInfo{
-		branchToken:  branchToken,
-		lastEventID:  mutableState.GetNextEventID() - 1,
-		workflowTask: &workflowTask,
+		branchToken:         branchToken,
+		lastEventID:         mutableState.GetNextEventID() - 1,
+		workflowTask:        &workflowTask,
+		firstExecutionRunID: firstRunID,
 	}, nil
 }
 

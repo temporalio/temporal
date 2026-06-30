@@ -214,9 +214,10 @@ type WorkflowExecutionInfo struct {
 	SearchAttributes                map[string]*v13.Payload `protobuf:"bytes,52,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Memo                            map[string]*v13.Payload `protobuf:"bytes,53,rep,name=memo,proto3" json:"memo,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	VersionHistories                *v14.VersionHistories   `protobuf:"bytes,54,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	FirstExecutionRunId             string                  `protobuf:"bytes,55,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	ExecutionStats                  *ExecutionStats         `protobuf:"bytes,56,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
-	WorkflowRunExpirationTime       *timestamppb.Timestamp  `protobuf:"bytes,57,opt,name=workflow_run_expiration_time,json=workflowRunExpirationTime,proto3" json:"workflow_run_expiration_time,omitempty"`
+	// Deprecated. use `WorkflowExecutionState.first_execution_run_id`
+	FirstExecutionRunId       string                 `protobuf:"bytes,55,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
+	ExecutionStats            *ExecutionStats        `protobuf:"bytes,56,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
+	WorkflowRunExpirationTime *timestamppb.Timestamp `protobuf:"bytes,57,opt,name=workflow_run_expiration_time,json=workflowRunExpirationTime,proto3" json:"workflow_run_expiration_time,omitempty"`
 	// Transaction Id of the first event in the last batch of events.
 	LastFirstEventTxnId  int64                  `protobuf:"varint,58,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
 	StateTransitionCount int64                  `protobuf:"varint,59,opt,name=state_transition_count,json=stateTransitionCount,proto3" json:"state_transition_count,omitempty"`
