@@ -1156,3 +1156,209 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 	s.Equal(currentRunID, we2.RunId)
 	s.Equal(we0.RunId, we2.FirstExecutionRunId)
 }
+
+// TestResetOfNonCurrentRunFromDifferentChain_FirstExecutionRunId covers the interesting case where
+// the workflow has two distinct chains (chain 1: original run A; chain 2: a fresh start B after A
+// terminated), and the caller resets A — a non-current run from a *different* chain than the
+// currently-current B. The reset run D inherits its first_execution_run_id from A's chain (A),
+// not from B. After the reset, dedup responses against the workflow id should report A as the
+// FirstExecutionRunId, even though the workflow's most recent prior chain head was B.
+func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_FirstExecutionRunId() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
+
+	id := "functional-reset-non-current-different-chain-test"
+	wt := "functional-reset-non-current-different-chain-test-type"
+	tl := "functional-reset-non-current-different-chain-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	// Chain 1: start run A and complete it.
+	chain1Req := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+	we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), chain1Req)
+	s.NoError(err)
+	chain1RunID := we0.RunId
+
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: payloads.EncodeString("chain1-done"),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Chain 2: start run B as a brand-new chain (chain1's run is already completed, so this is a
+	// new chain with B as its head).
+	chain2Req := proto.Clone(chain1Req).(*workflowservice.StartWorkflowExecutionRequest)
+	chain2Req.RequestId = uuid.NewString()
+	we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), chain2Req)
+	s.NoError(err)
+	chain2RunID := we1.RunId
+	s.NotEqual(chain1RunID, chain2RunID)
+	s.Equal(chain2RunID, we1.FirstExecutionRunId, "chain 2 run B should be its own chain head")
+
+	// Sanity: workflow's current chain head is B.
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	s.NoError(err)
+	s.Equal(chain2RunID, desc.WorkflowExecutionInfo.Execution.GetRunId())
+	s.Equal(chain2RunID, desc.WorkflowExecutionInfo.GetFirstRunId())
+
+	// Locate the WorkflowTaskCompleted event in chain1's history to use as reset point.
+	chain1Events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID})
+	var wtCompletedEventID int64
+	for _, ev := range chain1Events {
+		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			wtCompletedEventID = ev.GetEventId()
+		}
+	}
+	s.NotZero(wtCompletedEventID)
+
+	// Reset chain1's non-current run A → produces a new run D that inherits A's chain head.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id, RunId: chain1RunID},
+		Reason:                    "reset non-current run from different chain",
+		WorkflowTaskFinishEventId: wtCompletedEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRunID := resetResp.RunId
+	s.NotEqual(chain1RunID, resetRunID)
+	s.NotEqual(chain2RunID, resetRunID)
+
+	// After reset, workflow's chain head switches from chain 2's head (B) back to chain 1's head (A).
+	desc, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	s.NoError(err)
+	s.Equal(resetRunID, desc.WorkflowExecutionInfo.Execution.GetRunId())
+	s.Equal(chain1RunID, desc.WorkflowExecutionInfo.GetFirstRunId(), "reset run should inherit chain1's head, not chain2's")
+
+	// USE_EXISTING dedup against the reset run: FirstExecutionRunId tracks the reset's chain (A),
+	// not the prior chain (B).
+	useExistingReq := proto.Clone(chain1Req).(*workflowservice.StartWorkflowExecutionRequest)
+	useExistingReq.RequestId = uuid.NewString()
+	useExistingReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), useExistingReq)
+	s.NoError(err)
+	s.False(we2.Started)
+	s.Equal(resetRunID, we2.RunId)
+	s.Equal(chain1RunID, we2.FirstExecutionRunId)
+	s.NotEqual(chain2RunID, we2.FirstExecutionRunId, "chain switched back to chain1 after reset")
+}
+
+// TestResetOfNonCurrentRunAfterContinueAsNew_FirstExecutionRunId covers the case where the workflow
+// has continued-as-new (so a different run is current) and the caller resets the *original*
+// (non-current) run. The resulting reset run becomes current; its first_execution_run_id should
+// still report the head of the chain (the original run id), and so should subsequent
+// Start/dedup interactions against the resulting workflow.
+func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunAfterContinueAsNew_FirstExecutionRunId() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
+
+	id := "functional-reset-non-current-after-can-test"
+	wt := "functional-reset-non-current-after-can-test-type"
+	tl := "functional-reset-non-current-after-can-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+	we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+	s.NoError(err)
+	originalRunID := we0.RunId
+
+	// Drive one CAN so the original run becomes non-current.
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType:        workflowType,
+						TaskQueue:           taskQueue,
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Locate the WorkflowTaskCompleted event in the original (non-current) run to use as reset point.
+	originalEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID})
+	var wtCompletedEventID int64
+	for _, ev := range originalEvents {
+		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			wtCompletedEventID = ev.GetEventId()
+		}
+	}
+	s.NotZero(wtCompletedEventID)
+
+	// Reset the *non-current* original run.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id, RunId: originalRunID},
+		Reason:                    "reset non-current run after CAN",
+		WorkflowTaskFinishEventId: wtCompletedEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRunID := resetResp.RunId
+	s.NotEqual(originalRunID, resetRunID)
+
+	// The reset run is now current. The chain head must still be the original run id.
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+	})
+	s.NoError(err)
+	s.Equal(resetRunID, desc.WorkflowExecutionInfo.Execution.GetRunId())
+	s.Equal(originalRunID, desc.WorkflowExecutionInfo.GetFirstRunId(), "reset of non-current run should preserve chain head")
+
+	// USE_EXISTING: response references the reset run id, FirstExecutionRunId == original head.
+	useExistingReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
+	useExistingReq.RequestId = uuid.NewString()
+	useExistingReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), useExistingReq)
+	s.NoError(err)
+	s.False(we2.Started)
+	s.Equal(resetRunID, we2.RunId)
+	s.Equal(originalRunID, we2.FirstExecutionRunId)
+}

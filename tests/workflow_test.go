@@ -2063,19 +2063,16 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_After
 
 	// Wait for the retry run to be current and confirm it differs from the original.
 	var retryRunID string
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowTestSuite) {
 		desc, derr := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		})
-		if derr != nil {
-			return false
-		}
+		s.NoError(derr)
 		retryRunID = desc.WorkflowExecutionInfo.Execution.GetRunId()
-		return retryRunID != "" && retryRunID != originalRunID
+		s.NotEqual(originalRunID, retryRunID)
+		s.NotEmpty(retryRunID)
 	}, 10*time.Second, 100*time.Millisecond)
-	s.NotEmpty(retryRunID)
-	s.NotEqual(originalRunID, retryRunID)
 
 	// FAIL policy: error must surface the original run id as the first execution run id.
 	failReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
