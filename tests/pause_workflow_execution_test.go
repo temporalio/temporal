@@ -276,13 +276,13 @@ func (s *PauseWorkflowExecutionSuite) TestListWorkflowExecutionsPausedHasNoClose
 
 	// Wait for the workflow to be running with a scheduled activity, so that the
 	// subsequent pause request is applied to a fully initialized workflow.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
-		require.NoError(t, err)
+		s.NoError(err)
 		info := desc.GetWorkflowExecutionInfo()
-		require.NotNil(t, info)
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
-		require.NotEmpty(t, desc.PendingActivities)
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		s.NotEmpty(desc.PendingActivities)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
@@ -303,20 +303,20 @@ func (s *PauseWorkflowExecutionSuite) TestListWorkflowExecutionsPausedHasNoClose
 	// List the workflow via visibility and assert that the paused execution is
 	// reported as open: paused status but no CloseTime / ExecutionDuration.
 	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
 		listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			PageSize:  10,
 			Query:     query,
 		})
-		require.NoError(t, err)
-		require.NotNil(t, listResp)
-		require.Len(t, listResp.GetExecutions(), 1)
+		s.NoError(err)
+		s.NotNil(listResp)
+		s.Len(listResp.GetExecutions(), 1)
 
 		execution := listResp.GetExecutions()[0]
-		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, execution.GetStatus())
-		require.Nil(t, execution.GetCloseTime())
-		require.Nil(t, execution.GetExecutionDuration())
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, execution.GetStatus())
+		s.Nil(execution.GetCloseTime())
+		s.Nil(execution.GetExecutionDuration())
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
