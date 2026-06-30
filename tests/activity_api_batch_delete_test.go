@@ -43,6 +43,7 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 	query := fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType)
 
 	// Wait for the activities to be indexed in visibility before submitting the batch.
+	//nolint:forbidigo // for tests with waits
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace: env.Namespace().String(),

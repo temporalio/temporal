@@ -1189,6 +1189,7 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 	// ListBatchOperations should eventually surface every started job. The batch
 	// operations are themselves workflows indexed in visibility, so allow a moment.
 	listed := make(map[string]*batchpb.BatchOperationInfo)
+	//nolint:forbidigo // for tests with waits
 	s.Eventually(func() bool {
 		resp, err := env.SdkClient().WorkflowService().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
 			Namespace: env.Namespace().String(),

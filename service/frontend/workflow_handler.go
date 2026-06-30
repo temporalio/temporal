@@ -6884,6 +6884,7 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 // value. Batch operations started before the type was recorded in the memo do
 // not have this field and therefore map to BATCH_OPERATION_TYPE_UNSPECIFIED.
 func batchOperationTypeFromString(operationTypeString string) enumspb.BatchOperationType {
+	//nolint:revive // Keep legacy memo case separate from new, for readability
 	switch operationTypeString {
 	// Workflow batch operations (current, execution-type-explicit strings).
 	case batcher.BatchTypeTerminateWorkflows:
