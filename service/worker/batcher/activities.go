@@ -190,7 +190,7 @@ func fetchPage(
 		archetypeExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
 		for _, activityExecution := range resp.GetExecutions() {
 			archetypeExecutionInfo = append(archetypeExecutionInfo, &commonpb.Execution{
-				Archetype:  enumspb.EXECUTION_TYPE_ACTIVITY,
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
 				BusinessId: activityExecution.GetActivityId(),
 				RunId:      activityExecution.GetRunId(),
 			})
