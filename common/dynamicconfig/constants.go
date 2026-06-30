@@ -1457,6 +1457,13 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxDeployments represents the maximum number of worker deployments that can be registered in a single namespace`,
 	)
+	MatchingWorkerDeploymentVisibilityQueryRPS = NewNamespaceFloatSetting(
+		"matching.workerDeploymentVisibilityQueryRPS",
+		5.0,
+		`MatchingWorkerDeploymentVisibilityQueryRPS limits the per-namespace rate of the visibility
+CountWorkflowExecutions query used to enforce the worker-deployment limit during auto-creation.
+Exceeding it defers auto-creation with a retryable ResourceExhausted error.`,
+	)
 	MatchingMaxVersionsInDeployment = NewNamespaceIntSetting(
 		"matching.maxVersionsInDeployment",
 		100,
