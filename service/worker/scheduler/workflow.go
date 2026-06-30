@@ -36,7 +36,7 @@ type SchedulerWorkflowVersion int64
 
 const (
 	// Versions of workflow logic.
-	// When introducing a new versionnrecord a history for TestReplays.
+	// When introducing a new version, record a history for TestReplays.
 
 	// represents the state before Version is introduced
 	InitialVersion SchedulerWorkflowVersion = 0
@@ -124,11 +124,13 @@ type (
 		// without modifying state).
 		specBuilder *SpecBuilder
 		cspec       *CompiledSpec
-		// enableCHASMMigration, migrateWithRunningWorkflows, and versionCeiling are
-		// re-evaluated every iteration inside the "tweakables" MutableSideEffect.
+		// enableCHASMMigration and migrateWithRunningWorkflows are re-evaluated every iteration
+		// inside the "tweakables" MutableSideEffect.
 		enableCHASMMigration        func() bool
 		migrateWithRunningWorkflows func() bool
-		versionCeiling              func() int
+		// versionCeiling is read once per run, on the run's first evaluation
+		// the resulting version is then locked for the rest of the run.
+		versionCeiling func() int
 
 		tweakables TweakablePolicies
 
@@ -1343,12 +1345,7 @@ func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		ceiling := s.versionCeiling()
-		if ceiling > int(HighestVersion) {
-			s.logger.Warn("worker.schedulerV1VersionCeiling above the highest version; treated as no clamp",
-				"ceiling", ceiling, "highestVersion", HighestVersion)
-		}
-		p.Version = clampVersion(p.Version, ceiling)
+		p.Version = s.determineVersion(p.Version)
 		// We should only migrate at or above the CHASM gate
 		if p.Version >= chasmMigrationMinVersion {
 			p.EnableCHASMMigration = s.enableCHASMMigration()
@@ -1755,9 +1752,33 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
 }
 
-// clampVersion lowers v to ceiling.
-// A negative ceiling is unset (no clamp).
-// A ceiling greater than the max version is lowered (essentially a no-op)
+// determineVersion returns the scheduler workflow version to use for this run.
+// If the run already has a version set, it remains unchanhed.
+// Otherwise, it reads the configured ceiling (worker.schedulerV1VersionCeiling) on the run's first evaluation.
+func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) SchedulerWorkflowVersion {
+	// If set, use the recorded value.
+	if s.isTweakablesRecorded() {
+		return s.tweakables.Version
+	}
+
+	// If the value is set too high, log a warning.
+	ceiling := s.versionCeiling()
+	if ceiling > int(HighestVersion) {
+		s.logger.Warn("worker.schedulerV1VersionCeiling above the highest version; treated as no clamp",
+			"ceiling", ceiling, "highestVersion", HighestVersion)
+	}
+
+	// Otherwise, return the clamped version.
+	return clampVersion(defaultVersion, ceiling)
+}
+
+// isTweakablesRecorded reports whether this run has already recorded its tweakables.
+func (s *scheduler) isTweakablesRecorded() bool {
+	return s.tweakables != TweakablePolicies{}
+}
+
+// clampVersion lowers v to ceiling. A negative ceiling is unset (no clamp); a ceiling at or above
+// the highest version leaves v unchanged.
 func clampVersion(v SchedulerWorkflowVersion, ceiling int) SchedulerWorkflowVersion {
 	if ceiling < 0 {
 		return v

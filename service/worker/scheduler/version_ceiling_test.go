@@ -31,8 +31,30 @@ func TestClampVersion(t *testing.T) {
 	}
 }
 
-// TestVersionCeilingDefersMigration verifies a clamp below the CHASM gate keeps migration markers out of history
-func (s *workflowSuite) TestVersionCeilingDefersMigration() {
+// TestDetermineVersionLocksAfterFirstEvaluation verifies the ceiling is read once and the version is
+// then locked for the run.
+func TestDetermineVersionLocksAfterFirstEvaluation(t *testing.T) {
+	calls := 0
+	s := &scheduler{versionCeiling: func() int { calls++; return oldPeerCeiling }}
+
+	// First evaluation: tweakables not yet recorded.
+	got := s.determineVersion(HighestVersion)
+	require.Equal(t, SchedulerWorkflowVersion(oldPeerCeiling), got)
+	require.Equal(t, 1, calls)
+
+	// Record tweakables as the MutableSideEffect would after the first evaluation.
+	s.tweakables = CurrentTweakablePolicies
+	s.tweakables.Version = got
+
+	// Later evaluations reuse the recorded version and don't re-read the ceiling.
+	require.Equal(t, got, s.determineVersion(HighestVersion))
+	require.Equal(t, 1, calls, "ceiling read once; version locked thereafter")
+}
+
+// TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
+// markers out of history, and that once the ceiling is lifted (on the next run) the deferred
+// migration runs.
+func (s *workflowSuite) TestVersionCeilingWithCHASMMigration() {
 	migrateCalls := 0
 	s.expectMigrate(&migrateCalls)
 
