@@ -922,6 +922,7 @@ func (a *Activity) unpause(
 	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
 		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
+	scheduleTime = a.respectStartDelay(scheduleTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
@@ -993,6 +994,11 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		return nil, err
 	}
 
+	scheduleTime := ctx.Now(a)
+	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+
 	if frontendReq.GetRestoreOriginalOptions() {
 		ogOptions := a.GetOriginalOptions()
 		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
@@ -1002,11 +1008,13 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
 		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
 		a.Priority = common.CloneProto(ogOptions.GetPriority())
-	}
 
-	scheduleTime := ctx.Now(a)
-	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+		// start_delay only governs the first dispatch. Once the first attempt has started, restoring
+		// the original value would shift ScheduleToClose without affecting dispatch timing.
+		if a.GetFirstAttemptStartedTime() == nil {
+			a.StartDelay = common.CloneProto(ogOptions.GetStartDelay())
+			scheduleTime = a.respectStartDelay(scheduleTime)
+		}
 	}
 
 	switch a.Status {
@@ -1032,11 +1040,7 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
 		// yields the activity lands back in PAUSED rather than SCHEDULED.
 		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
-		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
-			req:          frontendReq,
-			scheduleTime: scheduleTime,
-			handler:      metricsHandler,
-		}); err != nil {
+		if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
 			return nil, err
 		}
 		a.emitOnResetMetrics(metricsHandler)
@@ -1419,6 +1423,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	info := &apiactivitypb.ActivityExecutionInfo{
 		ActivityId:              key.BusinessID,
 		ActivityType:            a.GetActivityType(),
+		ActualStartTime:         a.GetFirstAttemptStartedTime(),
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
@@ -1440,6 +1445,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		NextAttemptScheduleTime: attemptScheduleTimeForRetry(attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
+		RequestedStartTime:      timestamppb.New(a.firstDispatchTime()),
 		RunId:                   key.RunID,
 		RunState:                runState,
 		ScheduleTime:            a.GetScheduleTime(),

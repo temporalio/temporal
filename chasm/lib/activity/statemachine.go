@@ -524,7 +524,7 @@ var TransitionResetRequested = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-	func(a *Activity, ctx chasm.MutableContext, _ resetEvent) error {
+	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		return nil
 	},
 )
