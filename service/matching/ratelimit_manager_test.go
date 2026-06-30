@@ -93,7 +93,7 @@ func (r *rateLimitManager) SetFairnessKeyRateLimitDefaultForTesting(rps float64,
 	r.fairnessKeyRateLimitDefault = &rps
 }
 
-func (r *rateLimitManager) SetApiConfigRPSForTesting(rps float64) {
+func (r *rateLimitManager) SetAPIConfigRPSForTesting(rps float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.apiConfigRPS = &rps
@@ -135,7 +135,7 @@ func newConfigWithFraction(fraction float64) *Config {
 	return cfg
 }
 
-// TestFractionScaling_ApiConfigRPS verifies that apiConfigRPS is scaled by the cell fraction
+// TestFractionScaling_ApiConfigRPS verifies that apiConfigRPS is scaled by the fraction
 // before being divided by the number of read partitions.
 func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 	cfg := newConfigWithFraction(0.5)
@@ -146,7 +146,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	defer rlm.Stop()
 
-	rlm.SetApiConfigRPSForTesting(100.0)
+	rlm.SetAPIConfigRPSForTesting(100.0)
 
 	rps, source := rlm.GetEffectiveRPSAndSource()
 	// effectiveRPS = apiRPS * fraction / numPartitions; GetEffectiveRPSAndSource multiplies back by numPartitions → apiRPS * fraction
@@ -154,7 +154,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
 }
 
-// TestFractionScaling_WorkerRPS verifies that workerRPS is scaled by the cell fraction.
+// TestFractionScaling_WorkerRPS verifies that workerRPS is scaled by the fraction.
 func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
 	cfg := newConfigWithFraction(0.5)
 	config := newTaskQueueConfig(
@@ -172,7 +172,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
 }
 
 // TestFractionScaling_FairnessKeyRateLimitDefault verifies that the per-key fairness rate default
-// is also scaled by the cell fraction (Fix 3 coverage).
+// is also scaled by the fraction (Fix 3 coverage).
 func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault() {
 	const fraction = 0.5
 	const fairnessKeyRPS = float32(100)
@@ -209,7 +209,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 	s.InEpsilon(want, got, 1e-9)
 }
 
-// TestFractionScaling_ZeroFraction verifies that a zero fraction (fully drained cell) reduces
+// TestFractionScaling_ZeroFraction verifies that a zero fraction (fully drained) reduces
 // the effective RPS to zero even when an API rate limit is set.
 func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 	cfg := newConfigWithFraction(0.0)
@@ -220,9 +220,9 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	defer rlm.Stop()
 
-	rlm.SetApiConfigRPSForTesting(100.0)
+	rlm.SetAPIConfigRPSForTesting(100.0)
 
 	rps, source := rlm.GetEffectiveRPSAndSource()
-	s.Equal(0.0, rps)
+	s.InDelta(0.0, rps, 0.0)
 	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
 }
