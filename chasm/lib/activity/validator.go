@@ -30,7 +30,6 @@ func ValidateAndNormalizeStandaloneActivity(
 	namespaceID namespace.ID,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
-	runTimeout *durationpb.Duration,
 ) error {
 	// Standalone activities always use user defined task queues, so we can enforce user defined task queue validation
 	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
@@ -45,7 +44,7 @@ func ValidateAndNormalizeStandaloneActivity(
 		namespaceID,
 		options,
 		priority,
-		runTimeout)
+		durationpb.New(0))
 }
 
 // ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
