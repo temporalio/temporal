@@ -627,10 +627,11 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 	invoker.recordCompletedAction(ctx, completed, info.RequestId)
 
-	// Generate immediately after recording completions, so that an idle task
-	// can be scheduled if no more actions are remaining. Necessary as
-	// additional events invalidate in-flight idle tasks.
-	s.Generator.Get(ctx).Generate(ctx)
+	// Generate immediately after recording completions, so that an idle task can
+	// be scheduled if no more actions are remaining. Necessary as additional events
+	// invalidate in-flight idle tasks. Skip recomputing FutureActionTimes, as it is
+	// maintained by the looping GeneratorTask that runs on the schedule's interval.
+	s.Generator.Get(ctx).GenerateSkippingFutureActionTimes(ctx)
 
 	return nil
 }
