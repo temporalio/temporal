@@ -75,7 +75,7 @@ func Invoke(
 		return nil, err
 	}
 
-	runID, started, err := SignalWithStartWorkflow(
+	runID, firstExecutionRunID, started, err := SignalWithStartWorkflow(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -94,8 +94,9 @@ func Invoke(
 
 	swr := signalWithStartRequest.SignalWithStartRequest
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   runID,
-		Started: started,
+		RunId:               runID,
+		FirstExecutionRunId: firstExecutionRunID,
+		Started:             started,
 		SignalLink: api.GenerateRequestIDRefLink(
 			swr.GetNamespace(),
 			swr.GetWorkflowId(),

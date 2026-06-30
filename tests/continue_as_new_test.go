@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -1106,11 +1107,11 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 
 	// Drive exactly one CAN. After the WT completes, the second run is RUNNING with no further
 	// pollers, so the subsequent StartWorkflowExecution calls below land on a live workflow.
-	didCAN := false
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		if !didCAN {
-			didCAN = true
-			return []*commandpb.Command{{
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
 					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -1120,27 +1121,9 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 					},
 				},
-			}}, nil
-		}
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("done"),
-				},
-			},
-		}}, nil
-	}
-	poller := &testcore.TaskPoller{
-		Client:              env.FrontendClient(),
-		Namespace:           env.Namespace().String(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		Logger:              env.Logger,
-		T:                   s.T(),
-	}
-	_, err = poller.PollAndProcessWorkflowTask()
+			}},
+		}, nil
+	})
 	s.NoError(err)
 
 	// Confirm the post-CAN run is current and distinct from the original.
@@ -1154,20 +1137,20 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 	s.Equal(we0.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 
 	// FAIL conflict policy: error should expose the original run id as the first execution run id.
-	failReq := *startReq
+	failReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
 	failReq.RequestId = uuid.NewString()
 	failReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
-	_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), &failReq)
+	_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), failReq)
 	var already *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &already)
 	s.Equal(currentRunID, already.RunId, "AlreadyStarted error should reference the current run")
 	s.Equal(we0.RunId, already.FirstExecutionRunId, "AlreadyStarted error should expose head-of-chain run id")
 
 	// USE_EXISTING dedup: response carries the original run id as first_execution_run_id.
-	useExistingReq := *startReq
+	useExistingReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
 	useExistingReq.RequestId = uuid.NewString()
 	useExistingReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &useExistingReq)
+	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), useExistingReq)
 	s.NoError(err)
 	s.False(we2.Started)
 	s.Equal(currentRunID, we2.RunId)
