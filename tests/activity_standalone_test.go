@@ -7060,6 +7060,147 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"start_delay should not be restored when the activity has already dispatched")
 	})
 
+	s.Run("ResetRestoreOriginal_RecomputesScheduleToStartAndScheduleToClose", func(s *standaloneActivityTestSuite) {
+		// Create an activity with a long delay and a short ScheduleToClose.
+		// Update it to get rid of the delay -> pulls the ScheduleToClose in to a short deadline.
+		// Reset the delay back to the long value -> pushes the ScheduleToClose dedline out to delay + ScheduleToClose
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalStartDelay := 4 * time.Second
+		scheduleToCloseTimeout := 2 * time.Second
+
+		// Create it with ScheduleToClose deadline = 2s + 4s
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartDelay:             durationpb.New(originalStartDelay),
+		})
+		require.NoError(t, err)
+		describe := func() *workflowservice.DescribeActivityExecutionResponse {
+			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(t, err)
+			return resp
+		}
+		desc := describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		// Update start_delay to 0: recreates the ScheduleToClose deadline = 0s + 2s.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(0)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+		desc = describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(0+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		// Reset start_delay to 4s: recreates ScheduleToClose deadline = 2s + 4s
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+		desc = describe()
+		require.Equal(t,
+			desc.Info.ScheduleTime.AsTime().Add(originalStartDelay+scheduleToCloseTimeout),
+			desc.Info.ExpirationTime.AsTime())
+
+		require.Never(t, func() bool {
+			return describe().GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+		}, 3500*time.Millisecond, 200*time.Millisecond,
+			"ScheduleToStart and ScheduleToClose timeouts should have been pushed back to 6s by the start delay")
+
+	})
+
+	s.Run("ResetRestoreOriginal_OnStarted_RecomputesScheduleToCloseDeadline", func(s *standaloneActivityTestSuite) {
+		// Same gap as ResetRestoreOriginal_RecomputesScheduleToStartAndScheduleToClose, but on the
+		// STARTED -> RESET_REQUESTED reset path that bypasses reset(). Two things force a different repro
+		// shape than the SCHEDULED case:
+		//   - start_delay is frozen once STARTED, so we move the ScheduleToClose deadline via the timeout
+		//     field, not start_delay.
+		//   - a STARTED attempt has a live StartToClose timer pinned <= ScheduleToClose; retracting ScС
+		//     (the SCHEDULED test's trick) would drag StartToClose onto the same early deadline and time the
+		//     activity out on the correct path too. So we extend both timeouts, then restore only ScС: the
+		//     restored 2s ScС is the sole terminal timer, flipping the assertion to "must time out by 4s".
+		//
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               env.Tv().WorkerIdentity(),
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
+		})
+		require.NoError(t, err)
+
+		// Transition to STARTED; worker never responds
+		_, err = env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+
+		// Extend ScheduleToClose and StartToClose to 8s.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				ScheduleToCloseTimeout: durationpb.New(8 * time.Second),
+				StartToCloseTimeout:    durationpb.New(8 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "start_to_close_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Reset ScheduleToClose to 2s; recreates ScheduleToClose task at 2s.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.RunId,
+			RestoreOriginalOptions: true,
+		})
+		require.NoError(t, err)
+
+		// Must time out at the restored 2s deadline. Buggy code keeps the stale 8s task → still alive at 4s.
+		await.Require(s.Context(), t, func(c *await.T) {
+			resp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.RunId,
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
+		}, 4*time.Second, 100*time.Millisecond)
+	})
+
 	// The guard accepts the field mask path in either snake_case or camelCase form.
 	s.Run("UpdateCamelCaseFieldMask_Rejected", func(s *standaloneActivityTestSuite) {
 		t := s.T()
@@ -7485,6 +7626,67 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.False(t, actualStart.IsZero())
 		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedRequested.UnixNano(),
 			"activity dispatched before its original requested_start_time; unpause did not honor the original delay")
+	})
+
+	// Reset (without RestoreOriginalOptions) of an activity still inside its start_delay window must
+	// honor the remaining delay, mirroring Unpause (#crew-standalone-activities consensus: Reset alters
+	// execution, not scheduling — it does not skip the start delay). A regression that dispatches at
+	// "now" would start the activity before its original requested_start_time.
+	s.Run("ResetDuringDelay_HonorsWallClockTarget", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		// 5s leaves a wide catch margin: a buggy immediate dispatch (actualStart ~= T0 + a few hundred ms
+		// of setup) sits far below the T0+5s target even after adding timerSafetyMargin (1.5s), so the
+		// regression fails robustly; correct code dispatches at ~T0+5s and passes with margin to spare.
+		startDelay := 5 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
+
+		// Reset while still in the delay window, before any worker pickup. No RestoreOriginalOptions:
+		// this exercises the plain-reset path, which must still respect the pending start delay.
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+
+		pollCtx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken())
+
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
+		require.False(t, actualStart.IsZero())
+		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedRequested.UnixNano(),
+			"activity dispatched before its original requested_start_time; Reset did not honor the remaining start delay")
 	})
 
 	// If the delay window has already elapsed by the time the activity is unpaused, the activity
@@ -8358,6 +8560,59 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		)
+	})
+
+	t.Run("ChangeTaskQueue_RedispatchesToNewQueue", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		queueA := testcore.RandomizeStr(t.Name() + "-A")
+		queueB := testcore.RandomizeStr(t.Name() + "-B")
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: queueA},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+		})
+		require.NoError(t, err)
+
+		// Update to queue B before any worker poll.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{TaskQueue: &taskqueuepb.TaskQueue{Name: queueB}},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"task_queue.name"}},
+		})
+		require.NoError(t, err)
+
+		// Poller on queue B picks it up.
+		pollResp, err := env.pollActivityTaskQueue(ctx, queueB)
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp.GetActivityId(), "task was not dispatched from the updated task queue")
+		require.EqualValues(t, 1, pollResp.GetAttempt())
+
+		// Describe reports queue B.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, queueB, descResp.GetInfo().GetTaskQueue())
+		require.False(t, descResp.GetInfo().GetActualStartTime().AsTime().IsZero())
+
+		// There are no tasks on queue A.
+		shortCtx, shortCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer shortCancel()
+		oldQueueResp, err := env.pollActivityTaskQueue(shortCtx, queueA)
+		if err == nil {
+			require.Empty(t, oldQueueResp.GetActivityId(), "task should not be dispatchable from the old task queue after update")
+		}
 	})
 
 	t.Run("ChangeHeartbeatTimeout", func(t *testing.T) {
