@@ -937,7 +937,9 @@ func TestTransitionResetFromPaused(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, act.Status)
 			require.Equal(t, int32(1), attemptState.Count)
-			require.Nil(t, attemptState.GetCurrentRetryInterval())
+			// The pending retry interval is preserved (reset honors any remaining backoff); with no
+			// CompleteTime there is no pending backoff to honor, so the dispatch is immediate.
+			require.Equal(t, durationpb.New(30*time.Second), attemptState.GetCurrentRetryInterval())
 			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
 
 			// Last task is always the dispatch task
@@ -947,13 +949,16 @@ func TestTransitionResetFromPaused(t *testing.T) {
 	}
 }
 
-// TestTransitionResetClearsCurrentRetryInterval verifies that TransitionReset clears the retry
-// interval so a reset activity is not delayed by a previous backoff period.
-func TestTransitionResetClearsCurrentRetryInterval(t *testing.T) {
+// TestTransitionResetHonorsBackoff verifies that TransitionReset honors a pending retry backoff:
+// the re-dispatch is scheduled at CompleteTime+CurrentRetryInterval (not immediately), mirroring how
+// the first dispatch honors start_delay. Count is still reset to 1.
+func TestTransitionResetHonorsBackoff(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	completeTime := defaultTime.Add(-5 * time.Second) // failed 5s ago
 	attemptState := &activitypb.ActivityAttemptState{
 		Count:                2,
+		CompleteTime:         timestamppb.New(completeTime),
 		CurrentRetryInterval: durationpb.New(30 * time.Second),
 	}
 
@@ -973,6 +978,18 @@ func TestTransitionResetClearsCurrentRetryInterval(t *testing.T) {
 
 	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, handler: metrics.NoopMetricsHandler})
 	require.NoError(t, err)
-	require.Nil(t, attemptState.GetCurrentRetryInterval(), "TransitionReset must clear CurrentRetryInterval")
 	require.Equal(t, int32(1), attemptState.Count, "TransitionReset must reset Count to 1")
+	require.Equal(t, durationpb.New(30*time.Second), attemptState.GetCurrentRetryInterval(),
+		"TransitionReset must preserve the pending retry interval so the backoff is honored")
+
+	// The dispatch task must be scheduled at CompleteTime+CurrentRetryInterval, not at resetTime.
+	var dispatch *chasm.MockTask
+	for i := range ctx.Tasks {
+		if _, ok := ctx.Tasks[i].Payload.(*activitypb.ActivityDispatchTask); ok {
+			dispatch = &ctx.Tasks[i]
+		}
+	}
+	require.NotNil(t, dispatch, "expected an ActivityDispatchTask")
+	require.Equal(t, completeTime.Add(30*time.Second), dispatch.Attributes.ScheduledTime,
+		"reset must honor the remaining backoff (dispatch at CompleteTime+interval)")
 }
