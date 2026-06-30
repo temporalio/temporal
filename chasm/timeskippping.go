@@ -7,31 +7,39 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-// Time skipping is a two-sided contract between the CHASM framework and a root component:
+// Time skipping is a two-sided contract between the CHASM framework and a root component, split along
+// the configuration / runtime axis:
 //
-//   - TimeSkippingController is PROVIDED BY the framework and CALLED BY the
-//     component. It is embedded in MutableContext and allows the component to opt in / adjust the config via
-//     SetTimeSkippingConfig.
-//   - TimeSkippable is the mandatory component-implemented interface that must be implemented by the root
-//     component of an execution to make time skipping work.
+//   - TimeSkippingConfigurator is PROVIDED BY the framework and CALLED BY the component. It is embedded
+//     in MutableContext and lets the component opt in / adjust the config via SetTimeSkippingConfig.
+//   - TimeSkippingRuntime is the mandatory component-implemented half: the root component implements it
+//     so the framework can decide, at runtime, whether the execution may be skipped.
 
-// TimeSkippingController is the framework-provided surface (embedded in MutableContext) through which a
-// root component opts into and adjusts time skipping for the whole execution.
-type TimeSkippingController interface {
+// TimeSkippingConfigurator is the framework-provided, configuration-time surface (embedded in
+// MutableContext) through which a root component opts into and adjusts time skipping for the whole
+// execution.
+type TimeSkippingConfigurator interface {
 	// SetTimeSkippingConfig sets the execution's time-skipping config: the first call establishes it,
 	// later calls update it in place (preserving the accumulated skipped duration).
 	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 }
 
-// TimeSkippable is the mandatory component-implemented half of the time-skipping contract. The root
-// component of an execution that opts into time skipping implements it so the framework can decide, once
-// per transaction, whether the execution is idle enough to fast-forward virtual time. ROOT COMPONENT
-// ONLY — the framework consults only the root component's implementation.
-type TimeSkippable interface {
-	// HasInflightWork returns true when the execution has in-flight work (e.g. a standalone activity
-	// whose attempt has been dispatched to a worker or is currently running). The framework skips no
-	// time while it returns true, so in-flight work runs at real speed.
-	HasInflightWork(ctx Context) bool
+// TimeSkippingRuntime is the mandatory component-implemented, runtime half of the time-skipping
+// contract. The root component of an execution that opts into time skipping implements it so the
+// framework can decide, once per transaction, whether the execution is idle enough to fast-forward
+// virtual time. ROOT COMPONENT ONLY — the framework consults only the root component's implementation.
+type TimeSkippingRuntime interface {
+	// IsExecutionSkippable reports whether the execution may have its virtual clock fast-forwarded right
+	// now. It returns true only when the execution is idle. The framework skips no time while it returns
+	// false, so in-flight work runs at real speed.
+	//
+	// A recommended implementation composes:
+	//   1. status check (optional): only states that can be idle are skip candidates; any active or
+	//      terminal-but-still-working status returns false.
+	//   2. in-flight work check (mandatory): false whenever real work is dispatched or running (e.g. a
+	//      scheduled attempt whose dispatch time is at or before now).
+	//   3. other execution-specific preconditions, as needed.
+	IsExecutionSkippable(ctx Context) bool
 }
 
 // TimeSkippingTransition is a time-skipping decision and is shared between the CHASM framework and

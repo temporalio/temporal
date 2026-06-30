@@ -97,9 +97,9 @@ type MutableContext interface {
 	// SetUserMetadata replaces the user metadata attached to the given component.
 	SetUserMetadata(Component, *sdkpb.UserMetadata) error
 
-	// TimeSkippingController is the framework-provided surface for managing this execution's
+	// TimeSkippingConfigurator is the framework-provided surface for managing this execution's
 	// time-skipping configuration. It takes no Component argument as the configuration is execution-scoped.
-	TimeSkippingController
+	TimeSkippingConfigurator
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition

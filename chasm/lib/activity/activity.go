@@ -55,7 +55,7 @@ var (
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
-var _ chasm.TimeSkippable = (*Activity)(nil)
+var _ chasm.TimeSkippingRuntime = (*Activity)(nil)
 
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
@@ -125,22 +125,20 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
-// HasInflightWork implements chasm.TimeSkippable.
-// It returns true if
-// - the activity is not in a scheduled state
-// - the activity is scheduled but the next dispatch is not in the future
-// Otherwise, it returns false.
-//
-// A terminal activity that is still delivering completion callbacks (including while backing off between retries) is treated as having in-flight work: the delivery is pending and resolves on the target's readiness, not this execution's virtual clock.
-func (a *Activity) HasInflightWork(ctx chasm.Context) bool {
+// IsExecutionSkippable implements chasm.TimeSkippingRuntime. The activity is skippable only when it is
+// SCHEDULED (any other status — running, or a terminal activity still delivering completion callbacks,
+// including while backing off between retries — is real work whose delivery resolves on the target's
+// readiness, not this execution's virtual clock) and its next attempt dispatch is in the (virtual)
+// future (a dispatch at or before now means an attempt is being dispatched or running, i.e. in flight).
+func (a *Activity) IsExecutionSkippable(ctx chasm.Context) bool {
 	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		return true
+		return false
 	}
 	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
 	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
-		return true
+		return false
 	}
-	return false
+	return true
 }
 
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {

@@ -2155,17 +2155,17 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 	if err != nil {
 		return err
 	}
-	tsRoot, ok := rootComponent.(TimeSkippable)
+	tsRoot, ok := rootComponent.(TimeSkippingRuntime)
 	if !ok {
 		// todo: add a metric for alert in real implementation
 		n.logger.Error(
-			"root component does not implement TimeSkippable when executions have turned on time skipping",
+			"root component does not implement TimeSkippingRuntime when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
 		return nil
 	}
 
 	// step2: calculate the time-skipping transition.
-	if tsRoot.HasInflightWork(immutableContext) {
+	if !tsRoot.IsExecutionSkippable(immutableContext) {
 		return nil
 	}
 	transition, err := n.calculateTimeSkippingTransition(immutableContext)
