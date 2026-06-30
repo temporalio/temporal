@@ -166,10 +166,9 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 			"standby task executor returned retryable error",
 			err,
 		)
-		return err
 	}
 
-	return nil
+	return err
 }
 
 func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
@@ -187,12 +186,17 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	valid, err := validateChasmSideEffectTask(ctx, ms, task)
-	if err != nil || !valid {
+	isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
+	if err != nil {
 		return err
 	}
+	if !isTaskInTree {
+		// Replication has removed the logical task — drop the physical task.
+		return nil
+	}
 
-	// Task is still valid — check discard delay.
+	// Task still exists in the tree; retry until the active cluster executes
+	// and replicates the resulting state change.
 	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
 	if !e.Now().After(discardTime) {

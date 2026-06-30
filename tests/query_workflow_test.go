@@ -239,9 +239,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	var queryResultStr string
 	var queryDuration time.Duration
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		startTime := time.Now()
 		queryResult, err := env.SdkClient().QueryWorkflow(ctx, id, "", "test")
@@ -250,7 +248,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 		if err == nil {
 			getErr = queryResult.Get(&queryResultStr)
 		}
-	}()
+	})
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2) //nolint:forbidigo
@@ -305,7 +303,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
-	s.Eventually(func() bool {
+	s.AwaitTrue(func() bool {
 		// wait for workflow task to fail 3 times
 		return atomic.LoadInt32(&failures) >= 3
 	}, 10*time.Second, 50*time.Millisecond)

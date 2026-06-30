@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -219,6 +219,8 @@ func (s *engine2Suite) SetupTest() {
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			metrics.NoopMetricsHandler,
+			log.NewNoopLogger(),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
@@ -259,8 +261,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -365,8 +367,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -683,8 +685,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -780,8 +782,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},
@@ -1312,15 +1314,19 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-			Namespace:    tests.Namespace.String(),
-			WorkflowId:   tests.WorkflowID,
-			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForText01": payload.EncodeString("search attribute value")},
+		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+			StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+				Namespace:    tests.Namespace.String(),
+				WorkflowId:   tests.WorkflowID,
+				WorkflowType: &commonpb.WorkflowType{Name: "wType"},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						"AliasForText01": sadefs.MustEncodeValue("search attribute value", enumspb.INDEXED_VALUE_TYPE_TEXT),
+					},
+				},
 			},
-		}},
+		},
 	}}
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -1337,7 +1343,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		startChildEventAttributes := eventsToSave[1].GetStartChildWorkflowExecutionInitiatedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
-			payload.EncodeString("search attribute value"),
+			sadefs.MustEncodeValue("search attribute value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["Text01"])
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
@@ -1494,7 +1500,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		startEventAttributes := eventsToSave[0].GetWorkflowExecutionStartedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
-			payload.EncodeString("test"),
+			sadefs.MustEncodeValue("test", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			startEventAttributes.GetSearchAttributes().GetIndexedFields()["Keyword01"])
 		return tests.CreateWorkflowExecutionResponse, nil
 	})
@@ -1514,7 +1520,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"Keyword01": payload.EncodeString("test"),
+				"Keyword01": sadefs.MustEncodeValue("test", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			}}},
 	})
 	s.Nil(err)
@@ -2630,7 +2636,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -2677,7 +2682,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -2856,7 +2860,6 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	startEvent := addWorkflowExecutionStartedEvent(ms, execution, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	startVersion := startEvent.GetVersion()
 	timeoutEvent, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)

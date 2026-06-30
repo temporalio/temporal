@@ -48,10 +48,13 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 
-	settingsContent, err := schema.ElasticsearchClusterSettings()
-	if err != nil {
-		logger.Error("Unable to load embedded cluster settings.", tag.Error(err))
-		return err
+	settingsContent := ""
+	if !cli.Bool(CLIOptSkipClusterSettings) {
+		settingsContent, err = schema.ElasticsearchClusterSettings()
+		if err != nil {
+			logger.Error("Unable to load embedded cluster settings.", tag.Error(err))
+			return err
+		}
 	}
 
 	templateContent, err := schema.ElasticsearchIndexTemplate()

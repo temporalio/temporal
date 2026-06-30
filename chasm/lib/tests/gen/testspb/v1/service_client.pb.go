@@ -40,7 +40,7 @@ func NewTestServiceLayeredClient(
 	if err != nil {
 		return nil, err
 	}
-	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient)
+	connections := history.NewConnectionPool(resolver, rpcFactory, NewTestServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 	var redirector history.Redirector[TestServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		redirector = history.NewCachingRedirector(
@@ -56,7 +56,7 @@ func NewTestServiceLayeredClient(
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
-		retryPolicy:    common.CreateHistoryClientRetryPolicy(),
+		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 	}, nil
 }
 func (c *TestServiceLayeredClient) callTestNoRetry(

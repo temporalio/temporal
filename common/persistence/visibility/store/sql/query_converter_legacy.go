@@ -3,6 +3,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -489,10 +489,6 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			return err
 		}
 
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
-		}
-
 		switch v := value.(type) {
 		case string:
 			// escape strings for safety
@@ -661,12 +657,7 @@ func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {
-	for _, op := range supportedOperators {
-		if operator == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedOperators, operator)
 }
 
 func isSupportedComparisonOperator(operator string) bool {
@@ -682,10 +673,5 @@ func isSupportedTextOperator(operator string) bool {
 }
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
-	for _, tp := range supportedTypesRangeCond {
-		if saType == tp {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedTypesRangeCond, saType)
 }

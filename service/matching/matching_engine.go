@@ -72,6 +72,15 @@ const (
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
 
+	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
+	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
+	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
+	forwardedPollJitterRatio = 1.0 / 6
+	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
+	// the interval never drops below this value; if the interval is already at or below
+	// this floor, no jitter is applied.
+	forwardedPollMinInterval = common.CriticalLongPollTimeout
+
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
 	// workers shut down. Even with aggressive autoscaling, a single matching node is
@@ -158,6 +167,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		partitionScalerFactory        PartitionScalerFactory
 		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
@@ -273,6 +283,7 @@ func NewEngine(
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
+	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -317,6 +328,7 @@ func NewEngine(
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
+		partitionScalerFactory:    partitionScalerFactory,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
@@ -533,6 +545,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
 	var nsState string
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
 	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
 		nsState = metrics.ActiveNamespaceStateTagValue
 	} else {
@@ -708,7 +721,7 @@ pollLoop:
 		}
 
 		if task.isQuery() {
-			task.finish(nil, true) // this only means query task sync match succeed.
+			task.finish(taskFinishResult{consumedToken: true}) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
@@ -767,10 +780,14 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -782,10 +799,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
@@ -797,7 +814,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -816,17 +833,17 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -837,7 +854,7 @@ pollLoop:
 			continue pollLoop
 		}
 
-		task.finish(nil, true)
+		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -990,10 +1007,14 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -1005,10 +1026,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
@@ -1020,7 +1041,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -1039,7 +1060,7 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ActivityStartDuringTransition:
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
@@ -1056,17 +1077,17 @@ pollLoop:
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -1076,7 +1097,7 @@ pollLoop:
 
 			continue pollLoop
 		}
-		task.finish(nil, true)
+		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -2578,7 +2599,7 @@ pollLoop:
 			return task.pollNexusTaskQueueResponse(), nil
 		}
 
-		task.finish(err, true)
+		task.finish(taskFinishResult{err: err, consumedToken: true})
 		if err != nil {
 			continue pollLoop
 		}
@@ -2845,7 +2866,20 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, errNoTasks
 	}
 
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
+	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
+	// interval never falls below forwardedPollMinInterval.
+	longPollInterval := pm.LongPollExpirationInterval()
+	if pollMetadata.forwardedFrom == "" {
+		jitterMax := time.Duration(float64(longPollInterval) * forwardedPollJitterRatio)
+		if longPollInterval-jitterMax < forwardedPollMinInterval {
+			jitterMax = longPollInterval - forwardedPollMinInterval
+		}
+		if jitterMax > 0 {
+			longPollInterval -= backoff.FullJitter(jitterMax)
+		}
+	}
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {

@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -201,7 +200,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 		true, // isWorkflow
@@ -267,7 +266,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		int64(0),
 		currentMutation,
 		currentEventsSeq,
-		util.Ptr(int64(0)),
+		new(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
 		true, // isWorkflow
@@ -309,7 +308,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -555,7 +554,6 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	).Return(&historypb.HistoryEvent{EventId: wtFailedEventID}, nil)
 	mutableState.EXPECT().FlushBufferedEvents()
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		wtFailedEventID,
 		terminateReason,
 		nil,
 		consts.IdentityResetter,
@@ -1045,6 +1043,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			Input:      payloads.EncodeString("signal-input-1"),
 			Identity:   "signal-identity-1",
 			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
+			RequestId:  "signal-request-id-1",
 		}},
 	}
 	// This event is not reapplied
@@ -1063,6 +1062,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				SignalName: "signal-name-2",
 				Input:      payloads.EncodeString("signal-input-2"),
 				Identity:   "signal-identity-2",
+				RequestId:  "signal-request-id-2",
 			},
 		},
 	}
@@ -1205,6 +1205,8 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetIdentity(),
 						attr.GetPriority(),
 						attr.GetTimeSkippingConfig(),
+						attr.GetTimeSkippingConfigUpdated(),
+						attr.GetWorkflowUpdateOptions(),
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 					attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -1213,6 +1215,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 						attr.GetInput(),
 						attr.GetIdentity(),
 						attr.GetHeader(),
+						attr.GetRequestId(),
 						event.Links,
 					).Return(&historypb.HistoryEvent{}, nil)
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
@@ -1245,11 +1248,9 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 					}
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 					if !tc.isReset {
-						ms.EXPECT().GetNextEventID().Return(event.GetEventId() + 1)
 						ms.EXPECT().GetStartedWorkflowTask().Return(nil)
 						attr := event.GetWorkflowExecutionTerminatedEventAttributes()
 						ms.EXPECT().AddWorkflowExecutionTerminatedEvent(
-							event.GetEventId()+1,
 							attr.GetReason(),
 							attr.GetDetails(),
 							attr.GetIdentity(),
@@ -1315,7 +1316,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	ms := historyi.NewMockMutableState(s.controller)
 	// Assert that none of these following methods are invoked.
 	arg := gomock.Any()
-	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg).Times(0)
+	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg, arg).Times(0)
 	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
 	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
 
@@ -1511,7 +1512,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.baseRunID),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		resetBranchToken,
 		resetRequestID,
@@ -1706,7 +1707,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 }
 
 func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTimeSkippingConfig() {
-	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	timeSkippingConfig := &commonpb.TimeSkippingConfig{Enabled: true}
 	event := &historypb.HistoryEvent{
 		EventId:   101,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
@@ -1734,6 +1735,8 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTim
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		timeSkippingConfig,
+		attr.GetTimeSkippingConfigUpdated(),
+		attr.GetWorkflowUpdateOptions(),
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, []*historypb.HistoryEvent{event}, nil, "", true)

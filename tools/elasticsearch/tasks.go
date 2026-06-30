@@ -31,7 +31,7 @@ type SetupTask struct {
 func (task *SetupTask) setupClusterSettings() error {
 	config := task.config
 	if len(config.SettingsContent) == 0 {
-		task.logger.Info("Skipping cluster settings update, no embedded settings content")
+		task.logger.Info("Skipping cluster settings update")
 		return nil
 	}
 

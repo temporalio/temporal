@@ -56,6 +56,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		SourceClusterName() string
+		SourceShardKey() ClusterShardKey
 		Ack()
 		Nack(err error)
 		Abort()
@@ -162,6 +163,10 @@ func (e *ExecutableTaskImpl) TaskCreationTime() time.Time {
 
 func (e *ExecutableTaskImpl) SourceClusterName() string {
 	return e.sourceClusterName
+}
+
+func (e *ExecutableTaskImpl) SourceShardKey() ClusterShardKey {
+	return e.sourceShardKey
 }
 
 func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {
@@ -455,7 +460,7 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
-	resendErr := e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+	resendErr := e.ResendHandler.ResendHistoryEvents(
 		ctx,
 		remoteCluster,
 		namespace.ID(retryErr.NamespaceId),
@@ -588,7 +593,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	var eventsVersion = EmptyVersion
 	isLastEvent := false
 	if len(newRunId) != 0 {
-		iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+		iterator := e.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 			ctx,
 			remoteCluster,
 			namespace.ID(workflowKey.NamespaceID),
@@ -634,7 +639,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		eventsVersion = EmptyVersion
 		return nil
 	}
-	iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+	iterator := e.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 		ctx,
 		remoteCluster,
 		namespace.ID(workflowKey.NamespaceID),
@@ -846,13 +851,13 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	switch err.(type) {
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
-			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+			_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
 			}
 		}
 	case *serviceerror.NamespaceNotFound:
-		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil

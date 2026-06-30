@@ -486,9 +486,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 
-		// wtFailedEventID must be used as the event batch ID for any following workflow termination events
-		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +498,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms.FlushBufferedEvents()
 
 			_, err := ms.AddWorkflowExecutionTerminatedEvent(
-				wtFailedEventID,
 				wtFailedCause.Message(),
 				nil,
 				consts.IdentityHistoryService,
@@ -516,7 +513,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() {
+	// Do not schedule a new workflow task if the workflow is paused. Accepting the in-flight
+	// WT completion is intentional (see HistoryBuilder buffering of WORKFLOW_EXECUTION_PAUSED),
+	// but scheduling a follow-up WT would call ApplyWorkflowTaskScheduledEvent, which resets
+	// Status to RUNNING while leaving executionInfo.PauseInfo set — desyncing pause state.
+	// Mirrors the gate in closeTransactionHandleWorkflowTaskScheduling.
+	if ms.IsWorkflowExecutionRunning() && !ms.IsWorkflowExecutionStatusPaused() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
@@ -603,7 +605,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				nil,
-				0,
+				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
 			if err != nil {
 				return nil, err
@@ -729,7 +731,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 			nil,
-			0,
+			-1, // sentinel: inline path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			return nil, err

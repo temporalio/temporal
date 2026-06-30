@@ -134,9 +134,9 @@ func TestReaderSignaling(t *testing.T) {
 	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	}, nil)
-	sync, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
+	outcome, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
-	require.True(t, sync)
+	require.Equal(t, syncMatchSuccess, outcome)
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }
@@ -160,7 +160,7 @@ func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.
 			out <- err
 			return nil
 		}
-		task.finish(err, true)
+		task.finish(taskFinishResult{err: err, consumedToken: true})
 		out <- task
 		return nil
 	})
@@ -258,7 +258,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(0, len(descResp.DescResponse.GetPollers()))
+	s.Empty(descResp.DescResponse.GetPollers())
 	s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 
 	includeTaskStatus = true
@@ -280,14 +280,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
+	s.Len(descResp.DescResponse.GetPollers(), 1)
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, makePollMetadata(rps))
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
-	s.Equal(1, len(descResp.DescResponse.GetPollers()))
+	s.Len(descResp.DescResponse.GetPollers(), 1)
 	s.Equal(string(pollerIdent), descResp.DescResponse.Pollers[0].GetIdentity())
 	s.True(descResp.DescResponse.Pollers[0].GetRatePerSecond() > 4.0 && descResp.DescResponse.Pollers[0].GetRatePerSecond() < 6.0)
 
@@ -310,7 +310,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	// Active poll-er
 	s.tqMgr.Start()
 	s.tqMgr.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
-	s.Equal(1, len(s.tqMgr.GetAllPollerInfo()))
+	s.Len(s.tqMgr.GetAllPollerInfo(), 1)
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)
@@ -320,7 +320,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 
 	// Active adding task
 	s.tqMgr.Start()
-	s.Equal(0, len(s.tqMgr.GetAllPollerInfo()))
+	s.Empty(s.tqMgr.GetAllPollerInfo())
 	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)

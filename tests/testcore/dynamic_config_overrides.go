@@ -26,7 +26,12 @@ var (
 	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it is allowed,
 	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
 	defaultDynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendRPS.Key(): 3000,
+		// Make sure we don't hit the rate limiter in tests.
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key(): 1000,
+		// Test reactivation cache for all versioning tests.
+		dynamicconfig.EnableVersionReactivationSignals.Key():                    true,
+		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key():                    1000000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
@@ -37,6 +42,7 @@ var (
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
 		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():             60 * time.Second,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
 		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
 		dynamicconfig.HistoryScannerEnabled.Key():                               false,
@@ -62,8 +68,16 @@ var (
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
+		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		nexusoperations.UseSystemCallbackURL.Key():                          true,
+
+		// CHASM scheduler rollout percents default to 0 in production; in tests we
+		// dial them to 100 so existing tests that only flip the binary enable flag
+		// continue to route every schedule through CHASM. Tests that want to
+		// exercise the percent gate can override per-test.
+		dynamicconfig.CHASMSchedulerCreationRolloutPercent.Key():  100,
+		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
 	}
 )

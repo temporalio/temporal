@@ -105,9 +105,9 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	report, err := mergeReports([]*junitReport{j1})
 	require.NoError(t, err)
 
-	suites := report.Testsuites.Suites
+	suites := report.Suites
 	require.Len(t, suites, 1)
-	require.Equal(t, 2, report.Testsuites.Failures)
+	require.Equal(t, 2, report.Failures)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 5)
@@ -125,7 +125,7 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	require.Contains(t, failureData, "Error Trace:")
 	require.Contains(t, failureData, "expected: 1")
 	require.NotContains(t, failureData, "=== RUN")
-	require.NotContains(t, failureData, "--- FAIL:")
+	require.Contains(t, failureData, "--- FAIL: TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
 	for _, tc := range suites[0].Testcases {
 		if tc.Failure != nil {
 			require.Equal(t, string(failureTypeFailed), tc.Failure.Type)
@@ -141,9 +141,9 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, report.reportingErrs)
 
-	suites := report.Testsuites.Suites
+	suites := report.Suites
 	require.Len(t, suites, 2)
-	require.Equal(t, 4, report.Testsuites.Failures)
+	require.Equal(t, 4, report.Failures)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
@@ -319,7 +319,7 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.NoError(t, j2.read(), "Should be able to re-read the written XML")
 
 			// Validate that the structure is reasonable
-			require.Greater(t, len(parsed.Suites), 0, "Should have at least one test suite")
+			require.NotEmpty(t, parsed.Suites, "Should have at least one test suite")
 		})
 	}
 }

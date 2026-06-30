@@ -8,14 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -35,6 +37,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	config := &Config{
@@ -43,6 +47,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxOperationNameLength:             func(string) int { return 10 },
 		PayloadSizeLimit:                   func(string) int { return 20 },
 		PayloadSizeLimitWarn:               func(string) int { return 10 },
+		MaxUserMetadataSummarySize:         func(string) int { return 10 },
+		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
@@ -242,6 +248,24 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "input exceeds size limit",
 		},
 		{
+			name: "user_metadata.summary - exceeds size limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.UserMetadata = &sdkpb.UserMetadata{
+					Summary: &commonpb.Payload{Data: []byte("too-long-summary")},
+				}
+			},
+			errMsg: "user_metadata.summary exceeds size limit",
+		},
+		{
+			name: "user_metadata.details - exceeds size limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.UserMetadata = &sdkpb.UserMetadata{
+					Details: &commonpb.Payload{Data: []byte("this-details-payload-is-too-long")},
+				}
+			},
+			errMsg: "user_metadata.details exceeds size limit",
+		},
+		{
 			name: "nexus_header - disallowed key",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Disallowed-Header": "value"}
@@ -278,9 +302,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("v1"),
-						"CustomTextField":    payload.EncodeString("v2"),
-						"CustomIntField":     payload.EncodeString("3"),
+						"CustomKeywordField": sadefs.MustEncodeValue("v1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						"CustomTextField":    sadefs.MustEncodeValue("v2", enumspb.INDEXED_VALUE_TYPE_TEXT),
+						"CustomIntField":     sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT),
 					},
 				}
 			},
@@ -291,7 +315,10 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString(strings.Repeat("x", 100)),
+						"CustomKeywordField": sadefs.MustEncodeValue(
+							strings.Repeat("x", 100),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				}
 			},
@@ -308,7 +335,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				Operation:   "operation",
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("val"),
+						"CustomKeywordField": sadefs.MustEncodeValue("val", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			}

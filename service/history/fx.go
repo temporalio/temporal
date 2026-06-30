@@ -8,14 +8,16 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -27,13 +29,13 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
@@ -57,13 +59,16 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
+
 	shard.Module,
 	events.Module,
 	cache.Module,
 	archival.Module,
 	ChasmEngineModule,
+	chasmtests.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -89,6 +94,7 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
@@ -96,17 +102,38 @@ var Module = fx.Options(
 	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		chasmRegistry *chasm.Registry,
+		testHooks testhooks.TestHooks,
+	) {
+		if hook, ok := testhooks.Get(
+			testHooks,
+			testhooks.HistoryChasmRuntimeProvider,
+			testhooks.GlobalScope,
+		); ok {
+			hook(chasmEngine, chasmVisibilityManager, chasmRegistry)
+		}
+	}),
 
 	callbacks.Module,
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	scheduler.Module,
+	callback.Module,
 	chasmnexus.Module,
 	chasmworkflow.Module,
+	chasmworkflow.HistoryHandlerModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func ServiceResolverProvider(
@@ -123,9 +150,10 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 	}
 
 	handler := &Handler{
-		status:          common.DaemonStatusInitialized,
-		config:          args.Config,
-		tokenSerializer: tasktoken.NewSerializer(),
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.Config,
+		nexusCompletionHandler: args.NexusCompletionHandler,
+		tokenSerializer:        tasktoken.NewSerializer(),
 		deepHealthCheckHandler: deepHealthCheckHandler{
 			healthServer:            args.HealthServer,
 			metricsHandler:          args.MetricsHandler,
@@ -156,6 +184,7 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
 		chasmRegistry:                args.ChasmRegistry,
+		testHooks:                    args.TestHooks,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
@@ -309,117 +338,14 @@ func NamespaceRateLimitInterceptorProvider(
 
 func RateLimitInterceptorProvider(
 	serviceConfig *configs.Config,
-	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
-	metricsHandler metrics.Handler,
 ) *interceptor.RateLimitInterceptor {
-	priorityFn, priorities := getFairnessPriorityFn(serviceConfig, ownershipBasedQuotaScaler, metricsHandler)
 	return interceptor.NewRateLimitInterceptor(
-		quotas.NewPriorityRateLimiterHelper(
-			quotas.NewDefaultIncomingRateBurst(func() float64 { return float64(serviceConfig.RPS()) }),
-			serviceConfig.OperatorRPSRatio,
-			priorityFn,
-			priorities,
-		),
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                         0, // exclude health check requests from rate limiting.
 			historyservice.HistoryService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
 		},
 	)
-}
-
-// getFairnessPriorityFn builds the namespace-fairness-aware priority function
-// for the history host RPS rate limiter, along with the priority list to
-// pass to NewPriorityRateLimiterHelper.
-//
-// Priority layout (6 levels):
-//
-//	0  Operator           (in-share)
-//	1  API                (in-share)
-//	2  BgHigh             (in-share)
-//	3  BgLow              (in-share)
-//	4  over-share         (any caller type except Preemptable, over fair share)
-//	5  Preemptable        (always, regardless of fairness or share state)
-//
-// All caller types except Preemptable participate in the fairness check:
-// in-share traffic keeps its caller-type priority (including Operator at 0),
-// over-share traffic — Operator included — collapses into the single
-// over-share band at priority 4 and emits a demotion metric. Preemptable is
-// outside the fairness model: it never consumes the namespace bucket, never
-// produces a demotion metric, and always sinks to the bottom band.
-//
-// share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * multiplier.
-// OwnershipAwareNamespaceQuotaCalculator (with nil MemberCounter and
-// PerInstanceQuota=0) returns scaleFactor*globalRPS when scaler is ready and
-// a positive global RPS is configured, and 0 otherwise. The multiplier
-// (normalized below to >0) doesn't change the sign, so GetQuota>0 alone is
-// the "fairness applies" signal; the bucket rate folds in the multiplier.
-func getFairnessPriorityFn(
-	cfg *configs.Config,
-	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
-	metricsHandler metrics.Handler,
-) (quotas.RequestPriorityFn, []int) {
-	const (
-		overSharePriority   = 4
-		preemptablePriority = 5
-	)
-	priorities := []int{
-		quotas.OperatorPriority, 1, 2, 3,
-		overSharePriority,
-		preemptablePriority,
-	}
-
-	nsQuotaCalc := shard.NewOwnershipAwareNamespaceQuotaCalculator(
-		ownershipBasedQuotaScaler,
-		nil,
-		func(string) int { return 0 },
-		cfg.FrontendGlobalNamespaceRPS,
-	)
-
-	// Per-namespace fair-share buckets, sized at share(ns) with the standard
-	// incoming burst ratio (= 2). Reuses NewNamespaceRequestRateLimiter (per-
-	// namespace map keyed on req.Caller, 1-hour TTL eviction) and
-	// NewDefaultIncomingRateLimiter (dynamic rate read live each call).
-	nsBuckets := quotas.NewNamespaceRequestRateLimiter(
-		func(req quotas.Request) quotas.RequestRateLimiter {
-			ns := req.Caller
-			return quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDefaultIncomingRateLimiter(func() float64 {
-					mul := cfg.NamespaceFairShareMultiplier()
-					if mul <= 0 {
-						mul = 1
-					}
-					return nsQuotaCalc.GetQuota(ns) * mul
-				}),
-			)
-		},
-	)
-
-	enabled := cfg.EnableNamespaceFairness
-	priorityFn := func(req quotas.Request) int {
-		callerTypePri := configs.RequestToPriority(req)
-		if !enabled() {
-			return callerTypePri
-		}
-		if req.CallerType == headers.CallerTypePreemptable {
-			return preemptablePriority
-		}
-		if req.Caller == "" {
-			return callerTypePri
-		}
-		if nsQuotaCalc.GetQuota(req.Caller) <= 0 {
-			return callerTypePri
-		}
-		if nsBuckets.Allow(time.Now().UTC(), req) {
-			return callerTypePri
-		}
-		metrics.ServiceRequestsNamespaceFairnessDemoted.With(metricsHandler).Record(
-			1,
-			metrics.NamespaceTag(req.Caller),
-			metrics.StringTag("caller_type", req.CallerType),
-		)
-		return overSharePriority
-	}
-	return priorityFn, priorities
 }
 
 func ESProcessorConfigProvider(

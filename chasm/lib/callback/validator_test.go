@@ -1,6 +1,7 @@
 package callback
 
 import (
+	"context"
 	"regexp"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		require.NoError(t, err)
 	})
 
@@ -46,7 +47,7 @@ func TestValidateCallbacks(t *testing.T) {
 			{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb1"}}},
 			{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb2"}}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")
@@ -66,7 +67,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "url length longer than max length allowed")
@@ -81,7 +82,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "header size longer than max allowed size")
@@ -96,7 +97,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		require.NoError(t, err)
 		nexus := cbs[0].GetNexus()
 		require.Equal(t, "application/json", nexus.Header["content-type"])
@@ -119,7 +120,7 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "does not match any configured callback address")
@@ -129,14 +130,14 @@ func TestValidateCallbacks(t *testing.T) {
 		cbs := []*commonpb.Callback{
 			{Variant: nil},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		var unimplementedErr *serviceerror.Unimplemented
 		require.ErrorAs(t, err, &unimplementedErr)
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {
-		err := v.Validate("ns", nil)
+		err := v.Validate(context.Background(), "ns", nil)
 		require.NoError(t, err)
 	})
 
@@ -146,7 +147,7 @@ func TestValidateCallbacks(t *testing.T) {
 				Internal: &commonpb.Callback_Internal{},
 			}},
 		}
-		err := v.Validate("ns", cbs)
+		err := v.Validate(context.Background(), "ns", cbs)
 		require.NoError(t, err)
 	})
 }

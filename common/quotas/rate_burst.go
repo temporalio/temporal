@@ -202,5 +202,5 @@ func (c *OperatorRateBurstImpl) Rate() float64 {
 }
 
 func (c *OperatorRateBurstImpl) Burst() int {
-	return int(c.operatorRateRatio() * float64(c.baseRateBurstFn.Burst()))
+	return c.baseRateBurstFn.Burst()
 }

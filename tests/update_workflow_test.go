@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1255,7 +1256,11 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func(s *WorkflowUpdateSuite) {
-			env := testcore.NewEnv(s.T())
+			// Cases in this table intentionally trigger soft asserts and then
+			// verify the resulting error; disable fail-on-error so those logs
+			// don't poison the cluster.
+			env := testcore.NewEnv(s.T(), testcore.WithDisableTestloggerFailure())
+
 			mustStartWorkflow(env, env.Tv())
 
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -1286,9 +1291,9 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 				T:                   s.T(),
 			}
 
-			halfSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 500*time.Millisecond)
+			fiveSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 5*time.Second)
 			defer cancel()
-			updateResultCh := sendUpdate(halfSecondTimeoutCtx, env, env.Tv())
+			updateResultCh := sendUpdate(fiveSecondTimeoutCtx, env, env.Tv())
 
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask()
@@ -4575,7 +4580,7 @@ func (s *WorkflowUpdateSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
-func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNotBreakPendingUpdate() {
 	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
@@ -4644,12 +4649,16 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
+
+	queryCtx, cancelQueries := context.WithCancel(env.Context())
+	defer cancelQueries()
+
 	queryFn := func(resCh chan<- QueryResult) {
 		// There is no query handler, and query timeout is ok for this test.
 		// But first query must not time out before 2nd query reached server,
 		// because 2 queries overflow the query buffer (default size 1),
 		// which leads to clearing of WF context.
-		shortCtx, cancel := context.WithTimeout(env.Context(), 100*time.Millisecond)
+		shortCtx, cancel := context.WithTimeout(queryCtx, 5*time.Second)
 		defer cancel()
 		queryResp, err := env.FrontendClient().QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Namespace: env.Namespace().String(),
@@ -4661,26 +4670,37 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		resCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
-	query1ResultCh := make(chan QueryResult)
-	query2ResultCh := make(chan QueryResult)
+	query1ResultCh := make(chan QueryResult, 1)
+	query2ResultCh := make(chan QueryResult, 1)
 	go queryFn(query1ResultCh)
 	go queryFn(query2ResultCh)
-	query1Res := <-query1ResultCh
-	query2Res := <-query2ResultCh
+
+	var query1Res, query2Res QueryResult
+	select {
+	case query1Res = <-query1ResultCh:
+		cancelQueries() // Cancel 2nd query to avoid waiting for it after 1st query already failed and cleared WF context.
+		query2Res = <-query2ResultCh
+	case query2Res = <-query2ResultCh:
+		cancelQueries() // Cancel 1st query to avoid waiting for it after 2nd query already failed and cleared WF context.
+		query1Res = <-query1ResultCh
+	}
+
 	s.Error(query1Res.Err)
 	s.Error(query2Res.Err)
 	s.Nil(query1Res.Resp)
 	s.Nil(query2Res.Resp)
 
+	isBufferedErr := func(err error) bool {
+		return common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)
+	}
+
 	var queryBufferFullErr *serviceerror.ResourceExhausted
-	if common.IsContextDeadlineExceededErr(query1Res.Err) {
-		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+	if isBufferedErr(query1Res.Err) {
 		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
 	} else {
 		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
-		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
 	}
 
 	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
@@ -4768,23 +4788,24 @@ func (s *WorkflowUpdateSuite) TestUpdatesAreSentToWorkerInOrderOfAdmission() {
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
 
-	expectedHistory := `
+	var expectedHistory strings.Builder
+	expectedHistory.WriteString(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	`
+	`)
 	for i := range nUpdates {
 		tvi := env.Tv().WithUpdateIDNumber(i)
-		expectedHistory += fmt.Sprintf(`
+		expectedHistory.WriteString(fmt.Sprintf(`
 	  %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
 	  %d WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}`,
 			5+2*i, tvi.UpdateID(),
-			6+2*i, tvi.UpdateID())
+			6+2*i, tvi.UpdateID()))
 	}
 
 	history := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
-	s.EqualHistoryEvents(expectedHistory, history)
+	s.EqualHistoryEvents(expectedHistory.String(), history)
 }
 
 func (s *WorkflowUpdateSuite) TestWaitAccepted_GotCompleted() {
@@ -5168,6 +5189,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// poll update to ensure same outcome is returned
@@ -5218,6 +5246,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("rejection-of-"+env.Tv().UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
 
 			// poll update to ensure same outcome is returned

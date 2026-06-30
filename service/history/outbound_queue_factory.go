@@ -302,6 +302,7 @@ func (f *outboundQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.OutboundQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.hostReaderRateLimiter,
 		queues.GrouperStateMachineNamespaceIDAndDestination{},

@@ -219,7 +219,7 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 }
 
 func getDbFields() []string {
-	t := reflect.TypeOf(VisibilityRow{})
+	t := reflect.TypeFor[VisibilityRow]()
 	dbFields := make([]string, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)

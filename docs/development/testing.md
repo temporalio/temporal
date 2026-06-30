@@ -41,6 +41,33 @@ Always use `require.X` (and `protorequire.X`) instead of `assert.X` (and `protoa
 `assert` records a failure but lets the test continue, which often leads to confusing
 cascading errors.
 
+### Polling with await.Require
+
+For polling/retry loops in tests, use `await.Require` (or `await.Requiref`)
+from `common/testing/await` instead of testify's `EventuallyWithT`.
+
+Use `t.Context()` inside the callback for a context derived from the parent
+context and canceled when the parent context is canceled or the await timeout
+expires.
+
+```go
+await.Require(ctx, t, func(t *await.T) {
+    resp, err := client.GetStatus(t.Context())
+    require.NoError(t, err)
+    require.Equal(t, "ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Use `RequireTrue` instead of testify's `Eventually` for simple local bool-returning predicates.
+
+```go
+await.RequireTrue(t, func() bool {
+    return cache.Ready()
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+`RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -59,6 +86,26 @@ Use `parallelsuite.Suite` to ensure your test suite is fast and safe: it runs al
 and provides assertion helpers and safety mechanisms.
 
 It replaces all use of `testify`'s `Suite`.
+
+#### Context shorthand
+
+```go
+ctx := s.Context()
+```
+
+`s.Context()` returns the subtest-scoped context - equivalent to `testcontext.New(s.T())`.
+
+#### Await shorthand
+
+```go
+s.Await(func(s *MySuite) {
+    resp, err := client.GetStatus(s.Context())
+    s.NoError(err)
+    s.Equal("ready", resp.Status)
+}, 5*time.Second, 200*time.Millisecond)
+```
+
+Inside an `s.Await` callback, `s.Context()` is capped to that await's timeout.
 
 ### testvars package
 
@@ -126,6 +173,10 @@ func TestFoo(t *testing.T) {
 If you don't care about specific value, you can use `Any()` method to generate a random value.
 It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
 
+### testcontext package
+
+There's no need to create your own `context.Context` via `context.WithTimeout`; use `testcontext.New(t)` instead. It returns a test-scoped `context.Context`, memoized per `*testing.T` and canceled on test end or timeout.
+
 ### taskpoller package
 
 For end-to-end testing, consider using `taskpoller.TaskPoller` to handle workflow tasks. This is
@@ -159,6 +210,58 @@ It is *not* a substitute for regular error handling, validation, or control flow
 
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
+
+### protorequire package
+
+Use `protorequire.ProtoEqual` to compare proto messages with proto semantics.
+Prefer a single `ProtoEqual` call over asserting fields one-by-one, since it catches unexpected field changes and keeps the expected value next to the assertion.
+
+To ignore specific fields on the top-level message (e.g. non-deterministic timestamps), pass `protorequire.IgnoreFields`:
+
+```go
+protorequire.ProtoEqual(t, expected, actual,
+    protorequire.IgnoreFields(
+        "execution_duration",
+        "schedule_time",
+    ),
+)
+```
+
+### historyrequire package
+
+`historyrequire` has assertions to verify workflow event histories.
+
+Use `EqualHistoryEvents` to assert the full event sequence:
+
+```go
+events := env.GetHistory(env.Namespace().String(), workflowExecution)
+s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled {"Attempt": 1}
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionCompleted`, events)
+```
+
+Optional inline JSON (e.g. `{"Attempt": 1}`) can be used to assert on specific attributes.
+
+Use `ContainsHistoryEvents` when you only care about a particular segment:
+
+```go
+s.ContainsHistoryEvents(`
+  4 WorkflowTaskFailed {"Identity": "worker-1"}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, events)
+```
+
+Use `RequireHistoryEvent` when you only care about a single event type:
+
+```go
+completed := s.RequireHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+require.Equal(t, "expected-result", completed.GetWorkflowExecutionCompletedEventAttributes().Result)
+```
+
+Or use `RequireNoHistoryEvent` when you expect no event of a given type to be present.
 
 ### Test Cluster
 

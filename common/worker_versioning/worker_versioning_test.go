@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -755,6 +756,55 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	}
 }
 
+// TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression guards against
+// reintroducing a bug where the per-deployment loop in CalculateTaskQueueVersioningInfo
+// would pick an unversioned-but-newer RoutingConfig over a versioned-and-member
+// RoutingConfig depending on Go map iteration order. Go re-randomizes map iteration
+// per range, so calling the function many times on the same input makes a
+// ~50%-per-call probabilistic bug practically deterministic.
+func TestCalculateTaskQueueVersioningInfo_MapIterationOrderRegression(t *testing.T) {
+	t1 := timestamp.TimePtr(time.Now().Add(-time.Hour))
+	t2 := timestamp.TimePtr(time.Now())
+
+	data := &persistencespb.DeploymentData{
+		DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+			"foo": {
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					CurrentVersionChangedTime:           t1,
+					RampingDeploymentVersion:            &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo", BuildId: v1.GetBuildId()},
+					RampingVersionPercentage:            30,
+					RampingVersionPercentageChangedTime: t1,
+				},
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+					v1.GetBuildId(): {},
+				},
+			},
+			"bar": {
+				RoutingConfig: &deploymentpb.RoutingConfig{
+					CurrentDeploymentVersion:            nil,
+					CurrentVersionChangedTime:           t2,
+					RampingDeploymentVersion:            nil,
+					RampingVersionPercentage:            20,
+					RampingVersionPercentageChangedTime: t2,
+				},
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{},
+			},
+		},
+	}
+
+	const N = 100
+	for i := range N {
+		current, _, _, ramping, _, _, _, _ := CalculateTaskQueueVersioningInfo(data)
+		if !current.Equal(v1) {
+			t.Fatalf("iteration %d: got current = %v, want %v (map iteration order regression)", i, current, v1)
+		}
+		if !ramping.Equal(v1) {
+			t.Fatalf("iteration %d: got ramping = %v, want %v (map iteration order regression)", i, ramping, v1)
+		}
+	}
+}
+
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -1010,6 +1060,61 @@ func TestValidateVersioningOverrideAndGetReactivationEligibility(t *testing.T) {
 				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0) // No RPC call expected!
 			},
 			expectError: false,
+		},
+		{
+			name: "v0.32: One-time override, with cache hit, returns cached reactivation eligibility",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {
+				c.Put(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId, true, false, 42)
+			},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).Times(0)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: false,
+			expectedRevisionNumber:         42,
+		},
+		{
+			name: "v0.32: One-time override, with cache miss, RPC returns member and active",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(
+					gomock.Any(),
+					gomock.Any(),
+				).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+					IsMember:               true,
+					ShouldSkipReactivation: true,
+					RevisionNumber:         7,
+				}, nil)
+			},
+			expectError:                    false,
+			expectedShouldSkipReactivation: true,
+			expectedRevisionNumber:         7,
+		},
+		{
+			name: "v0.32: One-time override, without target deployment version, returns error",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{},
+				},
+			},
+			setupCache:    func(c *testVersionMembershipCache) {},
+			setupMock:     func(m *matchingservicemock.MockMatchingServiceClient) {},
+			expectError:   true,
+			errorContains: "must provide target deployment version if override is one-time",
 		},
 		{
 			name: "v0.32: Pinned override, with cache hit (drained), returns isDrainedOrInactive=true and cached revision",
@@ -1812,13 +1917,7 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 			// Check that only expected versions were removed
 			for k := range originalKeys {
 				_, exists := deploymentData.Versions[k]
-				shouldBeRemoved := false
-				for _, removed := range tt.wantRemoved {
-					if k == removed {
-						shouldBeRemoved = true
-						break
-					}
-				}
+				shouldBeRemoved := slices.Contains(tt.wantRemoved, k)
 				if shouldBeRemoved {
 					assert.False(t, exists, "version %s should have been removed", k)
 				} else {
