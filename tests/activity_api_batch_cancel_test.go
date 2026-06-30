@@ -26,6 +26,7 @@ func TestActivityAPIBatchCancelClientTestSuite(t *testing.T) {
 
 func (env *standaloneActivityEnv) eventuallyCanceled(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
+	//nolint:forbidigo // tests with waits
 	require.Eventually(t, func() bool {
 		resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -56,6 +57,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 	query := fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType)
 
 	// Wait for the activities to be indexed in visibility before submitting the batch.
+	//nolint:forbidigo // tests with waits
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace: env.Namespace().String(),

@@ -211,9 +211,7 @@ func fetchPage(
 		}
 
 		executionInfos = make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
-		for _, wf := range resp.Executions {
-			executionInfos = append(executionInfos, wf)
-		}
+		executionInfos = append(executionInfos, resp.Executions...)
 		nextPageToken = resp.NextPageToken
 	}
 
