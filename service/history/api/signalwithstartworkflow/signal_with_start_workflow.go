@@ -19,6 +19,9 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+// SignalWithStartWorkflow returns the run id and first-execution run id of the workflow that
+// received the signal (or was started). firstExecutionRunID may be empty when reading from a
+// pre-existing record whose ExecutionState has not been backfilled yet.
 func SignalWithStartWorkflow(
 	ctx context.Context,
 	shard historyi.ShardContext,
@@ -26,7 +29,7 @@ func SignalWithStartWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, bool, error) {
+) (runID string, firstExecutionRunID string, started bool, err error) {
 	// workflow is running and restart was not requested, and conflict policy is to use existing
 	if currentWorkflowLease != nil &&
 		currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() &&
@@ -40,9 +43,12 @@ func SignalWithStartWorkflow(
 			currentWorkflowLease,
 			signalWithStartRequest,
 		); err != nil {
-			return "", false, err
+			return "", "", false, err
 		}
-		return currentWorkflowLease.GetContext().GetWorkflowKey().RunID, false, nil
+		return currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+			currentWorkflowLease.GetMutableState().GetExecutionState().FirstExecutionRunId,
+			false,
+			nil
 	}
 	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
@@ -62,7 +68,7 @@ func startAndSignalWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, bool, error) {
+) (string, string, bool, error) {
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
@@ -75,12 +81,12 @@ func startAndSignalWorkflow(
 		signalWithStartRequest,
 	)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	if err = api.ValidateSignal(
@@ -91,7 +97,7 @@ func startAndSignalWorkflow(
 		signalWithStartRequest.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
@@ -103,7 +109,7 @@ func startAndSignalWorkflow(
 		signalWithStartRequest.GetWorkflowIdConflictPolicy(),
 	)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if workflowMutationFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
@@ -113,13 +119,14 @@ func startAndSignalWorkflow(
 			workflowMutationFn,
 			newWorkflowLease,
 		); err != nil {
-			return "", false, err
+			return "", "", false, err
 		}
-		return runID, true, nil
+		// Started a fresh run after terminating the existing one: this run is the head of the chain.
+		return runID, runID, true, nil
 	}
 	vrid, err := createVersionedRunID(currentWorkflowLease)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
@@ -221,16 +228,16 @@ func startAndSignalWithoutCurrentWorkflow(
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	requestID string,
-) (string, bool, error) {
+) (string, string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if len(newWorkflowEventsSeq) != 1 {
-		return "", false, serviceerror.NewInternal("unable to create 1st event batch")
+		return "", "", false, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
 	createMode := persistence.CreateWorkflowModeBrandNew
@@ -246,7 +253,7 @@ func startAndSignalWithoutCurrentWorkflow(
 			newWorkflowLease.GetMutableState(),
 		)
 		if err != nil {
-			return "", false, err
+			return "", "", false, err
 		}
 	}
 	err = newWorkflowLease.GetContext().CreateWorkflowExecution(
@@ -262,14 +269,16 @@ func startAndSignalWithoutCurrentWorkflow(
 	)
 	switch failedErr := err.(type) {
 	case nil:
-		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
+		// Brand-new run: head of the chain == this run id.
+		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+		return runID, runID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if _, ok := failedErr.RequestIDs[requestID]; ok {
-			return failedErr.RunID, false, nil
+			return failedErr.RunID, failedErr.FirstExecutionRunID, false, nil
 		}
-		return "", false, err
+		return "", "", false, err
 	default:
-		return "", false, err
+		return "", "", false, err
 	}
 }
 

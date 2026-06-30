@@ -2367,9 +2367,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:      resp.GetRunId(),
-		Started:    resp.Started,
-		SignalLink: resp.GetSignalLink(),
+		RunId:               resp.GetRunId(),
+		FirstExecutionRunId: resp.GetFirstExecutionRunId(),
+		Started:             resp.Started,
+		SignalLink:          resp.GetSignalLink(),
 	}, nil
 }
 
