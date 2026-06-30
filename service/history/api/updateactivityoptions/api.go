@@ -354,6 +354,10 @@ func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest,
 				activityIDs = append(activityIDs, ai.ActivityId)
 			}
 		}
+	case *workflowservice.UpdateActivityOptionsRequest_MatchAll:
+		for _, ai := range ms.GetPendingActivityInfos() {
+			activityIDs = append(activityIDs, ai.ActivityId)
+		}
 	}
 	return activityIDs
 }
