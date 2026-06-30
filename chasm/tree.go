@@ -1600,6 +1600,18 @@ func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
 			elapsed := now.Sub(pauseInfo.PausedTime.AsTime())
 			attrs.PauseInfo.AccumulatedPauseDuration = durationpb.New(pauseInfo.GetAccumulatedPauseDuration().AsDuration() + elapsed)
 			attrs.PauseInfo.PausedTime = nil
+		default:
+			continue
+		}
+
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+			node.updateLastUpdateVersionedTransition()
+			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+			delete(n.mutation.DeletedNodes, encodedPath)
 		}
 	}
 	return nil
