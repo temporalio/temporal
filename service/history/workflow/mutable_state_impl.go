@@ -3181,7 +3181,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		ms.initTimeSkippingInfo(tsc, stateProp, startEvent.GetEventId())
+		if err := ms.initTimeSkippingInfo(tsc, stateProp, startEvent.GetEventId()); err != nil {
+			return err
+		}
 	}
 
 	ms.approximateSize += ms.executionInfo.Size()
@@ -9861,28 +9863,6 @@ func logError(
 	tags = append(tags, tag.WorkflowRunID(executionState.RunId))
 	tags = append(tags, tag.WorkflowNamespaceID(executionInfo.NamespaceId))
 	logger.Error(msg, tags...)
-}
-
-func (ms *MutableStateImpl) shiftWorkflowTimes(initialSkippedDuration *durationpb.Duration) {
-	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
-		return
-	}
-	accum := initialSkippedDuration.AsDuration()
-	if !timeNotSet(ms.executionState.StartTime) {
-		ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.StartTime) {
-		ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.ExecutionTime) {
-		ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowRunExpirationTime) {
-		ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
-		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
-	}
 }
 
 func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
