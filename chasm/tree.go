@@ -2185,6 +2185,9 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 	}
 
 	// step4: record and regenerate
+	// todo: a bad design of current implementation is that RecordTimeSkippingTransition called regenerateChasmFastForwardWakeTask
+	// for chasm-based executions, and this is a special treatment. And we also need this special treatment for passive cluster.
+	// The reason is current chasm MutableContext.AddTask requires a component.
 	if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
 		return err
 	}
