@@ -7,13 +7,18 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-// Time skipping is a two-sided contract between the CHASM framework and a root component, split along
-// the configuration / runtime axis:
+// Time skipping is a contract between the CHASM framework and a root component, split along the
+// configuration / runtime axis:
 //
-//   - TimeSkippingConfigurator is PROVIDED BY the framework and CALLED BY the component. It is embedded
-//     in MutableContext and lets the component opt in / adjust the config via SetTimeSkippingConfig.
-//   - TimeSkippingRuntime is the mandatory component-implemented half: the root component implements it
-//     so the framework can decide, at runtime, whether the execution may be skipped.
+//   - TimeSkippingConfigurator (PROVIDED BY the framework, CALLED BY the component) is the
+//     configuration-time surface. It is embedded in MutableContext and lets the component opt in /
+//     adjust the config via SetTimeSkippingConfig.
+//   - TimeSkippingRuntimeGate (component-implemented, MANDATORY) is the runtime surface the framework
+//     consults each transaction to decide whether the execution is idle enough to skip.
+//   - TimeSkippingRuntimeTargetProvider (component-implemented, OPTIONAL) lets a component nominate the
+//     next skip target itself, in place of the framework's default timer-task tree scan.
+//
+// The two runtime interfaces are ROOT COMPONENT ONLY — the framework consults only the root component.
 
 // TimeSkippingConfigurator is the framework-provided, configuration-time surface (embedded in
 // MutableContext) through which a root component opts into and adjusts time skipping for the whole
@@ -24,11 +29,9 @@ type TimeSkippingConfigurator interface {
 	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 }
 
-// TimeSkippingRuntime is the mandatory component-implemented, runtime half of the time-skipping
-// contract. The root component of an execution that opts into time skipping implements it so the
-// framework can decide, once per transaction, whether the execution is idle enough to fast-forward
-// virtual time. ROOT COMPONENT ONLY — the framework consults only the root component's implementation.
-type TimeSkippingRuntime interface {
+// TimeSkippingRuntimeGate is the mandatory, runtime half of the time-skipping contract: the framework
+// asks it, once per transaction, whether the execution may be skipped at all.
+type TimeSkippingRuntimeGate interface {
 	// IsExecutionSkippable reports whether the execution may have its virtual clock fast-forwarded right
 	// now. It returns true only when the execution is idle. The framework skips no time while it returns
 	// false, so in-flight work runs at real speed.
@@ -40,6 +43,17 @@ type TimeSkippingRuntime interface {
 	//      scheduled attempt whose dispatch time is at or before now).
 	//   3. other execution-specific preconditions, as needed.
 	IsExecutionSkippable(ctx Context) bool
+}
+
+// TimeSkippingRuntimeTargetProvider is the optional, by default the framework scans the tree's
+// all pure and side-effect tasks that are future-scheduled and takes the earliest one as the skip target.
+// If the execution needs a customized strategy, the root component can implement this interface
+// and it will override the default strategy.
+type TimeSkippingRuntimeTargetProvider interface {
+	// FindNextTargetTime provides a customized strategy to find the next skip target.
+	// The framework will provided a initilalized transition, and the implementation should just call
+	// transition.CompareAndSetTargetTime to set the target time, and it is allowed to leave the transition unchanged.
+	FindNextTargetTime(ctx Context, transition *TimeSkippingTransition)
 }
 
 // TimeSkippingTransition is a time-skipping decision and is shared between the CHASM framework and

@@ -2155,32 +2155,40 @@ func (n *Node) closeTransactionHandleTimeSkipping() error {
 	if err != nil {
 		return err
 	}
-	tsRoot, ok := rootComponent.(TimeSkippingRuntime)
+	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
 		// todo: add a metric for alert in real implementation
 		n.logger.Error(
-			"root component does not implement TimeSkippingRuntime when executions have turned on time skipping",
+			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
 		return nil
 	}
 
-	// step2: calculate the time-skipping transition.
+	// step2: bail unless the execution is idle.
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
 		return nil
 	}
-	transition, err := n.calculateTimeSkippingTransition(immutableContext)
-	if err != nil {
-		return err
+
+	// step3: find the next skip target. A root component MAY implement TimeSkippingRuntimeTargetProvider
+	// to nominate the target itself; otherwise the framework scans the tree's timer tasks. Either way the
+	// framework owns the transition: it constructs it here, then applies the fast-forward budget and the
+	// validity gate below.
+	transition := NewTimeSkippingTransition(n.Now(nil))
+	if provider, ok := rootComponent.(TimeSkippingRuntimeTargetProvider); ok {
+		provider.FindNextTargetTime(immutableContext, transition)
+	} else {
+		n.defaultFindNextTargetTime(transition)
 	}
+	transition.GateByFastForward(tsi.GetFastForwardInfo())
 	if !transition.IsValid() {
 		return nil
 	}
 
-	// step3: record and regenerate
+	// step4: record and regenerate
 	if err := n.backend.RecordTimeSkippingTransition(context.Background(), *transition, n.ArchetypeID()); err != nil {
 		return err
 	}
-	if err := n.regenerateTasksForTimeSkipping(immutableContext); err != nil {
+	if err := n.regenerateChasmTasksForTimeSkipping(immutableContext); err != nil {
 		return err
 	}
 	return nil
@@ -2209,19 +2217,8 @@ func (n *Node) validateSerializedTask(
 	}, taskInstance)
 }
 
-// calculateTimeSkippingTransition is the framework's default "where to skip to": it scans every scheduled
-// (CategoryTimer) task across the tree — pure AND side-effect — folds the earliest VALID one strictly
-// after now in as the business wake target, then folds in the fast-forward budget. It returns nil when
-// time skipping is disabled.
-func (n *Node) calculateTimeSkippingTransition(ctx Context) (*TimeSkippingTransition, error) {
-	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
-	if !tsi.GetConfig().GetEnabled() {
-		return nil, nil
-	}
-	now := n.Now(nil)
-	transition := NewTimeSkippingTransition(now)
-
-	// Business wake targets: the earliest valid future-scheduled (CategoryTimer) task across the tree.
+func (n *Node) defaultFindNextTargetTime(transition *TimeSkippingTransition) error {
+	now := transition.CurrentTime
 	for _, node := range n.andAllChildren() {
 		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
 		if componentAttr == nil {
@@ -2237,26 +2234,16 @@ func (n *Node) calculateTimeSkippingTransition(ctx Context) (*TimeSkippingTransi
 				}
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
-					// A past/stale task that the component failed to invalidate.
-					// Ignore it rather than let it pin the target.
-					continue
-				}
-				valid, err := node.validateSerializedTask(ctx, task)
-				if err != nil {
-					return nil, err
-				}
-				if !valid {
 					continue
 				}
 				transition.CompareAndSetTargetTime(scheduledTime)
 			}
 		}
 	}
-	transition.GateByFastForward(tsi.GetFastForwardInfo())
-	return transition, nil
+	return nil
 }
 
-// regenerateTasksForTimeSkipping re-emits physical timer tasks after a time-skipping transition
+// regenerateChasmTasksForTimeSkipping re-emits physical timer tasks after a time-skipping transition
 // so their wall-clock visibility reflects the new accumulated skip.
 //
 // "Regenerate all" by default: every CategoryTimer task (pure and side-effect) across the tree is
@@ -2266,7 +2253,7 @@ func (n *Node) calculateTimeSkippingTransition(ctx Context) (*TimeSkippingTransi
 //
 // Invalidated tasks are excluded: each task is validated (validateSerializedTask) before being reset or
 // re-stamped, so a task whose validator now rejects it is left alone rather than re-emitted.
-func (n *Node) regenerateTasksForTimeSkipping(ctx Context) error {
+func (n *Node) regenerateChasmTasksForTimeSkipping(ctx Context) error {
 	archetypeID := n.ArchetypeID()
 
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task

@@ -87,7 +87,7 @@ func (s *nodeSuite) TestRegenerateTasksForTimeSkipping_RestampsEachTimerExactlyO
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(true, nil).AnyTimes()
 
-	err = root.regenerateTasksForTimeSkipping(NewContext(context.Background(), root))
+	err = root.regenerateChasmTasksForTimeSkipping(NewContext(context.Background(), root))
 	s.NoError(err)
 
 	// 2 side-effect CategoryTimer tasks (root + SubComponent1) + 1 pure timer (earliest) = 3, all
