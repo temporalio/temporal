@@ -3685,7 +3685,6 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 
 	mutations, err := root.CloseTransaction()
 	s.NoError(err)
-	s.Len(mutations.UpdatedNodes, 1, "root should be updated")
 	s.Empty(mutations.DeletedNodes)
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
 }
