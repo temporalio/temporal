@@ -3276,7 +3276,7 @@ func (s *nodeSuite) TestContextPauseInfoWhilePaused() {
 
 	// Baseline: no pause info before any pause.
 	s.Nil(mutableCtx.PauseInfo(testComponent).PausedSince)
-	s.Zero(mutableCtx.PauseInfo(testComponent).AccumulatedPauseDuration)
+	s.Zero(mutableCtx.PauseInfo(testComponent).PastPausedDuration)
 
 	s.timeSource.Update(tPause)
 	testComponent.Pause(mutableCtx)
@@ -3292,7 +3292,7 @@ func (s *nodeSuite) TestContextPauseInfoWhilePaused() {
 	pi := mutableCtx2.PauseInfo(testComponent2)
 	s.Require().NotNil(pi.PausedSince)
 	s.Equal(tPause, *pi.PausedSince)
-	s.Zero(pi.AccumulatedPauseDuration)
+	s.Zero(pi.PastPausedDuration)
 
 	_, err = root.CloseTransaction()
 	s.NoError(err)
@@ -3307,7 +3307,7 @@ func (s *nodeSuite) TestContextPauseInfoWhilePaused() {
 	_, err = root.CloseTransaction()
 	s.NoError(err)
 
-	// After unpause: PausedSince is nil, AccumulatedPauseDuration reflects the pause interval.
+	// After unpause: PausedSince is nil, PastPausedDuration reflects the pause interval.
 	s.timeSource.Update(tAfterUnpause)
 	mutableCtx4 := NewMutableContext(context.Background(), root)
 	component4, err := root.Component(mutableCtx4, ComponentRef{})
@@ -3315,7 +3315,7 @@ func (s *nodeSuite) TestContextPauseInfoWhilePaused() {
 	testComponent4 := component4.(*TestComponent)
 	pi = mutableCtx4.PauseInfo(testComponent4)
 	s.Nil(pi.PausedSince)
-	s.Equal(tUnpause.Sub(tPause), pi.AccumulatedPauseDuration)
+	s.Equal(tUnpause.Sub(tPause), pi.PastPausedDuration)
 }
 
 func (s *nodeSuite) TestContextPauseInfoMultipleCycles() {
@@ -3368,7 +3368,7 @@ func (s *nodeSuite) TestContextPauseInfoMultipleCycles() {
 	s.NoError(err)
 	pi := mutableCtx5.PauseInfo(component5.(*TestComponent))
 	s.Nil(pi.PausedSince)
-	s.Equal(5*time.Minute+7*time.Minute, pi.AccumulatedPauseDuration)
+	s.Equal(5*time.Minute+7*time.Minute, pi.PastPausedDuration)
 }
 
 func (s *nodeSuite) TestExecuteImmediatePureTask() {

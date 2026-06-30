@@ -1142,7 +1142,7 @@ func (s *ChasmSuite) TestPauseUnpauseInfo() {
 		pi, err := tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 		ss.Nil(pi.PausedSince)
-		ss.Zero(pi.AccumulatedPauseDuration)
+		ss.Zero(pi.PastPausedDuration)
 
 		// Pause the component.
 		err = tests.PausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
@@ -1152,7 +1152,7 @@ func (s *ChasmSuite) TestPauseUnpauseInfo() {
 		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 		ss.Require().NotNil(pi.PausedSince, "PausedSince must be set while paused")
-		ss.Zero(pi.AccumulatedPauseDuration)
+		ss.Zero(pi.PastPausedDuration)
 		pausedSince := *pi.PausedSince
 
 		// Second read while still paused: PausedSince must remain the same.
@@ -1165,10 +1165,10 @@ func (s *ChasmSuite) TestPauseUnpauseInfo() {
 		err = tests.UnpausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 
-		// After unpause: PausedSince is nil, AccumulatedPauseDuration is positive.
+		// After unpause: PausedSince is nil, PastPausedDuration is positive.
 		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
 		ss.NoError(err)
 		ss.Nil(pi.PausedSince)
-		ss.Positive(pi.AccumulatedPauseDuration)
+		ss.Positive(pi.PastPausedDuration)
 	})
 }

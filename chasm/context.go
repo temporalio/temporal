@@ -80,9 +80,18 @@ type ComponentPauseInfo struct {
 	// PausedSince is the wall-clock time when the component entered LifecycleStatePaused,
 	// or nil if the component is not currently paused.
 	PausedSince *time.Time
-	// AccumulatedPauseDuration is the total time spent paused across all completed pause/unpause cycles.
-	// Does not include the current ongoing pause interval; add time.Since(*PausedSince) for that.
-	AccumulatedPauseDuration time.Duration
+	// PastPausedDuration is the total time spent paused across all completed pause/unpause cycles.
+	// Does not include the current ongoing pause interval; use TotalPausedDuration for that.
+	PastPausedDuration time.Duration
+}
+
+// TotalPausedDuration returns the total time this component has been paused, including the
+// current ongoing pause interval if the component is currently paused.
+func (p ComponentPauseInfo) TotalPausedDuration(now time.Time) time.Duration {
+	if p.PausedSince == nil {
+		return p.PastPausedDuration
+	}
+	return p.PastPausedDuration + now.Sub(*p.PausedSince)
 }
 
 type ExecutionInfo struct {
@@ -208,7 +217,7 @@ func (c *immutableCtx) PauseInfo(component Component) ComponentPauseInfo {
 	}
 	return ComponentPauseInfo{
 		PausedSince:              pausedSince,
-		AccumulatedPauseDuration: info.GetAccumulatedPauseDuration().AsDuration(),
+		PastPausedDuration: info.GetAccumulatedPauseDuration().AsDuration(),
 	}
 }
 
