@@ -14,7 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
-	serverClient "go.temporal.io/server/client"
+	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -191,7 +191,7 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 type applyPeerTaskHandlerOptions struct {
 	fx.In
 
-	ClientBean     serverClient.Bean
+	ClientBean     serverclient.Bean
 	MetricsHandler metrics.Handler
 	Logger         log.Logger
 }
@@ -199,7 +199,7 @@ type applyPeerTaskHandlerOptions struct {
 type applyPeerTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*nsreplpb.ApplyPeerTask]
 
-	clientBean serverClient.Bean
+	clientBean serverclient.Bean
 	// TODO(nsrepl): emit metrics for the peer apply path. Suggested shape:
 	//   - nsrepl_apply_attempts_total{target_cell, source_cell, outcome}    counter
 	//   - nsrepl_apply_failures_total{target_cell, source_cell}             counter

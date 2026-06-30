@@ -12,8 +12,8 @@ import (
 // EventScheduleLocal is emitted at component creation. Schedules ApplyLocalTask.
 type EventScheduleLocal struct{}
 
-// TransitionScheduleLocal: initial transition. Stays in RUNNING (component just created)
-// and schedules the local apply task.
+// TransitionScheduleLocal is the initial transition. Stays in RUNNING (component
+// just created) and schedules the local apply task.
 var TransitionScheduleLocal = chasm.NewTransition(
 	[]nsreplpb.ComponentStatus{nsreplpb.COMPONENT_STATUS_RUNNING},
 	nsreplpb.COMPONENT_STATUS_RUNNING,

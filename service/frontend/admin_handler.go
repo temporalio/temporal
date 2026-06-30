@@ -239,8 +239,8 @@ func NewAdminHandler(
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
-		chasmRegistry:   args.ChasmRegistry,
-		schedulerClient: args.SchedulerClient,
+		chasmRegistry:        args.ChasmRegistry,
+		schedulerClient:      args.SchedulerClient,
 		nsreplTaskExecutor: nsreplication.NewTaskExecutor(
 			args.ClusterMetadata.GetCurrentClusterName(),
 			args.PersistenceMetadataManager,
@@ -1429,6 +1429,8 @@ func (adh *AdminHandler) ApplyNamespaceMutation(ctx context.Context, request *ad
 		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE
 	case nsreplication.OutcomeNotAdmitted:
 		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED
+	default:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED
 	}
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: respOutcome,
