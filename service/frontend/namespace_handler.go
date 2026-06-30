@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -48,6 +49,11 @@ type (
 		archiverProvider       provider.ArchiverProvider
 		timeSource             clock.TimeSource
 		config                 *Config
+		// chasmNsReplClient is the layered gRPC client into the history-side
+		// NamespaceReplicationService. Used when UseCHASMNamespaceReplication is
+		// enabled to trigger namespace mutations through the CHASM transport
+		// instead of the legacy queue path.
+		chasmNsReplClient nsreplpb.NamespaceReplicationServiceClient
 	}
 )
 
@@ -76,6 +82,7 @@ func newNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 	timeSource clock.TimeSource,
 	config *Config,
+	chasmNsReplClient nsreplpb.NamespaceReplicationServiceClient,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -88,6 +95,7 @@ func newNamespaceHandler(
 		archiverProvider:       archiverProvider,
 		timeSource:             timeSource,
 		config:                 config,
+		chasmNsReplClient:      chasmNsReplClient,
 	}
 }
 
@@ -232,42 +240,65 @@ func (d *namespaceHandler) RegisterNamespace(
 		failoverVersion = d.clusterMetadata.GetNextFailoverVersion(activeClusterName, 0)
 	}
 
-	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:              info,
-			Config:            config,
-			ReplicationConfig: replicationConfig,
-			ConfigVersion:     0,
-			FailoverVersion:   failoverVersion,
-		},
-		IsGlobalNamespace: isGlobalNamespace,
+	detail := &persistencespb.NamespaceDetail{
+		Info:              info,
+		Config:            config,
+		ReplicationConfig: replicationConfig,
+		ConfigVersion:     0,
+		FailoverVersion:   failoverVersion,
 	}
 
-	namespaceResponse, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
-	if err != nil {
-		return nil, err
+	// Branch on the CHASM transport flag. Note: for CREATE there is no
+	// pre-existing notification_version to CAS against — pass 0 as
+	// ExpectedVersion; the metadata store treats this as a create-only path.
+	useCHASM := d.shouldUseCHASMReplication(isGlobalNamespace, false, replicationConfig)
+	var namespaceID string
+	if useCHASM {
+		if err := d.invokeCHASMNamespaceMutation(
+			ctx,
+			nsreplpb.NAMESPACE_OPERATION_CREATE,
+			detail,
+			0,
+		); err != nil {
+			return nil, err
+		}
+		namespaceID = info.Id
+	} else {
+		namespaceRequest := &persistence.CreateNamespaceRequest{
+			Namespace:         detail,
+			IsGlobalNamespace: isGlobalNamespace,
+		}
+		namespaceResponse, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = namespaceResponse.ID
 	}
 
-	err = d.namespaceReplicator.HandleTransmissionTask(
-		ctx,
-		enumsspb.NAMESPACE_OPERATION_CREATE,
-		namespaceRequest.Namespace.Info,
-		namespaceRequest.Namespace.Config,
-		namespaceRequest.Namespace.ReplicationConfig,
-		false,
-		namespaceRequest.Namespace.ConfigVersion,
-		namespaceRequest.Namespace.FailoverVersion,
-		namespaceRequest.IsGlobalNamespace,
-		nil,
-		false, // forceReplicate
-	)
-	if err != nil {
-		return nil, err
+	// HandleTransmissionTask publishes to the legacy queue. Skip it when the CHASM
+	// transport handled the peer fan-out.
+	if !useCHASM {
+		err = d.namespaceReplicator.HandleTransmissionTask(
+			ctx,
+			enumsspb.NAMESPACE_OPERATION_CREATE,
+			detail.Info,
+			detail.Config,
+			detail.ReplicationConfig,
+			false,
+			detail.ConfigVersion,
+			detail.FailoverVersion,
+			isGlobalNamespace,
+			nil,
+			false, // forceReplicate
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	d.logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(registerRequest.GetNamespace()),
-		tag.WorkflowNamespaceID(namespaceResponse.ID),
+		tag.WorkflowNamespaceID(namespaceID),
 	)
 
 	return &workflowservice.RegisterNamespaceResponse{}, nil
@@ -604,39 +635,59 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 
 		replicationConfig.FailoverHistory = failoverHistory
-		updateReq := &persistence.UpdateNamespaceRequest{
-			Namespace: &persistencespb.NamespaceDetail{
-				Info:                        info,
-				Config:                      config,
-				ReplicationConfig:           replicationConfig,
-				ConfigVersion:               configVersion,
-				FailoverVersion:             failoverVersion,
-				FailoverNotificationVersion: failoverNotificationVersion,
-			},
-			IsGlobalNamespace:   isGlobalNamespace,
-			NotificationVersion: notificationVersion,
+		detail := &persistencespb.NamespaceDetail{
+			Info:                        info,
+			Config:                      config,
+			ReplicationConfig:           replicationConfig,
+			ConfigVersion:               configVersion,
+			FailoverVersion:             failoverVersion,
+			FailoverNotificationVersion: failoverNotificationVersion,
 		}
-		err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
-		if err != nil {
-			return nil, err
+
+		// Branch on the CHASM transport flag. When enabled for replicated global
+		// namespaces, the CHASM component does the local CAS write + peer fan-out
+		// (replacing both metadataMgr.UpdateNamespace and HandleTransmissionTask).
+		// Otherwise, fall back to today's queue-based path.
+		if d.shouldUseCHASMReplication(isGlobalNamespace, clusterListChanged, replicationConfig) {
+			if err := d.invokeCHASMNamespaceMutation(
+				ctx,
+				nsreplpb.NAMESPACE_OPERATION_UPDATE,
+				detail,
+				notificationVersion,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			updateReq := &persistence.UpdateNamespaceRequest{
+				Namespace:           detail,
+				IsGlobalNamespace:   isGlobalNamespace,
+				NotificationVersion: notificationVersion,
+			}
+			if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	err = d.namespaceReplicator.HandleTransmissionTask(
-		ctx,
-		enumsspb.NAMESPACE_OPERATION_UPDATE,
-		info,
-		config,
-		replicationConfig,
-		clusterListChanged,
-		configVersion,
-		failoverVersion,
-		isGlobalNamespace,
-		failoverHistory,
-		false, // forceReplicate
-	)
-	if err != nil {
-		return nil, err
+	// HandleTransmissionTask publishes to the legacy queue. Skip it when the CHASM
+	// transport handled the peer fan-out for this mutation.
+	if !d.shouldUseCHASMReplication(isGlobalNamespace, clusterListChanged, replicationConfig) {
+		err = d.namespaceReplicator.HandleTransmissionTask(
+			ctx,
+			enumsspb.NAMESPACE_OPERATION_UPDATE,
+			info,
+			config,
+			replicationConfig,
+			clusterListChanged,
+			configVersion,
+			failoverVersion,
+			isGlobalNamespace,
+			failoverHistory,
+			false, // forceReplicate
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
@@ -1197,4 +1248,56 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 	default:
 		return errInvalidNamespaceStateUpdate
 	}
+}
+
+// shouldUseCHASMReplication reports whether the CHASM transport should handle
+// this mutation. True only when:
+//   - the namespace is global (replication is needed at all), AND
+//   - there is a peer to replicate to (>1 cluster, or the cluster list changed), AND
+//   - the UseCHASMNamespaceReplication dynamic config flag is enabled.
+func (d *namespaceHandler) shouldUseCHASMReplication(
+	isGlobalNamespace bool,
+	clusterListChanged bool,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
+) bool {
+	if !isGlobalNamespace {
+		return false
+	}
+	if len(replicationConfig.GetClusters()) <= 1 && !clusterListChanged {
+		return false
+	}
+	return d.config.UseCHASMNamespaceReplication()
+}
+
+// invokeCHASMNamespaceMutation routes the mutation through the CHASM transport.
+// It calls into history's NamespaceReplicationService.TriggerNamespaceMutation,
+// which starts the per-namespace NamespaceMutationComponent and waits for the
+// local apply to complete before returning. Peer fan-out continues asynchronously
+// inside the component after this returns.
+func (d *namespaceHandler) invokeCHASMNamespaceMutation(
+	ctx context.Context,
+	operation nsreplpb.NamespaceOperation,
+	detail *persistencespb.NamespaceDetail,
+	expectedVersion int64,
+) error {
+	currentCluster := d.clusterMetadata.GetCurrentClusterName()
+	var peerCells []string
+	for _, c := range detail.GetReplicationConfig().GetClusters() {
+		if c != currentCluster {
+			peerCells = append(peerCells, c)
+		}
+	}
+
+	mutation := &nsreplpb.NamespaceMutation{
+		Operation:       operation,
+		NamespaceDetail: detail,
+		ExpectedVersion: expectedVersion,
+		PeerCells:       peerCells,
+	}
+	req := &nsreplpb.TriggerNamespaceMutationRequest{
+		NamespaceId: detail.GetInfo().GetId(),
+		Mutation:    mutation,
+	}
+	_, err := d.chasmNsReplClient.TriggerNamespaceMutation(ctx, req)
+	return err
 }

@@ -130,6 +130,14 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
 	)
+	UseCHASMNamespaceReplication = NewGlobalBoolSetting(
+		"system.useCHASMNamespaceReplication",
+		false,
+		`UseCHASMNamespaceReplication routes namespace mutations (RegisterNamespace/UpdateNamespace)
+through the CHASM-based replication transport (NamespaceMutationComponent) instead of the legacy
+namespace replication queue. The CHASM component does the local CAS write and fans out to peer
+cells via the ApplyNamespaceMutation admin RPC. Cell-wide toggle; off by default.`,
+	)
 	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
 		"system.enableNamespaceHandoverWait",
 		false,
