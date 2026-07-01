@@ -63,7 +63,7 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithDedicatedCluster(),
-		testcore.WithWorkerService("delete namespace workflow"),
+		testcore.WithWorkerService(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, unified),
 		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
