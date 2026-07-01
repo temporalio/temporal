@@ -13,7 +13,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -433,6 +435,78 @@ func TestTransitionSucceeded(t *testing.T) {
 			}, capture.Snapshot())
 		})
 	}
+}
+
+// TestTransitionSucceeded_MetricsSuppressedDuringReplay drives a real TransitionSucceeded through a
+// real chasm context (not a mock) to verify that the framework-level cherry-pick guard
+// (chasm.NewMutableContextForReplay) suppresses the caller-side metric emission, while a live
+// context still emits.
+func TestTransitionSucceeded_MetricsSuppressedDuringReplay(t *testing.T) {
+	newTreeWithStartedOperation := func(t *testing.T, handler metrics.Handler) (*chasm.Node, *Operation) {
+		logger := log.NewNoopLogger()
+		registry := chasm.NewRegistry(logger)
+		require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+		require.NoError(t, registry.Register(&Library{}))
+
+		timeSource := clock.NewEventTimeSource()
+		timeSource.Update(defaultTime)
+		nodeBackend := &chasm.MockNodeBackend{
+			HandleNextTransitionCount: func() int64 { return 2 },
+			HandleGetCurrentVersion:   func() int64 { return 1 },
+			HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
+				return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
+			},
+			HandleGetNamespaceEntry: func() *namespace.Namespace {
+				return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0)
+			},
+		}
+
+		root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, handler)
+		setupCtx := chasm.NewMutableContext(context.Background(), root)
+		op := NewOperation(&nexusoperationpb.OperationState{
+			Status:                 nexusoperationpb.OPERATION_STATUS_STARTED,
+			Endpoint:               "test-endpoint",
+			Service:                "test-service",
+			Operation:              "test-operation",
+			ScheduledTime:          timestamppb.New(defaultTime),
+			StartedTime:            timestamppb.New(defaultTime.Add(time.Second)),
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			RequestId:              "request-id",
+		})
+		op.RequestData = chasm.NewDataField(setupCtx, &nexusoperationpb.OperationRequestData{})
+		require.NoError(t, root.SetRootComponent(op))
+		_, err := root.CloseTransaction()
+		require.NoError(t, err)
+		return root, op
+	}
+
+	// Carries the OperationContext the metric tagging looks up; tag config is irrelevant here.
+	goCtx := context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+		MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+	})
+
+	t.Run("replay context suppresses emission", func(t *testing.T) {
+		handler := metricstest.NewCaptureHandler()
+		capture := handler.StartCapture()
+		defer handler.StopCapture(capture)
+
+		root, op := newTreeWithStartedOperation(t, handler)
+		ctx := chasm.NewMutableContextForReplay(goCtx, root)
+		require.NoError(t, TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: mustToPayload(t, "result")}))
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.Status)
+		require.Empty(t, capture.Snapshot(), "no caller metrics should be emitted while re-applying during cherry-pick")
+	})
+
+	t.Run("live context emits", func(t *testing.T) {
+		handler := metricstest.NewCaptureHandler()
+		capture := handler.StartCapture()
+		defer handler.StopCapture(capture)
+
+		root, op := newTreeWithStartedOperation(t, handler)
+		ctx := chasm.NewMutableContext(goCtx, root)
+		require.NoError(t, TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: mustToPayload(t, "result")}))
+		require.NotEmpty(t, capture.Snapshot()[NexusOperationSuccessCount.Name()], "live path should emit the success counter")
+	})
 }
 
 func TestTransitionFailed(t *testing.T) {

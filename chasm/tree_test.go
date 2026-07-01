@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -88,6 +89,27 @@ func (s *nodeSuite) initAssertions() {
 
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
+}
+
+func (s *nodeSuite) TestContextMetricsHandler_SuppressedWhenReplaying() {
+	base := s.nodeBase()
+	liveHandler := metricstest.NewCaptureHandler()
+	base.metricsHandler = liveHandler
+	root := newNode(base, nil, "")
+
+	// A live context uses the configured handler.
+	liveCtx := NewMutableContext(context.Background(), root)
+	s.Equal(metrics.Handler(liveHandler), liveCtx.MetricsHandler())
+
+	// A replay context (cherry-pick re-apply) suppresses metrics with the no-op handler.
+	replayCtx := NewMutableContextForReplay(context.Background(), root)
+	s.Equal(metrics.NoopMetricsHandler, replayCtx.MetricsHandler())
+	s.NotEqual(liveCtx.MetricsHandler(), replayCtx.MetricsHandler())
+
+	// Child contexts derived via ContextWithValue inherit the replay flag.
+	type ctxKey struct{}
+	derived := ContextWithValue(replayCtx, ctxKey{}, "value")
+	s.Equal(metrics.NoopMetricsHandler, derived.MetricsHandler())
 }
 
 func (s *nodeSuite) TestNewTree() {
