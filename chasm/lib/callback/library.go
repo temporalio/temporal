@@ -15,7 +15,7 @@ type (
 )
 
 // NewNilLibrary creates a Library with all nil handlers. Useful for
-// registration-only contexts like tdbg where no task execution is needed.
+// decoding contexts like tdbg where no task execution is needed.
 func NewNilLibrary() *Library {
 	return &Library{}
 }
