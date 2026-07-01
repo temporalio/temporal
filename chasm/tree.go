@@ -127,6 +127,14 @@ type (
 		// terminated as part of a delete operation. Like terminated, this is in-memory only
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
+
+		// subtreeIsDirty is true if this node or any of its descendants was mutated in the
+		// current transaction (valueState >= valueStateNeedSerialize), or if ExecutePureTask
+		// ran on this node. It is propagated upward to ancestors during CloseTransaction so
+		// that task cleanup can be skipped for nodes whose entire lineage is clean.
+		//
+		// This is a per-node field (not in nodeBase) and is reset after each transaction.
+		subtreeIsDirty bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -415,6 +423,16 @@ func (n *Node) setValueState(state valueState) {
 	n.valueState = state
 	if state >= valueStateNeedSerialize {
 		n.isActiveStateDirty = true
+		n.markSubtreeDirty()
+	}
+}
+
+// markSubtreeDirty sets subtreeIsDirty on this node and propagates upward to all ancestors.
+// This ensures that ancestor nodes know their subtree contains a dirty node, which is used
+// during CloseTransaction to skip task validation for completely unrelated subtrees.
+func (n *Node) markSubtreeDirty() {
+	for cur := n; cur != nil && !cur.subtreeIsDirty; cur = cur.parent {
+		cur.subtreeIsDirty = true
 	}
 }
 
@@ -1985,6 +2003,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	var firstPureTaskNode *Node
 
 	for nodePath, node := range n.andAllChildren() {
+		if node.parent != nil && node.parent.subtreeIsDirty {
+			node.subtreeIsDirty = true
+		}
+
 		// no-op if node is not a component
 		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
 		if componentAttr == nil {
@@ -1996,9 +2018,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
 		// - child component state update
 		// - parent component closing (access rule)
-		// - a pointer field pointing to an updated component
-		// As a result, we need to validate existing tasks for all components if we are in active cluster.
-		if n.isActiveStateDirty {
+		// - a pointer field pointing to an updated component (pointers are ancestors-only)
+		// We skip validation only for nodes whose entire lineage (ancestors and descendants) is clean,
+		// since none of the above causes can apply to a completely unrelated subtree.
+		if n.isActiveStateDirty && node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
 				return err
@@ -2438,6 +2461,11 @@ func (n *Node) cleanupTransaction() {
 
 	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
+
+	// Reset per-node subtreeIsDirty on all nodes in the tree.
+	for _, node := range n.andAllChildren() {
+		node.subtreeIsDirty = false
+	}
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -3315,6 +3343,9 @@ func (n *Node) ExecutePureTask(
 			// Mark the tree state to dirty so it will force the transaction to clean up
 			// invalid tasks (including the current one).
 			n.isActiveStateDirty = true
+			// Also mark this specific node's subtree dirty so that task cleanup is not
+			// skipped even when the task handler makes no state mutations.
+			n.markSubtreeDirty()
 		}
 	}()
 
