@@ -35,6 +35,8 @@ system.enableDeployments:
   - value: true
 system.enableDeploymentVersions:
   - value: true
+system.visibilityAllowList:
+  - value: false
 frontend.workerVersioningRuleAPIs:
   - value: true
 component.nexusoperations.callback.endpoint.template:

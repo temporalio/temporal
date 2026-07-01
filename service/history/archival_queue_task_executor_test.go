@@ -413,6 +413,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					RelocatableAttributesRemoved: p.RelocatableAttributesRemoved,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+				mutableState.EXPECT().GetSearchAttributes(gomock.Any()).Return(nil, nil).AnyTimes()
+				mutableState.EXPECT().GetMemo(gomock.Any()).Return(nil, nil).AnyTimes()
 				executionState := &persistencespb.WorkflowExecutionState{
 					State:     0,
 					Status:    0,

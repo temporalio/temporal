@@ -1377,9 +1377,11 @@ func (mr *MockMutableStateMockRecorder) ApplyTransientWorkflowTaskScheduled() *g
 }
 
 // ApplyUpsertWorkflowSearchAttributesEvent mocks base method.
-func (m *MockMutableState) ApplyUpsertWorkflowSearchAttributesEvent(arg0 *history.HistoryEvent) {
+func (m *MockMutableState) ApplyUpsertWorkflowSearchAttributesEvent(arg0 *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ApplyUpsertWorkflowSearchAttributesEvent", arg0)
+	ret := m.ctrl.Call(m, "ApplyUpsertWorkflowSearchAttributesEvent", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // ApplyUpsertWorkflowSearchAttributesEvent indicates an expected call of ApplyUpsertWorkflowSearchAttributesEvent.
@@ -1613,9 +1615,11 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionUpdateCompletedEve
 }
 
 // ApplyWorkflowPropertiesModifiedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowPropertiesModifiedEvent(arg0 *history.HistoryEvent) {
+func (m *MockMutableState) ApplyWorkflowPropertiesModifiedEvent(arg0 *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ApplyWorkflowPropertiesModifiedEvent", arg0)
+	ret := m.ctrl.Call(m, "ApplyWorkflowPropertiesModifiedEvent", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // ApplyWorkflowPropertiesModifiedEvent indicates an expected call of ApplyWorkflowPropertiesModifiedEvent.
@@ -2480,6 +2484,21 @@ func (mr *MockMutableStateMockRecorder) GetLastWriteVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastWriteVersion", reflect.TypeOf((*MockMutableState)(nil).GetLastWriteVersion))
 }
 
+// GetMemo mocks base method.
+func (m *MockMutableState) GetMemo(ctx context.Context) (map[string]*common.Payload, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMemo", ctx)
+	ret0, _ := ret[0].(map[string]*common.Payload)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMemo indicates an expected call of GetMemo.
+func (mr *MockMutableStateMockRecorder) GetMemo(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMemo", reflect.TypeOf((*MockMutableState)(nil).GetMemo), ctx)
+}
+
 // GetMostRecentWorkerVersionStamp mocks base method.
 func (m *MockMutableState) GetMostRecentWorkerVersionStamp() *common.WorkerVersionStamp {
 	m.ctrl.T.Helper()
@@ -2705,6 +2724,21 @@ func (m *MockMutableState) GetRetryBackoffDuration(arg0 *failure.Failure) (time.
 func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), arg0)
+}
+
+// GetSearchAttributes mocks base method.
+func (m *MockMutableState) GetSearchAttributes(ctx context.Context) (map[string]*common.Payload, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSearchAttributes", ctx)
+	ret0, _ := ret[0].(map[string]*common.Payload)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSearchAttributes indicates an expected call of GetSearchAttributes.
+func (mr *MockMutableStateMockRecorder) GetSearchAttributes(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockMutableState)(nil).GetSearchAttributes), ctx)
 }
 
 // GetShouldUseRampingVersion mocks base method.

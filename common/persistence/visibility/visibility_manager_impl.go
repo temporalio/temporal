@@ -576,9 +576,9 @@ func aliasChasmSearchAttributes(
 		aliasName, err := mapper.Alias(fieldName)
 		if err != nil {
 			// Silently ignore serviceerror.InvalidArgument because it indicates unregistered field.
-			// INFO: Chasm search attributes must be registered with the CHASM Registry using the WithSearchAttributes() option.
-			var invalidArgumentErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgumentErr) {
+			// INFO: Chasm search attributes must be registered with the CHASM Registry
+			// using the WithSearchAttributes() option.
+			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 				continue
 			}
 			return nil, err

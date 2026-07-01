@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -430,6 +433,10 @@ func NewMutableState(
 			logger,
 			shard.GetMetricsHandler().WithTags(metrics.NamespaceTag(namespaceName)),
 		)
+
+		if s.enableChasmVisibility() {
+			s.ensureChasmVisibilityComponent(context.Background())
+		}
 	}
 
 	if s.executionInfo.GetTimeSkippingInfo() != nil {
@@ -696,6 +703,35 @@ func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
 }
 
+// enableChasmVisibility returns true if CHASM-based Visibility must be enabled for the workflow.
+func (ms *MutableStateImpl) enableChasmVisibility() bool {
+	nsName := ms.GetNamespaceEntry().Name()
+	if !ms.ChasmEnabled() || ms.config.VisibilityAllowList(nsName.String()) {
+		return false
+	}
+	ratio := ms.shard.GetConfig().EnableCHASMVisibilityRatio(nsName.String())
+	if ratio <= 0 {
+		return false
+	}
+	if ratio >= 1 {
+		return true
+	}
+	return float64(farm.Fingerprint32([]byte(ms.executionState.RunId))) < ratio*math.MaxUint32
+}
+
+// chasmVisibilityEnabled returns true if CHASM-based Visibility is enabled for the workflow.
+func (ms *MutableStateImpl) chasmVisibilityEnabled() bool {
+	if !ms.ChasmEnabled() {
+		return false
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return false
+	}
+	_, ok := wf.Visibility.TryGet(chasmCtx)
+	return ok
+}
+
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
 // Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
@@ -741,6 +777,17 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
+}
+
+func (ms *MutableStateImpl) ensureChasmVisibilityComponent(ctx context.Context) {
+	ms.EnsureChasmWorkflowComponent(ctx)
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+	softassert.That(ms.logger, err == nil, "chasm workflow component not set")
+
+	if _, ok := wf.Visibility.TryGet(chasmCtx); !ok {
+		vis := chasm.NewVisibility(chasmCtx)
+		wf.Visibility = chasm.NewComponentField(chasmCtx, vis)
+	}
 }
 
 func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
@@ -3081,11 +3128,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.namespaceEntry.Retention(),
 	)
 
-	if event.Memo != nil {
-		ms.executionInfo.Memo = event.Memo.GetFields()
+	if err := ms.updateSearchAttributes(event.SearchAttributes.GetIndexedFields()); err != nil {
+		return err
 	}
-	if event.SearchAttributes != nil {
-		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
+	if err := ms.updateMemo(event.Memo.GetFields()); err != nil {
+		return err
 	}
 
 	if event.GetVersioningOverride() != nil {
@@ -3565,7 +3612,11 @@ func (ms *MutableStateImpl) updateBinaryChecksumSearchAttribute() error {
 	if proto.Equal(exeInfo.SearchAttributes[sadefs.BinaryChecksums], checksumsPayload) {
 		return nil // unchanged
 	}
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BinaryChecksums: checksumsPayload})
+	if err := ms.updatePredefinedSearchAttributes(
+		map[string]*commonpb.Payload{sadefs.BinaryChecksums: checksumsPayload},
+	); err != nil {
+		return err
+	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -3889,12 +3940,6 @@ func (ms *MutableStateImpl) addUsedDeploymentVersionToLoadedSearchAttribute(exis
 }
 
 func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeValueSize int) error {
-	searchAttributes := ms.executionInfo.SearchAttributes
-	if searchAttributes == nil {
-		searchAttributes = make(map[string]*commonpb.Payload, 1)
-		ms.executionInfo.SearchAttributes = searchAttributes
-	}
-
 	hasUnversionedOrAssigned := false
 	if len(buildIds) > 0 { // len is 0 if we are removing the pinned search attribute and the workflow was never unversioned or assigned
 		hasUnversionedOrAssigned = worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
@@ -3905,8 +3950,9 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 			return err
 		}
 		if len(buildIds) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
-			ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.BuildIds: saPayload})
-			break
+			return ms.updatePredefinedSearchAttributes(
+				map[string]*commonpb.Payload{sadefs.BuildIds: saPayload},
+			)
 		}
 		if len(buildIds) == 1 {
 			buildIds = make([]string, 0)
@@ -3917,26 +3963,18 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 			buildIds = buildIds[1:]
 		}
 	}
-	return nil
 }
 
 func (ms *MutableStateImpl) saveUsedDeploymentVersions(usedDeploymentVersions []string, maxSearchAttributeValueSize int) error {
-	searchAttributes := ms.executionInfo.SearchAttributes
-	if searchAttributes == nil {
-		searchAttributes = make(map[string]*commonpb.Payload, 1)
-		ms.executionInfo.SearchAttributes = searchAttributes
-	}
-
 	for {
 		saPayload, err := sadefs.EncodeValue(usedDeploymentVersions, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
 			return err
 		}
 		if len(usedDeploymentVersions) == 0 || len(saPayload.GetData()) <= maxSearchAttributeValueSize {
-			ms.updateSearchAttributes(map[string]*commonpb.Payload{
-				sadefs.TemporalUsedWorkerDeploymentVersions: saPayload,
-			})
-			break
+			return ms.updatePredefinedSearchAttributes(
+				map[string]*commonpb.Payload{sadefs.TemporalUsedWorkerDeploymentVersions: saPayload},
+			)
 		}
 		// If too large, remove oldest entries
 		if len(usedDeploymentVersions) == 1 {
@@ -3945,7 +3983,6 @@ func (ms *MutableStateImpl) saveUsedDeploymentVersions(usedDeploymentVersions []
 			usedDeploymentVersions = usedDeploymentVersions[1:] // Remove oldest
 		}
 	}
-	return nil
 }
 
 // Note: If the encoding for one of these strings fails, none of them would get saved. But we really
@@ -3987,8 +4024,7 @@ func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, 
 			saPayloads[sadefs.TemporalWorkflowVersioningBehavior] = behaviorPayload
 		}
 	}
-	ms.updateSearchAttributes(saPayloads)
-	return nil
+	return ms.updatePredefinedSearchAttributes(saPayloads)
 }
 
 func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(
@@ -4020,7 +4056,10 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 
 	// modify them
 	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
-	modifiedUsedDeploymentVersions := ms.addUsedDeploymentVersionToLoadedSearchAttribute(existingUsedDeploymentVersions, usedVersion)
+	modifiedUsedDeploymentVersions := ms.addUsedDeploymentVersionToLoadedSearchAttribute(
+		existingUsedDeploymentVersions,
+		usedVersion,
+	)
 	modifiedDeployment := ms.GetWorkerDeploymentSA()
 	modifiedVersion := ms.GetWorkerDeploymentVersionSA()
 	modifiedBehavior := ""
@@ -4028,14 +4067,7 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 		modifiedBehavior = b.String()
 	}
 
-	// check equality
-	if slices.Equal(existingBuildIds, modifiedBuildIds) &&
-		slices.Equal(existingUsedDeploymentVersions, modifiedUsedDeploymentVersions) &&
-		existingDeployment == modifiedDeployment &&
-		existingVersion == modifiedVersion &&
-		existingBehavior == modifiedBehavior {
-		return false, nil
-	}
+	hasChanges := false
 
 	// save build ids if changed
 	if !slices.Equal(existingBuildIds, modifiedBuildIds) {
@@ -4043,6 +4075,7 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
 		}
+		hasChanges = true
 	}
 
 	// save used deployment versions if changed
@@ -4051,18 +4084,26 @@ func (ms *MutableStateImpl) addBuildIDAndDeploymentInfoToSearchAttributesWithNoV
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
 		}
+		hasChanges = true
 	}
 
 	// save deployment search attributes if changed
 	if existingDeployment != modifiedDeployment ||
 		existingVersion != modifiedVersion ||
 		existingBehavior != modifiedBehavior {
-		err = ms.saveDeploymentSearchAttributes(modifiedDeployment, modifiedVersion, modifiedBehavior, maxSearchAttributeValueSize)
+		err = ms.saveDeploymentSearchAttributes(
+			modifiedDeployment,
+			modifiedVersion,
+			modifiedBehavior,
+			maxSearchAttributeValueSize,
+		)
 		if err != nil {
 			return false, err // if err != nil, nothing will be written
 		}
+		hasChanges = true
 	}
-	return true, nil
+
+	return hasChanges, nil
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -5206,7 +5247,9 @@ func (ms *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 	}
 
 	event := ms.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, command)
-	ms.ApplyUpsertWorkflowSearchAttributesEvent(event)
+	if err := ms.ApplyUpsertWorkflowSearchAttributesEvent(event); err != nil {
+		return nil, err
+	}
 	// TODO merge active & passive task generation
 	if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 		return nil, err
@@ -5216,11 +5259,17 @@ func (ms *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 
 func (ms *MutableStateImpl) ApplyUpsertWorkflowSearchAttributesEvent(
 	event *historypb.HistoryEvent,
-) {
-	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
-	ms.approximateSize -= ms.executionInfo.Size()
-	ms.updateSearchAttributes(upsertSearchAttr)
-	ms.approximateSize += ms.executionInfo.Size()
+) error {
+	attr := event.GetUpsertWorkflowSearchAttributesEventAttributes()
+	if attr.SearchAttributes != nil {
+		upsertSearchAttr := attr.GetSearchAttributes().GetIndexedFields()
+		ms.approximateSize -= ms.executionInfo.Size()
+		if err := ms.updateSearchAttributes(upsertSearchAttr); err != nil {
+			return err
+		}
+		ms.approximateSize += ms.executionInfo.Size()
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
@@ -5233,7 +5282,9 @@ func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 	}
 
 	event := ms.hBuilder.AddWorkflowPropertiesModifiedEvent(workflowTaskCompletedEventID, command)
-	ms.ApplyWorkflowPropertiesModifiedEvent(event)
+	if err := ms.ApplyWorkflowPropertiesModifiedEvent(event); err != nil {
+		return nil, err
+	}
 	// TODO merge active & passive task generation
 	// TODO: only generate visibility task when memo is updated
 	if err := ms.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
@@ -5244,14 +5295,17 @@ func (ms *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowPropertiesModifiedEvent(
 	event *historypb.HistoryEvent,
-) {
+) error {
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
 		ms.approximateSize -= ms.executionInfo.Size()
-		ms.updateMemo(upsertMemo)
+		if err := ms.updateMemo(upsertMemo); err != nil {
+			return err
+		}
 		ms.approximateSize += ms.executionInfo.Size()
 	}
+	return nil
 }
 
 func (ms *MutableStateImpl) AddExternalWorkflowExecutionSignaled(
@@ -6959,7 +7013,11 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 		return nil // unchanged
 	}
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalPauseInfo: pauseInfoPayload})
+	if err := ms.updatePredefinedSearchAttributes(
+		map[string]*commonpb.Payload{sadefs.TemporalPauseInfo: pauseInfoPayload},
+	); err != nil {
+		return err
+	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -7006,7 +7064,11 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	// Log the search attribute change
 	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
+	if err := ms.updatePredefinedSearchAttributes(
+		map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload},
+	); err != nil {
+		return err
+	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -7026,7 +7088,11 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
 	// Just remove the search attribute entirely for now
-	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil})
+	if err := ms.updatePredefinedSearchAttributes(
+		map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: nil},
+	); err != nil {
+		return err
+	}
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
@@ -7223,14 +7289,45 @@ func (ms *MutableStateImpl) AddTasks(
 	newTasks ...tasks.Task,
 ) {
 	now := ms.Now()
+	nsName := ms.GetNamespaceEntry().Name()
+	chasmVisEnabledRatio := ms.shard.GetConfig().EnableCHASMVisibilityRatio(nsName.String())
+	isWorkflow := ms.IsWorkflow()
 	for _, task := range newTasks {
-		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
-			chasmTask.GetCategory() == tasks.CategoryVisibility &&
-			ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			softassert.Fail(ms.logger, "CHASM visibility task added on already-closed execution")
+		category := task.GetCategory()
+
+		if category == tasks.CategoryVisibility {
+			switch task.GetType() {
+			case enumsspb.TASK_TYPE_CHASM:
+				softassert.That(
+					ms.logger,
+					ms.stateInDB != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+					"CHASM visibility task added on already-closed execution",
+				)
+
+				// If this is a CHASM Visibility task, the mutable state is a workflow and
+				// the ratio is 0, then this workflow had CHASM Visibility enabled when the
+				// ratio was not 0, and now it's has been rolled back to 0. In this case,
+				// we want to ignore CHASM Visibility tasks, and let the regular Visibility
+				// tasks be added.
+				if isWorkflow && chasmVisEnabledRatio == 0 {
+					continue
+				}
+
+			case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
+				enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION,
+				enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+				// If the mutable state is a workflow with CHASM Visibility enabled and
+				// the ratio is not 0, then CHASM Visibility task is also generated and
+				// we can ignore the regular Visibility tasks.
+				if isWorkflow && ms.chasmVisibilityEnabled() && chasmVisEnabledRatio > 0 {
+					continue
+				}
+
+			default:
+				// no-op
+			}
 		}
 
-		category := task.GetCategory()
 		// Drop tasks scheduled too far in the future. VisibilityTime hasn't been
 		// shifted to wall-clock yet (the conversion runs below), so both sides are
 		// virtual here; the difference is frame-invariant (skip cancels). Keep
@@ -7557,24 +7654,164 @@ func (ms *MutableStateImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 	return ms.taskGenerator.GenerateMigrationTasks(targetClusters)
 }
 
-func (ms *MutableStateImpl) updateSearchAttributes(
-	updatedPayloadMap map[string]*commonpb.Payload,
-) {
+func (ms *MutableStateImpl) getPredefinedSearchAttributes() map[string]*commonpb.Payload {
+	predefined := make(map[string]*commonpb.Payload)
+	for saFieldName, saPayload := range ms.executionInfo.GetSearchAttributes() {
+		if !sadefs.IsMappable(saFieldName) {
+			predefined[saFieldName] = saPayload
+		}
+	}
+	return predefined
+}
+
+func (ms *MutableStateImpl) GetSearchAttributes(
+	ctx context.Context,
+) (map[string]*commonpb.Payload, error) {
+	if ms.chasmVisibilityEnabled() {
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return payload.MergeMapOfPayload(
+			ms.getPredefinedSearchAttributes(),
+			wf.CustomSearchAttributes(chasmCtx),
+		), nil
+	}
+	return ms.executionInfo.GetSearchAttributes(), nil
+}
+
+func (ms *MutableStateImpl) GetMemo(ctx context.Context) (map[string]*commonpb.Payload, error) {
+	if ms.chasmVisibilityEnabled() {
+		wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return wf.CustomMemo(chasmCtx), nil
+	}
+	return ms.executionInfo.GetMemo(), nil
+}
+
+func (ms *MutableStateImpl) updatePredefinedSearchAttributes(
+	updatedSearchAttributes map[string]*commonpb.Payload,
+) error {
+	if len(updatedSearchAttributes) == 0 {
+		return nil
+	}
+	for field := range updatedSearchAttributes {
+		if sadefs.IsMappable(field) {
+			return serviceerror.NewInternalf(
+				"cannot call updatePredefinedSearchAttributes with custom search attribute %q",
+				field,
+			)
+		}
+	}
 	ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(
 		ms.executionInfo.SearchAttributes,
-		updatedPayloadMap,
+		updatedSearchAttributes,
 	)
 	ms.visibilityUpdated = true
+	return nil
+}
+
+func (ms *MutableStateImpl) updateSearchAttributes(
+	updatedSearchAttributes map[string]*commonpb.Payload,
+) error {
+	if len(updatedSearchAttributes) == 0 {
+		return nil
+	}
+
+	// Split search attributes map since it contains both predefined and custom search attributes.
+	updatedCustom := make(map[string]*commonpb.Payload)
+	updatedPredefined := make(map[string]*commonpb.Payload)
+	for name, saPayload := range updatedSearchAttributes {
+		if sadefs.IsMappable(name) {
+			updatedCustom[name] = saPayload
+		} else {
+			updatedPredefined[name] = saPayload
+		}
+	}
+
+	chasmVisEnabled := ms.chasmVisibilityEnabled()
+	chasmVisRatio := ms.config.EnableCHASMVisibilityRatio(ms.GetNamespaceEntry().Name().String())
+	if !chasmVisEnabled || chasmVisRatio < 1 {
+		// CHASM Visibility is not 100% enabled, so write everything to execution info as backup.
+		ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(
+			ms.executionInfo.SearchAttributes,
+			updatedSearchAttributes,
+		)
+		ms.visibilityUpdated = true
+	} else if len(updatedPredefined) > 0 {
+		// CHASM Visibility is 100% enabled, so write only the predefined search
+		// attributes to execution info.
+		ms.executionInfo.SearchAttributes = payload.MergeMapOfPayload(
+			ms.executionInfo.SearchAttributes,
+			updatedPredefined,
+		)
+		ms.visibilityUpdated = true
+	}
+
+	if chasmVisEnabled && len(updatedCustom) > 0 {
+		return ms.updateCustomSearchAttributesChasm(updatedCustom)
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) updateCustomSearchAttributesChasm(
+	updatedSearchAttributes map[string]*commonpb.Payload,
+) error {
+	if len(updatedSearchAttributes) == 0 {
+		return nil
+	}
+	// CHASM Visibility stores custom search attributes using alias instead of field names.
+	aliasedSearchAttributes, err := searchattribute.AliasFields(
+		ms.shard.GetSearchAttributesMapperProvider(),
+		&commonpb.SearchAttributes{
+			IndexedFields: updatedSearchAttributes,
+		},
+		ms.GetNamespaceEntry().Name().String(),
+	)
+	if err != nil {
+		return err
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.UpsertCustomSearchAttributes(chasmCtx, aliasedSearchAttributes.GetIndexedFields())
 }
 
 func (ms *MutableStateImpl) updateMemo(
 	updatedMemo map[string]*commonpb.Payload,
-) {
-	ms.executionInfo.Memo = payload.MergeMapOfPayload(
-		ms.executionInfo.Memo,
-		updatedMemo,
-	)
-	ms.visibilityUpdated = true
+) error {
+	if len(updatedMemo) == 0 {
+		return nil
+	}
+
+	chasmVisEnabled := ms.chasmVisibilityEnabled()
+	chasmVisRatio := ms.config.EnableCHASMVisibilityRatio(ms.GetNamespaceEntry().Name().String())
+	if !chasmVisEnabled || chasmVisRatio < 1 {
+		// CHASM Visibility is not 100% enabled, so write to execution info as backup.
+		ms.executionInfo.Memo = payload.MergeMapOfPayload(
+			ms.executionInfo.Memo,
+			updatedMemo,
+		)
+		ms.visibilityUpdated = true
+	}
+
+	if chasmVisEnabled {
+		return ms.updateMemoChasm(updatedMemo)
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) updateMemoChasm(
+	updatedMemo map[string]*commonpb.Payload,
+) error {
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.UpsertCustomMemo(chasmCtx, updatedMemo)
 }
 
 type closeTransactionResult struct {

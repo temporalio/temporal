@@ -33,6 +33,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -4331,6 +4332,69 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestAddTasks_ChasmVisibility() {
+	registry := chasm.NewRegistry(s.logger)
+	s.NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+	s.mockShard.SetChasmRegistry(registry)
+	s.mockConfig.VisibilityAllowList = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.mockConfig.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockConfig.EnableCHASMVisibilityRatio = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(0.99)
+	ms := NewMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		s.namespaceEntry,
+		tests.WorkflowID,
+		tests.RunID,
+		time.Now().UTC(),
+	)
+	s.True(ms.ChasmEnabled())
+	s.True(ms.chasmVisibilityEnabled())
+
+	ms.AddTasks(
+		&tasks.StartExecutionVisibilityTask{},
+		&tasks.UpsertExecutionVisibilityTask{},
+		&tasks.CloseExecutionVisibilityTask{},
+	)
+	s.Empty(ms.InsertTasks[tasks.CategoryVisibility])
+
+	ms.AddTasks(&tasks.ChasmTask{
+		Category: tasks.CategoryVisibility,
+		TaskID:   1,
+	})
+	s.Len(ms.InsertTasks[tasks.CategoryVisibility], 1)
+	t0 := ms.InsertTasks[tasks.CategoryVisibility][0]
+	s.Equal(enumsspb.TASK_TYPE_CHASM, t0.GetType())
+	s.Equal(tasks.CategoryVisibility, t0.GetCategory())
+	s.Equal(int64(1), t0.GetTaskID())
+
+	// Disable CHASM Visibility
+	s.mockConfig.EnableCHASMVisibilityRatio = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(0)
+	ms.AddTasks(&tasks.ChasmTask{
+		Category: tasks.CategoryVisibility,
+		TaskID:   2,
+	})
+	s.Len(ms.InsertTasks[tasks.CategoryVisibility], 1)
+	s.Equal(int64(1), ms.InsertTasks[tasks.CategoryVisibility][0].GetTaskID())
+
+	ms.AddTasks(
+		&tasks.StartExecutionVisibilityTask{TaskID: 2},
+		&tasks.UpsertExecutionVisibilityTask{TaskID: 3},
+		&tasks.CloseExecutionVisibilityTask{TaskID: 4},
+	)
+	s.Len(ms.InsertTasks[tasks.CategoryVisibility], 4)
+	s.Equal(int64(1), ms.InsertTasks[tasks.CategoryVisibility][0].GetTaskID())
+	t1 := ms.InsertTasks[tasks.CategoryVisibility][1]
+	s.Equal(enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION, t1.GetType())
+	s.Equal(int64(2), t1.GetTaskID())
+	t2 := ms.InsertTasks[tasks.CategoryVisibility][2]
+	s.Equal(enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION, t2.GetType())
+	s.Equal(int64(3), t2.GetTaskID())
+	t3 := ms.InsertTasks[tasks.CategoryVisibility][3]
+	s.Equal(enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION, t3.GetType())
+	s.Equal(int64(4), t3.GetTaskID())
 }
 
 func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {

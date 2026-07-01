@@ -71,6 +71,7 @@ type Config struct {
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMVisibilityRatio            dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
 	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -501,6 +502,7 @@ func NewConfig(
 
 		EnableCHASMCallbacks:          dynamicconfig.EnableCHASMCallbacks.Get(dc),
 		EnableCHASMSignalBacklinks:    dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		EnableCHASMVisibilityRatio:    dynamicconfig.EnableCHASMVisibilityRatio.Get(dc),
 		ExternalPayloadsEnabled:       dynamicconfig.ExternalPayloadsEnabled.Get(dc),
 		EnableWorkflowUpdateCallbacks: dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
 
