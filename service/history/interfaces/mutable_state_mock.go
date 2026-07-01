@@ -1974,6 +1974,20 @@ func (mr *MockMutableStateMockRecorder) EnsureChasmWorkflowComponent(ctx any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureChasmWorkflowComponent", reflect.TypeOf((*MockMutableState)(nil).EnsureChasmWorkflowComponent), ctx)
 }
 
+// ExecutionStateUpdated mocks base method.
+func (m *MockMutableState) ExecutionStateUpdated() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecutionStateUpdated")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ExecutionStateUpdated indicates an expected call of ExecutionStateUpdated.
+func (mr *MockMutableStateMockRecorder) ExecutionStateUpdated() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecutionStateUpdated", reflect.TypeOf((*MockMutableState)(nil).ExecutionStateUpdated))
+}
+
 // FlushBufferedEvents mocks base method.
 func (m *MockMutableState) FlushBufferedEvents() {
 	m.ctrl.T.Helper()

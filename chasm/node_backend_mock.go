@@ -22,6 +22,7 @@ var _ NodeBackend = (*MockNodeBackend)(nil)
 // fields (thread-safe).
 type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
+	HandleGetExecutionStateUpdated    func() bool
 	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
 	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
 	HandleGetCurrentVersion           func() int64
@@ -48,6 +49,13 @@ type MockNodeBackend struct {
 		State  enumsspb.WorkflowExecutionState
 		Status enumspb.WorkflowExecutionStatus
 	}
+}
+
+func (m *MockNodeBackend) ExecutionStateUpdated() bool {
+	if m.HandleGetExecutionStateUpdated != nil {
+		return m.HandleGetExecutionStateUpdated()
+	}
+	return false
 }
 
 func (m *MockNodeBackend) GetExecutionState() *persistencespb.WorkflowExecutionState {
