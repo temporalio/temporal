@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nsrepl.proto.v1;
+
+import "chasm/lib/nsrepl/proto/v1/message.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1;nsreplpb";
+
+// NamespaceReplicationService is the internal (frontend → history) RPC that
+// frontend uses to trigger namespace mutations through the CHASM-based
+// replication transport. The history-side handler starts the per-namespace
+// NamespaceMutationComponent and waits for the local apply (ApplyLocalTask) to
+// complete. Peer fan-out (ApplyPeerTask) continues asynchronously after the
+// RPC returns.
+service NamespaceReplicationService {
+  rpc TriggerNamespaceMutation(TriggerNamespaceMutationRequest) returns (TriggerNamespaceMutationResponse) {
+    // Route to the history shard owning the temporal-system namespace's
+    // BusinessID = namespace_id execution. namespace_id field is required by the
+    // CHASM router; it doubles as the component's BusinessID.
+    option (temporal.server.api.routing.v1.routing).business_id = "namespace_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}
+
+message TriggerNamespaceMutationRequest {
+  // The namespace whose mutation is being triggered. Doubles as the
+  // NamespaceMutationComponent's BusinessID, so concurrent calls for the same
+  // namespace serialize through CHASM's BusinessID policy.
+  string namespace_id = 1;
+
+  NamespaceMutation mutation = 2;
+}
+
+message TriggerNamespaceMutationResponse {
+  // The new notification_version after a successful local CAS write.
+  int64 new_version = 1;
+}

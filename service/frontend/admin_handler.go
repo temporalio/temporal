@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
@@ -120,6 +121,14 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+
+		// nsreplTaskExecutor applies namespace replication tasks. Used by the new
+		// ApplyNamespaceMutation admin RPC (the receiver side of the CHASM-based
+		// replication transport). This is the same TaskExecutor implementation
+		// the queue-based path uses — single source of truth for apply semantics.
+		// The admin RPC calls ExecuteWithOutcome to surface outcomes on the wire;
+		// the queue path calls Execute and discards the outcome.
+		nsreplTaskExecutor nsreplication.TaskExecutor
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -232,6 +241,14 @@ func NewAdminHandler(
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
 		schedulerClient:      args.SchedulerClient,
+		nsreplTaskExecutor: nsreplication.NewTaskExecutor(
+			args.ClusterMetadata.GetCurrentClusterName(),
+			args.PersistenceMetadataManager,
+			args.NamespaceDataMerger,
+			nsreplication.NewDefaultAdmitter(),
+			args.Logger,
+			testhooks.NewTestHooks(),
+		),
 	}
 }
 
@@ -1370,6 +1387,53 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 			ReplicationTasks:       replicationTasks,
 			LastRetrievedMessageId: lastMessageID,
 		},
+	}, nil
+}
+
+// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+// namespace replication transport. It applies the incoming namespace mutation to
+// the local metadata store using apply-if-higher semantics (config_version /
+// failover_version monotonicity). The originating cell's NamespaceMutationComponent
+// calls this RPC against each peer cell after its local apply commits.
+//
+// This is the inverse of GetNamespaceReplicationMessages: instead of the peer
+// polling, the source pushes via this RPC.
+func (adh *AdminHandler) ApplyNamespaceMutation(ctx context.Context, request *adminservice.ApplyNamespaceMutationRequest) (_ *adminservice.ApplyNamespaceMutationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespaceTask() == nil {
+		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
+	}
+
+	// Delegate to the shared TaskExecutor — same implementation the queue path
+	// uses. ExecuteWithOutcome surfaces the outcome (Applied / Created /
+	// NoOpStale / Duplicate / NotAdmitted) so we can map it onto the wire enum;
+	// the queue path's Execute is a thin wrapper that discards this.
+	outcome, err := adh.nsreplTaskExecutor.ExecuteWithOutcome(ctx, request.GetNamespaceTask())
+	if err != nil {
+		return nil, err
+	}
+
+	respOutcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED
+	switch outcome {
+	case nsreplication.OutcomeApplied:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED
+	case nsreplication.OutcomeCreated:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED
+	case nsreplication.OutcomeNoOpStale:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE
+	case nsreplication.OutcomeDuplicate:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE
+	case nsreplication.OutcomeNotAdmitted:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED
+	default:
+		respOutcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED
+	}
+	return &adminservice.ApplyNamespaceMutationResponse{
+		Outcome: respOutcome,
 	}, nil
 }
 

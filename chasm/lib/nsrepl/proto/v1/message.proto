@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nsrepl.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/persistence/v1/namespaces.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1;nsreplpb";
+
+// NamespaceMutation is the input to a NamespaceMutationComponent — the full target
+// state of the namespace plus the CAS guard and an optional correlation ID.
+message NamespaceMutation {
+  // CREATE or UPDATE. Mirrors transmission_task_handler's NamespaceOperation.
+  NamespaceOperation operation = 1;
+
+  // Full target NamespaceDetail. Self-contained — apply tasks read this directly
+  // and write it as-is to the metadata store / peer cells.
+  temporal.server.api.persistence.v1.NamespaceDetail namespace_detail = 2;
+
+  // CAS guard for the local apply. Must match the metadata store's current
+  // notification_version (today: cell-global counter; future: per-namespace).
+  int64 expected_version = 3;
+
+  // List of peer cells to fan out to after the local apply succeeds.
+  // Drawn from NamespaceDetail.replication_config.clusters minus the local cell.
+  repeated string peer_cells = 4;
+}
+
+enum NamespaceOperation {
+  NAMESPACE_OPERATION_UNSPECIFIED = 0;
+  NAMESPACE_OPERATION_CREATE = 1;
+  NAMESPACE_OPERATION_UPDATE = 2;
+}
+
+// NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
+message NamespaceMutationState {
+  // The mutation being applied.
+  NamespaceMutation mutation = 1;
+
+  // Top-level lifecycle status. Drives LifecycleState().
+  ComponentStatus status = 2;
+
+  // Local apply outcome, set once ApplyLocalTask completes.
+  LocalApplyStatus local_apply = 3;
+
+  // Per-peer apply outcomes, keyed by target cell name.
+  map<string, PeerApplyStatus> peer_apply = 4;
+}
+
+enum ComponentStatus {
+  COMPONENT_STATUS_UNSPECIFIED = 0;
+  // Component is running: local apply pending or in progress, or peer fan-out in progress.
+  COMPONENT_STATUS_RUNNING = 1;
+  // All tasks reached a terminal state (success or final failure). Component is done.
+  COMPONENT_STATUS_COMPLETED = 2;
+  // Local apply failed. Peer fan-out was never attempted.
+  COMPONENT_STATUS_FAILED = 3;
+}
+
+// LocalApplyOutcome reports the result of the local CAS write. Binary outcome:
+// pending until the write resolves, then committed or failed.
+enum LocalApplyOutcome {
+  LOCAL_APPLY_OUTCOME_UNSPECIFIED = 0;
+  LOCAL_APPLY_OUTCOME_PENDING = 1;
+  LOCAL_APPLY_OUTCOME_COMMITTED = 2;
+  LOCAL_APPLY_OUTCOME_FAILED = 3;
+}
+
+// PeerApplyOutcome reports the result of a peer apply via the
+// ApplyNamespaceMutation admin RPC. Richer than the local outcome because the
+// receiver's apply-if-higher logic can no-op stale incoming mutations, and the
+// RPC can fail in retriable or terminal ways.
+enum PeerApplyOutcome {
+  PEER_APPLY_OUTCOME_UNSPECIFIED = 0;
+  PEER_APPLY_OUTCOME_PENDING = 1;
+  PEER_APPLY_OUTCOME_APPLIED = 2;
+  PEER_APPLY_OUTCOME_NO_OP_STALE = 3;
+  PEER_APPLY_OUTCOME_FAILED_RETRIABLE = 4;
+  PEER_APPLY_OUTCOME_FAILED_TERMINAL = 5;
+}
+
+message LocalApplyStatus {
+  LocalApplyOutcome outcome = 1;
+  // The new notification_version after a successful CAS write.
+  int64 new_version = 2;
+  google.protobuf.Timestamp applied_at = 3;
+  // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
+  temporal.api.failure.v1.Failure failure = 4;
+}
+
+message PeerApplyStatus {
+  PeerApplyOutcome outcome = 1;
+  int64 new_version = 2;
+  int32 attempt_count = 3;
+  google.protobuf.Timestamp first_attempt_at = 4;
+  google.protobuf.Timestamp last_attempt_at = 5;
+  // Failure detail when outcome is FAILED_*.
+  temporal.api.failure.v1.Failure last_failure = 6;
+}
