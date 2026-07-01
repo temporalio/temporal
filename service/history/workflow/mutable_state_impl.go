@@ -7722,6 +7722,13 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
+
+	if ms.closeTransactionShouldSkipPersistence(isStateDirty, chasmNodesMutation) {
+		return closeTransactionResult{
+			skipPersistence: true,
+		}, nil
+	}
+
 	for nodePath := range chasmNodesMutation.DeletedNodes {
 		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
 		delete(ms.chasmNodeSizes, nodePath)
@@ -7757,12 +7764,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	if ms.closeTransactionShouldSkipPersistence(chasmNodesMutation) {
-		return closeTransactionResult{
-			skipPersistence: true,
-		}, nil
-	}
-
 	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.timeSource.Now())
 
@@ -7788,8 +7789,8 @@ func (ms *MutableStateImpl) closeTransaction(
 	}, nil
 }
 
-func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(chasmNodesMutation chasm.NodesMutation) bool {
-	return !ms.IsWorkflow() && chasmNodesMutation.IsEmpty()
+func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
+	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
