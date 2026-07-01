@@ -343,6 +343,13 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminMigrateSchedule(c, clientFactory)
 			},
 		},
+		{
+			Name:  "status",
+			Usage: "Show counts of V1 (workflow-backed) and V2 (CHASM) schedules in --namespace, from visibility",
+			Action: func(c *cli.Context) error {
+				return AdminScheduleStatus(c, clientFactory)
+			},
+		},
 	}
 }
 
