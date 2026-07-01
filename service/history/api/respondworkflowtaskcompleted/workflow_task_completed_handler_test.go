@@ -635,7 +635,7 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
 	ms.EXPECT().GetAssignedBuildId().Return("")
 	ms.EXPECT().AddActivityTaskStartedEvent(
-		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1",
+		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
 	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: "test-namespace-id",
@@ -672,9 +672,6 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
 	require.NoError(t, err)
 	require.NotNil(t, mutation)
-	// StartedClock must be set so that worker commands (e.g. cancel) can reconstruct
-	// the task token for eagerly dispatched activities.
-	require.Equal(t, expectedClock, ai.StartedClock)
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
