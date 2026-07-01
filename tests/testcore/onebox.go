@@ -923,6 +923,10 @@ func sdkClientFactoryProvider(
 }
 
 func (c *TemporalImpl) setNexusCallbackURL() {
+	addrs := c.hostsByProtocolByService[httpProtocol][primitives.FrontendService].All
+	if len(addrs) == 0 {
+		return
+	}
 	// Set Nexus callback URL with the cluster's HTTP address. This is a sensible default to avoid
 	// users to need to manually set this.
 	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests

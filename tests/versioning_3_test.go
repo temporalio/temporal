@@ -6712,7 +6712,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 // made current again, then reset-by-build-ID resets the workflow before v2 usage
 // so the reset run resumes on v1.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
-	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
+	env := s.setupEnv(testcore.WithWorkerService())
 
 	tv := env.Tv()
 	tv1 := tv.WithBuildIDNumber(1)

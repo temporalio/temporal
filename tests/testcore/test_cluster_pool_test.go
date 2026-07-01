@@ -8,7 +8,39 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-func TestGlobalOverridesSurviveTestCleanup(t *testing.T) {
+// clusterCreateFnArgs allow us to inspect the arguments passed to the cluster creation function in unit tests of this module.
+// This works when paired with a mocked clusterCreationFn that populates a slice of these structs for later inspection.
+type clusterCreateFnArgs struct {
+	shared        bool
+	workerEnabled bool
+}
+
+// newMockClusterPoolRouter creates a clusterRouter with small pools and a mockClusterCreationFn
+// that simply records calls. It allows testing routing logic without starting a real server.
+// Note that for the function calls, we need to return *[]clusterCreateFnArgs so that the appended
+// clusterCreateFnArgs are visible to the caller.
+func newMockClusterPoolRouter(t *testing.T) (*clusterRouter, *[]clusterCreateFnArgs) {
+	t.Helper()
+
+	var calls []clusterCreateFnArgs
+	mockClusterCreationFn := func(t *testing.T, dc map[dynamicconfig.Key]any, shared bool, opts []TestClusterOption) *FunctionalTestBase {
+		// Keep the worker service off unless explicitly enabled via WithWorkerService (this mirrors the actual createClusterFn implementation).
+		baseOpts := []TestClusterOption{withWorkerService(false)}
+		params := ApplyTestClusterOptions(append(baseOpts, opts...))
+		calls = append(calls, clusterCreateFnArgs{shared: shared, workerEnabled: params.EnableWorkerService})
+		return &FunctionalTestBase{}
+	}
+
+	r := &clusterRouter{
+		shared:           newClusterPool(2, false, 0),
+		sharedWithWorker: newClusterPool(1, false, 0), // small pool to force reuse of the same cluster for multiple tests
+		dedicated:        newClusterPool(2, true, 0),
+		clusterCreatorFn: mockClusterCreationFn,
+	}
+	return r, &calls
+}
+
+func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
 	var dcClient *dynamicconfig.MemoryClient
 
 	t.Run("create", func(t *testing.T) {
@@ -103,4 +135,47 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// The old poisoned lease remains active, while leaseCount restarts on the replacement.
 	require.Equal(t, 2, slot.activeLeases)
 	require.Equal(t, 1, slot.leaseCount)
+}
+
+func TestClusterPool_SharedWorkerServiceRouting(t *testing.T) {
+	t.Run("worker service uses and reuses shared-with-worker pool", func(t *testing.T) {
+		router, calls := newMockClusterPoolRouter(t)
+		var first, second *FunctionalTestBase
+
+		t.Run("first call creates cluster", func(t *testing.T) {
+			first = router.get(t, false /* dedicated */, true /* workerService */, nil, nil)
+		})
+		require.Equal(t, 1, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker should have one lease")
+		require.Equal(t, 0, router.shared.allSlots[0].leaseCount, "shared pool should be unused")
+		require.Len(t, *calls, 1)
+		require.Equal(t, clusterCreateFnArgs{shared: true, workerEnabled: true}, (*calls)[0])
+
+		t.Run("second call reuses cluster", func(t *testing.T) {
+			second = router.get(t, false /* dedicated */, true /* workerService */, nil, nil)
+		})
+		require.Same(t, first, second, "second call should return the same cluster, not allocate a new one")
+		require.Len(t, *calls, 1, "no new cluster should have been created")
+		require.Equal(t, 2, router.sharedWithWorker.allSlots[0].leaseCount, "slot 0 should have been leased twice")
+		require.Equal(t, 0, router.shared.allSlots[0].leaseCount+router.shared.allSlots[1].leaseCount,
+			"plain shared pool should be unused")
+	})
+
+	t.Run("worker service with dedicated uses dedicated pool", func(t *testing.T) {
+		router, calls := newMockClusterPoolRouter(t)
+
+		router.get(t, true /* dedicated */, true /* workerService */, nil, nil)
+		require.Equal(t, 0, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker pool should be unused")
+		require.Len(t, *calls, 1)
+		require.Equal(t, clusterCreateFnArgs{shared: false, workerEnabled: true}, (*calls)[0])
+	})
+
+	t.Run("no worker service uses plain shared pool", func(t *testing.T) {
+		router, calls := newMockClusterPoolRouter(t)
+
+		router.get(t, false /* dedicated */, false /* workerService */, nil, nil)
+		require.Equal(t, 1, router.shared.allSlots[0].leaseCount, "shared pool should have one lease")
+		require.Equal(t, 0, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker pool should be unused")
+		require.Len(t, *calls, 1)
+		require.Equal(t, clusterCreateFnArgs{shared: true, workerEnabled: false}, (*calls)[0])
+	})
 }

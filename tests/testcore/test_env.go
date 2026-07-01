@@ -90,6 +90,7 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster         bool
+	needWorkerService        bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
@@ -152,12 +153,13 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
-func WithWorkerService(reason string) TestOption {
+// default to avoid the worker overhead.
+// If this is not coupled with any option that requires a dedicated cluster,
+// we will create a cluster that will be recycled by other tests that also
+// need the system worker service.
+func WithWorkerService() TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
-		o.dedicatedReason = "worker service required: " + reason
+		o.needWorkerService = true
 	}
 }
 
@@ -278,7 +280,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	base := testClusterRouter.get(t, options.dedicatedCluster, options.needWorkerService, startupConfig, options.clusterOptions)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
