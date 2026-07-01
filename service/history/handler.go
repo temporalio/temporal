@@ -2213,6 +2213,20 @@ func (h *Handler) completeNexusOperationChasmFallback(
 		return serviceerror.NewNotFound(msgOperationNotFound)
 	}
 
+	// Require the token's schedule-time run to be a real run of this execution before re-targeting the
+	// current run, mirroring the CHASM-token path (completeNexusOperationAfterReset). A bogus/tampered
+	// run ID (with an otherwise valid event/request ID) must keep its NotFound rather than completing the
+	// current-run op.
+	namespaceID := request.GetCompletion().GetNamespaceId()
+	businessID := request.GetCompletion().GetWorkflowId()
+	if !h.scheduleTimeRunExists(ctx, chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  businessID,
+		RunID:       request.GetCompletion().GetRunId(),
+	}) {
+		return serviceerror.NewNotFound(msgOperationNotFound)
+	}
+
 	completion, err := chasmNexusCompletionFromHSMRequest(request)
 	if err != nil {
 		return err
@@ -2223,8 +2237,8 @@ func (h *Handler) completeNexusOperationChasmFallback(
 	return h.applyChasmNexusCompletionOnCurrentRun(
 		ctx,
 		chasm.ExecutionKey{
-			NamespaceID: request.GetCompletion().GetNamespaceId(),
-			BusinessID:  request.GetCompletion().GetWorkflowId(),
+			NamespaceID: namespaceID,
+			BusinessID:  businessID,
 		},
 		scheduledEventID,
 		completion,
@@ -2551,8 +2565,17 @@ func nexusOperationErrorFromChasmRequest(
 	}
 	opErr, ok := recvdErr.(*nexus.OperationError)
 	if !ok {
+		// The CHASM request has no explicit outcome state, so a failure that doesn't already carry a
+		// Nexus OperationError must be classified here. Mirror the native CHASM path
+		// (Operation.HandleNexusCompletion) and treat a Temporal cancellation as Canceled rather than
+		// defaulting everything to Failed, so a cross-tree completion records the same terminal state
+		// (canceled vs failed) as an in-CHASM completion.
+		state := nexus.OperationStateFailed
+		if failure.Failure.GetCanceledFailureInfo() != nil {
+			state = nexus.OperationStateCanceled
+		}
 		opErr = &nexus.OperationError{
-			State:   nexus.OperationStateFailed,
+			State:   state,
 			Message: "nexus operation completed unsuccessfully",
 			Cause:   recvdErr,
 		}
