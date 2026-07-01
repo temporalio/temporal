@@ -343,6 +343,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient, dc *dynamicconf
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
 	persistenceConfig.TransactionSizeLimit = dynamicconfig.TransactionSizeLimit.Get(dc)
+	persistenceConfig.HistoryNodeBlobCompressionThreshold = dynamicconfig.HistoryNodeBlobCompressionThreshold.Get(dc)
 	return &persistenceConfig
 }
 

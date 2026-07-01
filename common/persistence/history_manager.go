@@ -364,6 +364,15 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	if err != nil {
 		return nil, err
 	}
+
+	dataSize := len(blob.Data)
+
+	var encodingOverride string
+	blob, encodingOverride, err = m.maybeCompressHistoryBlob(blob)
+	if err != nil {
+		return nil, err
+	}
+
 	size := len(blob.Data)
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
@@ -380,8 +389,10 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 		Node: InternalHistoryNode{
 			NodeID:            nodeID,
 			Events:            blob,
+			EncodingOverride:  encodingOverride,
 			PrevTransactionID: request.PrevTransactionID,
 			TransactionID:     request.TransactionID,
+			DataSize:          dataSize,
 		},
 		ShardID: request.ShardID,
 	}
@@ -418,7 +429,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
-	if len(request.History.Data) == 0 {
+	if request.History == nil || len(request.History.Data) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}
@@ -431,8 +442,18 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 			Msg: "eventID cannot be less than 1",
 		}
 	}
+
+	blob := request.History
+	dataSize := len(blob.Data)
+
+	var encodingOverride string
+	blob, encodingOverride, err = m.maybeCompressHistoryBlob(blob)
+	if err != nil {
+		return nil, err
+	}
+
 	// nodeID will be the first eventID
-	size := len(request.History.Data)
+	size := len(blob.Data)
 	sizeLimit := m.transactionSizeLimit()
 	if size > sizeLimit {
 		return nil, &TransactionSizeLimitError{
@@ -447,9 +468,11 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		BranchInfo:  branch,
 		Node: InternalHistoryNode{
 			NodeID:            nodeID,
-			Events:            request.History,
+			Events:            blob,
+			EncodingOverride:  encodingOverride,
 			PrevTransactionID: request.PrevTransactionID,
 			TransactionID:     request.TransactionID,
+			DataSize:          dataSize,
 		},
 		ShardID: request.ShardID,
 	}
@@ -492,7 +515,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 
 	return &AppendHistoryNodesResponse{
-		Size: len(req.Node.Events.Data),
+		Size: req.Node.DataSize,
 	}, err
 }
 
@@ -509,7 +532,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 
 	err = m.persistence.AppendHistoryNodes(ctx, req)
 	return &AppendHistoryNodesResponse{
-		Size: len(request.History.Data),
+		Size: req.Node.DataSize,
 	}, err
 }
 
