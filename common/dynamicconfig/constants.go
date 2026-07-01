@@ -3110,6 +3110,13 @@ the CHASM implementation. When disabled, new update callbacks will not be regist
 but existing callbacks will still be processed and fired.`,
 	)
 
+	EnableReadChasmWorkflows = NewNamespaceBoolSetting(
+		"frontend.enableReadChasmWorkflows",
+		false,
+		`If enabled, Visibility read workflow APIS (ListWorkflowExecutions, CountWorkflowsExecutions)
+will use the CHASM API in VisibilityManager`,
+	)
+
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
 		"history.versionMembershipCacheTTL",
 		1*time.Second,
