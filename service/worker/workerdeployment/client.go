@@ -21,6 +21,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -2110,10 +2111,57 @@ func (d *ClientImpl) ValidateComputeConfig(
 	identity string,
 ) error {
 	upserts := scalingGroupUpdatesToWCI(upsertScalingGroups)
-	if err := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, version, identity, upserts, removeScalingGroups); err != nil {
-		return serviceerror.NewInvalidArgument(err.Error())
+	validationErr := d.workerControllerInstanceClient.ValidateWorkerControllerInstanceSpec(ctx, namespaceEntry, version, identity, upserts, removeScalingGroups)
+
+	// Persist the on-demand validation outcome to the version workflow's ComputeStatus so the
+	// result is reflected immediately, instead of waiting for the next periodic check. This reuses
+	// the SignalSyncValidationStatus receiver that the periodic check delivers to. Best-effort:
+	// a failure to sync must not change the validation result returned to the caller.
+	now := time.Now()
+	status := wciiface.NewValidationStatusSuccess(now)
+	if validationErr != nil {
+		status = wciiface.NewValidationStatusFailed(now, validationErr.Error())
+	}
+	if syncErr := d.syncValidationStatus(ctx, namespaceEntry, version, status, identity); syncErr != nil {
+		d.logger.Error("failed to sync compute validation status to version workflow",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
+			tag.Error(syncErr))
+	}
+
+	if validationErr != nil {
+		return serviceerror.NewInvalidArgument(validationErr.Error())
 	}
 	return nil
+}
+
+// syncValidationStatus signals the version workflow with the outcome of a compute-config
+// validation so it can persist the result into ComputeStatus (see the SignalSyncValidationStatus
+// receiver in version_workflow.go).
+func (d *ClientImpl) syncValidationStatus(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	status *wciiface.ValidationStatus,
+	identity string,
+) error {
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(status)
+	if err != nil {
+		return err
+	}
+	_, err = d.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId()),
+			},
+			SignalName: worker_versioning.SignalSyncValidationStatus,
+			Input:      input,
+			Identity:   identity,
+			RequestId:  uuid.NewString(),
+		},
+	})
+	return err
 }
 
 // queryVersionState queries the version workflow for its current state.
