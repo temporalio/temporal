@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1608,6 +1609,79 @@ func (n *Node) applyPendingComponentMetadata() bool {
 	return dirty
 }
 
+// closeTransactionUpdatePauseInfo updates ChasmPauseInfo for every component node
+// that transitioned into or out of an effective paused state this transaction.
+// A component is effectively paused if it or any ancestor returns LifecycleStatePaused,
+// since paused state covers the entire subtree below the paused component.
+func (n *Node) closeTransactionUpdatePauseInfo(immutableContext Context) error {
+	now := n.timeSource.Now()
+	for _, node := range n.andAllChildren() {
+		if !node.isComponent() {
+			continue
+		}
+		component, ok := node.value.(Component)
+		if !ok {
+			continue
+		}
+
+		attrs := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if attrs == nil {
+			continue
+		}
+
+		pauseInfo := attrs.GetPauseInfo()
+		wasPaused := pauseInfo != nil && pauseInfo.PausedTime != nil
+		isPaused := component.LifecycleState(immutableContext).IsPaused() || node.isAncestorPaused(immutableContext)
+
+		switch {
+		case !wasPaused && isPaused:
+			if attrs.PauseInfo == nil {
+				attrs.PauseInfo = &persistencespb.ChasmPauseInfo{}
+			}
+			attrs.PauseInfo.PausedTime = timestamppb.New(now)
+		case wasPaused && !isPaused:
+			elapsed := now.Sub(pauseInfo.PausedTime.AsTime())
+			attrs.PauseInfo.AccumulatedPauseDuration = durationpb.New(pauseInfo.GetAccumulatedPauseDuration().AsDuration() + elapsed)
+			attrs.PauseInfo.PausedTime = nil
+		default:
+			continue
+		}
+
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+			node.updateLastUpdateVersionedTransition()
+			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+			delete(n.mutation.DeletedNodes, encodedPath)
+		}
+	}
+	return nil
+}
+
+// isAncestorPaused reports whether any ancestor component of this node is currently
+// paused — either by returning LifecycleStatePaused (if deserialized this transaction)
+// or by having PausedTime recorded in its persisted attrs from a prior transaction.
+func (n *Node) isAncestorPaused(ctx Context) bool {
+	for p := n.parent; p != nil; p = p.parent {
+		if !p.isComponent() {
+			continue
+		}
+		// If the ancestor was deserialized this transaction, ask its lifecycle state directly.
+		if c, ok := p.value.(Component); ok {
+			if c.LifecycleState(ctx).IsPaused() {
+				return true
+			}
+		}
+		// If the ancestor was not accessed this transaction, check its persisted pause info.
+		if p.serializedNode.GetMetadata().GetComponentAttributes().GetPauseInfo().GetPausedTime() != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // componentNodePath implements the CHASM Context interface
 func (n *Node) componentNodePath(
 	component Component,
@@ -1638,12 +1712,19 @@ func (n *Node) dataNodePath(
 	return refNode.path(), nil
 }
 
-// Now implements the CHASM Context interface
 func (n *Node) Now(
 	_ Component,
 ) time.Time {
-	// TODO: Now() could be different for components after we support Pause for CHASM components.
 	return n.timeSource.Now()
+}
+
+// componentPauseInfo returns the persisted pause info for the given component, or nil if none.
+func (n *Node) componentPauseInfo(component Component) *persistencespb.ChasmPauseInfo {
+	node, ok := n.valueToNode[component]
+	if !ok {
+		return nil
+	}
+	return node.serializedNode.GetMetadata().GetComponentAttributes().GetPauseInfo()
 }
 
 // AddTask implements the CHASM MutableContext interface
@@ -1713,6 +1794,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionUpdatePauseInfo(immutableContext); err != nil {
 		return NodesMutation{}, err
 	}
 

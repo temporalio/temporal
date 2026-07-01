@@ -251,3 +251,59 @@ func RemovePayloadHandler(
 		State: state,
 	}, nil
 }
+
+func PausePayloadStoreHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).Pause,
+		nil,
+	)
+	return err
+}
+
+func UnpausePayloadStoreHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).Unpause,
+		nil,
+	)
+	return err
+}
+
+func GetPauseInfoHandler(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	storeID string,
+) (chasm.ComponentPauseInfo, error) {
+	return chasm.ReadComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: namespaceID.String(),
+				BusinessID:  storeID,
+			},
+		),
+		(*PayloadStore).GetPauseInfo,
+		nil,
+	)
+}

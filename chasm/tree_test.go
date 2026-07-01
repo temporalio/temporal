@@ -3362,6 +3362,119 @@ func (s *nodeSuite) TestContextNowStableWithinContext() {
 	s.Equal(laterTime, immutableContext.Now(component))
 }
 
+func (s *nodeSuite) TestContextPauseInfoWhilePaused() {
+	root := s.testComponentTree()
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	tPause := t0.Add(time.Minute)
+	tWhilePaused := tPause.Add(time.Hour)
+	tUnpause := tWhilePaused.Add(time.Hour)
+	tAfterUnpause := tUnpause.Add(time.Minute)
+
+	s.timeSource.Update(t0)
+
+	mutableCtx := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableCtx, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	// Baseline: no pause info before any pause.
+	s.Nil(mutableCtx.PauseInfo(testComponent).PausedSince)
+	s.Zero(mutableCtx.PauseInfo(testComponent).PastPausedDuration)
+
+	s.timeSource.Update(tPause)
+	testComponent.Pause(mutableCtx)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Next transaction: PausedSince should be set to tPause.
+	s.timeSource.Update(tWhilePaused)
+	mutableCtx2 := NewMutableContext(context.Background(), root)
+	component2, err := root.Component(mutableCtx2, ComponentRef{})
+	s.NoError(err)
+	testComponent2 := component2.(*TestComponent)
+	pi := mutableCtx2.PauseInfo(testComponent2)
+	s.Require().NotNil(pi.PausedSince)
+	s.Equal(tPause, *pi.PausedSince)
+	s.Zero(pi.PastPausedDuration)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Unpause.
+	s.timeSource.Update(tUnpause)
+	mutableCtx3 := NewMutableContext(context.Background(), root)
+	component3, err := root.Component(mutableCtx3, ComponentRef{})
+	s.NoError(err)
+	testComponent3 := component3.(*TestComponent)
+	testComponent3.Unpause(mutableCtx3)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// After unpause: PausedSince is nil, PastPausedDuration reflects the pause interval.
+	s.timeSource.Update(tAfterUnpause)
+	mutableCtx4 := NewMutableContext(context.Background(), root)
+	component4, err := root.Component(mutableCtx4, ComponentRef{})
+	s.NoError(err)
+	testComponent4 := component4.(*TestComponent)
+	pi = mutableCtx4.PauseInfo(testComponent4)
+	s.Nil(pi.PausedSince)
+	s.Equal(tUnpause.Sub(tPause), pi.PastPausedDuration)
+}
+
+func (s *nodeSuite) TestContextPauseInfoMultipleCycles() {
+	root := s.testComponentTree()
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	pause1At := t0.Add(10 * time.Minute)
+	unpause1At := pause1At.Add(5 * time.Minute)
+	pause2At := unpause1At.Add(3 * time.Minute)
+	unpause2At := pause2At.Add(7 * time.Minute)
+
+	s.timeSource.Update(t0)
+
+	mutableCtx := NewMutableContext(context.Background(), root)
+	component, err := root.Component(mutableCtx, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	s.timeSource.Update(pause1At)
+	testComponent.Pause(mutableCtx)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	s.timeSource.Update(unpause1At)
+	mutableCtx2 := NewMutableContext(context.Background(), root)
+	component2, err := root.Component(mutableCtx2, ComponentRef{})
+	s.NoError(err)
+	component2.(*TestComponent).Unpause(mutableCtx2)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	s.timeSource.Update(pause2At)
+	mutableCtx3 := NewMutableContext(context.Background(), root)
+	component3, err := root.Component(mutableCtx3, ComponentRef{})
+	s.NoError(err)
+	component3.(*TestComponent).Pause(mutableCtx3)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	s.timeSource.Update(unpause2At)
+	mutableCtx4 := NewMutableContext(context.Background(), root)
+	component4, err := root.Component(mutableCtx4, ComponentRef{})
+	s.NoError(err)
+	component4.(*TestComponent).Unpause(mutableCtx4)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	mutableCtx5 := NewMutableContext(context.Background(), root)
+	component5, err := root.Component(mutableCtx5, ComponentRef{})
+	s.NoError(err)
+	pi := mutableCtx5.PauseInfo(component5.(*TestComponent))
+	s.Nil(pi.PausedSince)
+	s.Equal(5*time.Minute+7*time.Minute, pi.PastPausedDuration)
+}
+
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	root := s.testComponentTree()
 

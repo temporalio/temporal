@@ -21,9 +21,16 @@ type Context interface {
 	// NOTE: component created in the current transaction won't have a ref
 	// this is a Ref to the component state at the start of the transition
 	Ref(Component) ([]byte, error)
-	// Now returns the current time in the context of the given component.
-	// In a context of a transaction, this time must be used to allow for framework support of pause and time skipping.
+	// Now returns the current time, stable for the lifetime of this context.
+	// Must be used within a transaction to allow for framework support of time skipping.
+	// Note: Now does not account for pause state; use PauseInfo to incorporate pause duration
+	// into time calculations.
 	Now(Component) time.Time
+	// PauseInfo returns pause accounting for the given component as of the start of this context.
+	// Because LifecycleStatePaused covers the entire component subtree, the framework accumulates
+	// pause duration on every component in the subtree, not only the one that returned the paused
+	// state. Application logic can use this to compute a pause-adjusted time or implement SLA tracking.
+	PauseInfo(Component) ComponentPauseInfo
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
@@ -66,6 +73,25 @@ type Context interface {
 	withValue(key any, value any) Context
 	structuredRef(Component) (ComponentRef, error)
 	goContext() context.Context
+}
+
+// ComponentPauseInfo is a snapshot of a component's pause accounting as of the start of this context.
+type ComponentPauseInfo struct {
+	// PausedSince is the wall-clock time when the component entered LifecycleStatePaused,
+	// or nil if the component is not currently paused.
+	PausedSince *time.Time
+	// PastPausedDuration is the total time spent paused across all completed pause/unpause cycles.
+	// Does not include the current ongoing pause interval; use TotalPausedDuration for that.
+	PastPausedDuration time.Duration
+}
+
+// TotalPausedDuration returns the total time this component has been paused, including the
+// current ongoing pause interval if the component is currently paused.
+func (p ComponentPauseInfo) TotalPausedDuration(now time.Time) time.Duration {
+	if p.PausedSince == nil {
+		return p.PastPausedDuration
+	}
+	return p.PastPausedDuration + now.Sub(*p.PausedSince)
 }
 
 type ExecutionInfo struct {
@@ -174,6 +200,25 @@ func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
 
 func (c *immutableCtx) Now(_ Component) time.Time {
 	return c.now
+}
+
+func (c *immutableCtx) PauseInfo(component Component) ComponentPauseInfo {
+	if component == nil {
+		return ComponentPauseInfo{}
+	}
+	info := c.root.componentPauseInfo(component)
+	if info == nil {
+		return ComponentPauseInfo{}
+	}
+	var pausedSince *time.Time
+	if pt := info.GetPausedTime(); pt != nil {
+		t := pt.AsTime()
+		pausedSince = &t
+	}
+	return ComponentPauseInfo{
+		PausedSince:              pausedSince,
+		PastPausedDuration: info.GetAccumulatedPauseDuration().AsDuration(),
+	}
 }
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {

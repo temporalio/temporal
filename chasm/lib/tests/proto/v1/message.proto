@@ -13,6 +13,7 @@ message TestPayloadStore {
   map<string, google.protobuf.Timestamp> expiration_times = 3;
   bool closed = 4;
   bool canceled = 5;
+  bool paused = 6;
 }
 
 message TestPayloadTTLPureTask {
