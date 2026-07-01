@@ -134,6 +134,34 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.Len(t, generator.FutureActionTimes, 2)
 }
 
+func TestGeneratorTask_SkipFutureActionTimes(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	sched.Schedule.State.LimitedActions = true
+	sched.Schedule.State.RemainingActions = 2
+
+	// Seed the window with a normal run.
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+	require.Len(t, generator.FutureActionTimes, 2)
+
+	// A skip run leaves the window untouched even though the count input changed,
+	// mirroring a completion-triggered run firing after RemainingActions dropped.
+	sched.Schedule.State.RemainingActions = 1
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{
+		SkipFutureActionTimes: true,
+	}))
+	require.Len(t, generator.FutureActionTimes, 2)
+
+	// A normal run picks up the new count.
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+	require.Len(t, generator.FutureActionTimes, 1)
+}
+
 func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
