@@ -336,6 +336,88 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	s.True(releaseCalled)
 }
 
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetError() {
+	// When ResetWorkflow fails with a non-InvalidArgument error, the reapply is not swallowed:
+	// BackfillWorkflow propagates the error so the replication task is retried.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	LastCompletedWorkflowTaskStartedEventId := int64(9999)
+	nextEventID := LastCompletedWorkflowTaskStartedEventId * 2
+	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion(workflowID)
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
+	})
+	histories := versionhistory.NewVersionHistories(versionHistory)
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+	historySize := rand.Int63()
+
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion(workflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
+	mutableState.EXPECT().AddHistorySize(historySize)
+
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		LastCompletedWorkflowTaskStartedEventId,
+		lastWorkflowTaskStartedVersion,
+		nextEventID,
+		gomock.Any(),
+		targetWorkflow,
+		targetWorkflow,
+		EventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+		nil,
+		false, // allowResetWithPendingChildren
+		nil,   // post reset operations
+	).Return(serviceerror.NewInternal("reset boom"))
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	// UpdateWorkflowExecutionWithNew must not be invoked: the reset error is propagated first.
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+
+	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
+	s.Error(err)
+	s.True(releaseCalled)
+}
+
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_NoWorkflowTaskBoundary() {
 	// A closed current workflow with no completed workflow task and no usable pending workflow
 	// task (never had one, or its only task was started then cleared on close) has no
@@ -492,6 +574,169 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Pendin
 
 	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
+	s.True(releaseCalled)
+}
+
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_StartedPendingWorkflowTask() {
+	// A closed current workflow that never completed a workflow task but has a real pending
+	// workflow task that was already started (StartedEventID set) is anchored at that started
+	// event, not its scheduled event, so the resetter rebuilds to the started boundary.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	scheduledEventID := int64(2)
+	startedEventID := int64(3)
+	nextEventID := int64(4)
+	startedEventVersion := s.namespaceEntry.FailoverVersion(workflowID)
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: startedEventID, Version: startedEventVersion},
+	})
+	histories := versionhistory.NewVersionHistories(versionHistory)
+	historySize := rand.Int63()
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion(workflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	// No completed workflow task, but a real pending task that was already started survives the close.
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
+	mutableState.EXPECT().IsTransientWorkflowTask().Return(false).AnyTimes()
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(&historyi.WorkflowTaskInfo{
+		ScheduledEventID: scheduledEventID,
+		StartedEventID:   startedEventID,
+		Type:             enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+	}).AnyTimes()
+	mutableState.EXPECT().AddHistorySize(historySize)
+
+	// Reset must be anchored at the started workflow task's event, not the scheduled one.
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		startedEventID,
+		startedEventVersion,
+		nextEventID,
+		gomock.Any(),
+		targetWorkflow,
+		targetWorkflow,
+		EventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+		nil,
+		false, // allowResetWithPendingChildren
+		nil,   // post reset operations
+	).Return(nil)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_TransientWorkflowTaskNotUsable() {
+	// A transient (continuously failing, attempt > 1) pending task has no persisted
+	// WorkflowTaskScheduled event, so it must NOT be used as a reset anchor. ResetWorkflow must
+	// not be invoked; the EmptyEventID version-history lookup errors out instead.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	nextEventID := int64(5)
+	version := s.namespaceEntry.FailoverVersion(workflowID)
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: common.FirstEventID, Version: version},
+	})
+	histories := versionhistory.NewVersionHistories(versionHistory)
+	historySize := rand.Int63()
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion(workflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(common.EmptyEventID)
+	mutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
+	// Transient task: ScheduledEventID is a NextEventID placeholder with no backing event.
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(&historyi.WorkflowTaskInfo{
+		ScheduledEventID: nextEventID,
+		StartedEventID:   common.EmptyEventID,
+		Type:             enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+	}).AnyTimes()
+	mutableState.EXPECT().AddHistorySize(historySize)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
+
+	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
+	s.Error(err)
 	s.True(releaseCalled)
 }
 
