@@ -3108,6 +3108,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	s.NoError(err)
 
@@ -3174,6 +3175,7 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	s.NoError(err)
 
@@ -6635,6 +6637,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 		nil,
 		nil,
 		expectedWorkerControlTaskQueue,
+		nil,
 	)
 	s.NoError(err)
 
