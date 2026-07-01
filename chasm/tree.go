@@ -2183,6 +2183,36 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	return cleanedUp, nil
 }
 
+// applySingletonMode enforces singleton semantics for tasks registered with [WithSingletonTask].
+// It is called after task validation, so only valid new tasks reach this point.
+// Returns true if the new task should be skipped (SingletonTaskModeIgnore with existing task).
+func (n *Node) applySingletonMode(
+	rt *RegistrableTask,
+	taskList *[]*persistencespb.ChasmComponentAttributes_Task,
+) (skip bool) {
+	if rt.singletonMode == 0 {
+		return false
+	}
+
+	idx := slices.IndexFunc(*taskList, func(t *persistencespb.ChasmComponentAttributes_Task) bool {
+		return t.TypeId == rt.taskTypeID
+	})
+	if idx == -1 {
+		return false
+	}
+
+	switch rt.singletonMode {
+	case SingletonTaskModeReplace:
+		delete(n.taskValueCache, (*taskList)[idx].Data)
+		*taskList = slices.Delete(*taskList, idx, idx+1)
+		return false
+	case SingletonTaskModeIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) closeTransactionHandleNewTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 	validateContext Context,
@@ -2240,9 +2270,15 @@ func (n *Node) closeTransactionHandleNewTasks(
 		}
 
 		if registrableTask.isPureTask {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.PureTasks); skip {
+				continue
+			}
 			componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
 			sortPureTasks = true
 		} else {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.SideEffectTasks); skip {
+				continue
+			}
 			componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
 		}
 

@@ -4568,3 +4568,291 @@ func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	s.NoError(err)
 	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
 }
+
+func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_SideEffect() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First transaction: add an initial singleton side-effect task.
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("first")})
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1)
+	s.Equal(testSingletonReplaceSideEffectTaskTypeID, rootAttr.SideEffectTasks[0].TypeId)
+
+	// Second transaction: add a second singleton task — it should replace the first.
+	// closeTransactionCleanupInvalidTasks re-validates the existing task (returns true to keep it),
+	// then closeTransactionHandleNewTasks validates the new task.
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	mutableContext = NewMutableContext(context.Background(), root)
+	c, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent = c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("second")})
+
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1, "replace mode must keep exactly one task")
+	s.Equal(testSingletonReplaceSideEffectTaskTypeID, rootAttr.SideEffectTasks[0].TypeId)
+}
+
+func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_SideEffect() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First transaction: add the initial singleton side-effect task.
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSingletonIgnoreSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("first")})
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1)
+	firstTask := rootAttr.SideEffectTasks[0]
+
+	// Second transaction: add a second singleton task — it should be discarded.
+	// closeTransactionCleanupInvalidTasks re-validates the existing task (1 call),
+	// then closeTransactionHandleNewTasks validates the new task (1 call).
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	mutableContext = NewMutableContext(context.Background(), root)
+	c, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent = c.(*TestComponent)
+
+	s.testLibrary.mockSingletonIgnoreSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("second")})
+
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1, "ignore mode must keep exactly one task")
+	s.Equal(firstTask.VersionedTransition, rootAttr.SideEffectTasks[0].VersionedTransition,
+		"ignore mode must keep the original task, not replace it")
+}
+
+func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_Pure() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	t1 := s.timeSource.Now()
+	t2 := t1.Add(time.Minute)
+
+	// First transaction: add an initial singleton pure task.
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplacePureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t1}, &TestSingletonReplacePureTask{Data: []byte("first")})
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.PureTasks, 1)
+	s.Equal(testSingletonReplacePureTaskTypeID, rootAttr.PureTasks[0].TypeId)
+
+	// Second transaction: add a second singleton pure task with a different scheduled time.
+	// closeTransactionCleanupInvalidTasks re-validates the existing task (1 call),
+	// then closeTransactionHandleNewTasks validates the new task (1 call).
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	mutableContext = NewMutableContext(context.Background(), root)
+	c, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent = c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplacePureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
+	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t2}, &TestSingletonReplacePureTask{Data: []byte("second")})
+
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.PureTasks, 1, "replace mode must keep exactly one task")
+	s.Equal(testSingletonReplacePureTaskTypeID, rootAttr.PureTasks[0].TypeId)
+	s.Equal(t2.UTC(), rootAttr.PureTasks[0].ScheduledTime.AsTime(), "replace mode must use the new task's scheduled time")
+}
+
+func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_Pure() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	t1 := s.timeSource.Now()
+	t2 := t1.Add(time.Minute)
+
+	// First transaction: add the initial singleton pure task.
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSingletonIgnorePureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t1}, &TestSingletonIgnorePureTask{Data: []byte("first")})
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.PureTasks, 1)
+	firstTask := rootAttr.PureTasks[0]
+
+	// Second transaction: add a second singleton pure task — it should be discarded.
+	// closeTransactionCleanupInvalidTasks re-validates the existing task (1 call),
+	// then closeTransactionHandleNewTasks validates the new task (1 call).
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	mutableContext = NewMutableContext(context.Background(), root)
+	c, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent = c.(*TestComponent)
+
+	s.testLibrary.mockSingletonIgnorePureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
+	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t2}, &TestSingletonIgnorePureTask{Data: []byte("second")})
+
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.PureTasks, 1, "ignore mode must keep exactly one task")
+	s.Equal(firstTask.ScheduledTime.AsTime(), rootAttr.PureTasks[0].ScheduledTime.AsTime(),
+		"ignore mode must keep the original task's scheduled time")
+}
+
+func (s *nodeSuite) TestCloseTransaction_SingletonTask_InvalidNewTask_DoesNotDisplaceExisting() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	// First transaction: add a valid singleton replace side-effect task.
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("first")})
+
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1)
+	firstTask := rootAttr.SideEffectTasks[0]
+
+	// Second transaction: add an invalid singleton task — validation drops it before singleton logic runs,
+	// so the existing task must be unaffected.
+	// closeTransactionCleanupInvalidTasks re-validates the existing task first (returns true to keep it),
+	// then closeTransactionHandleNewTasks validates the new task (returns false to drop it).
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 3 }
+	mutableContext = NewMutableContext(context.Background(), root)
+	c, err = root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent = c.(*TestComponent)
+
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+	s.testLibrary.mockSingletonReplaceSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("invalid-second")})
+
+	mutation, err = root.CloseTransaction()
+	s.NoError(err)
+	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
+	s.Len(rootAttr.SideEffectTasks, 1, "invalid new task must not displace existing singleton")
+	s.Equal(firstTask.VersionedTransition, rootAttr.SideEffectTasks[0].VersionedTransition,
+		"existing task must be unchanged")
+}
