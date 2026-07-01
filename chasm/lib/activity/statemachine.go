@@ -42,38 +42,39 @@ var TransitionScheduled = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		attempt := a.LastAttempt.Get(ctx)
-
+		currentTime := ctx.Now(a)
 		attempt.Count++
 		attempt.Stamp++
 
 		// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
 		// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
-		dispatchTime := a.firstDispatchTime()
+		startDelay := a.GetStartDelay().AsDuration()
+		startDelayEnd := currentTime.Add(startDelay)
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: dispatchTime.Add(timeout),
+					ScheduledTime: startDelayEnd.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
 				})
 		}
 
-		if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
 			a.ScheduleToCloseStamp++
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: deadline,
+					ScheduledTime: startDelayEnd.Add(timeout),
 				},
 				&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 		}
 
 		dispatchAttrs := chasm.TaskAttributes{}
-		if dispatchTime.After(a.ScheduleTime.AsTime()) {
-			dispatchAttrs.ScheduledTime = dispatchTime
+		if startDelay > 0 {
+			dispatchAttrs.ScheduledTime = startDelayEnd
 		}
 		ctx.AddTask(
 			a,
@@ -105,7 +106,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		}
 
 		attempt := a.LastAttempt.Get(ctx)
-		retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
+		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
@@ -488,9 +489,9 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	req       *workflowservice.ResetActivityExecutionRequest
-	resetTime time.Time
-	handler   metrics.Handler
+	req          *workflowservice.ResetActivityExecutionRequest
+	scheduleTime time.Time
+	handler      metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
@@ -578,7 +579,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 			return err
 		}
 
-		retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
+		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,

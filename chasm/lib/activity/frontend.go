@@ -392,6 +392,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		namespaceID,
 		opts,
 		req.Priority,
+		durationpb.New(0),
 	)
 	if err != nil {
 		return nil, err
