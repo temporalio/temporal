@@ -318,6 +318,13 @@ func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
 	r.perKeyLimit = simpleLimiterParams{}
 }
 
+// rateLimitState returns the whole-queue ready time and whether a per-key limit is in effect.
+func (r *rateLimitManager) rateLimitState() (wholeQueueReady simpleLimiter, perKeyLimited bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.wholeQueueReady, r.perKeyLimit.limited()
+}
+
 func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -907,7 +907,9 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
+	workflowStartTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete, and execution replication delete task,
@@ -985,6 +987,8 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
+							StartTime:                      workflowStartTime,
+							IsRetentionDelete:              retentionDelete,
 						},
 					}
 				}
@@ -1484,6 +1488,10 @@ func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
+}
+
+func (s *ContextImpl) GetLifecycleContext() context.Context {
+	return s.lifecycleCtx
 }
 
 func (s *ContextImpl) stoppedForOwnershipLost() bool {
@@ -2284,10 +2292,7 @@ func (s *ContextImpl) newDetachedContext(
 	var cancel context.CancelFunc
 	deadline, ok := ctx.Deadline()
 	if ok {
-		timeout := deadline.Sub(s.GetTimeSource().Now())
-		if timeout < minContextTimeout {
-			timeout = minContextTimeout
-		}
+		timeout := max(deadline.Sub(s.GetTimeSource().Now()), minContextTimeout)
 		detachedContext, cancel = context.WithTimeout(detachedContext, timeout)
 	} else {
 		cancel = func() {}

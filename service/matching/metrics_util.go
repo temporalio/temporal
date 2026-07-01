@@ -4,6 +4,40 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+// dropReason is why a backlog task was dropped; it is recorded as the `reason` tag on
+// tasks_dropped. The zero value (dropReasonUnspecified) means the task was not dropped.
+type dropReason int
+
+const (
+	dropReasonUnspecified dropReason = iota
+	dropReasonNotFound
+	dropReasonInternalError
+	dropReasonDataLoss
+	dropReasonExpiredRead
+	dropReasonExpiredMemory
+	dropReasonInvalid
+)
+
+// tag maps the drop reason to its tasks_dropped `reason` metric tag.
+func (r dropReason) tag() metrics.Tag {
+	switch r {
+	case dropReasonNotFound:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonNotFound)
+	case dropReasonInternalError:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonInternalError)
+	case dropReasonDataLoss:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonDataLoss)
+	case dropReasonExpiredRead:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonExpiredRead)
+	case dropReasonExpiredMemory:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonExpiredMemory)
+	default:
+		return metrics.ReasonTag(metrics.DroppedTaskReasonInvalid)
+	}
+}
+
+// getInvalidTaskTag returns the tasks_expired stage tag for a task being dropped
+// due to in-memory expiry or validation failure.
 func getInvalidTaskTag(task *internalTask) metrics.Tag {
 	if IsTaskExpired(task.event.AllocatedTaskInfo) {
 		return metrics.TaskExpireStageMemoryTag
@@ -11,22 +45,20 @@ func getInvalidTaskTag(task *internalTask) metrics.Tag {
 	return metrics.TaskInvalidTag
 }
 
-// getDroppedTaskExpiryReasonTag returns the tasks_dropped reason tag for a task
-// being thrown away due to in-memory expiry or validation failure.
-func getDroppedTaskExpiryReasonTag(task *internalTask) metrics.Tag {
+// getDroppedTaskExpiryReason returns the drop reason for a task being dropped due to
+// in-memory expiry or validation failure.
+func getDroppedTaskExpiryReason(task *internalTask) dropReason {
 	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.DroppedTaskReasonExpiredMemoryTag
+		return dropReasonExpiredMemory
 	}
-	return metrics.DroppedTaskReasonInvalidTag
+	return dropReasonInvalid
 }
 
-// recordDroppedTask emits the tasks_dropped metric, but only for backlog/spooled
-// tasks. Sync-match tasks (including tasks forwarded from a child partition, which
-// also carry a responseC) are handed straight to a poller rather than spooled, so
-// dropping one is not a backlog-drain loss and is excluded here.
-func recordDroppedTask(handler metrics.Handler, task *internalTask, reason metrics.Tag) {
-	if task.isSyncMatchTask() {
+// recordDroppedTask records the tasks_dropped counter on the given physical-queue
+// handler. It is a no-op when reason is dropReasonUnspecified (a non-drop completion).
+func recordDroppedTask(handler metrics.Handler, reason dropReason) {
+	if reason == dropReasonUnspecified {
 		return
 	}
-	metrics.DroppedTasksCounter.With(handler).Record(1, reason)
+	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag())
 }

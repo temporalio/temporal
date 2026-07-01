@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
@@ -377,6 +378,50 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
+}
+
+func (s *engineSuite) TestGetMutableStateLongPoll_ShardClosed() {
+	ctx := context.Background()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "test-get-workflow-execution-shard-closed",
+		RunId:      tests.RunID,
+	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
+	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
+	// right now the next event ID is 4
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil).AnyTimes()
+
+	// Prime the workflow cache so the later poll reads from cache, not persistence.
+	_, err := s.historyEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId:         tests.NamespaceID.String(),
+		Execution:           &execution,
+		ExpectedNextEventId: 3,
+	})
+	s.NoError(err)
+
+	// Shard moves off this host. A poll blocked for new events must return promptly
+	// with the unchanged next event ID instead of waiting out the long-poll timeout.
+	s.mockShard.UnloadForOwnershipLost()
+
+	start := time.Now().UTC()
+	pollResponse, err := s.historyEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
+		NamespaceId:         tests.NamespaceID.String(),
+		Execution:           &execution,
+		ExpectedNextEventId: 4,
+	})
+	elapsed := time.Since(start)
+	s.NoError(err)
+	s.Equal(int64(4), pollResponse.GetNextEventId())
+	s.Less(elapsed, 10*time.Second, "poll should return on shard close, not wait out the long-poll timeout")
 }
 
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
@@ -5022,7 +5067,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.
@@ -5107,7 +5151,6 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 		{name: "Legacy", chasmEnabled: false},
 		{name: "Chasm", chasmEnabled: true},
 	} {
-		tc := tc
 		s.Run(tc.name, func() {
 			// Use a unique RunId per sub-test to avoid workflow cache collisions
 			// between the Legacy and Chasm sub-tests.
@@ -5590,7 +5633,7 @@ func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"Keyword01": payload.EncodeString("random-keyword"),
+			"Keyword01": sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 		},
 	}
 	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
@@ -5655,8 +5698,8 @@ func (s *engineSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},

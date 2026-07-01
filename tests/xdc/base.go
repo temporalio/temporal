@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -146,6 +145,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		}
 		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
+		clusterConfigs[clusterIndex].EnableHistoryTaskRecorder = params.EnableHistoryTaskRecorder
 
 		var err error
 		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
@@ -303,12 +303,7 @@ func (s *xdcBaseSuite) createNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[0].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-		}
+		s.describeNamespace(t, clusters[0], ns, isGlobal)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	if len(clusters) > 1 && isGlobal {
@@ -316,17 +311,13 @@ func (s *xdcBaseSuite) createNamespace(
 		// Check other clusters too.
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, c := range clusters[1:] {
-				for _, r := range c.Host().NamespaceRegistries() {
-					resp, err := r.GetNamespace(namespace.Name(ns))
-					require.NoError(t, err)
-					require.NotNil(t, resp)
-					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-				}
+				resp := s.describeNamespace(t, c, ns, isGlobal)
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
 
+	s.waitForNamespaceCacheRefresh()
 	return ns
 }
 
@@ -335,7 +326,6 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	inClusterIndex int,
 	clusters []*testcore.TestCluster,
 ) {
-
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
@@ -352,13 +342,9 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-			isGlobalNamespace = resp.IsGlobalNamespace()
-		}
+		resp := s.describeNamespace(t, clusters[inClusterIndex], ns, true)
+		require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
+		isGlobalNamespace = resp.GetIsGlobalNamespace()
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	if len(clusters) > 1 && isGlobalNamespace {
@@ -369,22 +355,18 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 				if ci == inClusterIndex {
 					continue
 				}
-				for _, r := range c.Host().NamespaceRegistries() {
-					resp, err := r.GetNamespace(namespace.Name(ns))
-					require.NoError(t, err)
-					require.NotNil(t, resp)
-					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-				}
+				resp := s.describeNamespace(t, c, ns, true)
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) promoteNamespace(
 	ns string,
 	inClusterIndex int,
 ) {
-
 	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
 		PromoteNamespace: true,
@@ -392,13 +374,9 @@ func (s *xdcBaseSuite) promoteNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range s.clusters[inClusterIndex].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.True(t, resp.IsGlobalNamespace())
-		}
+		s.describeNamespace(t, s.clusters[inClusterIndex], ns, true)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) failover(
@@ -424,16 +402,48 @@ func (s *xdcBaseSuite) failover(
 	// check local and remote clusters
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, c := range s.clusters {
-			for _, r := range c.Host().NamespaceRegistries() {
-				resp, err := r.GetNamespace(namespace.Name(ns))
-				require.NoError(t, err)
-				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.RoutingKey{}))
-			}
+			resp := s.describeNamespace(t, c, ns, true)
+			require.Equal(t, targetCluster, resp.GetReplicationConfig().GetActiveClusterName())
 		}
 	}, replicationWaitTime, replicationCheckInterval)
 
 	s.waitForClusterSynced()
+	s.waitForNamespaceCacheRefresh()
+}
+
+func (s *xdcBaseSuite) waitForNamespaceCacheRefresh() {
+	time.Sleep(namespaceCacheWaitTime) //nolint:forbidigo
+}
+
+func (s *xdcBaseSuite) describeNamespace(
+	t require.TestingT,
+	testCluster *testcore.TestCluster,
+	ns string,
+	isGlobal bool,
+) *workflowservice.DescribeNamespaceResponse {
+	resp, err := testCluster.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, isGlobal, resp.GetIsGlobalNamespace())
+	if isGlobal {
+		require.NotNil(t, resp.GetReplicationConfig())
+	}
+	return resp
+}
+
+func (s *xdcBaseSuite) namespaceClusterNames(resp *workflowservice.DescribeNamespaceResponse) []string {
+	replicationConfig := resp.GetReplicationConfig()
+	if replicationConfig == nil {
+		return nil
+	}
+	clusters := replicationConfig.GetClusters()
+	clusterNames := make([]string, len(clusters))
+	for i, replicationCluster := range clusters {
+		clusterNames[i] = replicationCluster.GetClusterName()
+	}
+	return clusterNames
 }
 
 func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {

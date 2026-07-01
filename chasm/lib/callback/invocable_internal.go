@@ -72,6 +72,7 @@ func (c invocableInternal) Invoke(
 	if err != nil {
 		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
 	}
+
 	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
 	if requestID == "" {
 		requestID = c.requestID

@@ -98,6 +98,7 @@ type (
 		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountBase              dynamicconfig.IntPropertyFn
 		MoveGroupTaskCountMultiplier        dynamicconfig.FloatPropertyFn
+		ShrinkPredicateMaxPendingKeys       dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -183,7 +184,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.ReaderOptions.MaxPredicateSize))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.MaxPredicateSize, options.ShrinkPredicateMaxPendingKeys, metricsHandler))
 		}
 		readerGroup.NewReader(readerID, slices...)
 
@@ -271,7 +272,9 @@ func (p *queueBase) processNewRange() {
 			p.monitor,
 			newReadScope,
 			p.grouper,
-			p.options.ReaderOptions.MaxPredicateSize,
+			p.options.MaxPredicateSize,
+			p.options.ShrinkPredicateMaxPendingKeys,
+			p.metricsHandler,
 		))
 	}
 

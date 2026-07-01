@@ -470,11 +470,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// TODO(fairness): remove this again once the SDK allows setting the fairness key
 	const fairnessKeyPrefix = "x-temporal-internal-fairness-key["
 	if after, ok := strings.CutPrefix(attr.GetActivityId(), fairnessKeyPrefix); ok {
-		if endIndex := strings.Index(after, "]"); endIndex != -1 {
-			keyAndWeight := after[:endIndex]
-			if colonIndex := strings.Index(keyAndWeight, ":"); colonIndex != -1 {
-				key := keyAndWeight[:colonIndex]
-				if weight, err := strconv.ParseFloat(keyAndWeight[colonIndex+1:], 32); err == nil {
+		if before, _, ok0 := strings.Cut(after, "]"); ok0 {
+			keyAndWeight := before
+			if before, after0, ok0 := strings.Cut(keyAndWeight, ":"); ok0 {
+				key := before
+				if weight, err := strconv.ParseFloat(after0, 32); err == nil {
 					attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
 					attr.Priority.FairnessKey = key
 					attr.Priority.FairnessWeight = float32(weight)

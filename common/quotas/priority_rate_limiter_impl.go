@@ -3,7 +3,7 @@ package quotas
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -59,9 +59,7 @@ func NewPriorityRateLimiter(
 	for priority := range priorityToRateLimiters {
 		priorities = append(priorities, priority)
 	}
-	sort.Slice(priorities, func(i, j int) bool {
-		return priorities[i] < priorities[j]
-	})
+	slices.Sort(priorities)
 	priorityToIndex := make(map[int]int, len(priorityToRateLimiters))
 	rateLimiters := make([]RequestRateLimiter, 0, len(priorityToRateLimiters))
 	for index, priority := range priorities {

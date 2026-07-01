@@ -185,6 +185,7 @@ func DefaultNamespaceStateChanged(currentClusterName string, oldNS *namespace.Na
 		oldNS.State() != newNS.State() ||
 		oldNS.Name() != newNS.Name() ||
 		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
+		//nolint:forbidigo // ns-wide state diff for cache invalidation.
 		oldNS.ActiveInCluster(currentClusterName) != newNS.ActiveInCluster(currentClusterName) ||
 		oldNS.ReplicationState("") != newNS.ReplicationState("")
 }
@@ -713,7 +714,7 @@ func (r *registry) updateIDToNamespace(
 	id namespace.ID,
 	newNS *namespace.Namespace,
 ) *namespace.Namespace {
-	oldNS, _ := iDToNamespace[id]
+	oldNS := iDToNamespace[id]
 	iDToNamespace[id] = newNS
 	return oldNS
 }

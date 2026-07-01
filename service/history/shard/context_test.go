@@ -202,7 +202,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 
 	s.NoError(err)
@@ -228,7 +230,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -243,7 +247,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -257,7 +263,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -282,7 +290,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -296,7 +306,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication|tasks.DeleteWorkflowExecutionStageCurrent, stage)
@@ -310,7 +322,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -323,7 +337,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -390,7 +406,9 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		[]byte("branchToken"),
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
 	s.Require().NotNil(captured, "AddHistoryTasks was never called")
@@ -415,7 +433,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageNone, stage)
@@ -431,7 +451,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
@@ -446,7 +468,7 @@ func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
@@ -458,7 +480,7 @@ func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
@@ -473,7 +495,7 @@ func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+	s.Equal(contextStateAcquired, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardNoError() {
@@ -486,7 +508,7 @@ func (s *contextSuite) TestAcquireShardNoError() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+	s.Equal(contextStateAcquired, s.mockShard.state)
 }
 
 func (s *contextSuite) TestHandoverNamespace() {
@@ -753,7 +775,7 @@ func (s *contextSuite) TestShardStopReasonAcquireShard() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
 }
@@ -763,7 +785,7 @@ func (s *contextSuite) TestShardStopReasonUnload() {
 
 	s.mockShard.UnloadForOwnershipLost()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
 }
@@ -929,7 +951,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 2)
+	s.Equal(2, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// update after ShardFirstUpdateInterval
 	s.mockShard.initLastUpdatesTime()
@@ -940,7 +962,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// update again. This time update will not work since shard lastUpdate time was set during previous update
 	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 15*time.Second))
@@ -950,7 +972,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 1)
+	s.Equal(1, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// now move past last updated interval. This time hard info should be updated/persisted
 	s.timeSource.Update(s.mockShard.lastUpdated.Add(s.mockShard.config.ShardUpdateMinInterval() + 10*time.Second))
@@ -960,5 +982,5 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 }

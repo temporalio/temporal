@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
@@ -28,15 +29,14 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -48,10 +48,10 @@ type (
 	dlqTestEnv struct {
 		*testcore.TestEnv
 
-		dlq              persistence.HistoryTaskQueueManager
-		writer           bytes.Buffer
-		sdkClientFactory sdk.ClientFactory
-		deleteBlockCh    chan any
+		dlq             persistence.HistoryTaskQueueManager
+		writer          bytes.Buffer
+		systemSDKClient sdkclient.Client
+		deleteBlockCh   chan any
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
@@ -65,10 +65,6 @@ type (
 		lastMessageID       string
 		targetCluster       string
 		expectedNumMessages int
-	}
-	testTaskQueueManager struct {
-		env *dlqTestEnv
-		persistence.HistoryTaskQueueManager
 	}
 )
 
@@ -95,26 +91,37 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
 			},
 		}),
-		testcore.WithFxOptions(primitives.HistoryService,
-			fx.Populate(&w.dlq),
-			fx.Decorate(
-				func(m persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
-					return &testTaskQueueManager{
-						env:                     w,
-						HistoryTaskQueueManager: m,
-					}
-				},
-			),
-		),
-		testcore.WithFxOptions(primitives.FrontendService,
-			fx.Populate(&w.sdkClientFactory),
-		),
 	}
 	w.TestEnv = testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
 
+	var err error
+	w.dlq, err = w.GetTestCluster().TestBase().Factory.NewHistoryTaskQueueManager()
+	s.NoError(err)
+	s.T().Cleanup(w.dlq.Close)
+
+	w.systemSDKClient, err = sdkclient.Dial(sdkclient.Options{
+		HostPort:  w.FrontendGRPCAddress(),
+		Namespace: primitives.SystemLocalNamespace,
+	})
+	s.NoError(err)
+	s.T().Cleanup(w.systemSDKClient.Close)
+
 	w.deleteBlockCh = make(chan any)
 	close(w.deleteBlockCh)
+
+	// DeleteDLQTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.
+	w.InjectHook(testhooks.NewHook(
+		testhooks.HistoryDLQTaskDeleteInterceptor,
+		func(
+			ctx context.Context,
+			request *historyservice.DeleteDLQTasksRequest,
+			deleteTasks func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error),
+		) (*historyservice.DeleteDLQTasksResponse, error) {
+			<-w.deleteBlockCh
+			return deleteTasks(ctx, request)
+		},
+	))
 
 	return w
 }
@@ -457,8 +464,7 @@ func (s *DLQSuite) purgeMessages(env *dlqTestEnv, maxMessageIDToDelete int64) st
 	var token adminservice.DLQJobToken
 	s.NoError(proto.Unmarshal(response.GetJobToken(), &token))
 
-	systemSDKClient := env.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
+	run := env.systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
 	s.NoError(run.Get(s.Context(), nil))
 	return tokenString
 }
@@ -470,8 +476,7 @@ func (s *DLQSuite) mergeMessages(env *dlqTestEnv, maxMessageID int64) string {
 	s.NoError(err)
 	var token adminservice.DLQJobToken
 	s.NoError(token.Unmarshal(tokenBytes))
-	systemSDKClient := env.sdkClientFactory.GetSystemClient()
-	run := systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
+	run := env.systemSDKClient.GetWorkflow(s.Context(), token.WorkflowId, token.RunId)
 	s.NoError(run.Get(s.Context(), nil))
 	return tokenString
 }
@@ -602,13 +607,4 @@ func (s *DLQSuite) readTransferTasks(file *os.File) []tdbgtest.DLQMessage[*persi
 	})
 	s.NoError(err)
 	return dlqTasks
-}
-
-// ReadTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.
-func (m *testTaskQueueManager) DeleteTasks(
-	ctx context.Context,
-	request *persistence.DeleteTasksRequest,
-) (*persistence.DeleteTasksResponse, error) {
-	<-m.env.deleteBlockCh
-	return m.HistoryTaskQueueManager.DeleteTasks(ctx, request)
 }

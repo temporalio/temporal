@@ -629,6 +629,16 @@ const (
 	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
+// Matching task dropped reason tag values
+const (
+	DroppedTaskReasonNotFound      = "not_found"
+	DroppedTaskReasonInternalError = "internal_error"
+	DroppedTaskReasonDataLoss      = "data_loss"
+	DroppedTaskReasonExpiredRead   = "expired_read"
+	DroppedTaskReasonExpiredMemory = "expired_memory"
+	DroppedTaskReasonInvalid       = "invalid"
+)
+
 var (
 	ServiceRequests = NewCounterDef(
 		"service_requests",
@@ -922,12 +932,17 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter        = NewCounterDef("queue_actions")
-	ActivityE2ELatency        = NewTimerDef(
+	TaskSchedulerThrottled       = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueuePredicateResolutionLoss = NewCounterDef(
+		"queue_predicate_resolution_loss",
+		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
+			"or falling back to the universal predicate, causing extra tasks to be reprocessed. Tagged by reason."),
+	)
+	ActivityE2ELatency = NewTimerDef(
 		"activity_end_to_end_latency",
 		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
 	)
@@ -1202,10 +1217,9 @@ var (
 		"nexus_task_requests",
 		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)
-	SyncThrottlePerTaskQueueCounter   = NewCounterDef("sync_throttle_count")
-	BufferThrottlePerTaskQueueCounter = NewCounterDef("buffer_throttle_count")
-	// TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
+	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1256,6 +1270,10 @@ var (
 	TaskRetryTransient = NewCounterDef(
 		"task_retry_transient",
 		WithDescription("Count of tasks that hit a transient error during match or forward and are retried immediately"),
+	)
+	FairReaderStuckDetected = NewCounterDef(
+		"fair_reader_stuck_detected",
+		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
@@ -1445,7 +1463,7 @@ var (
 	)
 	ScheduleActionSuccess = NewCounterDef(
 		"schedule_action_success",
-		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
+		WithDescription("The number of successful StartWorkflow RPCs issued by a schedule."),
 	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
@@ -1470,6 +1488,42 @@ var (
 	ScheduleGenerateLatency = NewTimerDef(
 		"schedule_generate_latency",
 		WithDescription("Delay between when a scheduled action was due and when the generator buffered it"),
+	)
+	ScheduleGeneratorTicks = NewCounterDef(
+		"schedule_generator_ticks",
+		WithDescription("The number of times a scheduler's generator task fired. Compare with schedule_generator_paused_ticks to attribute task throughput to paused vs. active schedules."),
+	)
+	ScheduleGeneratorPausedTicks = NewCounterDef(
+		"schedule_generator_paused_ticks",
+		WithDescription("The number of times a scheduler's generator task fired while the schedule was paused."),
+	)
+	SchedulerGeneratorLoopCompleted = NewCounterDef(
+		"scheduler_generator_loop_completed",
+		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleIdleTask = NewCounterDef(
+		"schedule_idle_task",
+		WithDescription("The number of times a schedule's idle task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleInvokerProcessBufferTask = NewCounterDef(
+		"schedule_invoker_process_buffer_task",
+		WithDescription("The number of times a scheduler's ProcessBuffer task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleInvokerExecuteTask = NewCounterDef(
+		"schedule_invoker_execute_task",
+		WithDescription("The number of times a scheduler's Execute side-effect task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleBackfillerTask = NewCounterDef(
+		"schedule_backfiller_task",
+		WithDescription("The number of times a scheduler's Backfiller task ran. Tagged with outcome and reason (reason is \"none\" when outcome is \"fired\")."),
+	)
+	ScheduleBackfillerCompleted = NewCounterDef(
+		"schedule_backfiller_completed",
+		WithDescription("The number of times a scheduler's Backfiller drained its requested time range and deleted itself. End-to-end signal for backfill request lifecycle."),
+	)
+	ScheduleBufferedStartDropped = NewCounterDef(
+		"schedule_buffered_start_dropped",
+		WithDescription("The number of buffered starts dropped by ProcessBuffer before execution. Tagged with reason (missed_catchup_window, paused_or_limited)."),
 	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
@@ -1502,6 +1556,7 @@ var (
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
+	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

@@ -65,6 +65,7 @@ type Config struct {
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalWorkerDeploymentReadRPS                                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalWorkerDeploymentReadBurstRatio                              dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -233,6 +234,7 @@ type Config struct {
 	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	PollerAutoscalingAutoEnroll       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -300,6 +302,7 @@ func NewConfig(
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Get(dc),
 		GlobalWorkerDeploymentReadRPS:                                     dynamicconfig.FrontendGlobalWorkerDeploymentReadRPS.Get(dc),
+		GlobalWorkerDeploymentReadBurstRatio:                              dynamicconfig.FrontendGlobalWorkerDeploymentReadBurstRatio.Get(dc),
 
 		GlobalNamespaceRPS:                     dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		InternalFEGlobalNamespaceRPS:           dynamicconfig.InternalFrontendGlobalNamespaceRPS.Get(dc),
@@ -405,6 +408,7 @@ func NewConfig(
 		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		PollerAutoscalingAutoEnroll:       dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
 		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
@@ -535,22 +539,18 @@ func (s *Service) Stop() {
 	s.logger.Info("ShutdownHandler: Draining traffic")
 	// Gracefully stop gRPC server and HTTP API server concurrently
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.AfterFunc(requestDrainTime, func() {
 			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 			s.server.Stop()
 		})
 		s.server.GracefulStop()
 		t.Stop()
-	}()
+	})
 	if s.httpAPIServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s.httpAPIServer.GracefulStop(requestDrainTime)
-		}()
+		})
 	}
 	wg.Wait()
 
