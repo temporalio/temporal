@@ -727,21 +727,6 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	return nil
 }
 
-func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
-	attributes *commonpb.SearchAttributes,
-	namespaceName namespace.Name,
-) (*commonpb.SearchAttributes, error) {
-	sa, err := searchattribute.UnaliasFields(wh.saMapperProvider, attributes, namespaceName.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if err = wh.validator.ValidateSearchAttributes(sa, namespaceName.String()); err != nil {
-		return nil, err
-	}
-	return sa, nil
-}
-
 func (wh *WorkflowHandler) ExecuteMultiOperation(
 	ctx context.Context,
 	request *workflowservice.ExecuteMultiOperationRequest,

@@ -242,6 +242,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 				Version:     closeVersion,
 			},
 		)
+
 		if r.archivalEnabled() {
 			retention, err := r.getRetention()
 			if err != nil {
@@ -408,13 +409,10 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 	startEvent *historypb.HistoryEvent,
 ) error {
-
-	startVersion := startEvent.GetVersion()
-
 	r.mutableState.AddTasks(&tasks.StartExecutionVisibilityTask{
 		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
-		Version:     startVersion,
+		Version:     startEvent.GetVersion(),
 	})
 	return nil
 }

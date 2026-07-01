@@ -1,13 +1,16 @@
 package history
 
 import (
+	"bytes"
 	"context"
+	"maps"
 	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -28,22 +31,22 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
-type (
-	visibilityQueueTaskExecutor struct {
-		shardContext   historyi.ShardContext
-		cache          wcache.Cache
-		logger         log.Logger
-		metricProvider metrics.Handler
-		visibilityMgr  manager.VisibilityManager
-
-		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
-		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
-		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	}
-)
-
 var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
+
+var workflowChasmVisibilityMismatch = metrics.NewCounterDef("visibility_workflow_chasm_visibility_mismatch")
+
+type visibilityQueueTaskExecutor struct {
+	shardContext   historyi.ShardContext
+	cache          wcache.Cache
+	logger         log.Logger
+	metricProvider metrics.Handler
+	visibilityMgr  manager.VisibilityManager
+
+	ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
+	enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+}
 
 func newVisibilityQueueTaskExecutor(
 	shardContext historyi.ShardContext,
@@ -357,6 +360,12 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
 		return err
@@ -369,6 +378,36 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 	if mutableState == nil {
 		return errNoChasmMutableState
+	}
+
+	isWorkflow := mutableState.IsWorkflow()
+	chasmVisEnabledRatio := t.shardContext.GetConfig().EnableCHASMVisibilityRatio(namespaceEntry.Name().String())
+	if isWorkflow && chasmVisEnabledRatio == 0 {
+		// CHASM Visibility was disabled, but workflow had already generated this
+		// CHASM Visibility task. Process as regular Visibility task.
+
+		if mutableState.IsWorkflowExecutionRunning() {
+			// Must release since processUpsertExecution will re-acquire the lock.
+			release(nil)
+			return t.processUpsertExecution(ctx, &tasks.UpsertExecutionVisibilityTask{
+				WorkflowKey:         task.WorkflowKey,
+				VisibilityTimestamp: task.VisibilityTimestamp,
+				TaskID:              task.TaskID,
+			})
+		}
+
+		closeVersion, err := mutableState.GetCloseVersion()
+		if err != nil {
+			return err
+		}
+		// Must release since processCloseExecution will re-acquire the lock.
+		release(nil)
+		return t.processCloseExecution(ctx, &tasks.CloseExecutionVisibilityTask{
+			WorkflowKey:         task.WorkflowKey,
+			VisibilityTimestamp: task.VisibilityTimestamp,
+			TaskID:              task.TaskID,
+			Version:             closeVersion,
+		})
 	}
 
 	isTaskInTree, isValidByComponent, err := validateChasmSideEffectTask(ctx, mutableState, task)
@@ -399,12 +438,6 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
 	}
 
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
-		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err != nil {
-		return err
-	}
-
 	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
 	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
@@ -417,9 +450,14 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	for alias, value := range aliasedCustomSearchAttributes {
 		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
 		if err != nil {
-			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
-			// or there are delays in propagating search attribute mappings to History.
-			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
+			// To reach here, either the search attribute has been deregistered before task execution,
+			// which is valid behavior, or there are delays in propagating search attribute mappings to
+			// History.
+			t.logger.Warn(
+				"Failed to get field name for alias, ignoring search attribute",
+				tag.String("alias", alias),
+				tag.Error(err),
+			)
 			continue
 		}
 		searchAttributes[fieldName] = value
@@ -464,6 +502,15 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		}
 	}
 
+	if isWorkflow && chasmVisEnabledRatio < 1 {
+		// It's a workflow and CHASM Visibility is not 100% enabled.
+		t.validateChasmWorkflowVisibility(
+			mutableState.GetExecutionInfo(),
+			searchAttributes,
+			userMemoMap,
+		)
+	}
+
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,
@@ -472,10 +519,13 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		searchAttributes,
 	)
 
-	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	// We reuse the TemporalNamespaceDivision column to store the string
+	// representation of ArchetypeID.
 	searchattribute.AddSearchAttributes(
 		&requestBase.SearchAttributes,
-		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(
+			strconv.FormatUint(uint64(tree.ArchetypeID()), 10),
+		),
 	)
 
 	// Override TaskQueue if provided by CHASM search attributes.
@@ -663,6 +713,28 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 
+func (t *visibilityQueueTaskExecutor) validateChasmWorkflowVisibility(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	chasmCustomSearchAttributes map[string]*commonpb.Payload,
+	chasmCustomMemo map[string]*commonpb.Payload,
+) {
+	csaMismatch := !isEqualMapPayload(executionInfo.GetSearchAttributes(), chasmCustomSearchAttributes)
+	memoMismatch := !isEqualMapPayload(executionInfo.GetMemo(), chasmCustomMemo)
+	if csaMismatch || memoMismatch {
+		// Log there is a difference, but do not fail the task.
+		t.logger.Warn(
+			"CHASM Visibility data does not match values in ExecutionInfo",
+			tag.Bool("csa_mismatch", csaMismatch),
+			tag.Bool("memo_mismatch", memoMismatch),
+		)
+		workflowChasmVisibilityMismatch.With(t.metricProvider).Record(
+			1,
+			metrics.StringTag("csa_mismatch", strconv.FormatBool(csaMismatch)),
+			metrics.StringTag("memo_mismatch", strconv.FormatBool(memoMismatch)),
+		)
+	}
+}
+
 func getWorkflowMemo(
 	memoFields map[string]*commonpb.Payload,
 ) *commonpb.Memo {
@@ -690,4 +762,10 @@ func copyMapPayload(input map[string]*commonpb.Payload) map[string]*commonpb.Pay
 		result[k] = common.CloneProto(v)
 	}
 	return result
+}
+
+func isEqualMapPayload(a, b map[string]*commonpb.Payload) bool {
+	return maps.EqualFunc(a, b, func(p1, p2 *commonpb.Payload) bool {
+		return bytes.Equal(p1.GetData(), p2.GetData())
+	})
 }
