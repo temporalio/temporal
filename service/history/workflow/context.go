@@ -604,6 +604,13 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
+	if updateWorkflow == nil {
+		if newWorkflow != nil || len(newWorkflowEventsSeq) != 0 {
+			return serviceerror.NewInternal("current workflow mutation skipped with new workflow snapshot")
+		}
+		return nil
+	}
+
 	if err := c.mergeUpdateWithNewReplicationTasks(
 		updateWorkflow,
 		newWorkflow,
