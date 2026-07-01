@@ -2411,7 +2411,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 }
 
 func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter, testcore.WithWorkerService("build id scavenger workflow"))
+	env := s.newTestEnv(enableUnifiedQueryConverter, testcore.WithWorkerService())
 	tq := s.T().Name()
 	buildIdv0 := s.T().Name() + "-v0"
 	buildIdv1 := s.T().Name() + "-v1"

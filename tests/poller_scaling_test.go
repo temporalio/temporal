@@ -31,12 +31,13 @@ type PollerScalingIntegSuite struct {
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &PollerScalingIntegSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.Run(t, &PollerScalingIntegSuite{})
 }
 
 func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
+		testcore.WithWorkerService(),
+
 		// Force one partition so we can reliably see the backlog
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),

@@ -46,7 +46,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) createBatchUpdateOptionsWorkflow(en
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSuccess() {
 	env := testcore.NewEnv(s.T(),
-		testcore.WithWorkerService("batch operations"),
+		testcore.WithWorkerService(),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
 	)
 
@@ -194,7 +194,7 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFailed() {
 	env := testcore.NewEnv(s.T(),
-		testcore.WithWorkerService("batch operations"),
+		testcore.WithWorkerService(),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
 	)
 

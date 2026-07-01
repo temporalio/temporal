@@ -1063,7 +1063,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchSignal() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
 
 	type myData struct {
 		Stuff  string
@@ -1118,7 +1118,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchReset() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
 	var count atomic.Int32
 
 	activityFn := func(ctx context.Context) (int32, error) {
@@ -1182,7 +1182,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
 	tq := testcore.RandomizeStr(s.T().Name())
 	buildPrefix := uuid.NewString()[:6] + "-"
 	buildIdv1 := buildPrefix + "v1"
