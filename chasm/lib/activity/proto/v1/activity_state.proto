@@ -137,6 +137,12 @@ message ActivityState {
   // that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
   // when the activity transitions out of RESET_REQUESTED.
   bool reset_keep_paused = 18;
+
+  // Time at which a worker first picked up the activity (the first attempt's started time). Set
+  // once on the first SCHEDULED->STARTED transition and never updated thereafter, so it survives
+  // retries and resets. Used as the discriminator for whether start_delay still applies on
+  // pre-dispatch rescheduling paths.
+  google.protobuf.Timestamp first_attempt_started_time = 19;
 }
 
 message ActivityCancelState {

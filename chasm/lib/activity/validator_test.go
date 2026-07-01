@@ -64,8 +64,7 @@ func TestValidateSuccess(t *testing.T) {
 			defaultMaxIDLengthLimit,
 			defaultNamespaceID,
 			&defaultActivityOptions,
-			&defaultPriority,
-			durationpb.New(0))
+			&defaultPriority)
 		require.NoError(t, err)
 	})
 
@@ -310,8 +309,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 				tc.maxIDLengthLimit,
 				tc.namespaceID,
 				tc.options,
-				tc.priority,
-				durationpb.New(0))
+				tc.priority)
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 			require.Contains(t, invalidArgErr.Error(), tc.expectedErrMessage)

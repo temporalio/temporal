@@ -30,7 +30,6 @@ func ValidateAndNormalizeStandaloneActivity(
 	namespaceID namespace.ID,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
-	runTimeout *durationpb.Duration,
 ) error {
 	// Standalone activities always use user defined task queues, so we can enforce user defined task queue validation
 	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
@@ -45,7 +44,7 @@ func ValidateAndNormalizeStandaloneActivity(
 		namespaceID,
 		options,
 		priority,
-		runTimeout)
+		durationpb.New(0))
 }
 
 // ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
@@ -190,10 +189,10 @@ func validateAndNormalizeTimeouts(
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgumentf("a valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
+		return serviceerror.NewInvalidArgumentf("a valid StartToCloseTimeout or ScheduleToCloseTimeout must be set on the activity. ActivityId=%s ActivityType=%s",
 			activityID, activityType)
 	}
-	// ensure activity timeout never larger than workflow timeout
+	// ensure activity timeout never exceeds runTimeout
 	if runTimeout.AsDuration() > 0 {
 		runTimeoutDur := runTimeout.AsDuration()
 		if options.ScheduleToCloseTimeout.AsDuration() > runTimeoutDur {
