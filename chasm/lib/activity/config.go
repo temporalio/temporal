@@ -39,6 +39,12 @@ var (
 		false,
 		`Allows attaching completion callbacks to standalone activity executions.`,
 	)
+
+	TimeSkippingEnabled = dynamicconfig.NewNamespaceBoolSetting(
+		"activity.timeSkippingEnabled",
+		false,
+		`Allows setting time_skipping_config on standalone activity executions. This is a standalone-activity-specific feature flag, separate from the workflow frontend.TimeSkippingEnabled flag.`,
+	)
 )
 
 type Config struct {
@@ -53,6 +59,7 @@ type Config struct {
 	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	StartDelayEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingEnabled         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
@@ -68,6 +75,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollTimeout:             LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:           StartDelayEnabled.Get(dc),
+		TimeSkippingEnabled:         TimeSkippingEnabled.Get(dc),
 		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
 		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}

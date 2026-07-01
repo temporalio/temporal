@@ -11,10 +11,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/components/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -141,6 +143,54 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		s.Nil(tsc)
 		s.Nil(stateProp)
 	})
+}
+
+// TestChasmFastForwardWake_ShortenedBySkip verifies that, for a CHASM (non-workflow) execution, the
+// fast-forward wake timer is kept in mutable state and its wall-clock fire time is shortened by each
+// skip: init emits the wake at the fast-forward target (no skip yet); a 10m skip re-emits it 10m
+// sooner (real fire = target - accumulatedSkippedDuration).
+func (s *mutableStateSuite) TestChasmFastForwardWake_ShortenedBySkip() {
+	// Force a CHASM (non-workflow) archetype so the wake stays in mutable state and is re-stamped here
+	// (rather than via the workflow event path).
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	s.mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 1).AnyTimes()
+
+	// Init the fast-forward — emits the wake at the target (accumulated == 0, so real fire == target).
+	s.mutableState.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled:     true,
+		FastForward: durationpb.New(time.Hour),
+	})
+	ffTarget := s.mutableState.executionInfo.GetTimeSkippingInfo().GetFastForwardInfo().GetTargetTime().AsTime()
+
+	initialWake := s.lastTimeSkippingTimerTask()
+	s.Require().NotNil(initialWake)
+	s.Equal(ffTarget, initialWake.GetVisibilityTime(), "initial wake fires at the fast-forward target")
+
+	// Skip 10m of virtual time.
+	const skipped = 10 * time.Minute
+	base := s.mutableState.timeSource.Now()
+	s.NoError(s.mutableState.applyTimeSkippingTransition(chasm.TimeSkippingTransition{
+		CurrentTime: base,
+		TargetTime:  base.Add(skipped),
+	}))
+	s.Equal(skipped, s.mutableState.executionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration())
+
+	// The wake is re-stamped 10m sooner — the fast-forward timer is shortened by the skip.
+	skippedWake := s.lastTimeSkippingTimerTask()
+	s.Require().NotNil(skippedWake)
+	s.Equal(ffTarget.Add(-skipped), skippedWake.GetVisibilityTime(), "wake shortened by the skipped duration")
+	s.Equal(skipped, initialWake.GetVisibilityTime().Sub(skippedWake.GetVisibilityTime()))
+}
+
+func (s *mutableStateSuite) lastTimeSkippingTimerTask() *tasks.TimeSkippingTimerTask {
+	var last *tasks.TimeSkippingTimerTask
+	for _, t := range s.mutableState.InsertTasks[tasks.CategoryTimer] {
+		if tst, ok := t.(*tasks.TimeSkippingTimerTask); ok {
+			last = tst
+		}
+	}
+	return last
 }
 
 func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {

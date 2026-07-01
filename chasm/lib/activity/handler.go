@@ -95,6 +95,10 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				}
 			}
 
+			if request.GetTimeSkippingConfig() != nil {
+				mutableContext.SetTimeSkippingConfig(request.GetTimeSkippingConfig())
+			}
+
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 			if err != nil {
 				return nil, err

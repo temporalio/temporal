@@ -9,6 +9,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
@@ -301,7 +302,7 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	}
 	// A pending activity blocks time skipping unless it has failed and is still
 	// waiting out its retry backoff (next attempt strictly in the future) — that one
-	// is a skip target, not in-flight work (see calculateTimeSkippingTransition). The
+	// is a skip target, not in-flight work (see findNextSkipTarget). The
 	// strict future check is what keeps a just-scheduled or already-due activity (next
 	// attempt <= now) blocking.
 	for _, ai := range ms.GetPendingActivityInfos() {
@@ -393,6 +394,14 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (needRegenTasks bool) {
+	// This is the workflow (history-event) time-skipping path. CHASM executions (e.g. standalone
+	// activities) run their own decision in the CHASM tree's closeTransactionHandleTimeSkipping;
+	// running this path for them would scan only workflow-level targets (timers, pending activities,
+	// run timeout) — none of which exist for a CHASM component — and its GateByFastForward would then
+	// skip straight to the fast-forward and disable time skipping before the CHASM path ever runs.
+	if !ms.IsWorkflow() {
+		return false
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
@@ -477,4 +486,128 @@ func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkippi
 	default:
 		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
+}
+
+// =============================================================================
+// Time Skipping for CHASM-based Executions
+// =============================================================================
+
+// applyTimeSkippingTransition mutates the execution's TimeSkippingInfo for a single skip transition:
+// it advances AccumulatedSkippedDuration by (TargetTime - CurrentTime), toggles Config.Enabled, and
+// marks the fast-forward target reached. This is the CHASM (non-workflow) apply path, invoked by
+// RecordTimeSkippingTransition; the workflow path applies the equivalent mutation from its history
+// event in ApplyWorkflowExecutionTimeSkippingTransitionedEvent.
+//
+// A zero TargetTime means "no skip" (only valid together with DisabledAfterFastForward, e.g. a bound
+// hit exactly). transition.CurrentTime must be in the virtual frame (ms.Now() / the event's virtual
+// EventTime).
+func (ms *MutableStateImpl) applyTimeSkippingTransition(transition chasm.TimeSkippingTransition) error {
+	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
+	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil {
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		return invalidTransitionError
+	}
+	if transition.TargetTime.IsZero() && !transition.DisabledAfterFastForward {
+		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
+		return invalidTransitionError
+	}
+
+	if tsi.GetAccumulatedSkippedDuration() == nil {
+		tsi.AccumulatedSkippedDuration = durationpb.New(0)
+	}
+	accumulatedSkippedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	if !transition.TargetTime.IsZero() {
+		accumulatedSkippedDuration += transition.TargetTime.Sub(transition.CurrentTime)
+	}
+	tsi.AccumulatedSkippedDuration = durationpb.New(accumulatedSkippedDuration)
+	tsi.Config.Enabled = !transition.DisabledAfterFastForward
+
+	if transition.DisabledAfterFastForward && tsi.GetFastForwardInfo() != nil {
+		tsi.FastForwardInfo.HasReached = true
+	}
+
+	ms.timeSkippingInfoUpdated = true
+
+	// Re-stamp the CHASM fast-forward wake so its wall-clock fire time tracks the new accumulated skip
+	// (real fire = TargetTime - accumulatedSkippedDuration). Bundled with the accumulated update here
+	// rather than routed through the chasm task pipeline; no-op for workflows and once the target is
+	// reached.
+	ms.regenerateChasmFastForwardWakeTask()
+	return nil
+}
+
+// chasmNoEventID is the sentinel event ID used when (re)computing time-skipping info for CHASM
+// executions, which have no history events to anchor the configuration to. Real event IDs start at
+// 1, so -1 is unambiguous. For CHASM the fast-forward wake is emitted as a CHASM task during
+// CloseTransaction (anchored on the VersionedTransition), so this stub only ends up in the unused
+// FastForwardInfo.SourceEventId field.
+//
+// TODO(time-skipping/chasm): emit the fast-forward wake as a ChasmTaskPure on the root component and
+// anchor its staleness check on the VersionedTransition (as ChasmTaskInfo does) rather than an
+// event ID.
+const chasmNoEventID int64 = -1
+
+// SetTimeSkippingConfig sets the execution's time-skipping configuration for a CHASM execution. It
+// backs chasm.MutableContext.SetTimeSkippingConfig (via the chasm.NodeBackend interface): the first
+// call initializes the TimeSkippingInfo, and subsequent calls update the config in place (preserving
+// the accumulated skipped duration). It reuses the workflow path's initTimeSkippingInfo /
+// updateTimeSkippingInfo, which are archetype-aware (no physical workflow timer task for CHASM — see
+// applyFastForward). CHASM executions have no history events to anchor to (see chasmNoEventID) and no
+// propagated state on this path.
+func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if ms.executionInfo.GetTimeSkippingInfo() == nil {
+		ms.initTimeSkippingInfo(config, nil, chasmNoEventID)
+	} else {
+		ms.updateTimeSkippingInfo(config, chasmNoEventID)
+	}
+}
+
+// RecordTimeSkippingTransition records a single time-skipping transition for the execution. It is the
+// archetype-aware apply sink: the CHASM framework's closeTransactionHandleTimeSkipping calls it for
+// non-workflow executions after building the transition, and the fast-forward wake timer executor
+// calls it (for either archetype) to disable time skipping once the fast-forward target is hit. The
+// caller is responsible for computing the final transition — including the min of the component
+// candidate and the fast-forward target; this method only records it.
+//
+// archetype selects how the skip is recorded:
+//   - the workflow archetype records a history event (AddWorkflowExecutionTimeSkippingTransitionedEvent),
+//     which in turn applies the transition to the TimeSkippingInfo;
+//   - all other archetypes have no history, so the transition is applied directly to the TSI.
+//
+// For CHASM executions, after this returns the physical timer tasks regenerated later in the same
+// CloseTransaction pick up the new accumulated offset via AddTasks -> ToRealTime, so no separate
+// timer-task regeneration is needed.
+func (ms *MutableStateImpl) RecordTimeSkippingTransition(
+	ctx context.Context,
+	transition chasm.TimeSkippingTransition,
+	archetype chasm.ArchetypeID,
+) error {
+	if !transition.IsValid() {
+		return nil
+	}
+	switch archetype {
+	case chasm.WorkflowArchetypeID:
+		// workflows require applying the transition through a history event
+		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
+			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
+		return err
+	default:
+		return ms.applyTimeSkippingTransition(transition)
+	}
+}
+func (ms *MutableStateImpl) regenerateChasmFastForwardWakeTask() {
+	if ms.IsWorkflow() {
+		return
+	}
+	ff := ms.executionInfo.GetTimeSkippingInfo().GetFastForwardInfo()
+	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil {
+		return
+	}
+	ms.AddTasks(&tasks.TimeSkippingTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: ff.GetTargetTime().AsTime(), // virtual; AddTasks -> ToRealTime shifts to wall clock
+		EventID:             chasmNoEventID,
+	})
 }

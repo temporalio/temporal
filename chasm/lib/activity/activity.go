@@ -55,6 +55,7 @@ var (
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
+var _ chasm.TimeSkippingRuntimeGate = (*Activity)(nil)
 
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
@@ -122,6 +123,22 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+// IsExecutionSkippable implements chasm.TimeSkippingRuntimeGate. The activity is skippable only when it is
+// SCHEDULED (any other status — running, or a terminal activity still delivering completion callbacks,
+// including while backing off between retries — is real work whose delivery resolves on the target's
+// readiness, not this execution's virtual clock) and its next attempt dispatch is in the (virtual)
+// future (a dispatch at or before now means an attempt is being dispatched or running, i.e. in flight).
+func (a *Activity) IsExecutionSkippable(ctx chasm.Context) bool {
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		return false
+	}
+	nextDispatch := a.attemptScheduleTime(a.LastAttempt.Get(ctx))
+	if nextDispatch == nil || !ctx.Now(a).Before(nextDispatch.AsTime()) {
+		return false
+	}
+	return true
 }
 
 func (a *Activity) ContextMetadata(_ chasm.Context) map[string]string {
