@@ -1473,13 +1473,13 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 
 	type wantTask struct {
 		visibilityTimestamp time.Time
-		stamp               int32
+		versionedTransition *persistencespb.VersionedTransition
 	}
 
 	const currentVersion = int64(99)
-	// Distinct from currentVersion so the assertion proves the regenerated task carries the
-	// version stored on the fast-forward, not the live GetCurrentVersion().
-	const fastForwardVersion = int64(42)
+	// Distinct from the live current version so the assertion proves the regenerated task carries the
+	// versioned transition stored on the fast-forward, not a recomputed one.
+	fastForwardVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 7}
 
 	for _, tc := range []struct {
 		name                string
@@ -1495,13 +1495,12 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime: timestamppb.New(fastForwardTarget),
-					Stamp:      7,
-					HasReached: false,
-					Version:    fastForwardVersion,
+					TargetTime:                    timestamppb.New(fastForwardTarget),
+					LastUpdateVersionedTransition: fastForwardVT,
+					HasReached:                    false,
 				},
 			},
-			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, stamp: 7},
+			wantFastForwardTask: &wantTask{visibilityTimestamp: fastForwardTarget, versionedTransition: fastForwardVT},
 		},
 		{
 			name: "HasReached=true skips task emission",
@@ -1511,9 +1510,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime: timestamppb.New(fastForwardTarget),
-					Stamp:      7,
-					HasReached: true,
+					TargetTime:                    timestamppb.New(fastForwardTarget),
+					LastUpdateVersionedTransition: fastForwardVT,
+					HasReached:                    true,
 				},
 			},
 		},
@@ -1525,9 +1524,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 					FastForward: durationpb.New(2 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(time.Hour),
 				FastForwardInfo: &persistencespb.FastForwardInfo{
-					TargetTime: timestamppb.New(fastForwardTarget),
-					Stamp:      7,
-					HasReached: false,
+					TargetTime:                    timestamppb.New(fastForwardTarget),
+					LastUpdateVersionedTransition: fastForwardVT,
+					HasReached:                    false,
 				},
 			},
 		},
@@ -1579,8 +1578,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			bt := fastForwardTasks[0]
 			require.Equal(t, tests.WorkflowKey, bt.WorkflowKey)
 			require.Equal(t, tc.wantFastForwardTask.visibilityTimestamp, bt.VisibilityTimestamp)
-			require.Equal(t, tc.wantFastForwardTask.stamp, bt.Stamp)
-			require.Equal(t, fastForwardVersion, bt.Version, "Version must come from stored FastForwardInfo, not GetCurrentVersion")
+			// VersionedTransition must come from stored FastForwardInfo, not a recomputed one.
+			protorequire.ProtoEqual(t, tc.wantFastForwardTask.versionedTransition, bt.VersionedTransition)
 			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
 		})
 	}
@@ -1841,9 +1840,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 	const (
 		startVersion   = int64(7)
 		currentVersion = int64(99)
-		ffVersion      = int64(42)
-		ffStamp        = int32(5)
 	)
+	ffVersionedTransition := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 5}
 	now := time.Now().UTC()
 
 	ctrl := gomock.NewController(t)
@@ -1867,10 +1865,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(now.Add(2 * time.Hour)),
-				Stamp:      ffStamp,
-				HasReached: false,
-				Version:    ffVersion,
+				TargetTime:                    timestamppb.New(now.Add(2 * time.Hour)),
+				LastUpdateVersionedTransition: ffVersionedTransition,
+				HasReached:                    false,
 			},
 		},
 	}).AnyTimes()
@@ -1910,6 +1907,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 			name := reflect.TypeOf(task).Elem().Name()
 			seen[name] = true
 			requireAllFieldsPopulated(t, name, reflect.ValueOf(task).Elem(), taskIDOnly)
+		default:
+			t.Fatalf("unexpected task type: %T", task)
 		}
 	}
 

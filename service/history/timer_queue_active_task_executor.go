@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -940,21 +941,40 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	// task staleness check
+	// 1) time skipping is disabled
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi == nil || !tsi.GetConfig().GetEnabled() {
+	tsiUtil := workflow.NewTimeSkippingInfoUtil(tsi)
+	if !tsiUtil.IsEnabled() {
 		release(nil)
 		return errNoTimerFired
 	}
-	ff := tsi.GetFastForwardInfo()
-	if ff.GetTargetTime() == nil || ff.GetHasReached() || ff.GetStamp() != task.Stamp {
+	// 2) fast-forward is disabled/reached, or this task was superseded by a newer fast-forward.
+	// The versioned transition's TransitionCount identifies the specific fast-forward instance
+	// (a re-applied fast-forward records a fresh transition), so a mismatch means this task is
+	// stale and is dropped silently.
+	if !tsiUtil.HasPendingFastForward() {
 		release(nil)
 		return errNoTimerFired
-	}
-	ffVersion := ff.GetVersion()
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, task.Version, task); err != nil {
-		return err
 	}
 
+	ffVT := tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()
+	if ffVT != nil && task.VersionedTransition != nil {
+		if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {
+			release(nil)
+			return errNoTimerFired
+		}
+		taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
+		ffVersion := ffVT.GetNamespaceFailoverVersion()
+		if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
+			release(nil)
+			return errNoTimerFired
+		}
+	} else {
+		return errors.New("time skipping timer task validation failed: nil versioned transition")
+	}
+
+	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
+	// TODO@time-skipping: chasm execution path is not implemented yet.
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {

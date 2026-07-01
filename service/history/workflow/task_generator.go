@@ -1103,8 +1103,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
-				Version:             fastForward.GetVersion(),
-				Stamp:               fastForward.GetStamp(),
+				VersionedTransition: fastForward.GetLastUpdateVersionedTransition(),
 			})
 		}
 	}

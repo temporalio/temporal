@@ -353,14 +353,7 @@ message FastForwardInfo {
   // Indicates whether this fast-forward has already been reached, used for idempotency checks.
   bool has_reached = 2;
 
-  // This is a monotonically increasing counter that is used to identify the version of the fast-forward.
-  // It is bumped every time the fast-forward is set.
-  // It is used to validate the time skipping fast-forward timer task.
-  int32 stamp = 4;
-
-  // This is the NamespaceFailoverVersion at which this fast-forward was configured.
-  // It is used to validate the time skipping fast-forward timer task.
-  int64 version = 5;
+  VersionedTransition last_update_versioned_transition = 4;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -535,6 +528,11 @@ message TimerTaskInfo {
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 17;
   }
+
+  // VersionedTransition provides a unified solution for both intra-cluster and inter-cluster
+  // task replication. It is intended to replace previous validation mechanisms, such as
+  // version + stamp.
+  VersionedTransition versioned_transition = 18;
 }
 
 message ArchivalTaskInfo {

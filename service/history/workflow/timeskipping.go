@@ -64,7 +64,6 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 // An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
 // the FastForwardInfo should never be nil.
 func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.Timestamp) {
-
 	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	tsi := ms.executionInfo.TimeSkippingInfo
 
@@ -84,21 +83,16 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
 	}
 
-	// Bump the stamp off the previous fast-forward (0 when none) before installing the fresh one.
-	stamp := tsi.GetFastForwardInfo().GetStamp() + 1
-
-	// always install a fresh fast-forward bound
+	currentVersionedTransition := ms.CurrentVersionedTransition()
 	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
-		TargetTime: timestamppb.New(targetTime),
-		HasReached: false,
-		Stamp:      stamp,
-		Version:    ms.GetCurrentVersion(),
+		TargetTime:                    timestamppb.New(targetTime),
+		HasReached:                    false,
+		LastUpdateVersionedTransition: currentVersionedTransition,
 	}
 	ms.AddTasks(&tasks.TimeSkippingTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
-		Version:             tsi.FastForwardInfo.Version,
-		Stamp:               stamp,
+		VersionedTransition: currentVersionedTransition,
 	})
 }
 
@@ -258,6 +252,26 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 	// consumes the remaining budget by skipping to the fast-forward and disabling.
 	t.TrackEarliestFutureTime(ffTargetTime)
 	t.DisabledAfterFastForward = true
+}
+
+// =============================================================================
+// Time Skipping Utility Functions
+// =============================================================================
+type TimeSkippingInfoUtil struct {
+	tsi *persistencespb.TimeSkippingInfo
+}
+
+func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
+	return &TimeSkippingInfoUtil{tsi: tsi}
+}
+
+func (util *TimeSkippingInfoUtil) HasPendingFastForward() bool {
+	return util.tsi != nil && util.tsi.GetFastForwardInfo() != nil && !util.tsi.GetFastForwardInfo().GetHasReached() &&
+		util.tsi.GetFastForwardInfo().GetTargetTime() != nil && !util.tsi.GetFastForwardInfo().GetTargetTime().AsTime().IsZero()
+}
+
+func (util *TimeSkippingInfoUtil) IsEnabled() bool {
+	return util.tsi.GetConfig().GetEnabled()
 }
 
 // =============================================================================

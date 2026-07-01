@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -247,7 +248,9 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 		ffi := tsi.GetFastForwardInfo()
 
 		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
-		if ffi != nil && ffi.GetStamp() == timerTask.Stamp && !ffi.GetHasReached() {
+		if ffi != nil &&
+			transitionhistory.Compare(ffi.GetLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
+			!ffi.GetHasReached() {
 			return &struct{}{}, nil
 		}
 		return nil, nil

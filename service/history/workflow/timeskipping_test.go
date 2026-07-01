@@ -368,6 +368,8 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 	s.Run("InitWithConfigOnly_ForExecutionsWithTSStartedByUser", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
+		currentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5}
+		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		cfg := &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(3 * time.Hour)}
@@ -382,8 +384,8 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		// timestamppb translates to UTC time
 		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
-		// first apply stamps the fast-forward with 1
-		s.Require().Equal(int32(1), tsi.GetFastForwardInfo().GetStamp())
+		// the fast-forward records the current versioned transition
+		s.Require().True(proto.Equal(currentVT, tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
 	})
 
 	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
@@ -440,9 +442,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
-				Stamp:      7,
-				HasReached: false,
+				TargetTime:                    timestamppb.New(baseTime.Add(time.Hour)),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7},
+				HasReached:                    false,
 			},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = currentTSI
@@ -459,6 +461,8 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	s.Run("UpdateTimeSkippingInfo_EnableTS", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
+		currentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5}
+		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		currentTSI := persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled: false,
@@ -479,8 +483,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Require().NotNil(newTSI)
 		s.True(proto.Equal(newConfig, newTSI.GetConfig()))
 		s.Require().NotNil(newTSI.GetFastForwardInfo())
-		// enabling from no fast-forward stamps with 1
-		s.Equal(int32(1), newTSI.GetFastForwardInfo().GetStamp())
+		// re-installing the fast-forward records the current versioned transition, so a task
+		// emitted here validates against a stable reference after a failover.
+		s.True(proto.Equal(currentVT, newTSI.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(newTSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -489,6 +494,8 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	s.Run("UpdateTimeSkippingInfo_OverrideFFThenTurnOff", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
+		currentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 8}
+		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		currentTSI := persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled:     true,
@@ -496,9 +503,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
-				Stamp:      7,
-				HasReached: false,
+				TargetTime:                    timestamppb.New(baseTime.Add(time.Hour)),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
+				HasReached:                    false,
 			},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
@@ -514,8 +521,8 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Require().NotNil(tsc2TSI)
 		s.True(proto.Equal(tsc2, tsc2TSI.GetConfig()))
 		s.Require().NotNil(tsc2TSI.GetFastForwardInfo())
-		// re-applying bumps the stamp from the previous fast-forward (7 -> 8)
-		s.Equal(int32(8), tsc2TSI.GetFastForwardInfo().GetStamp())
+		// re-applying records the current versioned transition, replacing the previous one
+		s.True(proto.Equal(currentVT, tsc2TSI.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), tsc2TSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(tsc2TSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, tsc2TSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -575,6 +582,8 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		fastForwardDuration := 3 * time.Hour
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
+		currentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5}
+		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
@@ -585,13 +594,11 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.mutableState.applyFastForward(nil)
 		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(fastForward)
-		// no prior fast-forward, so the stamp starts at 1
-		s.Equal(int32(1), fastForward.GetStamp())
 		s.False(fastForward.GetHasReached())
 		s.WithinDuration(fastForward.GetTargetTime().AsTime(), baseTime.Add(fastForwardDuration), 1*time.Second)
-		// the current failover version is recorded so the emitted task can be validated against
-		// a stable reference (not the live GetCurrentVersion, which moves on failover).
-		s.Equal(s.mutableState.GetCurrentVersion(), fastForward.GetVersion())
+		// the current versioned transition is recorded so the emitted task can be validated against
+		// a stable reference (not the live current version, which moves on failover).
+		s.True(proto.Equal(currentVT, fastForward.GetLastUpdateVersionedTransition()))
 	})
 
 	s.Run("FastForward_WithPropagatedTargetTime", func() {
@@ -624,8 +631,8 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-				Stamp:      7,
+				TargetTime:                    timestamppb.New(s.mutableState.Now().Add(time.Hour)),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 7},
 			},
 		}
 		s.mutableState.applyFastForward(nil)
@@ -635,19 +642,21 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	s.Run("FastForward_OverridesExistingInfo", func() {
 		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
+		currentVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 8}
+		s.mutableState.executionInfo.TransitionHistory = []*persistencespb.VersionedTransition{currentVT}
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(time.Hour)},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime: timestamppb.New(fixed), // stale bound that must be overridden
-				Stamp:      7,
+				TargetTime:                    timestamppb.New(fixed), // stale bound that must be overridden
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 3, TransitionCount: 5},
 			},
 		}
 		s.mutableState.applyFastForward(nil)
 		ff := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(ff)
 		s.Equal(fixed.Add(time.Hour), ff.GetTargetTime().AsTime(), "stale bound is replaced by now+FastForward")
-		// overriding an existing fast-forward bumps the stamp (7 -> 8)
-		s.Equal(int32(8), ff.GetStamp())
+		// overriding an existing fast-forward records the current versioned transition
+		s.True(proto.Equal(currentVT, ff.GetLastUpdateVersionedTransition()))
 	})
 }
 

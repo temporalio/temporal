@@ -2407,101 +2407,96 @@ func (s *timerQueueActiveTaskExecutorSuite) makeTimeSkippingMS() (*persistencesp
 	return pms, workflowKey
 }
 
-// TestExecuteTimeSkippingTimerTask covers the full validity-check ladder of
-// executeTimeSkippingTimerTask plus the happy-path disable transition.
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 	target := timestamppb.New(s.now.Add(time.Hour))
-	enabledFF := func(stamp int32, hasReached bool) *persistencespb.TimeSkippingInfo {
+	// The fast-forward's versioned transition carries the failover version (NamespaceFailoverVersion)
+	// and the fast-forward instance identity (TransitionCount, the successor of the old Stamp).
+	enabledFF := func(version int64, transitionCount int64, hasReached bool) *persistencespb.TimeSkippingInfo {
 		return &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime: target,
-				Stamp:      stamp,
 				HasReached: hasReached,
-				Version:    s.version,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: version,
+					TransitionCount:          transitionCount,
+				},
 			},
 		}
 	}
-
 	for _, tc := range []struct {
-		name        string
-		completed   bool // mark workflow execution completed
-		tsi         *persistencespb.TimeSkippingInfo
-		taskVersion int64
-		taskStamp   int32
-		wantErr     error // nil => happy path: disable transition is applied
+		name                string
+		completed           bool // mark workflow execution completed
+		tsi                 *persistencespb.TimeSkippingInfo
+		taskVersion         int64
+		taskTransitionCount int64
+		wantErr             error // nil => happy path: disable transition is applied
 	}{
 		{
-			name:        "WorkflowNotRunning",
-			completed:   true,
-			tsi:         enabledFF(1, false),
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     consts.ErrWorkflowCompleted,
+			name:                "WorkflowNotRunning",
+			completed:           true,
+			tsi:                 enabledFF(s.version, 1, false),
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             consts.ErrWorkflowCompleted,
 		},
 		{
-			name:        "TSINil",
-			tsi:         nil,
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     errNoTimerFired,
+			name:                "TSINil",
+			tsi:                 nil,
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             errNoTimerFired,
 		},
 		{
 			name: "ConfigDisabled",
 			tsi: &persistencespb.TimeSkippingInfo{
-				Config:          &commonpb.TimeSkippingConfig{Enabled: false},
-				FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: target, Stamp: 1},
+				Config: &commonpb.TimeSkippingConfig{Enabled: false},
+				FastForwardInfo: &persistencespb.FastForwardInfo{
+					TargetTime:                    target,
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
+				},
 			},
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     errNoTimerFired,
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             errNoTimerFired,
 		},
 		{
-			name:        "NoFastForwardInfo",
-			tsi:         &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}},
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     errNoTimerFired,
+			name:                "FastForwardInfoDeleted",
+			tsi:                 &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}},
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             errNoTimerFired,
 		},
 		{
-			// Stamp 0 is a degenerate fast-forward (a real one always has Stamp >= 1); even a
-			// matching zero-stamp task must be treated as invalid and dropped.
-			name:        "StampZero",
-			tsi:         enabledFF(0, false),
-			taskVersion: s.version,
-			taskStamp:   0,
-			wantErr:     errNoTimerFired,
+			name:                "HasReached",
+			tsi:                 enabledFF(s.version, 1, true),
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             errNoTimerFired,
 		},
 		{
-			name:        "HasReached",
-			tsi:         enabledFF(1, true),
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     errNoTimerFired,
+			// fast-forward was reconfigured (transition count 2); the old task carries 1.
+			name:                "TransitionCountMismatch",
+			tsi:                 enabledFF(s.version, 2, false),
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             errNoTimerFired,
 		},
 		{
-			// fast-forward was reconfigured (stamp 2); the old task carries stamp 1.
-			name:        "StampMismatch",
-			tsi:         enabledFF(2, false),
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     errNoTimerFired,
+			// Transition count matches the live fast-forward, but the task carries a stale failover
+			// version, so CheckTaskVersion rejects it before the disable transition is applied.
+			name:                "VersionMismatch",
+			tsi:                 enabledFF(s.version, 1, false),
+			taskVersion:         s.version + 1,
+			taskTransitionCount: 1,
+			wantErr:             consts.ErrTaskVersionMismatch,
 		},
 		{
-			// Stamp matches the live fast-forward, but the task carries a stale failover version,
-			// so CheckTaskVersion rejects it before the disable transition is applied.
-			name:        "VersionMismatch",
-			tsi:         enabledFF(1, false),
-			taskVersion: s.version + 1,
-			taskStamp:   1,
-			wantErr:     consts.ErrTaskVersionMismatch,
-		},
-		{
-			name:        "HappyPath",
-			tsi:         enabledFF(1, false),
-			taskVersion: s.version,
-			taskStamp:   1,
-			wantErr:     nil,
+			name:                "HappyPath",
+			tsi:                 enabledFF(s.version, 1, false),
+			taskVersion:         s.version,
+			taskTransitionCount: 1,
+			wantErr:             nil,
 		},
 	} {
 		s.Run(tc.name, func() {
@@ -2515,8 +2510,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 				WorkflowKey:         workflowKey,
 				TaskID:              s.mustGenerateTaskID(),
 				VisibilityTimestamp: s.now.Add(time.Hour),
-				Version:             tc.taskVersion,
-				Stamp:               tc.taskStamp,
+				VersionedTransition: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: tc.taskVersion,
+					TransitionCount:          tc.taskTransitionCount,
+				},
 			}
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 				Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)

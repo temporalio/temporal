@@ -144,14 +144,13 @@ func serializeTimerTask(
 
 func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:    task.NamespaceID,
-		WorkflowId:     task.WorkflowID,
-		RunId:          task.RunID,
-		TaskId:         task.TaskID,
-		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-		TaskType:       enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
-		Version:        task.Version,
-		Stamp:          task.Stamp,
+		NamespaceId:         task.NamespaceID,
+		WorkflowId:          task.WorkflowID,
+		RunId:               task.RunID,
+		TaskId:              task.TaskID,
+		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
+		TaskType:            enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
+		VersionedTransition: task.VersionedTransition,
 	}
 }
 
@@ -164,8 +163,7 @@ func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.T
 		),
 		VisibilityTimestamp: info.VisibilityTime.AsTime(),
 		TaskID:              info.TaskId,
-		Version:             info.Version,
-		Stamp:               info.Stamp,
+		VersionedTransition: info.VersionedTransition,
 	}
 }
 
