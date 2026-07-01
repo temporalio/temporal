@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -18,6 +20,7 @@ import (
 
 type searchAttributesValidatorSuite struct {
 	suite.Suite
+	*require.Assertions
 
 	ctrl *gomock.Controller
 
@@ -26,13 +29,14 @@ type searchAttributesValidatorSuite struct {
 }
 
 func TestSearchAttributesValidatorSuite(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	s := &searchAttributesValidatorSuite{
-		ctrl: ctrl,
+	suite.Run(t, &searchAttributesValidatorSuite{})
+}
 
-		mockVisibilityManager: manager.NewMockVisibilityManager(ctrl),
-		mockMetricsHandler:    metrics.NewMockHandler(ctrl),
-	}
+func (s *searchAttributesValidatorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+	s.ctrl = gomock.NewController(s.T())
+	s.mockMetricsHandler = metrics.NewMockHandler(s.ctrl)
+	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.ctrl)
 	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 	s.mockVisibilityManager.EXPECT().
 		ValidateCustomSearchAttributes(gomock.Any()).
@@ -42,7 +46,6 @@ func TestSearchAttributesValidatorSuite(t *testing.T) {
 			},
 		).
 		AnyTimes()
-	suite.Run(t, s)
 }
 
 func (s *searchAttributesValidatorSuite) newValidator(
@@ -73,8 +76,8 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	saValidator := s.newValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		true,
-		false,
+		true,  // allowList
+		false, // suppressErrorSetSystemSearchAttribute
 	)
 
 	namespace := "namespace"
@@ -121,6 +124,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Error(err)
 	s.Equal("invalid value for search attribute Bool01 of type Bool: 123", err.Error())
 
+	mockCounter := metrics.NewMockCounterIface(s.ctrl)
+	mockCounter.EXPECT().Record(
+		int64(1),
+		gomock.Any(),
+		metrics.StringTag("search_attribute_type", "Int"),
+		metrics.StringTag("allow_list", "true"),
+	)
+	s.mockMetricsHandler.EXPECT().Counter(invalidListValues.Name()).Return(mockCounter)
 	intArrayPayload, err := payload.Encode([]int{1, 2})
 	s.NoError(err)
 	fields = map[string]*commonpb.Payload{
@@ -153,6 +164,208 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		err = saValidator.Validate(attr, namespace)
 		s.Error(err)
 		s.Equal(fmt.Sprintf("%s attribute can't be set in SearchAttributes", restrictedAttr), err.Error())
+	}
+}
+
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_EmitInvalidListValues() {
+	intArrayPayload, err := payload.Encode([]int{1, 2})
+	s.NoError(err)
+
+	s.Run("AllowListFalse_RecordsMetricAndReturnsError", func() {
+		saValidator := s.newValidator(
+			NewTestProvider(),
+			NewTestMapperProvider(nil),
+			false, // allowList
+			false,
+		)
+
+		namespace := "namespace"
+		attr := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"Int01": intArrayPayload,
+			},
+		}
+
+		mockCounter := metrics.NewMockCounterIface(s.ctrl)
+		mockCounter.EXPECT().Record(
+			int64(1),
+			metrics.NamespaceTag(namespace),
+			metrics.StringTag("search_attribute_type", "Int"),
+			metrics.StringTag("allow_list", "false"),
+		)
+		s.mockMetricsHandler.EXPECT().Counter(invalidListValues.Name()).Return(mockCounter)
+
+		err := saValidator.Validate(attr, namespace)
+		s.Error(err)
+		s.Equal("invalid value for search attribute Int01 of type Int: [1 2]", err.Error())
+	})
+
+	s.Run("KeywordListType_DoesNotRecordMetric", func() {
+		saValidator := s.newValidator(
+			NewTestProvider(),
+			NewTestMapperProvider(nil),
+			true,
+			false,
+		)
+
+		namespace := "namespace"
+		attr := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"KeywordList01": sadefs.MustEncodeValue(
+					[]string{"a", "b"},
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+				),
+			},
+		}
+
+		// No metric expectation - the mock would fail if Counter were called.
+		err := saValidator.Validate(attr, namespace)
+		s.NoError(err)
+	})
+
+	s.Run("EmptyList_DoesNotRecordMetric", func() {
+		saValidator := s.newValidator(
+			NewTestProvider(),
+			NewTestMapperProvider(nil),
+			true,
+			false,
+		)
+
+		emptyArrayPayload, err := payload.Encode([]int{})
+		s.NoError(err)
+
+		namespace := "namespace"
+		attr := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"Int01": emptyArrayPayload,
+			},
+		}
+
+		// No metric expectation - empty list is acceptable for backwards
+		// compatibility to unset a custom search attribute.
+		err = saValidator.Validate(attr, namespace)
+		s.NoError(err)
+	})
+
+	s.Run("ScalarValue_DoesNotRecordMetric", func() {
+		saValidator := s.newValidator(
+			NewTestProvider(),
+			NewTestMapperProvider(nil),
+			true,
+			false,
+		)
+
+		intPayload, err := payload.Encode(1)
+		s.NoError(err)
+
+		namespace := "namespace"
+		attr := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"Int01": intPayload,
+			},
+		}
+
+		// No metric expectation - scalar JSON values must not be treated as lists.
+		err = saValidator.Validate(attr, namespace)
+		s.NoError(err)
+	})
+
+	s.Run("KeywordStringContainingBracket_DoesNotRecordMetric", func() {
+		saValidator := s.newValidator(
+			NewTestProvider(),
+			NewTestMapperProvider(nil),
+			true,
+			false,
+		)
+
+		namespace := "namespace"
+		attr := &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				// JSON-encoded string starts with `"`, not `[`.
+				"Keyword01": payload.EncodeString("[abc]"),
+			},
+		}
+
+		// No metric expectation - the leading `"` means this is not a list.
+		err := saValidator.Validate(attr, namespace)
+		s.NoError(err)
+	})
+}
+
+func TestIsNonEmptyListValues(t *testing.T) {
+	jsonMeta := map[string][]byte{
+		converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
+	}
+	binaryMeta := map[string][]byte{
+		converter.MetadataEncoding: []byte("binary/plain"),
+	}
+
+	tests := []struct {
+		name    string
+		payload *commonpb.Payload
+		want    bool
+	}{
+		{
+			name:    "nil payload",
+			payload: nil,
+			want:    false,
+		},
+		{
+			name:    "non-JSON encoding",
+			payload: &commonpb.Payload{Metadata: binaryMeta, Data: []byte("[1,2]")},
+			want:    false,
+		},
+		{
+			name:    "missing encoding metadata",
+			payload: &commonpb.Payload{Data: []byte("[1,2]")},
+			want:    false,
+		},
+		{
+			name:    "empty data",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: nil},
+			want:    false,
+		},
+		{
+			name:    "empty list",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte("[]")},
+			want:    false,
+		},
+		{
+			name:    "scalar int",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte("1")},
+			want:    false,
+		},
+		{
+			name:    "scalar string containing bracket",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte(`"[abc]"`)},
+			want:    false,
+		},
+		{
+			name:    "json null",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte("null")},
+			want:    false,
+		},
+		{
+			name:    "non-empty list of ints",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte("[1,2]")},
+			want:    true,
+		},
+		{
+			name:    "non-empty list of strings",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte(`["a","b"]`)},
+			want:    true,
+		},
+		{
+			name:    "non-empty list with single element",
+			payload: &commonpb.Payload{Metadata: jsonMeta, Data: []byte("[1]")},
+			want:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isNonEmptyListValues(tc.payload))
+		})
 	}
 }
 
