@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -87,6 +88,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
+		eventHandler        commonevents.Handler
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -2050,6 +2052,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
+	eventHandler commonevents.Handler,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2087,6 +2090,7 @@ func newContext(
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
+		eventHandler:            eventHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2193,6 +2197,13 @@ func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
 
 func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
+}
+
+func (s *ContextImpl) GetEventHandler() commonevents.Handler {
+	if s.eventHandler == nil {
+		return commonevents.NoopHandler()
+	}
+	return s.eventHandler
 }
 
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {

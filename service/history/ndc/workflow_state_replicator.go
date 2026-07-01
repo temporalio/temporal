@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -74,6 +75,7 @@ type (
 		persistenceRateLimiter       quotas.RequestRateLimiter
 		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		logger                       log.Logger
+		eventHandler                 commonevents.Handler
 		taskRefresher                workflow.TaskRefresher
 	}
 )
@@ -85,6 +87,7 @@ func NewWorkflowStateReplicator(
 	eventSerializer serialization.Serializer,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
+	eventHandler commonevents.Handler,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -99,6 +102,7 @@ func NewWorkflowStateReplicator(
 		persistenceRateLimiter:       persistenceRateLimiter,
 		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
 		logger:                       logger,
+		eventHandler:                 eventHandler,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
 	}
 }
@@ -235,6 +239,17 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
+	// appliedMS is the post-apply mutable state captured on the success path for the best-effort
+	// "applied" lifecycle event emitted below. It stays nil on duplicate/error paths.
+	var appliedMS historyi.MutableState
+	defer func() {
+		if retError != nil {
+			return
+		}
+		// TODO: gate behind dynamic config before production
+		r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS)
+	}()
+
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
 		ctx,
 		r.shardContext,
@@ -266,6 +281,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	}
 
 	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
+	appliedMS = ms
 	switch err.(type) {
 	case *serviceerror.NotFound:
 		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName)
@@ -340,6 +356,94 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return err
 	}
+}
+
+// emitReplicationVersionedTransitionApplied emits a best-effort "applied" ReplicationLifecycle
+// event summarizing post-apply mutable state. ms may be nil (e.g. a fresh apply via the NotFound
+// path) in which case only identity fields are populated. It never affects control flow.
+func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	ms historyi.MutableState,
+) {
+	handler := r.eventHandler
+	if handler == nil {
+		return
+	}
+
+	var nsName string
+	if name, err := r.namespaceRegistry.GetNamespaceName(namespaceID); err == nil {
+		nsName = name.String()
+	}
+
+	payload := commonevents.ReplicationLifecyclePayload{
+		Phase:       commonevents.ReplicationApplied,
+		TaskType:    commonevents.ReplTaskSyncVersionedTransition,
+		Shard:       r.shardContext.GetShardID(),
+		Namespace:   nsName,
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		Outcome:     "applied",
+	}
+	if ms != nil {
+		info := ms.GetExecutionInfo()
+		state := ms.GetExecutionState()
+		payload.State = state.GetState().String()
+		payload.Status = state.GetStatus().String()
+		payload.AppliedNextEventID = ms.GetNextEventID()
+		if lastWriteVersion, err := ms.GetLastWriteVersion(); err == nil {
+			payload.LastWriteVersion = lastWriteVersion
+		}
+		if cvt := ms.CurrentVersionedTransition(); cvt != nil {
+			payload.AppliedFailoverVersion = cvt.GetNamespaceFailoverVersion()
+			payload.AppliedTransitionCount = cvt.GetTransitionCount()
+		}
+		payload.TransitionHistoryLen = int32(len(info.GetTransitionHistory()))
+		if currentHistory, err := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); err == nil {
+			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
+				payload.LastEventID = lastItem.GetEventId()
+				payload.LastEventVersion = lastItem.GetVersion()
+			}
+		}
+		populateAppliedExecutionSummary(&payload, info, state)
+	}
+
+	commonevents.EmitReplicationLifecycle(handler, payload)
+}
+
+// populateAppliedExecutionSummary fills the post-apply mutable-state summary fields shared across
+// applied lifecycle hooks. It is best-effort and nil-safe.
+func populateAppliedExecutionSummary(
+	payload *commonevents.ReplicationLifecyclePayload,
+	info *persistencespb.WorkflowExecutionInfo,
+	state *persistencespb.WorkflowExecutionState,
+) {
+	payload.StateTransitionCount = info.GetStateTransitionCount()
+	payload.NewExecutionRunID = info.GetNewExecutionRunId()
+	payload.SuccessorRunID = info.GetSuccessorRunId()
+	payload.FirstExecutionRunID = info.GetFirstExecutionRunId()
+	payload.OriginalExecutionRunID = info.GetOriginalExecutionRunId()
+	payload.ResetRunID = info.GetResetRunId()
+	payload.WorkflowWasReset = info.GetWorkflowWasReset()
+	if ts := info.GetStartTime(); ts != nil && !ts.AsTime().IsZero() {
+		payload.StartTime = ts.AsTime().Format(time.RFC3339)
+	}
+	if ts := info.GetExecutionTime(); ts != nil && !ts.AsTime().IsZero() {
+		payload.ExecutionTime = ts.AsTime().Format(time.RFC3339)
+	}
+	if ts := info.GetCloseTime(); ts != nil && !ts.AsTime().IsZero() {
+		payload.CloseTime = ts.AsTime().Format(time.RFC3339)
+	}
+	if luvt := state.GetLastUpdateVersionedTransition(); luvt != nil {
+		payload.LastUpdateFailoverVersion = luvt.GetNamespaceFailoverVersion()
+		payload.LastUpdateTransitionCount = luvt.GetTransitionCount()
+	}
+	payload.SignalCount = info.GetSignalCount()
+	payload.ActivityCount = info.GetActivityCount()
+	payload.ChildExecutionCount = info.GetChildExecutionCount()
+	payload.UpdateCount = info.GetUpdateCount()
 }
 
 func parseVersionedTransitionAttributes(

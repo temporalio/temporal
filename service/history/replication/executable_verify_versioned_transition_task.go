@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -75,11 +76,22 @@ func (e *ExecutableVerifyVersionedTransitionTask) QueueID() any {
 	return e.WorkflowKey
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
+func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	if e.TerminalState() {
 		return nil
 	}
 	e.MarkExecutionStart()
+
+	// TODO: gate behind dynamic config before production
+	emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+
+	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
+	// best-effort "applied" lifecycle event emitted below.
+	var inspectedMS *persistencespb.WorkflowMutableState
+	defer func() {
+		// TODO: gate behind dynamic config before production
+		e.emitReplicationVerifyApplied(inspectedMS, retErr)
+	}()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -107,6 +119,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	defer cancel()
 
 	ms, err := e.getMutableState(ctx, e.RunID)
+	inspectedMS = ms
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
@@ -201,6 +214,100 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		lastItem.Version,
 		e.taskAttr.NewRunId,
 	)
+}
+
+// emitReplicationVerifyApplied emits a best-effort "applied" ReplicationLifecycle event for a
+// verify task. Outcome is "verified" when verification passed (no error) and "resend_needed" when
+// the task requested a state resend; any other error is reported with its message. ms may be nil
+// (e.g. the workflow was not found) in which case only identity fields are populated.
+func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
+	ms *persistencespb.WorkflowMutableState,
+	retErr error,
+) {
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
+	if err != nil {
+		return
+	}
+	handler := shardContext.GetEventHandler()
+	if handler == nil {
+		return
+	}
+
+	outcome := "verified"
+	errStr := ""
+	if retErr != nil {
+		var syncStateErr *serviceerrors.SyncState
+		if errors.As(retErr, &syncStateErr) {
+			outcome = "resend_needed"
+		} else {
+			outcome = "error"
+			errStr = retErr.Error()
+		}
+	}
+
+	var nsName string
+	if name, nsErr := e.NamespaceCache.GetNamespaceName(namespace.ID(e.NamespaceID)); nsErr == nil {
+		nsName = name.String()
+	}
+
+	payload := commonevents.ReplicationLifecyclePayload{
+		Phase:       commonevents.ReplicationApplied,
+		TaskType:    commonevents.ReplTaskVerifyVersionedTransition,
+		Shard:       shardContext.GetShardID(),
+		Namespace:   nsName,
+		NamespaceID: e.NamespaceID,
+		WorkflowID:  e.WorkflowID,
+		RunID:       e.RunID,
+		Outcome:     outcome,
+		Error:       errStr,
+	}
+	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {
+		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+		payload.TransitionCount = vt.GetTransitionCount()
+	}
+	if ms != nil {
+		info := ms.GetExecutionInfo()
+		state := ms.GetExecutionState()
+		payload.State = state.GetState().String()
+		payload.Status = state.GetStatus().String()
+		payload.TransitionHistoryLen = int32(len(info.GetTransitionHistory()))
+		if last := transitionhistory.LastVersionedTransition(info.GetTransitionHistory()); last != nil {
+			payload.AppliedFailoverVersion = last.GetNamespaceFailoverVersion()
+			payload.AppliedTransitionCount = last.GetTransitionCount()
+		}
+		if currentHistory, vhErr := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); vhErr == nil {
+			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
+				payload.LastEventID = lastItem.GetEventId()
+				payload.LastEventVersion = lastItem.GetVersion()
+			}
+		}
+		payload.StateTransitionCount = info.GetStateTransitionCount()
+		payload.NewExecutionRunID = info.GetNewExecutionRunId()
+		payload.SuccessorRunID = info.GetSuccessorRunId()
+		payload.FirstExecutionRunID = info.GetFirstExecutionRunId()
+		payload.OriginalExecutionRunID = info.GetOriginalExecutionRunId()
+		payload.ResetRunID = info.GetResetRunId()
+		payload.WorkflowWasReset = info.GetWorkflowWasReset()
+		if ts := info.GetStartTime(); ts != nil && !ts.AsTime().IsZero() {
+			payload.StartTime = ts.AsTime().Format(time.RFC3339)
+		}
+		if ts := info.GetExecutionTime(); ts != nil && !ts.AsTime().IsZero() {
+			payload.ExecutionTime = ts.AsTime().Format(time.RFC3339)
+		}
+		if ts := info.GetCloseTime(); ts != nil && !ts.AsTime().IsZero() {
+			payload.CloseTime = ts.AsTime().Format(time.RFC3339)
+		}
+		if luvt := state.GetLastUpdateVersionedTransition(); luvt != nil {
+			payload.LastUpdateFailoverVersion = luvt.GetNamespaceFailoverVersion()
+			payload.LastUpdateTransitionCount = luvt.GetTransitionCount()
+		}
+		payload.SignalCount = info.GetSignalCount()
+		payload.ActivityCount = info.GetActivityCount()
+		payload.ChildExecutionCount = info.GetChildExecutionCount()
+		payload.UpdateCount = info.GetUpdateCount()
+	}
+
+	commonevents.EmitReplicationLifecycle(handler, payload)
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context) error {

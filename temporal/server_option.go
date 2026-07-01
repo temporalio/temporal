@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
@@ -211,5 +212,13 @@ func WithTokenProvider(tp auth.TokenProvider) ServerOption {
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithCustomEventHandler sets a custom implementation of the events.Handler interface.
+// events.Handler is the base interface for emitting structured ("wide") events.
+func WithCustomEventHandler(provider events.Handler) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.eventHandler = provider
 	})
 }
