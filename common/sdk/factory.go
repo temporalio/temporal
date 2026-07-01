@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/rpc/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -33,15 +35,27 @@ type (
 		NewWorker(client sdkclient.Client, taskQueue string, options sdkworker.Options) sdkworker.Worker
 	}
 
+	// headersProvider mirrors go.temporal.io/sdk/internal.HeadersProvider. It is
+	// redefined here because sdk/internal is not importable outside the SDK module.
+	headersProviderIface interface {
+		GetHeaders(ctx context.Context) (map[string]string, error)
+	}
+
 	clientFactory struct {
 		hostPort        string
 		tlsConfig       *tls.Config
 		metricsHandler  *MetricsHandler
 		logger          log.Logger
 		sdklogger       sdklog.Logger
+		headersProvider headersProviderIface
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+	}
+
+	tokenProviderHeadersAdapter struct {
+		tp       auth.TokenProvider
+		hostPort string
 	}
 )
 
@@ -55,15 +69,32 @@ func NewClientFactory(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	stickyCacheSize dynamicconfig.IntPropertyFn,
+	tp auth.TokenProvider,
 ) *clientFactory {
+	var hp headersProviderIface
+	if tp != nil {
+		hp = &tokenProviderHeadersAdapter{tp: tp, hostPort: hostPort}
+	}
 	return &clientFactory{
 		hostPort:        hostPort,
 		tlsConfig:       tlsConfig,
 		metricsHandler:  NewMetricsHandler(metricsHandler),
 		logger:          logger,
 		sdklogger:       log.NewSdkLogger(logger),
+		headersProvider: hp,
 		stickyCacheSize: stickyCacheSize,
 	}
+}
+
+func (a *tokenProviderHeadersAdapter) GetHeaders(ctx context.Context) (map[string]string, error) {
+	token, err := a.tp.GetToken(ctx, a.hostPort)
+	if err != nil {
+		return nil, fmt.Errorf("sdk auth: %w", err)
+	}
+	if token == "" {
+		return nil, nil
+	}
+	return map[string]string{"authorization": "Bearer " + token}, nil
 }
 
 func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
@@ -75,6 +106,9 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 		DialOptions: []grpc.DialOption{
 			grpc.WithUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
 		},
+	}
+	if f.headersProvider != nil {
+		options.HeadersProvider = f.headersProvider // satisfies internal.HeadersProvider by structural typing
 	}
 	return options
 }
