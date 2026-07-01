@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/caio/go-tdigest/v5"
+	"go.temporal.io/server/common/fastrand"
 )
 
 type (
@@ -35,21 +36,6 @@ type (
 		// 90th percentile and the 99th percentile.
 		// Aggregates across all active windows.
 		TrimmedMean(lowerQuantile, upperQuantile float64) float64
-		// SubWindowForTime returns a view of the time window containing the given instant.
-		// Use this to get detailed information about a specific time window.
-		SubWindowForTime(instant time.Time) TimeWindowView
-	}
-
-	// TimeWindowView is a read-only view of a single time window.
-	TimeWindowView interface {
-		// Quantile returns the approximate value at quantile q (0 <= q <= 1)
-		Quantile(q float64) float64
-		// TrimmedMean returns the mean of the values within the given quantile range (0 <= q <= 1).
-		// For example, TrimmedMean(0.9, 0.99) returns the average of all the values between the
-		// 90th percentile and the 99th percentile.
-		TrimmedMean(lowerQuantile, upperQuantile float64) float64
-		Start() time.Time
-		End() time.Time
 	}
 
 	// WindowConfig controls the windowing behavior.
@@ -59,8 +45,7 @@ type (
 		// windowCount is the maximum number of windows to retain.
 		WindowCount int
 		// FillBlankIntervals controls whether gaps in the windowing should be preserved.
-		// This matters when windowSize is shorter than the largest gap in the measured data
-		// and individual time-windows are being fetched via TimeWindowedStats.SubWindowForTime.
+		// This matters when windowSize is shorter than the largest gap in the measured data.
 		FillBlankIntervals bool
 	}
 
@@ -100,91 +85,79 @@ func NewWindowedTDigest(cfg WindowConfig) (TimeWindowedStats, error) {
 	}, nil
 }
 
-func (w *timeWindowedTDigest) Record(value float64, timestamp time.Time) {
-	w.RecordMulti(value, timestamp, 1)
-}
-
-func (w *timeWindowedTDigest) RecordMulti(value float64, timestamp time.Time, count uint64) {
-	window, err := w.getOrCreateWindow(timestamp)
-	if err != nil {
-		// Drop data for invalid timestamps
-		return
-	}
-	_ = window.tdigest.AddWeighted(value, count)
-}
-
 func (w *timeWindowedTDigest) RecordToLatestWindow(value float64) {
 	w.RecordMultiToLatestWindow(value, 1)
 }
 
 func (w *timeWindowedTDigest) RecordMultiToLatestWindow(value float64, count uint64) {
-	window, err := w.getOrCreateWindow(time.Time{})
-	if err != nil {
-		return
-	}
-	_ = window.tdigest.AddWeighted(value, count)
+	w.RecordMulti(value, time.Now(), count)
 }
 
-func (w *timeWindowedTDigest) SubWindowForTime(instant time.Time) TimeWindowView {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	window, _ := w.searchWindowsBackwards(instant)
-	return window
+func (w *timeWindowedTDigest) Record(value float64, timestamp time.Time) {
+	w.RecordMulti(value, timestamp, 1)
+}
+
+func (w *timeWindowedTDigest) RecordMulti(value float64, timestamp time.Time, count uint64) {
+	if err := w.addToWindow(timestamp, value, count); err != nil {
+		// Data must have been too old, ignore.
+		return
+	}
 }
 
 func (w *timeWindowedTDigest) Quantile(q float64) float64 {
-	return w.getMergedWindows().Quantile(q)
+	merged := w.getMergedWindows()
+	if merged == nil || merged.Count() == 0 {
+		return 0
+	}
+
+	return merged.Quantile(q)
 }
 
 func (w *timeWindowedTDigest) TrimmedMean(lowerQuantile, upperQuantile float64) float64 {
-	return w.getMergedWindows().TrimmedMean(lowerQuantile, upperQuantile)
+	merged := w.getMergedWindows()
+	if merged == nil || merged.Count() == 0 {
+		return 0
+	}
+
+	return merged.TrimmedMean(lowerQuantile, upperQuantile)
 }
 
 // TODO: this is expensive, maybe cache everything but the latest window so we can skip N merges?
 func (w *timeWindowedTDigest) getMergedWindows() *tdigest.TDigest {
-	windows := w.cloneWindows()
-	merged, _ := tdigest.New()
-	for idx := range windows {
-		if windows[idx].tdigest != nil {
-			_ = merged.Merge(windows[idx].tdigest)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var merged *tdigest.TDigest
+	for idx := range w.windows {
+		td := w.windows[idx].tdigest
+		if td == nil {
+			continue
+		}
+
+		if merged == nil {
+			merged = td.Clone()
+		} else {
+			_ = merged.Merge(td)
 		}
 	}
 	return merged
 }
 
-func (w *timeWindowedTDigest) pretouchWindowsForTest(start time.Time) {
-	for range w.cfg.WindowCount {
-		w.advanceWindowSimple(start)
-	}
-}
-
-// cloneWindows creates a shallow copy of the ring buffer.
-// Use this to avoid holding the lock while accessing the windows for aggregated queries.
-func (w *timeWindowedTDigest) cloneWindows() []timedWindow {
+func (w *timeWindowedTDigest) addToWindow(timestamp time.Time, value float64, count uint64) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	windows := make([]timedWindow, len(w.windows))
-	copy(windows, w.windows)
-	return windows
-}
 
-// getOrCreateWindow returns the window containing the given timestamp, creating a new one if necessary.
-// 0 is a valid timestamp and will return the most recent window.
-func (w *timeWindowedTDigest) getOrCreateWindow(timestamp time.Time) (*timedWindow, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if timestamp.IsZero() {
-		timestamp = time.Now()
-	}
 	candidate, err := w.searchWindowsBackwards(timestamp)
-	if err == nil {
-		return candidate, nil
+	if err != nil {
+		if !errors.Is(err, errTooNew) {
+			// err is errTooOld or errInGap
+			return err
+		}
+
+		candidate = w.advanceWindow(timestamp)
 	}
-	if errors.Is(err, errTooNew) {
-		return w.advanceWindow(timestamp), nil
-	}
-	// err is errTooOld or errInGap
-	return nil, err
+
+	return candidate.tdigest.AddWeighted(value, count)
 }
 
 var errTooOld = errors.New("time was older than the earliest window")
@@ -194,16 +167,16 @@ var errInGap = errors.New("time was in a gap between windows")
 // Precondition: w.mu is held.
 // Returns the window containing the given timestamp, or error if no window exists.
 func (w *timeWindowedTDigest) searchWindowsBackwards(timestamp time.Time) (*timedWindow, error) {
-	latest := w.windows[w.head]
+	latest := &w.windows[w.head]
 	if !timestamp.Before(latest.start) {
 		// If the requested timestamp is after the latest window, no point in searching
 		if !timestamp.Before(latest.end) {
 			return nil, errTooNew
 		}
-		return &latest, nil
+		return latest, nil
 	}
 	for idx := w.modDec(w.head); idx != w.head; idx = w.modDec(idx) {
-		candidate := w.windows[idx]
+		candidate := &w.windows[idx]
 		// Window start is inclusive, end is exclusive. We're iterating
 		// backwards in time, so the first window that matches is the one we want.
 		if !timestamp.Before(candidate.start) {
@@ -212,7 +185,7 @@ func (w *timeWindowedTDigest) searchWindowsBackwards(timestamp time.Time) (*time
 			if !timestamp.Before(w.windows[idx].end) {
 				return nil, errInGap
 			}
-			return &candidate, nil
+			return candidate, nil
 		}
 	}
 	// All the windows are newer than the requested timestamp.
@@ -241,6 +214,7 @@ func (w *timeWindowedTDigest) advanceWindow(timestamp time.Time) *timedWindow {
 	return w.advanceWindowSimple(timestamp)
 }
 
+// Precondition: w.mu is held.
 func (w *timeWindowedTDigest) advanceWindowSimple(start time.Time) *timedWindow {
 	w.head = w.modInc(w.head)
 	if curr := &w.windows[w.head]; curr.tdigest != nil {
@@ -249,7 +223,8 @@ func (w *timeWindowedTDigest) advanceWindowSimple(start time.Time) *timedWindow 
 		curr.end = start.Add(w.cfg.WindowSize)
 		return curr
 	}
-	digest, _ := tdigest.New()
+
+	digest, _ := tdigest.New(tdigest.RandomNumberGenerator(fastrand.Rand{}))
 	window := timedWindow{
 		tdigest: digest,
 		start:   start,
@@ -267,19 +242,4 @@ func (w *timeWindowedTDigest) modInc(idx int) int {
 // modulo-decrement, for wrapping around the ring buffer.
 func (w *timeWindowedTDigest) modDec(idx int) int {
 	return (idx - 1 + w.cfg.WindowCount) % w.cfg.WindowCount
-}
-
-func (w *timedWindow) Start() time.Time {
-	return w.start
-}
-func (w *timedWindow) End() time.Time {
-	return w.end
-}
-
-func (w *timedWindow) Quantile(q float64) float64 {
-	return w.tdigest.Quantile(q)
-}
-
-func (w *timedWindow) TrimmedMean(lowerQuantile, upperQuantile float64) float64 {
-	return w.tdigest.TrimmedMean(lowerQuantile, upperQuantile)
 }

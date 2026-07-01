@@ -8,6 +8,101 @@ import (
 	"unsafe"
 )
 
+// Benchmark output:
+/*
+cpu: Apple M5 Max
+                                                       │   sec/op    │
+NewWindow-18                                             519.6µ ± 2%
+TenMillionRecordQuery/trimmed-mean-size-10-18             10.81 ± 1%
+TenMillionRecordQuery/quantile-size-10-18                 10.69 ± 3%
+TenMillionRecordQuery/trimmed-mean-size-100-18            4.887 ± 1%
+TenMillionRecordQuery/quantile-size-100-18                4.886 ± 0%
+TenMillionRecordQuery/trimmed-mean-size-1000-18           3.590 ± 0%
+TenMillionRecordQuery/quantile-size-1000-18               3.592 ± 0%
+TenMillionRecordQuery/trimmed-mean-size-10000-18         467.6m ± 1%
+TenMillionRecordQuery/quantile-size-10000-18             468.7m ± 0%
+Insert/10k-datapoints-retain-all-window-size-10-18       259.7µ ± 1%
+Insert/10k-datapoints-retain-all-window-size-100-18      514.7µ ± 1%
+Insert/10k-datapoints-retain-all-window-size-1000-18     1.438m ± 1%
+Insert/10k-datapoints-retain-all-window-size-10000-18    4.354m ± 1%
+Insert/10M-datapoints-retain-all-window-size-10-18        7.240 ± 4%
+Insert/10M-datapoints-retain-all-window-size-100-18      528.0m ± 2%
+Insert/10M-datapoints-retain-all-window-size-1000-18      1.397 ± 1%
+Insert/10M-datapoints-retain-all-window-size-10000-18     4.308 ± 0%
+Insert/10M-datapoints-retain-all-window-size-100000-18    5.264 ± 1%
+Insert/10M-datapoints-retain-10k-window-size-10-18       216.1m ± 0%
+Insert/10M-datapoints-retain-10k-window-size-100-18      473.2m ± 0%
+Insert/10M-datapoints-retain-10k-window-size-1000-18      1.394 ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10000-18     4.321 ± 0%
+geomean                                                  366.2m
+
+                                                       │     B/op     │
+NewWindow-18                                             4.751Mi ± 0%
+TenMillionRecordQuery/trimmed-mean-size-10-18            809.1Mi ± 0%
+TenMillionRecordQuery/quantile-size-10-18                809.0Mi ± 0%
+TenMillionRecordQuery/trimmed-mean-size-100-18           321.1Mi ± 0%
+TenMillionRecordQuery/quantile-size-100-18               320.7Mi ± 1%
+TenMillionRecordQuery/trimmed-mean-size-1000-18          109.1Mi ± 0%
+TenMillionRecordQuery/quantile-size-1000-18              109.2Mi ± 0%
+TenMillionRecordQuery/trimmed-mean-size-10000-18         14.74Mi ± 0%
+TenMillionRecordQuery/quantile-size-10000-18             14.73Mi ± 0%
+Insert/10k-datapoints-retain-all-window-size-10-18       12.82Ki ± 1%
+Insert/10k-datapoints-retain-all-window-size-100-18      8.738Ki ± 0%
+Insert/10k-datapoints-retain-all-window-size-1000-18     6.494Ki ± 0%
+Insert/10k-datapoints-retain-all-window-size-10000-18    488.3Ki ± 0%
+Insert/10M-datapoints-retain-all-window-size-10-18       15.47Gi ± 0%
+Insert/10M-datapoints-retain-all-window-size-100-18      799.8Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-1000-18     166.6Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-10000-18    493.2Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-100000-18   579.8Mi ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10-18       11.46Mi ± 0%
+Insert/10M-datapoints-retain-10k-window-size-100-18      8.823Mi ± 0%
+Insert/10M-datapoints-retain-10k-window-size-1000-18     8.456Mi ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10000-18    454.0Mi ± 0%
+geomean                                                  27.88Mi
+
+                                                       │  allocs/op  │
+NewWindow-18                                             1.502k ± 0%
+TenMillionRecordQuery/trimmed-mean-size-10-18            1.069M ± 0%
+TenMillionRecordQuery/quantile-size-10-18                1.069M ± 0%
+TenMillionRecordQuery/trimmed-mean-size-100-18           122.2k ± 0%
+TenMillionRecordQuery/quantile-size-100-18               122.2k ± 0%
+TenMillionRecordQuery/trimmed-mean-size-1000-18          12.93k ± 0%
+TenMillionRecordQuery/quantile-size-1000-18              12.93k ± 0%
+TenMillionRecordQuery/trimmed-mean-size-10000-18         1.300k ± 0%
+TenMillionRecordQuery/quantile-size-10000-18             1.300k ± 0%
+Insert/10k-datapoints-retain-all-window-size-10-18        266.0 ± 0%
+Insert/10k-datapoints-retain-all-window-size-100-18       264.0 ± 0%
+Insert/10k-datapoints-retain-all-window-size-1000-18      261.0 ± 0%
+Insert/10k-datapoints-retain-all-window-size-10000-18     306.0 ± 0%
+Insert/10M-datapoints-retain-all-window-size-10-18       5.302M ± 0%
+Insert/10M-datapoints-retain-all-window-size-100-18      552.0k ± 0%
+Insert/10M-datapoints-retain-all-window-size-1000-18     352.0k ± 0%
+Insert/10M-datapoints-retain-all-window-size-10000-18    351.0k ± 0%
+Insert/10M-datapoints-retain-all-window-size-100000-18   356.1k ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10-18       303.0k ± 0%
+Insert/10M-datapoints-retain-10k-window-size-100-18      302.1k ± 0%
+Insert/10M-datapoints-retain-10k-window-size-1000-18     302.0k ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10000-18    344.0k ± 0%
+geomean                                                  37.77k
+
+                                                       │ B/stats-size-estimate │
+Insert/10k-datapoints-retain-all-window-size-10-18                248.7Ki ± 0%
+Insert/10k-datapoints-retain-all-window-size-100-18               164.3Ki ± 0%
+Insert/10k-datapoints-retain-all-window-size-1000-18              155.9Ki ± 0%
+Insert/10k-datapoints-retain-all-window-size-10000-18             22.25Ki ± 2%
+Insert/10M-datapoints-retain-all-window-size-10-18                242.6Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-100-18               160.2Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-1000-18              152.0Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-10000-18             21.60Mi ± 0%
+Insert/10M-datapoints-retain-all-window-size-100000-18            2.334Mi ± 2%
+Insert/10M-datapoints-retain-10k-window-size-10-18                248.6Ki ± 0%
+Insert/10M-datapoints-retain-10k-window-size-100-18               164.2Ki ± 0%
+Insert/10M-datapoints-retain-10k-window-size-1000-18              155.8Ki ± 0%
+Insert/10M-datapoints-retain-10k-window-size-10000-18             22.26Ki ± 1%
+geomean                                                           1.131Mi
+*/
+
 // Uses declarations from windowed_tdigest_test.go
 // func n(seconds int) time.Time
 // RecordingValue struct {
@@ -20,9 +115,7 @@ type UIntGenerator interface {
 	Uint64() uint64
 }
 
-// -                 ms, us, ns
-// BenchmarkNewWindow 8,058,719 ns/op
-// 8ms to add 1000 new windows each containing a single datapoint.
+// NewWindow-18: 512.5µ ±  1%
 // For windows sized to more than a few milliseconds, this means window
 // creation will not be a bottleneck.
 func BenchmarkNewWindow(b *testing.B) {
@@ -41,19 +134,6 @@ func BenchmarkNewWindow(b *testing.B) {
 	}
 }
 
-// -                                                            s, ms, us, ns
-// BenchmarkTenMillionRecordQuery/trimmed-mean-size-10         11,655,230,875 ns/op
-// BenchmarkTenMillionRecordQuery/quantile-size-10             11,743,078,833 ns/op
-// BenchmarkTenMillionRecordQuery/subwindow-quantile-size-10        1,795,897 ns/op
-// BenchmarkTenMillionRecordQuery/trimmed-mean-size-100         5,297,755,167 ns/op
-// BenchmarkTenMillionRecordQuery/quantile-size-100             4,950,984,583 ns/op
-// BenchmarkTenMillionRecordQuery/subwindow-quantile-size-100         144,574 ns/op
-// BenchmarkTenMillionRecordQuery/trimmed-mean-size-1000        3,844,660,708 ns/op
-// BenchmarkTenMillionRecordQuery/quantile-size-1000            3,646,952,708 ns/op
-// BenchmarkTenMillionRecordQuery/subwindow-quantile-size-1000         13,883 ns/op
-// BenchmarkTenMillionRecordQuery/trimmed-mean-size-10000         473,836,570 ns/op
-// BenchmarkTenMillionRecordQuery/quantile-size-10000             473,955,278 ns/op
-// BenchmarkTenMillionRecordQuery/subwindow-quantile-size-10000       798,834 ns/op
 func BenchmarkTenMillionRecordQuery(b *testing.B) {
 	for windowSize := 10; windowSize <= 10_000; windowSize *= 10 {
 		stats, _ := NewWindowedTDigest(WindowConfig{
@@ -74,11 +154,6 @@ func BenchmarkTenMillionRecordQuery(b *testing.B) {
 				stats.Quantile(0.9)
 			}
 		})
-		b.Run(fmt.Sprintf("subwindow-quantile-size-%d", windowSize), func(b *testing.B) {
-			for b.Loop() {
-				stats.SubWindowForTime(datapoints[9_000_000].Time).Quantile(0.9)
-			}
-		})
 	}
 }
 
@@ -88,22 +163,6 @@ func BenchmarkTenMillionRecordQuery(b *testing.B) {
 // for a fixed window size also has a somewhat super-linear impact on latency.
 // Increasing window rotation by reducing the total window count was tested.
 // It did not make a significant (<1%) impact on latency.
-// Tests were run on a 2025 Macbook Pro M4 Max, your CPU features may differ!
-//
-// -                                                            s, ms, us, ns         MB, KB,  B                        GB, MB, KB,  B
-// BenchmarkInsert/10k-datapoints-retain-all-window-size-10           402,160 ns/op      254,672 B/stats-size-estimate         656,036 B/op-alloc
-// BenchmarkInsert/10k-datapoints-retain-all-window-size-100          680,058 ns/op      168,272 B/stats-size-estimate         649,773 B/op-alloc
-// BenchmarkInsert/10k-datapoints-retain-all-window-size-1000       1,668,972 ns/op      159,632 B/stats-size-estimate         647,274 B/op-alloc
-// BenchmarkInsert/10k-datapoints-retain-all-window-size-10000      4,438,201 ns/op       23,232 B/stats-size-estimate       1,139,031 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-all-window-size-10    11,239,292,208 ns/op  254,389,632 B/stats-size-estimate  22,680,700,936 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-all-window-size-100    1,765,953,792 ns/op  167,989,632 B/stats-size-estimate   2,851,912,088 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-all-window-size-1000   1,723,260,708 ns/op  159,349,632 B/stats-size-estimate    ,869,028,368 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-all-window-size-10000  4,644,341,542 ns/op   22,848,592 B/stats-size-estimate   1,162,587,904 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-all-window-size-100000 5,661,283,750 ns/op    2,395,696 B/stats-size-estimate   1,248,610,672 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-10k-window-size-10       392,717,680 ns/op      254,560 B/stats-size-estimate     656,047,216 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-10k-window-size-100      680,680,917 ns/op      168,160 B/stats-size-estimate     649,804,400 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-10k-window-size-1000   1,665,408,958 ns/op      159,520 B/stats-size-estimate     648,923,456 B/op-alloc
-// BenchmarkInsert/10M-datapoints-retain-10k-window-size-10000  4,630,973,833 ns/op       23,168 B/stats-size-estimate   1,115,983,792 B/op-alloc
 func BenchmarkInsert(b *testing.B) {
 	slidingBenchmark(benchmarkInput{
 		name:                "10k-datapoints-retain-all",
@@ -152,14 +211,17 @@ func slidingBenchmark(in benchmarkInput) {
 		1, rand.NewPCG(7, 42))
 	for windowSize := in.startWindowSize; windowSize <= in.maxWindowSize; windowSize *= 10 {
 		in.b.Run(fmt.Sprintf("%s-window-size-%d", in.name, windowSize), func(b *testing.B) {
-			b.ReportAllocs()
 			for range b.N {
 				// Need to recreate this each loop
 				stats, _ := NewWindowedTDigest(WindowConfig{
 					WindowSize:  time.Duration(windowSize) * time.Second,
 					WindowCount: in.inputDatapointCount / (windowSize * in.windowRotations),
 				})
-				stats.(*timeWindowedTDigest).pretouchWindowsForTest(n(1))
+
+				w := stats.(*timeWindowedTDigest)
+				for range w.cfg.WindowCount {
+					w.advanceWindowSimple(n(1))
+				}
 				b.StartTimer()
 				for _, dp := range datapoints {
 					stats.RecordMulti(dp.Value, dp.Time, dp.Count)
