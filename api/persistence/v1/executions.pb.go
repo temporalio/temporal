@@ -1248,19 +1248,12 @@ type FastForwardInfo struct {
 	TargetTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=target_time,json=targetTime,proto3" json:"target_time,omitempty"`
 	// Indicates whether this fast-forward has already been reached, used for idempotency checks.
 	HasReached bool `protobuf:"varint,2,opt,name=has_reached,json=hasReached,proto3" json:"has_reached,omitempty"`
-	// Monotonic counter bumped every time the fast-forward is (re)applied (i.e. whenever the
-	// TimeSkippingConfig is initialized or updated). Carried on the time-skipping timer task and
-	// compared at firing time: a task whose stamp does not match the current fast-forward's stamp
-	// has been superseded and is silently dropped. Event-free, so it works for both workflow and
-	// CHASM executions and survives failover (replicated, monotonic). Mirrors ActivityInfo.stamp.
+	// This is a monotonically increasing counter that is used to identify the version of the fast-forward.
+	// It is bumped every time the fast-forward is set.
+	// It is used to validate the time skipping fast-forward timer task.
 	Stamp int32 `protobuf:"varint,4,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Namespace failover version at which this fast-forward was (re)installed. Carried on the
-	// time-skipping timer task and validated at firing time via CheckTaskVersion. This is stored
-	// (rather than read from MutableState.GetCurrentVersion() at firing time) because the current
-	// version tracks the active cluster's failover version and changes on every failover, whereas
-	// the reference version a task is validated against must be stable for the life of the task.
-	// Mirrors how other timer tasks validate against a persisted per-entity version
-	// (ActivityInfo.version, the workflow start version).
+	// This is the NamespaceFailoverVersion at which this fast-forward was configured.
+	// It is used to validate the time skipping fast-forward timer task.
 	Version       int64 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

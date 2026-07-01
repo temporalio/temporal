@@ -1910,6 +1910,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 			name := reflect.TypeOf(task).Elem().Name()
 			seen[name] = true
 			requireAllFieldsPopulated(t, name, reflect.ValueOf(task).Elem(), taskIDOnly)
+		default:
+			t.Fatalf("unexpected task type: %T", task)
 		}
 	}
 

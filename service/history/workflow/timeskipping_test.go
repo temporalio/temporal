@@ -480,6 +480,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Require().NotNil(newTSI.GetFastForwardInfo())
 		// enabling from no fast-forward stamps with 1
 		s.Equal(int32(1), newTSI.GetFastForwardInfo().GetStamp())
+		// re-installing the fast-forward also records the current failover version, so a task
+		// emitted here validates against a stable reference after a failover.
+		s.Equal(s.mutableState.GetCurrentVersion(), newTSI.GetFastForwardInfo().GetVersion())
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(newTSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())

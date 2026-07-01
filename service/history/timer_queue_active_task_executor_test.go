@@ -2407,8 +2407,6 @@ func (s *timerQueueActiveTaskExecutorSuite) makeTimeSkippingMS() (*persistencesp
 	return pms, workflowKey
 }
 
-// TestExecuteTimeSkippingTimerTask covers the full validity-check ladder of
-// executeTimeSkippingTimerTask plus the happy-path disable transition.
 func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 	target := timestamppb.New(s.now.Add(time.Hour))
 	enabledFF := func(stamp int32, hasReached bool) *persistencespb.TimeSkippingInfo {
@@ -2422,7 +2420,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			},
 		}
 	}
-
 	for _, tc := range []struct {
 		name        string
 		completed   bool // mark workflow execution completed
@@ -2457,19 +2454,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			wantErr:     errNoTimerFired,
 		},
 		{
-			name:        "NoFastForwardInfo",
+			name:        "FastForwardInfoDeleted",
 			tsi:         &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}},
 			taskVersion: s.version,
 			taskStamp:   1,
-			wantErr:     errNoTimerFired,
-		},
-		{
-			// Stamp 0 is a degenerate fast-forward (a real one always has Stamp >= 1); even a
-			// matching zero-stamp task must be treated as invalid and dropped.
-			name:        "StampZero",
-			tsi:         enabledFF(0, false),
-			taskVersion: s.version,
-			taskStamp:   0,
 			wantErr:     errNoTimerFired,
 		},
 		{

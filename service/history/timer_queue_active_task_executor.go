@@ -939,11 +939,13 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	// task staleness check
+	// 1) time skipping is disabled
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		release(nil)
 		return errNoTimerFired
 	}
+	// 2) fast-forward is disabled/changed/executed for a different stamp/version/visibility timestamp
 	ff := tsi.GetFastForwardInfo()
 	if ff.GetTargetTime() == nil || ff.GetHasReached() || ff.GetStamp() != task.Stamp {
 		release(nil)
@@ -953,7 +955,8 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, task.Version, task); err != nil {
 		return err
 	}
-
+	// 3) firing fast-forward timer only turns off the time-skipping enabled flag and it doesn't regnerate tasks.
+	// TODO@time-skipping: chasm execution path is not implemented yet.
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {
