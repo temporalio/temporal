@@ -93,6 +93,7 @@ var (
 	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
 	errUnableToGetNamespaceInfoMessage                = "Unable to get namespace %v info with error: %v"
 	errUnableToCreateFrontendClientMessage            = "Unable to create frontend client with error: %v."
+	errUnableToCreateOperatorClientMessage            = "Unable to create operator client with error: %v."
 	errTooManySearchAttributesMessage                 = "Unable to create search attributes: cannot have more than %d search attribute of type %s."
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
