@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -25,6 +28,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -578,4 +582,114 @@ func (s *contextSuite) TestRefreshTask() {
 			s.NoError(err)
 		})
 	}
+}
+
+func (s *contextSuite) TestCacheSize_CountBasedLimit() {
+	// Size-based limit off (default): CacheSize is the constant 1, RefreshCacheSize a no-op.
+	s.False(s.workflowContext.config.HistoryCacheLimitSizeBased)
+	s.Equal(1, s.workflowContext.CacheSize())
+	s.workflowContext.RefreshCacheSize()
+	s.Equal(1, s.workflowContext.CacheSize())
+}
+
+func (s *contextSuite) TestCacheSize_SizeBasedLimit() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	// NewContext seeds the size from the workflow key (mutable state/registry not loaded yet).
+	baseline := len(tests.WorkflowKey.WorkflowID) + len(tests.WorkflowKey.RunID) + len(tests.WorkflowKey.NamespaceID)
+	s.Equal(baseline, wfContext.CacheSize())
+
+	// CacheSize must stay at baseline until RefreshCacheSize runs: it returns the
+	// cached value lock-free, never reading mutable state live. So
+	// GetApproximatePersistedSize is expected exactly once, from RefreshCacheSize.
+	controller := gomock.NewController(s.T())
+	mockMS := historyi.NewMockMutableState(controller)
+	mockMS.EXPECT().GetApproximatePersistedSize().Return(900).Times(1)
+	wfContext.MutableState = mockMS
+
+	s.Equal(baseline, wfContext.CacheSize())
+
+	wfContext.RefreshCacheSize()
+	s.Equal(baseline+900, wfContext.CacheSize())
+}
+
+func (s *contextSuite) TestCacheSize_ConcurrentReadWriteIsRaceFree() {
+	// CacheSize reads lock-free while RefreshCacheSize writes under the lock, so
+	// cacheSize must be atomic. Run with -race to catch non-atomic regressions.
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			wfContext.RefreshCacheSize()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = wfContext.CacheSize()
+		}
+	}()
+	wg.Wait()
+}
+
+// fakeUpdateStore is a no-op update.UpdateStore for building a real update.Registry
+// in tests, mirroring the update package's own emptyUpdateStore. GetUpdateOutcome
+// returns NotFound so the registry treats an unknown ID as new and creates it.
+type fakeUpdateStore struct{}
+
+func (fakeUpdateStore) VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo)) {}
+func (fakeUpdateStore) GetUpdateOutcome(context.Context, string) (*updatepb.Outcome, error) {
+	return nil, serviceerror.NewNotFound("not found")
+}
+func (fakeUpdateStore) GetCurrentVersion() int64         { return 0 }
+func (fakeUpdateStore) IsWorkflowExecutionRunning() bool { return true }
+
+func (s *contextSuite) TestCacheSize_IncludesUpdateRegistry() {
+	config := tests.NewDynamicConfig()
+	config.HistoryCacheLimitSizeBased = true
+	wfContext := NewContext(
+		config,
+		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
+		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	baseline := len(tests.WorkflowKey.WorkflowID) + len(tests.WorkflowKey.RunID) + len(tests.WorkflowKey.NamespaceID)
+
+	// The update registry is the state whose lock-free iteration caused the crash.
+	// CacheSize must keep returning the seeded baseline until RefreshCacheSize folds
+	// the registry size in under the workflow lock — never reading the registry live.
+	reg := update.NewRegistry(fakeUpdateStore{})
+	_, _, err := reg.FindOrCreate(context.Background(), "update-id")
+	s.NoError(err)
+	wfContext.updateRegistry = reg
+	s.NotZero(reg.GetSize())
+
+	s.Equal(baseline, wfContext.CacheSize())
+
+	wfContext.RefreshCacheSize()
+	s.Equal(baseline+reg.GetSize(), wfContext.CacheSize())
 }

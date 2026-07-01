@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,6 +43,10 @@ type (
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
 		updateRegistry update.Registry
+
+		// cacheSize holds the size last computed by RefreshCacheSize. CacheSize
+		// reads it without the workflow lock, so access must be atomic.
+		cacheSize atomic.Int64
 	}
 )
 
@@ -76,6 +81,10 @@ func NewContext(
 		contextImpl.archetypeID != chasm.UnspecifiedArchetypeID,
 		"Creating execution context with unspecified archetype ID",
 	)
+
+	// Seed the size while the context is unshared; MutableState and the update
+	// registry are still nil, so this reads no lock-guarded state.
+	contextImpl.RefreshCacheSize()
 
 	return contextImpl
 }
@@ -1197,11 +1206,23 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	)
 }
 
-// CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()
-// which returns the serialized size. Note: In-memory size will be slightly larger than the serialized size.
+// CacheSize returns the cache-limit size estimate. It runs without the workflow
+// lock, so it returns the value last computed by RefreshCacheSize rather than
+// reading mutable state or the update registry live.
 func (c *ContextImpl) CacheSize() int {
 	if !c.config.HistoryCacheLimitSizeBased {
 		return 1
+	}
+	return int(c.cacheSize.Load())
+}
+
+// RefreshCacheSize recomputes the cache-limit size estimate and stores it for
+// CacheSize to read lock-free. It reads mutable state and the update registry,
+// so it must run under the workflow lock, or before the context is shared.
+// The estimate uses serialized proto sizes, a bit under the in-memory size.
+func (c *ContextImpl) RefreshCacheSize() {
+	if !c.config.HistoryCacheLimitSizeBased {
+		return
 	}
 	size := len(c.workflowKey.WorkflowID) + len(c.workflowKey.RunID) + len(c.workflowKey.NamespaceID)
 	if c.MutableState != nil {
@@ -1210,7 +1231,7 @@ func (c *ContextImpl) CacheSize() int {
 	if c.updateRegistry != nil {
 		size += c.updateRegistry.GetSize()
 	}
-	return size
+	c.cacheSize.Store(int64(size))
 }
 
 func emitStateTransitionCount(
