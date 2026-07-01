@@ -2501,8 +2501,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 				FastForward: durationpb.New(time.Hour),
 			},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
-				SourceEventId: 1,
+				TargetTime: timestamppb.New(s.now.Add(time.Hour)),
+				Stamp:      1,
+				Version:    s.version,
 			},
 		}
 		return pms, workflowKey
@@ -2515,7 +2516,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			Version:             s.version,
+			Stamp:               1,
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2535,7 +2537,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now.Add(time.Hour),
-			EventID:             1,
+			Version:             s.version,
+			Stamp:               1,
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2552,7 +2555,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			Version:             s.version,
+			Stamp:               1,
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)

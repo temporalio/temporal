@@ -245,7 +245,7 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 		ffi := tsi.GetFastForwardInfo()
 
 		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
-		if ffi != nil && ffi.GetSourceEventId() == timerTask.EventID && !ffi.GetHasReached() {
+		if ffi != nil && ffi.GetStamp() == timerTask.Stamp && !ffi.GetHasReached() {
 			return &struct{}{}, nil
 		}
 		return nil, nil

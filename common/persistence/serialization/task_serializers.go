@@ -150,7 +150,8 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskType:       enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
-		EventId:        task.EventID,
+		Version:        task.Version,
+		Stamp:          task.Stamp,
 	}
 }
 
@@ -163,7 +164,8 @@ func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.T
 		),
 		VisibilityTimestamp: info.VisibilityTime.AsTime(),
 		TaskID:              info.TaskId,
-		EventID:             info.EventId,
+		Version:             info.Version,
+		Stamp:               info.Stamp,
 	}
 }
 

@@ -652,6 +652,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return err
 	}
+
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		CompletionCallbacks:      []*commonpb.Callback{callback},
 		Header:                   requestSpec.Header,

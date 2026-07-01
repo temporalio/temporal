@@ -358,21 +358,20 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 		s.NotPanics(func() {
-			s.Require().NoError(s.mutableState.initTimeSkippingInfo(nil, nil, 0))
+			s.Require().NoError(s.mutableState.initTimeSkippingInfo(nil, nil))
 		})
 		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.Equal(baseTime, s.mutableState.Now())
 	})
 
 	s.Run("InitWithConfigOnly_ForExecutionsWithTSStartedByUser", func() {
-		eventID := int64(1)
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 		cfg := &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(3 * time.Hour)}
 
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, nil, eventID))
+		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, nil))
 		s.Equal(baseTime, s.mutableState.Now())
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -382,6 +381,8 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		// timestamppb translates to UTC time
 		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
+		// first apply stamps the fast-forward with 1
+		s.Require().Equal(int32(1), tsi.GetFastForwardInfo().GetStamp())
 	})
 
 	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
@@ -393,7 +394,6 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 
 		hasSkipped := 2 * time.Hour
 		fastForward := 3 * time.Hour
-		eventID := int64(1)
 
 		cfg := &commonpb.TimeSkippingConfig{
 			Enabled:                 true,
@@ -404,7 +404,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 			InitialSkippedDuration: durationpb.New(hasSkipped),
 			FastForwardTargetTime:  timestamppb.New(targetTime),
 		}
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, propagation, eventID))
+		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, propagation))
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -423,7 +423,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 		s.mutableState.timeSkippingInfoUpdated = false
 
-		err := s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true}, 8)
+		err := s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true})
 		s.Error(err)
 		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo(), "must not initialize TS info on update")
 		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated on a failed update")
@@ -439,15 +439,14 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(baseTime.Add(time.Hour)),
-				SourceEventId: 7,
-				HasReached:    false,
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				Stamp:      7,
+				HasReached: false,
 			},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = currentTSI
 		s.mutableState.timeSkippingInfoUpdated = false
-		newEventID := int64(8)
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(nil, newEventID))
+		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(nil))
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(newTSI)
 		s.Nil(newTSI.GetConfig())
@@ -473,14 +472,17 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			FastForward:             durationpb.New(2 * time.Hour),
 			DisableChildPropagation: true,
 		}
-		newEventID := int64(8)
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig, newEventID))
+		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig))
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(newTSI)
 		s.True(proto.Equal(newConfig, newTSI.GetConfig()))
 		s.Require().NotNil(newTSI.GetFastForwardInfo())
-		s.Equal(newEventID, newTSI.GetFastForwardInfo().GetSourceEventId())
+		// enabling from no fast-forward stamps with 1
+		s.Equal(int32(1), newTSI.GetFastForwardInfo().GetStamp())
+		// re-installing the fast-forward also records the current failover version, so a task
+		// emitted here validates against a stable reference after a failover.
+		s.Equal(s.mutableState.GetCurrentVersion(), newTSI.GetFastForwardInfo().GetVersion())
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(newTSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -496,9 +498,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(baseTime.Add(time.Hour)),
-				SourceEventId: 7,
-				HasReached:    false,
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				Stamp:      7,
+				HasReached: false,
 			},
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
@@ -508,14 +510,14 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			Enabled:     true,
 			FastForward: durationpb.New(2 * time.Hour),
 		}
-		newEventID := int64(8)
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc2, newEventID))
+		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc2))
 		tsc2TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(tsc2TSI)
 		s.True(proto.Equal(tsc2, tsc2TSI.GetConfig()))
 		s.Require().NotNil(tsc2TSI.GetFastForwardInfo())
-		s.Equal(newEventID, tsc2TSI.GetFastForwardInfo().GetSourceEventId())
+		// re-applying bumps the stamp from the previous fast-forward (7 -> 8)
+		s.Equal(int32(8), tsc2TSI.GetFastForwardInfo().GetStamp())
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), tsc2TSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(tsc2TSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, tsc2TSI.GetAccumulatedSkippedDuration().AsDuration())
@@ -524,7 +526,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		tsc3 := &commonpb.TimeSkippingConfig{
 			Enabled: false,
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc3, newEventID))
+		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc3))
 		tsc3TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsc3TSI)
 		s.True(proto.Equal(tsc3, tsc3TSI.GetConfig()))
@@ -573,7 +575,6 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	s.Run("FastForward_WithNoPropagatedTargetTime", func() {
 
 		fastForwardDuration := 3 * time.Hour
-		eventID := int64(1)
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 
@@ -583,17 +584,20 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 				FastForward: durationpb.New(fastForwardDuration)},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-		s.mutableState.applyFastForward(eventID, nil)
+		s.mutableState.applyFastForward(nil)
 		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(fastForward)
-		s.Equal(eventID, fastForward.GetSourceEventId())
+		// no prior fast-forward, so the stamp starts at 1
+		s.Equal(int32(1), fastForward.GetStamp())
 		s.False(fastForward.GetHasReached())
 		s.WithinDuration(fastForward.GetTargetTime().AsTime(), baseTime.Add(fastForwardDuration), 1*time.Second)
+		// the current failover version is recorded so the emitted task can be validated against
+		// a stable reference (not the live GetCurrentVersion, which moves on failover).
+		s.Equal(s.mutableState.GetCurrentVersion(), fastForward.GetVersion())
 	})
 
 	s.Run("FastForward_WithPropagatedTargetTime", func() {
 		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-		eventID := int64(1)
 		propagatedTarget := fixed.Add(2 * time.Hour)
 		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -602,7 +606,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 				FastForward: durationpb.New(3 * time.Hour)},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-		s.mutableState.applyFastForward(eventID, timestamppb.New(propagatedTarget))
+		s.mutableState.applyFastForward(timestamppb.New(propagatedTarget))
 		fastForward := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(fastForward)
 		s.Equal(propagatedTarget, fastForward.GetTargetTime().AsTime(),
@@ -610,44 +614,42 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	})
 
 	s.Run("FastForward_NilDuration_NoOp", func() {
-		eventID := int64(1)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled: true},
 		}
-		s.mutableState.applyFastForward(eventID, nil)
+		s.mutableState.applyFastForward(nil)
 		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo())
 	})
 
 	s.Run("FastForward_ClearsExistingInfo", func() {
-		eventID := int64(1)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-				SourceEventId: 7,
+				TargetTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
+				Stamp:      7,
 			},
 		}
-		s.mutableState.applyFastForward(eventID, nil)
+		s.mutableState.applyFastForward(nil)
 		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo())
 	})
 
 	s.Run("FastForward_OverridesExistingInfo", func() {
-		eventID := int64(1)
 		fixed := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 		s.mutableState.timeSource = clock.NewEventTimeSource().Update(fixed)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(time.Hour)},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(fixed), // stale bound that must be overridden
-				SourceEventId: 7,
+				TargetTime: timestamppb.New(fixed), // stale bound that must be overridden
+				Stamp:      7,
 			},
 		}
-		s.mutableState.applyFastForward(eventID, nil)
+		s.mutableState.applyFastForward(nil)
 		ff := s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfo()
 		s.Require().NotNil(ff)
 		s.Equal(fixed.Add(time.Hour), ff.GetTargetTime().AsTime(), "stale bound is replaced by now+FastForward")
-		s.Equal(eventID, ff.GetSourceEventId())
+		// overriding an existing fast-forward bumps the stamp (7 -> 8)
+		s.Equal(int32(8), ff.GetStamp())
 	})
 }
 
