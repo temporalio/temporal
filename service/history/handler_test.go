@@ -197,6 +197,7 @@ func TestNexusOperationErrorFromChasmRequest(t *testing.T) {
 		name      string
 		request   *historyservice.CompleteNexusOperationChasmRequest
 		wantOpErr bool
+		wantState nexus.OperationState // checked only when wantOpErr is true
 	}{
 		{
 			name: "success yields no operation error",
@@ -207,12 +208,25 @@ func TestNexusOperationErrorFromChasmRequest(t *testing.T) {
 			wantOpErr: false,
 		},
 		{
-			name: "failure yields an operation error",
+			name: "generic failure yields a failed operation error",
 			request: &historyservice.CompleteNexusOperationChasmRequest{
 				Completion: &tokenspb.NexusOperationCompletion{RequestId: "r"},
 				Outcome:    &historyservice.CompleteNexusOperationChasmRequest_Failure{Failure: &failurepb.Failure{Message: "boom"}},
 			},
 			wantOpErr: true,
+			wantState: nexus.OperationStateFailed,
+		},
+		{
+			name: "canceled failure yields a canceled operation error",
+			request: &historyservice.CompleteNexusOperationChasmRequest{
+				Completion: &tokenspb.NexusOperationCompletion{RequestId: "r"},
+				Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{Failure: &failurepb.Failure{
+					Message:     "canceled",
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
+				}},
+			},
+			wantOpErr: true,
+			wantState: nexus.OperationStateCanceled,
 		},
 	}
 
@@ -222,6 +236,7 @@ func TestNexusOperationErrorFromChasmRequest(t *testing.T) {
 			require.NoError(t, err)
 			if tc.wantOpErr {
 				require.NotNil(t, opErr)
+				require.Equal(t, tc.wantState, opErr.State)
 			} else {
 				require.Nil(t, opErr)
 			}

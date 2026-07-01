@@ -1352,6 +1352,100 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCrossTreeCompletionAfterReset
 	}
 }
 
+// TestNexusOperationCompletionRejectsBogusScheduleTimeRun verifies the schedule-time-run gate on the
+// HSM-token -> CHASM-op fallback: a completion whose token has valid workflow/event/request IDs but a
+// bogus (never-existed) run ID must return NotFound rather than being re-targeted at the current CHASM op.
+func (s *NexusWorkflowTestSuite) TestNexusOperationCompletionRejectsBogusScheduleTimeRun(chasmEnabled bool) {
+	// Controls the creation-policy flag itself, so run it once (not per-suite-mode).
+	if chasmEnabled {
+		s.T().Skip("controls the flag explicitly; run once via the HSM suite")
+	}
+
+	env := s.newTestEnv(true)
+	ctx := env.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	nsName := env.Namespace().String()
+	setFlag := func(on bool) {
+		env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, on)
+	}
+	// Op created in HSM -> HSM-format callback token.
+	setFlag(false)
+
+	var callbackToken, publicCallbackURL string
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
+	s.NoError(err)
+	wfExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+
+	var wftCompletedEventID int64
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		hr := historyrequire.New(t)
+		hist := env.GetHistory(nsName, wfExec)
+		opStartedEvent := hr.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+		if opStartedEvent == nil {
+			return
+		}
+		wftCompletedIdx := slices.IndexFunc(hist, func(e *historypb.HistoryEvent) bool {
+			return e.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED && e.EventId > opStartedEvent.EventId
+		})
+		require.Positive(t, wftCompletedIdx, "expected WorkflowTaskCompleted after NexusOperationStarted")
+		wftCompletedEventID = hist[wftCompletedIdx].EventId
+	}, time.Second*10, time.Millisecond*200)
+	s.NotEmpty(callbackToken)
+
+	// Flip the flag so the reset rebuilds the op into CHASM; the HSM token's op no longer lives in HSM,
+	// which routes the completion into completeNexusOperationChasmFallback.
+	setFlag(true)
+	_, err = env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 nsName,
+		WorkflowExecution:         wfExec,
+		Reason:                    "test bogus schedule-time run",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+	})
+	s.NoError(err)
+
+	// Tamper ONLY the run ID (keep valid workflow/event/request IDs), then re-sign the token.
+	gen := &commonnexus.CallbackTokenGenerator{}
+	decoded, err := commonnexus.DecodeCallbackToken(callbackToken)
+	s.NoError(err)
+	completionToken, err := gen.DecodeCompletion(decoded)
+	s.NoError(err)
+	completionToken.RunId = uuid.NewString() // never-existed run
+	tamperedCallbackToken, err := gen.Tokenize(completionToken)
+	s.NoError(err)
+
+	completion := nexusrpc.CompleteOperationOptions{
+		Result: testcore.MustToPayload(s.T(), "result"),
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: tamperedCallbackToken},
+	}
+	err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+	var handlerErr *nexus.HandlerError
+	s.ErrorAs(err, &handlerErr)
+	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type, "bogus schedule-time run must yield NotFound")
+}
+
 // TestNexusOperationCompletionNotFoundInEitherTree verifies the cross-tree fallback preserves a
 // NotFound when the op exists in neither tree: a completion whose ScheduledEventId does not match any
 // operation must still be rejected with NotFound rather than masked by the fallback.
