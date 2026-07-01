@@ -394,6 +394,14 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (needRegenTasks bool) {
+	// This is the workflow (history-event) time-skipping path. CHASM executions (e.g. standalone
+	// activities) run their own decision in the CHASM tree's closeTransactionHandleTimeSkipping;
+	// running this path for them would scan only workflow-level targets (timers, pending activities,
+	// run timeout) — none of which exist for a CHASM component — and its GateByFastForward would then
+	// skip straight to the fast-forward and disable time skipping before the CHASM path ever runs.
+	if !ms.IsWorkflow() {
+		return false
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time

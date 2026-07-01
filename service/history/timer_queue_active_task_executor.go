@@ -940,7 +940,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	// (and other archetypes) apply the disable-only transition directly to the TimeSkippingInfo.
 	if err = mutableState.RecordTimeSkippingTransition(
 		ctx,
-		chasm.TimeSkippingTransition{DisabledAfterFastForward: true},
+		chasm.TimeSkippingTransition{CurrentTime: mutableState.Now(), DisabledAfterFastForward: true},
 		mutableState.ChasmTree().ArchetypeID(),
 	); err != nil {
 		return err

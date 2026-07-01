@@ -173,6 +173,14 @@ func (s *standaloneActivityTestSuite) TestTimeSkipping_StartDelayAndRetryBackoff
 			BackoffCoefficient: 1.0,
 			MaximumAttempts:    2,
 		},
+		// The 1h FastForward budget never binds here (both skip targets — the 20m start delay and
+		// the 20m retry backoff — are well under 1h, so time skipping advances to them, not to the
+		// budget). It is kept deliberately as a regression guard: it is precisely what surfaces the
+		// bug where the workflow (history-event) time-skipping path runs for a CHASM execution and,
+		// finding no workflow-level target, skips straight to the fast-forward and disables time
+		// skipping before the CHASM path runs (fixed by the !ms.IsWorkflow() gate in
+		// closeTransactionHandleWorkflowTimeSkipping). Without a FastForward that path has nothing to
+		// skip to and the regression would not reproduce.
 		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
 			Enabled:     true,
 			FastForward: durationpb.New(time.Hour),
