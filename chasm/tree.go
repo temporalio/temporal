@@ -2484,6 +2484,124 @@ func (n *Node) snapshotInternal(
 	}
 }
 
+// PartitionedSnapshot returns the tree's state split into two parts:
+//   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
+//     upload to object storage or replicate to another cluster.
+//   - A ChasmLocalState capturing the extracted cluster-local fields, keyed by encoded
+//     node path. Only nodes that carry such metadata are present.
+//
+// The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
+// zeroes field values, it never adds or removes nodes. The live in-memory tree is left
+// untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
+// Snapshot returns the tree's live node references.
+//
+// The returned ChasmLocalState has an empty Nodes map when no node carries cluster-local
+// fields; MergeClusterLocalState treats an empty (or nil) state as a no-op.
+func (n *Node) PartitionedSnapshot(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (NodesSnapshot, *persistencespb.ChasmLocalState) {
+	snapshot := n.Snapshot(exclusiveMinVT)
+	localState := &persistencespb.ChasmLocalState{
+		Nodes: make(map[string]*persistencespb.ChasmNodeLocalState),
+	}
+	for path, node := range snapshot.Nodes {
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		if len(componentAttr.SideEffectTasks) == 0 && len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
+		// read-only in a snapshot, so share its pointer rather than copying component payloads.
+		clean := &persistencespb.ChasmNode{Metadata: common.CloneProto(node.GetMetadata()), Data: node.GetData()}
+		cleanAttr := clean.GetMetadata().GetComponentAttributes()
+		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
+			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
+			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
+		}
+		snapshot.Nodes[path] = clean
+	}
+	return snapshot, localState
+}
+
+// extractAndZeroTaskStatuses records each task's physical task status in order and zeroes
+// it in place. The caller must pass tasks from a node copy, not the live tree.
+func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task) []int32 {
+	if len(taskList) == 0 {
+		return nil
+	}
+	statuses := make([]int32, len(taskList))
+	for i, t := range taskList {
+		statuses[i] = t.PhysicalTaskStatus
+		t.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return statuses
+}
+
+// ClusterLocalStateMergeResult reports, per direction, how many nodes had a task/status count
+// mismatch during MergeClusterLocalState. The two directions differ in significance, so they are
+// tracked separately rather than as a single count.
+type ClusterLocalStateMergeResult struct {
+	// NodesWithUncoveredTasks counts nodes that had more tasks than stored statuses. The extra
+	// tasks keep their zeroed status (physicalTaskStatusNone) and get a physical task created on
+	// the next transaction. Benign and self-healing — typically the writer's captured state was
+	// slightly behind the authoritative snapshot.
+	NodesWithUncoveredTasks int
+	// NodesWithExtraStatuses counts nodes that had more stored statuses than tasks. The surplus
+	// statuses have no task to apply to and are dropped. Suspicious: the stored state referenced
+	// tasks absent from the authoritative snapshot, which can indicate cluster divergence (e.g.
+	// split-brain). Detecting and resolving true divergence belongs to the replication conflict
+	// path; this count is a diagnostic signal, not the resolution.
+	NodesWithExtraStatuses int
+}
+
+// Mismatched reports whether any node had a task/status count mismatch in either direction.
+func (r ClusterLocalStateMergeResult) Mismatched() bool {
+	return r.NodesWithUncoveredTasks > 0 || r.NodesWithExtraStatuses > 0
+}
+
+// MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
+// extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
+// state are updated; nodes in the state but not the snapshot are silently skipped (the node
+// may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
+// only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
+// match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
+// stale-data) merge and escalate the suspicious direction.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
+	var result ClusterLocalStateMergeResult
+	for path, nodeState := range state.GetNodes() {
+		node, ok := s.Nodes[path]
+		if !ok {
+			continue
+		}
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		seUncovered, seExtra := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureUncovered, pureExtra := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seUncovered || pureUncovered {
+			result.NodesWithUncoveredTasks++
+		}
+		if seExtra || pureExtra {
+			result.NodesWithExtraStatuses++
+		}
+	}
+	return result
+}
+
+// mergeTaskStatuses applies statuses to tasks by position (the overlapping prefix when lengths
+// differ) and reports the direction of any length mismatch: uncoveredTasks when there are more
+// tasks than statuses (extra tasks left zeroed), extraStatuses when there are more statuses than
+// tasks (surplus dropped). At most one is true.
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) (uncoveredTasks, extraStatuses bool) {
+	for i := 0; i < len(taskList) && i < len(statuses); i++ {
+		taskList[i].PhysicalTaskStatus = statuses[i]
+	}
+	return len(taskList) > len(statuses), len(taskList) < len(statuses)
+}
+
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
 // cluster specific chasm tree changes.
 // DO NOT USE if you don't know why this method is introduced.
