@@ -2,13 +2,16 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -28,6 +31,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -42,10 +46,33 @@ type (
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
 		updateRegistry update.Registry
+
+		// taskCompletionBuffer holds the intermediate pages of an in-progress
+		// pagination of RespondWorkflowTaskCompleted requests; nil when no
+		// pagination is in progress
+		taskCompletionBuffer *TaskCompletionBuffer
+	}
+
+	// TaskCompletionBuffer holds the intermediate pages of a single in-progress
+	// pagination of RespondWorkflowTaskCompleted requests.
+	TaskCompletionBuffer struct {
+		pages     map[int32][]*commandpb.Command // page_number (0-based) -> commands
+		totalSize int64                          // cumulative buffered bytes
+		schedID   int64                          // workflow task identity - scheduled event ID
+		attempt   int32                          // workflow task identity - attempt number
 	}
 )
 
 var _ historyi.WorkflowContext = (*ContextImpl)(nil)
+
+// maxWorkflowTaskCompletionPages is the maximum number of pages that can be buffered.
+// This is a safety limit to prevent corrupted requests.
+const maxWorkflowTaskCompletionPages int32 = 1024
+
+// ErrTaskCompletionBufferSizeExceeded signals that a workflow's cumulative
+// pagination buffer exceeds the per workflow limit, so it can never complete via
+// pagination and the handler fails the workflow task
+var ErrTaskCompletionBufferSizeExceeded = errors.New("workflow task completion buffer size exceeds the per-workflow limit")
 
 func NewContext(
 	config *configs.Config,
@@ -109,6 +136,158 @@ func (c *ContextImpl) Clear() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
+	c.clearTaskCompletionBuffer()
+}
+
+// clearTaskCompletionBuffer drops the in-progress buffer
+func (c *ContextImpl) clearTaskCompletionBuffer() {
+	if c.taskCompletionBuffer == nil {
+		return
+	}
+	c.taskCompletionBuffer = nil
+}
+
+// reconcileTaskCompletionBuffer drops the buffer its workflow task is not current.
+// Intermediate pages are acknowledged without persisting, so any persisted
+// transaction other than the final page completion means the buffered workflow
+// task is no longer in flight (timed out, failed, completed, or the workflow
+// closed) and its buffer can never be consumed
+func (c *ContextImpl) reconcileTaskCompletionBuffer() {
+	if c.taskCompletionBuffer == nil || c.MutableState == nil {
+		return
+	}
+	startedTask := c.MutableState.GetStartedWorkflowTask()
+	if startedTask == nil ||
+		startedTask.ScheduledEventID != c.taskCompletionBuffer.schedID ||
+		startedTask.Attempt != c.taskCompletionBuffer.attempt {
+		c.clearTaskCompletionBuffer()
+	}
+}
+
+// AppendTaskCompletionPage buffers the commands of an intermediate page
+func (c *ContextImpl) AppendTaskCompletionPage(
+	schedID int64,
+	attempt int32,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) error {
+	if !request.GetIntermediatePage() {
+		return serviceerror.NewInvalidArgumentf(
+			"expected intermediate page")
+	}
+	if err := validatePageRequest(request); err != nil {
+		c.clearTaskCompletionBuffer()
+		return err
+	}
+	// a buffer for a different (schedID, attempt) is stale, clear it
+	if c.taskCompletionBuffer != nil &&
+		(c.taskCompletionBuffer.schedID != schedID || c.taskCompletionBuffer.attempt != attempt) {
+		c.clearTaskCompletionBuffer()
+	}
+	if c.taskCompletionBuffer == nil {
+		c.taskCompletionBuffer = &TaskCompletionBuffer{
+			pages:   make(map[int32][]*commandpb.Command),
+			schedID: schedID,
+			attempt: attempt,
+		}
+	}
+	// Keep existing page if it is already buffered
+	if _, ok := c.taskCompletionBuffer.pages[request.GetPageNumber()]; ok {
+		return nil
+	}
+
+	pageBytes := taskCompletionPageBytes(request.Commands)
+
+	// Apply per-workflow task limit
+	nsName := c.MutableState.GetNamespaceEntry().Name().String()
+	perWorkflowLimitBytes := int64(c.config.WorkflowTaskCompletionBufferSizeLimit(nsName))
+	if perWorkflowLimitBytes > 0 && c.taskCompletionBuffer.totalSize+pageBytes > perWorkflowLimitBytes {
+		c.clearTaskCompletionBuffer()
+		return ErrTaskCompletionBufferSizeExceeded
+	}
+
+	c.taskCompletionBuffer.pages[request.GetPageNumber()] = request.Commands
+	c.taskCompletionBuffer.totalSize += pageBytes
+	return nil
+}
+
+// taskCompletionPageBytes is the wire size of a page's commands.
+func taskCompletionPageBytes(cmds []*commandpb.Command) int64 {
+	var total int64
+	for _, cmd := range cmds {
+		total += int64(proto.Size(cmd))
+	}
+	return total
+}
+
+// validatePageRequest validates a pagination request for both the intermediate
+// (AppendTaskCompletionPage) and final (GetMergedTaskCompletionPages) paths.
+func validatePageRequest(request *workflowservice.RespondWorkflowTaskCompletedRequest) error {
+	if request.GetPageNumber() == 0 && !request.GetIntermediatePage() {
+		return serviceerror.NewInvalidArgumentf(
+			"validatePageRequest: unexpected non-paginated request")
+	}
+	if request.GetPageNumber() < 0 {
+		return serviceerror.NewInvalidArgumentf(
+			"workflow task completion pagination page number must be non-negative")
+	}
+	if request.GetPageNumber() >= maxWorkflowTaskCompletionPages {
+		return serviceerror.NewInvalidArgumentf(
+			"workflow task completion pagination supports at most %d pages", maxWorkflowTaskCompletionPages)
+	}
+	// An intermediate page with no commands is currently not practical.
+	if request.GetIntermediatePage() && len(request.Commands) == 0 {
+		return serviceerror.NewInvalidArgument(
+			"intermediate workflow task page must carry at least one command")
+	}
+	return nil
+}
+
+// GetMergedTaskCompletionPages concatenates the buffered intermediate pages
+// (0..finalPageNumber-1) in order, clears the buffer, and returns the merged
+// commands to be prepended to the final page's own commands.
+//
+// It returns a typed WorkflowTaskBufferLost error when the buffer
+// is missing, belongs to a different workflow task/attempt, or has a gap.
+// Buffer-lost is transient: no WorkflowTaskCompleted event is written and
+// the attempt is not consumed, so the SDK can resend pages
+func (c *ContextImpl) GetMergedTaskCompletionPages(
+	schedID int64,
+	attempt int32,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+) ([]*commandpb.Command, error) {
+	if request.GetIntermediatePage() {
+		return nil, serviceerror.NewInvalidArgumentf(
+			"expected final page")
+	}
+	if err := validatePageRequest(request); err != nil {
+		return nil, err
+	}
+	defer c.clearTaskCompletionBuffer()
+	finalPageNumber := request.GetPageNumber()
+	if c.taskCompletionBuffer == nil ||
+		c.taskCompletionBuffer.schedID != schedID ||
+		c.taskCompletionBuffer.attempt != attempt {
+		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+		return nil, serviceerror.NewWorkflowTaskBufferLostf(
+			"workflow task completion buffer lost for scheduled event %d attempt %d", schedID, attempt)
+	}
+	// Every page in 0..finalPageNumber-1 must be present. A gap means a page was
+	// lost or never sent; merging anyway would silently drop commands.
+	merged := make([]*commandpb.Command, 0, len(c.taskCompletionBuffer.pages))
+	for page := int32(0); page < finalPageNumber; page++ {
+		cmds, ok := c.taskCompletionBuffer.pages[page]
+		if !ok {
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			return nil, serviceerror.NewWorkflowTaskBufferLostf(
+				"workflow task completion buffer missing page %d of %d", page, finalPageNumber)
+		}
+		merged = append(merged, cmds...)
+	}
+	// Total completion size = buffered intermediate pages plus the final page (which
+	// is never buffered, so it must be added explicitly)
+	metrics.WorkflowTaskCompletionPaginatedBytes.With(c.metricsHandler).Record(
+		c.taskCompletionBuffer.totalSize + taskCompletionPageBytes(request.Commands))
+	return merged, nil
 }
 
 func (c *ContextImpl) GetArchetypeID() chasm.ArchetypeID {
@@ -578,6 +757,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
 	}
 
+	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
+	// RespondWorkflowTaskCompleted requests.
+	c.reconcileTaskCompletionBuffer()
+
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
 		updateWorkflowTransactionPolicy,
@@ -684,6 +867,10 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 			c.Clear()
 		}
 	}()
+
+	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
+	// RespondWorkflowTaskCompleted requests.
+	c.reconcileTaskCompletionBuffer()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
 		ctx,

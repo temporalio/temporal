@@ -271,6 +271,46 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	nsName := namespaceEntry.Name().String()
+
+	// When pagination is enabled, buffer intermediate pages and merge them into the final page
+	// before continuing through the normal workflow task completion path.
+	var paginationOverflow bool
+	if handler.config.EnableWorkflowTaskCompletionPagination(nsName) {
+		schedID := token.GetScheduledEventId()
+		attempt := token.Attempt
+
+		if request.GetIntermediatePage() {
+			// Buffer this page on the cached context and acknowledge.
+			if err := weContext.AppendTaskCompletionPage(schedID, attempt, request); err != nil {
+				if !errors.Is(err, workflow.ErrTaskCompletionBufferSizeExceeded) {
+					releaseLeaseWithError = false
+					return nil, err
+				}
+				paginationOverflow = true
+			} else {
+				releaseLeaseWithError = false
+				return &historyservice.RespondWorkflowTaskCompletedResponse{}, nil
+			}
+		} else if request.GetPageNumber() > 0 {
+			// Final page: merge the buffered intermediate pages ahead of this page's
+			// own commands.
+			mergedCommands, err := weContext.GetMergedTaskCompletionPages(schedID, attempt, request)
+			if err != nil {
+				// Buffer lost (e.g. the context was evicted between pages).
+				releaseLeaseWithError = false
+				return nil, err
+			}
+			// Append the merged commands ahead of the final page's own commands.
+			request.Commands = append(mergedCommands, request.Commands...)
+		}
+	} else if request.GetIntermediatePage() || request.GetPageNumber() > 0 {
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewFailedPreconditionf(
+			"workflow task completion pagination is disabled for this namespace %s",
+			namespaceEntry.Name().String(),
+		)
+	}
+
 	limits := historyi.WorkflowTaskCompletionLimits{
 		MaxResetPoints:              handler.config.MaxAutoResetPoints(nsName),
 		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
@@ -361,7 +401,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
 	//   or updates stay in the registry after WFT is failed.
 	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
-	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
+	if paginationOverflow {
+		// Per-workflow completion buffer overflowed: fail the workflow task
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE,
+			serviceerror.NewInvalidArgument(
+				"workflow task completion buffer size exceeds the per-workflow limit"),
+			false)
+	} else if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
 			serviceerror.NewInvalidArgumentf(
