@@ -231,4 +231,6 @@ service AdminService {
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
+
+  rpc GetDynamicConfigurations(GetDynamicConfigurationsRequest) returns (GetDynamicConfigurationsResponse) {}
 }
