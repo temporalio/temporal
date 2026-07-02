@@ -541,6 +541,7 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		a.ResetKeepPaused = false
+		a.applyDeferredOptionRestore(ctx)
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)
@@ -566,6 +567,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		currentTime := ctx.Now(a)
 
 		a.ResetKeepPaused = false
+		a.applyDeferredOptionRestore(ctx)
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)
