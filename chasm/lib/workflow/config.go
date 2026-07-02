@@ -12,7 +12,6 @@ type Config struct {
 	linkMaxSize                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	enableSignalWithStartFromWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	enableGetWorkflowExecutionResult  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	maxCallbacksPerWorkflow           dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) Config {
@@ -23,6 +22,5 @@ func NewConfig(dc *dynamicconfig.Collection) Config {
 		linkMaxSize:                       dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		enableSignalWithStartFromWorkflow: dynamicconfig.EnableSignalWithStartFromWorkflow.Get(dc),
 		enableGetWorkflowExecutionResult:  dynamicconfig.EnableGetWorkflowExecutionResult.Get(dc),
-		maxCallbacksPerWorkflow:           dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 	}
 }

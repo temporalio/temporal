@@ -2,29 +2,43 @@ package workflow
 
 import (
 	"context"
-	"errors"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/applicationservice/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/consts"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
 	ErrSignalWithStartOperationDisabled            = serviceerror.NewUnimplemented("SignalWithStart operation is disabled")
 	ErrGetWorkflowExecutionResultOperationDisabled = serviceerror.NewUnimplemented("GetWorkflowExecutionResult operation is disabled")
 )
+
+type nexusNamespaceIDCtxKey struct{}
+
+// WithNexusNamespaceID returns a context carrying the namespace ID of the Nexus operation. The
+// history handler sets this before dispatching to a Nexus operation handler, because the operation
+// request no longer carries the namespace itself.
+func WithNexusNamespaceID(ctx context.Context, namespaceID string) context.Context {
+	return context.WithValue(ctx, nexusNamespaceIDCtxKey{}, namespaceID)
+}
+
+// nexusNamespaceIDFromContext returns the namespace ID set by [WithNexusNamespaceID], or "" if none.
+func nexusNamespaceIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(nexusNamespaceIDCtxKey{}).(string)
+	return id
+}
 
 type workflowServiceNexusHandler struct {
 	config            Config
@@ -89,41 +103,12 @@ type getWorkflowExecutionResultHandler struct {
 	h *workflowServiceNexusHandler
 }
 
-func (w *getWorkflowExecutionResultHandler) getTerminalState(
-	ctx context.Context,
-	namespaceID string,
+// workflowResultFromCloseEvent maps a workflow's close (completion) event to the synchronous
+// GetWorkflowExecutionResult response.
+func workflowResultFromCloseEvent(
+	closeEvent *historypb.HistoryEvent,
 	req *applicationservice.GetWorkflowExecutionResultRequest,
 ) (*applicationservice.GetWorkflowExecutionResultResponse, error) {
-	res, err := w.h.historyHandler.GetWorkflowExecutionHistory(ctx, &historyservice.GetWorkflowExecutionHistoryRequest{
-		NamespaceId: namespaceID,
-		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:              req.GetNamespace(),
-			Execution:              req.GetExecution(),
-			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
-			MaximumPageSize:        1000,
-			SkipArchival:           true,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	// When SendRawHistoryBetweenInternalServices is enabled (default in tests), the history events
-	// arrive in res.History as raw serialized historypb.History proto bytes rather than decoded in
-	// res.GetResponse().GetHistory(). Decode them if the normal events field is empty.
-	events := res.GetResponse().GetHistory().GetEvents()
-	if len(events) == 0 && len(res.History) > 0 {
-		for _, rawBlob := range res.History {
-			h := &historypb.History{}
-			if unmarshalErr := h.Unmarshal(rawBlob); unmarshalErr != nil {
-				return nil, serviceerror.NewInternalf("failed to unmarshal raw history for workflow %v: %v", req.GetExecution(), unmarshalErr)
-			}
-			events = append(events, h.Events...)
-		}
-	}
-	if len(events) == 0 {
-		return nil, serviceerror.NewInternalf("no close event found for completed workflow %v", req.GetExecution())
-	}
-	closeEvent := events[len(events)-1]
 	switch closeEvent.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		attrs := closeEvent.GetWorkflowExecutionCompletedEventAttributes()
@@ -133,7 +118,6 @@ func (w *getWorkflowExecutionResultHandler) getTerminalState(
 			result = payloads[0]
 		}
 		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			CompletionStatus: &applicationservice.GetWorkflowExecutionResultResponse_Result{
 				Result: result,
 			},
@@ -141,28 +125,48 @@ func (w *getWorkflowExecutionResultHandler) getTerminalState(
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		attrs := closeEvent.GetWorkflowExecutionFailedEventAttributes()
 		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			CompletionStatus: &applicationservice.GetWorkflowExecutionResultResponse_Failure{
 				Failure: attrs.GetFailure(),
 			},
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			CompletionStatus: &applicationservice.GetWorkflowExecutionResultResponse_Failure{
+				Failure: &failurepb.Failure{
+					Message: "operation exceeded internal timeout",
+					FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+						TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+					},
+				},
+			},
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+			CompletionStatus: &applicationservice.GetWorkflowExecutionResultResponse_Failure{
+				Failure: &failurepb.Failure{
+					Message: "operation canceled",
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+						CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+							Details: closeEvent.GetWorkflowExecutionCanceledEventAttributes().GetDetails(),
+						},
+					},
+				},
+			},
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-		}, nil
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-		return &applicationservice.GetWorkflowExecutionResultResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+			CompletionStatus: &applicationservice.GetWorkflowExecutionResultResponse_Failure{
+				Failure: &failurepb.Failure{
+					Message: "operation terminated",
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
+				},
+			},
 		}, nil
 	default:
+		// CONTINUED_AS_NEW is intentionally not handled: like GetNexusCompletion, this operation
+		// resolves against the latest run, so a run that continued-as-new is not a terminal result.
 		return nil, serviceerror.NewInternalf("unexpected close event type %v for workflow %v", closeEvent.GetEventType(), req.GetExecution())
 	}
 }
@@ -176,19 +180,27 @@ func (w *getWorkflowExecutionResultHandler) Start(
 	req *applicationservice.GetWorkflowExecutionResultRequest,
 	opts nexus.StartOperationOptions,
 ) (nexus.HandlerStartOperationResult[*applicationservice.GetWorkflowExecutionResultResponse], error) {
-	if !w.h.config.enableGetWorkflowExecutionResult(req.GetNamespace()) {
+	// The request no longer carries the namespace; the history handler sets the namespace ID on the
+	// context before dispatching (see WithNexusNamespaceID).
+	nsID := nexusNamespaceIDFromContext(ctx)
+	if nsID == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace ID is not set on the operation context")
+	}
+	nsName, err := w.h.namespaceRegistry.GetNamespaceName(namespace.ID(nsID))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace ID %q: %v", nsID, err)
+	}
+
+	if !w.h.config.enableGetWorkflowExecutionResult(nsName.String()) {
 		return nil, ErrGetWorkflowExecutionResultOperationDisabled
 	}
 
-	nsID, err := w.h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("Invalid namespace %q: %v", req.GetNamespace(), err)
-	}
-
+	// GetWorkflowExecutionResult always targets the most recent run for the workflow ID, so the
+	// RunID on the request is intentionally ignored: leaving ExecutionKey.RunID empty resolves the
+	// ComponentRef to the current (latest) run.
 	workflowBRef := chasm.NewComponentRef[*Workflow](chasm.ExecutionKey{
-		NamespaceID: nsID.String(),
+		NamespaceID: nsID,
 		BusinessID:  req.GetExecution().GetWorkflowId(),
-		RunID:       req.GetExecution().GetRunId(),
 	})
 
 	// The inbound Nexus links identify the caller workflow(s) that scheduled this
@@ -209,16 +221,13 @@ func (w *getWorkflowExecutionResultHandler) Start(
 		})
 	}
 
-	_, _, err = chasm.UpdateComponent(ctx, workflowBRef,
-		func(wf *Workflow, mutableCtx chasm.MutableContext, _ any) (any, error) {
-			if !wf.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-			return nil, wf.AddCompletionCallbacks(
-				mutableCtx,
-				timestamppb.Now(),
-				opts.RequestID,
-				[]*commonpb.Callback{
+	result, _, err := chasm.UpdateComponent(ctx, workflowBRef,
+		func(wf *Workflow, mutableCtx chasm.MutableContext, _ any) (nexus.HandlerStartOperationResult[*applicationservice.GetWorkflowExecutionResultResponse], error) {
+			completionEvent, evErr := wf.GetCompletionEvent(mutableCtx)
+			if evErr != nil {
+				// No completion event yet => the workflow is still running: register the
+				// completion callback and complete the Nexus operation asynchronously.
+				completionCallbacks := []*commonpb.Callback{
 					{
 						Variant: &commonpb.Callback_Nexus_{
 							Nexus: &commonpb.Callback_Nexus{
@@ -230,25 +239,43 @@ func (w *getWorkflowExecutionResultHandler) Start(
 						},
 						Links: callerLinks,
 					},
-				},
-				w.h.config.maxCallbacksPerWorkflow(req.GetNamespace()),
-			)
-		}, nil,
-	)
-	if err != nil {
-		// Check for any NotFound to trigger the synchronous getTerminalState path.
-		if errors.As(err, new(*serviceerror.NotFound)) {
-			result, err := w.getTerminalState(ctx, nsID.String(), req)
-			if err != nil {
-				return nil, err
+				}
+
+				// Attach the callback by emitting a WorkflowExecutionOptionsUpdated event. Applying
+				// this event both attaches the callback to the CHASM tree for the current run and
+				// records it in the target's history, so it is durable across workflow reset and
+				// replication: those paths reapply the event through
+				// ApplyWorkflowExecutionOptionsUpdatedEvent (the same apply invoked here), which
+				// reattaches the callback on the new/standby run (see mutable_state_rebuilder.go and
+				// workflow_resetter.go handling of EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED).
+				// The RequestID is recorded as AttachedRequestId so the resetter can dedupe the
+				// reapplied callback.
+				if _, cbErr := wf.AttachCompletionCallbacks(
+					opts.RequestID,
+					completionCallbacks,
+					callerLinks,
+				); cbErr != nil {
+					return nil, cbErr
+				}
+				token, tokenErr := commonnexus.GenerateOperationToken(&workflowpb.GetWorkflowExecutionResultToken{
+					RequestId: opts.RequestID,
+				})
+				if tokenErr != nil {
+					return nil, tokenErr
+				}
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: token}, nil
+			}
+			// The workflow has already completed: return its result synchronously.
+			res, resErr := workflowResultFromCloseEvent(completionEvent, req)
+			if resErr != nil {
+				return nil, resErr
 			}
 			return &nexus.HandlerStartOperationResultSync[*applicationservice.GetWorkflowExecutionResultResponse]{
-				Value: result,
+				Value: res,
 			}, nil
-		}
-		return nil, err
-	}
-	return &nexus.HandlerStartOperationResultAsync{OperationToken: opts.RequestID}, nil
+		}, nil,
+	)
+	return result, err
 }
 
 func mustNewWorkflowServiceNexusHandler(
@@ -273,12 +300,6 @@ func (o GetWorkflowExecutionResultProcessor) ProcessInput(
 	ctx chasm.NexusOperationProcessorContext,
 	request *applicationservice.GetWorkflowExecutionResultRequest,
 ) (*chasm.NexusOperationProcessorResult, error) {
-	if request.GetNamespace() == "" {
-		request.Namespace = ctx.Namespace.Name().String()
-	} else if request.GetNamespace() != ctx.Namespace.Name().String() {
-		return nil, serviceerror.NewInvalidArgumentf("Namespace in request %q does not match namespace in context %q", request.GetNamespace(), ctx.Namespace.Name().String())
-	}
-
 	if err := o.validator.ValidateGetWorkflowExecutionResultRequest(request); err != nil {
 		return nil, err
 	}

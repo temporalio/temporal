@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -34,7 +35,9 @@ type MockNodeBackend struct {
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleGetNexusUpdateCompletion    func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleAttachCompletionCallbacks   func(requestID string, completionCallbacks []*commonpb.Callback, links []*commonpb.Link) (*historypb.HistoryEvent, error)
 	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	HandleGetCompletionEvent          func(ctx context.Context) (*historypb.HistoryEvent, error)
 	HandleGenerateEventLoadToken      func(event *historypb.HistoryEvent) ([]byte, error)
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
@@ -197,6 +200,17 @@ func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes fun
 	return nil
 }
 
+func (m *MockNodeBackend) AttachCompletionCallbacks(
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
+) (*historypb.HistoryEvent, error) {
+	if m.HandleAttachCompletionCallbacks != nil {
+		return m.HandleAttachCompletionCallbacks(requestID, completionCallbacks, links)
+	}
+	return nil, nil
+}
+
 func (m *MockNodeBackend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 	if m.HandleGenerateEventLoadToken != nil {
 		return m.HandleGenerateEventLoadToken(event)
@@ -207,6 +221,13 @@ func (m *MockNodeBackend) GenerateEventLoadToken(event *historypb.HistoryEvent) 
 func (m *MockNodeBackend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
 	if m.HandleLoadHistoryEvent != nil {
 		return m.HandleLoadHistoryEvent(ctx, token)
+	}
+	return nil, nil
+}
+
+func (m *MockNodeBackend) GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error) {
+	if m.HandleGetCompletionEvent != nil {
+		return m.HandleGetCompletionEvent(ctx)
 	}
 	return nil, nil
 }

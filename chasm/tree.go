@@ -215,8 +215,18 @@ type (
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		// AttachCompletionCallbacks emits and applies a WorkflowExecutionOptionsUpdated event carrying
+		// the given completion callbacks. Applying attaches them to the CHASM tree via the same path
+		// used by reset/replication, so the callbacks are recorded in history and reattached on the
+		// new/standby run.
+		AttachCompletionCallbacks(
+			requestID string,
+			completionCallbacks []*commonpb.Callback,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+		GetCompletionEvent(ctx context.Context) (*historypb.HistoryEvent, error)
 		HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(

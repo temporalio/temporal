@@ -26,6 +26,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2474,6 +2475,9 @@ func (h *Handler) StartNexusOperation(
 		Operation: req.GetRequest().GetOperation(),
 		Header:    options.Header,
 	})
+
+	// Make the namespace ID available to Nexus operation handlers via the context.
+	ctx = workflow.WithNexusNamespaceID(ctx, req.GetNamespaceId())
 
 	// Invoke the operation via the handler
 	if h.nexusHandler == nil {

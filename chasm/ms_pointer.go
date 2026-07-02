@@ -3,16 +3,11 @@ package chasm
 import (
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
-
-// IsWorkflowExecutionRunning returns true if the workflow execution is still running.
-func (m MSPointer) IsWorkflowExecutionRunning() bool {
-	state := m.backend.GetExecutionState()
-	return state.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-}
 
 // MSPointer is a special CHASM type which components can use to access their Node's underlying backend (i.e. mutable
 // state). It is used to expose methods needed from the mutable state without polluting the chasm.Context interface.
@@ -39,6 +34,17 @@ func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 	return m.backend.AddHistoryEvent(t, setAttributes)
 }
 
+// AttachCompletionCallbacks emits and applies a WorkflowExecutionOptionsUpdated event carrying the
+// given completion callbacks. This records the callback attachment in history (so it is reapplied on
+// workflow reset and replication) and attaches the callbacks to the CHASM tree for the current run.
+func (m MSPointer) AttachCompletionCallbacks(
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
+) (*historypb.HistoryEvent, error) {
+	return m.backend.AttachCompletionCallbacks(requestID, completionCallbacks, links)
+}
+
 // HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
 func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
 	return m.backend.HasAnyBufferedEvent(filter)
@@ -51,6 +57,12 @@ func (m MSPointer) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte
 // LoadHistoryEvent loads a history event from the underlying mutable state using the given token.
 func (m MSPointer) LoadHistoryEvent(ctx Context, token []byte) (*historypb.HistoryEvent, error) {
 	return m.backend.LoadHistoryEvent(ctx.goContext(), token)
+}
+
+// GetCompletionEvent retrieves the workflow's completion (close) event from the underlying mutable
+// state. It returns an error when the workflow is still running and therefore has no completion event.
+func (m MSPointer) GetCompletionEvent(ctx Context) (*historypb.HistoryEvent, error) {
+	return m.backend.GetCompletionEvent(ctx.goContext())
 }
 
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.

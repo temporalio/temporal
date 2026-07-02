@@ -236,14 +236,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	// Carry over runtime-registered CHASM completion callbacks (e.g. the Nexus
-	// GetWorkflowExecutionResult callback) from the run being terminated. These live only in the
-	// CHASM tree and are never written to history, so unlike StartWorkflow- and update-registered
-	// callbacks they are not picked up by event reapply and would otherwise be lost on the reset run.
-	if err := r.reapplyChasmCompletionCallbacks(ctx, resetMS, currentMutableState); err != nil {
-		return err
-	}
-
 	if err := r.performPostResetOperations(ctx, resetMS, postResetOperations); err != nil {
 		return err
 	}
@@ -513,33 +505,6 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		resetMutableState,
 		wcache.NoopReleaseFn,
 	), nil
-}
-
-// reapplyChasmCompletionCallbacks copies STANDBY CHASM completion callbacks from srcMS (the run
-// being terminated by the reset) into resetMS. Callbacks already present on the reset run (those
-// recovered from history during reapply — StartWorkflow- and update-registered callbacks) are
-// skipped via key-based dedup, so only runtime-registered callbacks that history does not capture
-// (e.g. the Nexus GetWorkflowExecutionResult callback) are propagated.
-func (r *workflowResetterImpl) reapplyChasmCompletionCallbacks(
-	ctx context.Context,
-	resetMS historyi.MutableState,
-	srcMS historyi.MutableState,
-) error {
-	if !resetMS.ChasmEnabled() || !srcMS.ChasmEnabled() {
-		return nil
-	}
-	srcWf, srcCtx, err := srcMS.ChasmWorkflowComponentReadOnly(ctx)
-	if err != nil {
-		return err
-	}
-	if len(srcWf.Callbacks) == 0 {
-		return nil
-	}
-	dstWf, dstCtx, err := resetMS.ChasmWorkflowComponent(ctx)
-	if err != nil {
-		return err
-	}
-	return dstWf.CarryOverStandbyCallbacks(dstCtx, srcCtx, srcWf)
 }
 
 func (r *workflowResetterImpl) failWorkflowTask(

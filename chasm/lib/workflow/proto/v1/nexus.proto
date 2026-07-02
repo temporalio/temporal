@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workflow.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
+
+// GetWorkflowExecutionResultToken is the payload of the operation token returned by the asynchronous
+// GetWorkflowExecutionResult Nexus operation. It is owned by this service so the token can be extended
+// independently of other services. It is wrapped in a versioned envelope (see
+// common/nexus.GenerateOperationToken) before being placed on the wire.
+message GetWorkflowExecutionResultToken {
+  // Request ID of the StartOperation call that created the operation.
+  string request_id = 1;
+}

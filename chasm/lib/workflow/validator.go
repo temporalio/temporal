@@ -198,9 +198,6 @@ func (v *RequestValidator) ValidateGetWorkflowExecutionResultRequest(request *ap
 	if request == nil {
 		return serviceerror.NewInvalidArgument("Request is empty")
 	}
-	if request.GetNamespace() == "" {
-		return serviceerror.NewInvalidArgument("Namespace is not set on request")
-	}
 	if request.GetExecution().GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("WorkflowId is not set on request")
 	}

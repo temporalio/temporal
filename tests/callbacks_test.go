@@ -582,6 +582,108 @@ func blockingWorkflow(ctx workflow.Context) error {
 	})
 }
 
+// TestNexusResetWorkflowCallback_DeliveredExactlyOnce verifies that a completion callback attached
+// at StartWorkflowExecution is delivered EXACTLY ONCE across a reset. On reset the callback is
+// recovered onto the new run by event reapply. The reapply keys the callback by the original start
+// request ID, so it must dedup rather than registering a second copy.
+//
+// TestNexusResetWorkflowWithCallback already asserts the post-reset callback COUNT via Describe;
+// this test additionally asserts at the network layer that the completion handler is invoked only
+// once, since a duplicate registration would deliver the result twice over the wire.
+func (s *CallbacksSuite) TestNexusResetWorkflowCallback_DeliveredExactlyOnce(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+
+	ctx := s.Context()
+	sdkClient := env.SdkClient()
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workflowID := env.Tv().WorkflowID()
+
+	// Buffer for 2 so a (buggy) duplicate delivery would not block the handler goroutine and could
+	// be observed by the negative check below.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
+		requestCompleteCh: make(chan error, 2),
+	}
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	callbackAddress := s.runNexusCompletionHTTPServer(s.T(), ch)
+
+	// Completes only once it has been reset (the post-reset run has a different run ID).
+	resettableWorkflow := func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool {
+			info := workflow.GetInfo(ctx)
+			return info.OriginalRunID != info.WorkflowExecution.RunID
+		})
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(resettableWorkflow, workflow.RegisterOptions{
+		Name: "resettableCallbackWorkflow",
+	})
+
+	cb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"},
+		},
+	}
+	startResponse, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "resettableCallbackWorkflow"},
+		TaskQueue:           taskQueue,
+		Identity:            s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{cb},
+	})
+	s.NoError(err)
+
+	// Wait for the initial run to process its first workflow task so there is a WorkflowTaskCompleted
+	// event to reset to. The callback is STANDBY on this run at reset time.
+	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: startResponse.RunId}
+	s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+		env.GetHistoryFunc(env.Namespace().String(), workflowExecution),
+		5*time.Second,
+		10*time.Millisecond)
+
+	resetResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         workflowExecution,
+		Reason:                    s.T().Name(),
+		WorkflowTaskFinishEventId: 4,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	s.NotEqual(startResponse.RunId, resetResponse.RunId)
+
+	// The post-reset run satisfies its Await condition (new run ID) and completes, firing the
+	// carried-over/reapplied callback.
+	resetRun := sdkClient.GetWorkflow(ctx, workflowID, resetResponse.RunId)
+	s.NoError(resetRun.Get(ctx, nil))
+
+	// Exactly one successful delivery.
+	select {
+	case completion := <-ch.requestCh:
+		s.Equal(nexus.OperationStateSucceeded, completion.State)
+		ch.requestCompleteCh <- nil
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for callback delivery")
+	}
+
+	// No duplicate delivery: a failure to dedup the carried-over callback against the reapplied one
+	// would deliver the result a second time.
+	select {
+	case dup := <-ch.requestCh:
+		s.Failf("callback delivered more than once after reset", "unexpected duplicate delivery, state=%v", dup.State)
+		ch.requestCompleteCh <- nil
+	case <-time.After(2 * time.Second):
+	}
+}
+
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(opts []testcore.TestOption) {
 	env := s.newTestEnv(opts...)
 

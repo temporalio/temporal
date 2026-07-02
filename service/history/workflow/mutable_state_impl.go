@@ -5863,6 +5863,34 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	return event, nil
 }
 
+// AttachCompletionCallbacks records the given completion callbacks by emitting and applying a
+// WorkflowExecutionOptionsUpdated event (via AddWorkflowExecutionOptionsUpdatedEvent). Applying the
+// event attaches the callbacks to the CHASM tree through the same code path used by workflow reset
+// and replication (ApplyWorkflowExecutionOptionsUpdatedEvent), so the callbacks are recorded in
+// history and reattached automatically on the new/standby run.
+//
+// This is intended for callers (e.g. the Nexus GetWorkflowExecutionResult operation) that attach a
+// completion callback to a running workflow. It is safe to call from within an active
+// chasm.UpdateComponent transaction: the apply path opens a MutableContext over the same
+// ms.chasmTree node and mutates the same root component instance.
+func (ms *MutableStateImpl) AttachCompletionCallbacks(
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
+) (*historypb.HistoryEvent, error) {
+	return ms.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil,   // versioningOverride
+		false, // unsetVersioningOverride
+		requestID,
+		completionCallbacks,
+		links,
+		"",  // identity
+		nil, // priority
+		nil, // timeSkippingConfig
+		nil, // workflowUpdateOptions
+	)
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 
