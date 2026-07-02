@@ -1090,3 +1090,47 @@ func (s *activitiesSuite) TestCheckReplicationOnce_AckRegressionNeverAccepted() 
 	}
 	s.True(obs[1].ackRegressed)
 }
+
+// A no-watermark shard whose RangeId changes between polls (ownership churn / re-acquire) must
+// NEVER be accepted, even after the grace window — this is the silent-churn case that ack
+// regression alone can't catch (the ack never advances, so there's nothing to regress from).
+func (s *activitiesSuite) TestCheckReplicationOnce_RangeIDChurnNeverAccepted() {
+	req := WaitReplicationRequest{
+		Namespace:           mockedNamespace,
+		ShardCount:          1,
+		RemoteCluster:       remoteCluster,
+		AllowedLagging:      10 * time.Second,
+		AllowedLaggingTasks: 1000,
+		WaitForTaskIds:      map[int32]int64{1: 100},
+	}
+	shardWithRange := func(rangeID int64) *historyservice.GetReplicationStatusResponse {
+		return &historyservice.GetReplicationStatusResponse{
+			Shards: []*historyservice.ShardReplicationStatus{
+				{
+					ShardId:                          1,
+					RangeId:                          rangeID,
+					MaxReplicationTaskId:             225443839,
+					MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+					RemoteClusters: map[string]*historyservice.ShardReplicationStatusPerCluster{
+						remoteCluster: {AckedTaskId: 0, AckedTaskVisibilityTime: nil}, // never reports
+					},
+				},
+			},
+		}
+	}
+	// RangeId bounces each poll (re-acquire churn) while the ack stays 0.
+	call := 0
+	s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ *historyservice.GetReplicationStatusRequest, _ ...interface{}) (*historyservice.GetReplicationStatusResponse, error) {
+			call++
+			return shardWithRange(int64(100 + call)), nil // 101, 102, 103, ... changes every poll
+		}).AnyTimes()
+
+	obs := map[int32]*shardObservation{}
+	for i := 0; i < noWatermarkStableGraceMinPolls+3; i++ {
+		ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
+		s.NoError(err)
+		s.False(ready)
+	}
+	s.True(obs[1].rangeChanged)
+}

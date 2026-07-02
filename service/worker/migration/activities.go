@@ -146,11 +146,13 @@ type (
 	// which must never be accepted. WaitHandover (traffic-paused, exact catch-up, fail-safe
 	// rollback) remains the authoritative gate for anything accepted here.
 	shardObservation struct {
-		everAcked    bool // a non-zero AckedTaskId was observed at least once this run
-		ackRegressed bool // AckedTaskId returned to 0 after being non-zero (stream reset)
-		everReady    bool // the shard was ready at least once this run
-		flipped      bool // the shard was ready, then went not-ready again (oscillation)
-		polls        int  // number of polls this shard has been observed in this run
+		everAcked    bool  // a non-zero AckedTaskId was observed at least once this run
+		ackRegressed bool  // AckedTaskId returned to 0 after being non-zero (stream reset)
+		everReady    bool  // the shard was ready at least once this run
+		flipped      bool  // the shard was ready, then went not-ready again (oscillation)
+		lastRangeID  int64 // last observed shard range id (0 = not yet seen)
+		rangeChanged bool  // range id changed between polls = shard ownership churn
+		polls        int   // number of polls this shard has been observed in this run
 	}
 
 	WorkflowVerifier func(
@@ -359,9 +361,18 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 		} else if obs.everReady {
 			obs.flipped = true
 		}
+		// A range id change means the shard was re-acquired (ownership churn), which resets the
+		// per-remote ack watermarks — the definitive signal that an unreported ack is due to
+		// churn, not a quiet-but-healthy stream. (RangeId is always > 0 for an acquired shard.)
+		if obs.lastRangeID != 0 && localShard.RangeId != 0 && localShard.RangeId != obs.lastRangeID {
+			obs.rangeChanged = true
+		}
+		if localShard.RangeId != 0 {
+			obs.lastRangeID = localShard.RangeId
+		}
 
 		isNoWatermark := !status.isReady && status.laggingTasks == 0
-		if isNoWatermark && !obs.ackRegressed && !obs.flipped && obs.polls >= noWatermarkStableGraceMinPolls {
+		if isNoWatermark && !obs.ackRegressed && !obs.flipped && !obs.rangeChanged && obs.polls >= noWatermarkStableGraceMinPolls {
 			status.isReady = true
 			acceptedNoWatermarkShardCount++
 		}

@@ -962,6 +962,9 @@ message ShardReplicationStatus {
   map<string, HandoverNamespaceInfo> handover_namespaces = 5;
 
   google.protobuf.Timestamp max_replication_task_visibility_time = 6;
+  // Current shard range id. It increments each time the shard is (re)acquired, so a change
+  // between polls signals shard ownership churn (which resets the per-remote ack watermarks).
+  int64 range_id = 7;
 }
 
 message HandoverNamespaceInfo {

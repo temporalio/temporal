@@ -6724,8 +6724,11 @@ type ShardReplicationStatus struct {
 	RemoteClusters                   map[string]*ShardReplicationStatusPerCluster `protobuf:"bytes,4,rep,name=remote_clusters,json=remoteClusters,proto3" json:"remote_clusters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	HandoverNamespaces               map[string]*HandoverNamespaceInfo            `protobuf:"bytes,5,rep,name=handover_namespaces,json=handoverNamespaces,proto3" json:"handover_namespaces,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	MaxReplicationTaskVisibilityTime *timestamppb.Timestamp                       `protobuf:"bytes,6,opt,name=max_replication_task_visibility_time,json=maxReplicationTaskVisibilityTime,proto3" json:"max_replication_task_visibility_time,omitempty"`
-	unknownFields                    protoimpl.UnknownFields
-	sizeCache                        protoimpl.SizeCache
+	// Current shard range id. It increments each time the shard is (re)acquired, so a change
+	// between polls signals shard ownership churn (which resets the per-remote ack watermarks).
+	RangeId       int64 `protobuf:"varint,7,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ShardReplicationStatus) Reset() {
@@ -6798,6 +6801,13 @@ func (x *ShardReplicationStatus) GetMaxReplicationTaskVisibilityTime() *timestam
 		return x.MaxReplicationTaskVisibilityTime
 	}
 	return nil
+}
+
+func (x *ShardReplicationStatus) GetRangeId() int64 {
+	if x != nil {
+		return x.RangeId
+	}
+	return 0
 }
 
 type HandoverNamespaceInfo struct {
@@ -11123,14 +11133,15 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x1bGetReplicationStatusRequest\x12'\n" +
 	"\x0fremote_clusters\x18\x01 \x03(\tR\x0eremoteClusters:\x06\x92\xc4\x03\x02\b\x01\"u\n" +
 	"\x1cGetReplicationStatusResponse\x12U\n" +
-	"\x06shards\x18\x01 \x03(\v2=.temporal.server.api.historyservice.v1.ShardReplicationStatusR\x06shards\"\xb4\x06\n" +
+	"\x06shards\x18\x01 \x03(\v2=.temporal.server.api.historyservice.v1.ShardReplicationStatusR\x06shards\"\xcf\x06\n" +
 	"\x16ShardReplicationStatus\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x125\n" +
 	"\x17max_replication_task_id\x18\x02 \x01(\x03R\x14maxReplicationTaskId\x12D\n" +
 	"\x10shard_local_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0eshardLocalTime\x12z\n" +
 	"\x0fremote_clusters\x18\x04 \x03(\v2Q.temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntryR\x0eremoteClusters\x12\x86\x01\n" +
 	"\x13handover_namespaces\x18\x05 \x03(\v2U.temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntryR\x12handoverNamespaces\x12j\n" +
-	"$max_replication_task_visibility_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR maxReplicationTaskVisibilityTime\x1a\x8a\x01\n" +
+	"$max_replication_task_visibility_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR maxReplicationTaskVisibilityTime\x12\x19\n" +
+	"\brange_id\x18\a \x01(\x03R\arangeId\x1a\x8a\x01\n" +
 	"\x13RemoteClustersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12]\n" +
 	"\x05value\x18\x02 \x01(\v2G.temporal.server.api.historyservice.v1.ShardReplicationStatusPerClusterR\x05value:\x028\x01\x1a\x83\x01\n" +
