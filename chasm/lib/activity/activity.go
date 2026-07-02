@@ -1188,8 +1188,7 @@ func (a *Activity) tryReschedule(
 	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
 	// A pending reset request is always honored, regardless of retryability or the should retry result.
-	//nolint:forbidigo // DeMorgan rearrangement would not be an improvement
-	if !resetRequested && !(failureRetryable && shouldRetry) {
+	if !resetRequested && !(failureRetryable && shouldRetry) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
 		return false, nil
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
