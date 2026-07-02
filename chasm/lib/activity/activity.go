@@ -549,16 +549,14 @@ func (a *Activity) HandleFailed(
 		!appFailure.GetNonRetryable() &&
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
-	if isRetryable {
-		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
-		if err != nil {
-			return nil, err
-		}
-		if rescheduled {
-			a.emitOnAttemptFailedMetrics(ctx, metricsHandler)
+	rescheduled, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	if err != nil {
+		return nil, err
+	}
+	if rescheduled {
+		a.emitOnAttemptFailedMetrics(ctx, metricsHandler)
 
-			return &historyservice.RespondActivityTaskFailedResponse{}, nil
-		}
+		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
 
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
@@ -1179,16 +1177,18 @@ func (a *Activity) recordFailedAttempt(
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
 // if retry is not possible. It handles the cases of pause and reset requests that were received
-// while the last attempt was in progress.
+// while the last attempt was in progress. failureRetryable reports whether the failure itself
+// permits a retry (timeouts always do; RespondActivityTaskFailed depends on the failure).
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
+	failureRetryable bool,
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (bool, error) {
 	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
-	// A pending reset request is always honored, regardless of the should retry result.
-	if !shouldRetry && !resetRequested {
+	// A pending reset request is always honored, regardless of retryability or the should retry result.
+	if !resetRequested && !(failureRetryable && shouldRetry) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
 		return false, nil
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
