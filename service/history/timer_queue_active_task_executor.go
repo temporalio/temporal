@@ -964,17 +964,21 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
 		ffVersion := ffVT.GetNamespaceFailoverVersion()
 		if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
-			// ErrTaskVersionMismatch: the framework drops the task and records the TaskVersionMisMatch metric.
 			return err
 		}
 	} else {
-		// Invariant: for a pending fast-forward and a task both exist, they must both have a non-nil versioned transition.
+		// Invariant: when a pending fast-forward and a task both exist, they must both have a
+		// non-nil versioned transition. A nil here is a "should never happen" state bug, not lost
+		// data, so we soft-assert (loud in dev/test) and return a terminal task error. The task
+		// framework then records failure/corruption metrics, logs, and drops the task (or DLQs it
+		// only if that is enabled for the category).
 		errorMsg := fmt.Sprintf(
 			"time-skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
 			task.VersionedTransition == nil,
 			ffVT == nil,
 		)
-		return softassert.UnexpectedDataLoss(t.logger, errorMsg, nil)
+		softassert.Fail(t.logger, errorMsg)
+		return consts.NewTerminalTaskError(errorMsg)
 	}
 
 	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
