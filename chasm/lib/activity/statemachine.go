@@ -548,15 +548,19 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		}
 		attempt.Count = 1
 		attempt.Stamp++
-		return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false)
+		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false); err != nil {
+			return err
+		}
+		// Reset discards the retry backoff
+		attempt.CurrentRetryInterval = nil
+		return nil
 	},
 )
 
 // TransitionResetAttemptFailedToScheduled transitions RESET_REQUESTED → SCHEDULED. It is performed
 // instead of TransitionRescheduled when the activity is in RESET_REQUESTED and the worker yields
-// (failure or timeout) with retries remaining. The failed attempt is recorded, the count is reset
-// to 0 and then incremented to 1 (so the next attempt is "attempt 1"), and a fresh dispatch task
-// is emitted at the next retry time.
+// (failure or timeout) with retries remaining. The failed attempt is recorded and the count is
+// reset to 1 (so the next attempt is "attempt 1").
 var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
@@ -579,13 +583,15 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false); err != nil {
 			return err
 		}
+		// Reset discards the retry backoff
+		attempt.CurrentRetryInterval = nil
 
-		retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
+		dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: retryScheduledTime.Add(timeout),
+					ScheduledTime: dispatchTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
@@ -594,7 +600,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: retryScheduledTime,
+				ScheduledTime: dispatchTime,
 			},
 			&activitypb.ActivityDispatchTask{
 				Stamp: attempt.GetStamp(),
