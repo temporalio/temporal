@@ -1766,6 +1766,22 @@ func (mr *MockMutableStateMockRecorder) ChasmWorkflowComponent(ctx any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowComponent", reflect.TypeOf((*MockMutableState)(nil).ChasmWorkflowComponent), ctx)
 }
 
+// ChasmWorkflowComponentForReplay mocks base method.
+func (m *MockMutableState) ChasmWorkflowComponentForReplay(ctx context.Context) (*workflow1.Workflow, chasm.MutableContext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowComponentForReplay", ctx)
+	ret0, _ := ret[0].(*workflow1.Workflow)
+	ret1, _ := ret[1].(chasm.MutableContext)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ChasmWorkflowComponentForReplay indicates an expected call of ChasmWorkflowComponentForReplay.
+func (mr *MockMutableStateMockRecorder) ChasmWorkflowComponentForReplay(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowComponentForReplay", reflect.TypeOf((*MockMutableState)(nil).ChasmWorkflowComponentForReplay), ctx)
+}
+
 // ChasmWorkflowComponentReadOnly mocks base method.
 func (m *MockMutableState) ChasmWorkflowComponentReadOnly(ctx context.Context) (*workflow1.Workflow, chasm.Context, error) {
 	m.ctrl.T.Helper()

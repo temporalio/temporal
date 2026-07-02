@@ -700,7 +700,18 @@ func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 // Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
 func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
-	chasmCtx := chasm.NewMutableContext(ctx, ms.chasmTree.(*chasm.Node))
+	return ms.chasmWorkflowComponent(chasm.NewMutableContext(ctx, ms.chasmTree.(*chasm.Node)))
+}
+
+// ChasmWorkflowComponentForReplay is like ChasmWorkflowComponent but returns a context in replay
+// mode, so that metrics emitted inside transitions are suppressed while events are re-applied from
+// history (reset rebuild, cherry-pick, conflict resolution) rather than executed live. Used by the
+// reset/reapply paths to avoid double-counting caller-side metrics.
+func (ms *MutableStateImpl) ChasmWorkflowComponentForReplay(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
+	return ms.chasmWorkflowComponent(chasm.NewMutableContextForReplay(ctx, ms.chasmTree.(*chasm.Node)))
+}
+
+func (ms *MutableStateImpl) chasmWorkflowComponent(chasmCtx chasm.MutableContext) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
 	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
 	if err != nil {
 		return nil, nil, err

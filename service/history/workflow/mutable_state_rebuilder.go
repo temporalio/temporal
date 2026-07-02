@@ -809,7 +809,9 @@ func (b *MutableStateRebuilderImpl) applyChasmEvent(
 	}
 	// Ensure the root CHASM workflow component exists before applying.
 	b.mutableState.EnsureChasmWorkflowComponent(ctx)
-	wf, chasmCtx, err := b.mutableState.ChasmWorkflowComponent(ctx)
+	// Re-applying events from history: use a replay context so transition side-effect metrics
+	// (e.g. caller-side Nexus operation metrics) are not re-emitted during rebuild.
+	wf, chasmCtx, err := b.mutableState.ChasmWorkflowComponentForReplay(ctx)
 	if err != nil {
 		return false, err
 	}

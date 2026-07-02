@@ -1121,7 +1121,9 @@ func cherryPickChasmEvent(
 	if !ok {
 		return cherryPickFallback, nil
 	}
-	wf, chasmCtx, err := mutableState.ChasmWorkflowComponent(ctx)
+	// Cherry-pick re-applies an event from history: use a replay context so transition side-effect
+	// metrics (e.g. caller-side Nexus operation metrics) are not re-emitted.
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentForReplay(ctx)
 	if err != nil {
 		return cherryPickSkipped, err
 	}
