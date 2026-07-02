@@ -93,6 +93,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
 		VersionedTransition: currentVersionedTransition,
+		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
 	})
 }
 

@@ -1104,6 +1104,7 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
 				VersionedTransition: fastForward.GetLastUpdateVersionedTransition(),
+				ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
 			})
 		}
 	}

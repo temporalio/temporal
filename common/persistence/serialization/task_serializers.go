@@ -151,6 +151,11 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
 		TaskType:            enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
 		VersionedTransition: task.VersionedTransition,
+		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: task.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -164,6 +169,7 @@ func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.T
 		VisibilityTimestamp: info.VisibilityTime.AsTime(),
 		TaskID:              info.TaskId,
 		VersionedTransition: info.VersionedTransition,
+		ArchetypeID:         info.GetChasmTaskInfo().GetArchetypeId(),
 	}
 }
 

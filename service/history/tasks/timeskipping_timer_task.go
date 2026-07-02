@@ -9,7 +9,10 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*TimeSkippingTimerTask)(nil)
+var (
+	_ Task           = (*TimeSkippingTimerTask)(nil)
+	_ HasArchetypeID = (*TimeSkippingTimerTask)(nil)
+)
 
 type (
 	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
@@ -19,11 +22,20 @@ type (
 		VisibilityTimestamp time.Time
 		VersionedTransition *persistencespb.VersionedTransition
 		TaskID              int64
+		// ArchetypeID identifies the execution archetype (workflow or a CHASM component) this task
+		// targets. It is required to acquire the correct execution context at firing time, since the
+		// context cache is keyed by archetype. Always set at generation from the mutable state's
+		// archetype (chasm.WorkflowArchetypeID for workflows).
+		ArchetypeID uint32
 	}
 )
 
 func (t *TimeSkippingTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
+}
+
+func (t *TimeSkippingTimerTask) GetArchetypeID() uint32 {
+	return t.ArchetypeID
 }
 
 func (t *TimeSkippingTimerTask) GetTaskID() int64 {
@@ -52,11 +64,12 @@ func (t *TimeSkippingTimerTask) GetType() enumsspb.TaskType {
 
 func (t *TimeSkippingTimerTask) String() string {
 	vt := t.VersionedTransition
-	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v}",
+	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v, ArchetypeID: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
 		vt.GetNamespaceFailoverVersion(),
 		vt.GetTransitionCount(),
+		t.ArchetypeID,
 	)
 }
