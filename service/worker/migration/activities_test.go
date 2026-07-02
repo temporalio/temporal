@@ -998,7 +998,95 @@ func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotR
 		},
 	}, nil).Times(1)
 
-	ready, err := s.a.checkReplicationOnce(context.Background(), req)
+	ready, err := s.a.checkReplicationOnce(context.Background(), req, map[int32]*shardObservation{})
+	s.NoError(err)
+	s.False(ready) // single poll: below the stability grace window, so not accepted
+}
+
+// A no-watermark shard that stays stable (no ack regression, no ready↔not-ready flip) across the
+// grace window is accepted (WaitHandover then confirms). Uses a persistent observations map to
+// simulate repeated polls of the same run.
+func (s *activitiesSuite) TestCheckReplicationOnce_StableNoWatermarkAcceptedAfterGrace() {
+	req := WaitReplicationRequest{
+		Namespace:           mockedNamespace,
+		ShardCount:          1,
+		RemoteCluster:       remoteCluster,
+		AllowedLagging:      10 * time.Second,
+		AllowedLaggingTasks: 1000,
+		WaitForTaskIds:      map[int32]int64{1: 100},
+	}
+	s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(&historyservice.GetReplicationStatusResponse{
+		Shards: []*historyservice.ShardReplicationStatus{
+			{
+				ShardId:                          1,
+				MaxReplicationTaskId:             225443839,
+				MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+				RemoteClusters: map[string]*historyservice.ShardReplicationStatusPerCluster{
+					remoteCluster: {AckedTaskId: 0, AckedTaskVisibilityTime: nil},
+				},
+			},
+		},
+	}, nil).AnyTimes()
+
+	obs := map[int32]*shardObservation{}
+	// Below the grace window: not accepted.
+	for i := 0; i < noWatermarkStableGraceMinPolls-1; i++ {
+		ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
+		s.NoError(err)
+		s.False(ready)
+	}
+	// Reaching the grace window with continuous stability: accepted.
+	ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
+	s.NoError(err)
+	s.True(ready)
+}
+
+// A shard whose ack advances and then regresses to 0 (stream reset = churn) must NEVER be
+// accepted, even after the grace window — this is the "don't continue a churning handover" guard.
+func (s *activitiesSuite) TestCheckReplicationOnce_AckRegressionNeverAccepted() {
+	req := WaitReplicationRequest{
+		Namespace:           mockedNamespace,
+		ShardCount:          1,
+		RemoteCluster:       remoteCluster,
+		AllowedLagging:      10 * time.Second,
+		AllowedLaggingTasks: 1000,
+		WaitForTaskIds:      map[int32]int64{1: 100},
+	}
+	shard := func(acked int64) *historyservice.GetReplicationStatusResponse {
+		var vis *timestamppb.Timestamp
+		if acked > 0 {
+			vis = timestamppb.New(time.Now())
+		}
+		return &historyservice.GetReplicationStatusResponse{
+			Shards: []*historyservice.ShardReplicationStatus{
+				{
+					ShardId:                          1,
+					MaxReplicationTaskId:             225443839,
+					MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+					RemoteClusters: map[string]*historyservice.ShardReplicationStatusPerCluster{
+						remoteCluster: {AckedTaskId: acked, AckedTaskVisibilityTime: vis},
+					},
+				},
+			},
+		}
+	}
+	// gomock returns queued responses in order: one advance (acked=50, still behind target 100),
+	// then a regression back to 0, then persistent 0.
+	gomock.InOrder(
+		s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(shard(50), nil).Times(1),
+		s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(shard(0), nil).AnyTimes(),
+	)
+
+	obs := map[int32]*shardObservation{}
+	// poll 1: acked=50 (advanced, everAcked=true) — behind target, not ready.
+	ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
 	s.NoError(err)
 	s.False(ready)
+	// subsequent polls: acked back to 0 → ackRegressed → never accepted, even past the grace window.
+	for i := 0; i < noWatermarkStableGraceMinPolls+3; i++ {
+		ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
+		s.NoError(err)
+		s.False(ready)
+	}
+	s.True(obs[1].ackRegressed)
 }
