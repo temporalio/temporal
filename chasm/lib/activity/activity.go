@@ -688,11 +688,15 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	attempt := a.LastAttempt.Get(ctx)
 
-	// Recalculate the current retry interval based on the (possibly updated) retry policy.
-	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && attempt.GetCurrentRetryInterval() != nil {
-		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
-		attempt.CurrentRetryInterval = durationpb.New(newInterval)
+	// Recalculate the pending retry interval based on the (possibly updated) retry policy so a
+	// shortened interval takes effect on re-dispatch. Applies whenever a retry is pending and no
+	// attempt is running (SCHEDULED in backoff, or PAUSED in backoff): unpause/reset honor this
+	// interval, so an update while paused must be reflected here.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED || a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+		if attempt.GetCurrentRetryInterval() != nil {
+			newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
+			attempt.CurrentRetryInterval = durationpb.New(newInterval)
+		}
 	}
 
 	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
@@ -927,12 +931,11 @@ func (a *Activity) unpause(
 		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
 	}
 	attempt.Stamp++
-	attempt.CurrentRetryInterval = nil
 	unpauseTime := ctx.Now(a)
 	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
 		unpauseTime = unpauseTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
 	}
-	dispatchTime := a.dispatchTimeRespectingStartDelay(unpauseTime)
+	dispatchTime := a.dispatchTimeForAttempt(attempt, unpauseTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
@@ -969,11 +972,10 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
 	attempt.Stamp++
-	attempt.CurrentRetryInterval = nil
 	if event.req.GetResetHeartbeat() {
 		a.clearHeartbeat(ctx)
 	}
-	dispatchTime := a.dispatchTimeRespectingStartDelay(event.resetTime)
+	dispatchTime := a.dispatchTimeForAttempt(attempt, event.resetTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
@@ -1065,11 +1067,11 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 			a.restoreOriginalOptions(ctx)
 		}
 		if keepPaused {
-			// Reset counts but keep the activity paused.
+			// Reset counts but keep the activity paused. The pending retry backoff is preserved so a
+			// later unpause honors any remaining backoff (see dispatchTimeForAttempt).
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.Count = 1
 			attempt.Stamp++
-			attempt.CurrentRetryInterval = nil
 			if frontendReq.GetResetHeartbeat() {
 				a.clearHeartbeat(ctx)
 			}
@@ -1296,6 +1298,17 @@ func (a *Activity) dispatchTimeRespectingStartDelay(t time.Time) time.Time {
 		return dispatchTime
 	}
 	return t
+}
+
+// dispatchTimeForAttempt returns the time at which a re-dispatch (unpause / reset) should occur. It
+// honors a pending start_delay (for the first attempt) and a pending retry backoff (for retries).
+// base is the earliest acceptable time (now, possibly offset by jitter).
+func (a *Activity) dispatchTimeForAttempt(attempt *activitypb.ActivityAttemptState, base time.Time) time.Time {
+	dispatchTime := a.dispatchTimeRespectingStartDelay(base)
+	if retryTime := dispatchTimeForRetry(attempt); retryTime != nil && retryTime.AsTime().After(dispatchTime) {
+		return retryTime.AsTime()
+	}
+	return dispatchTime
 }
 
 // reissueScheduleToClose bumps the ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
