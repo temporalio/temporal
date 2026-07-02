@@ -149,25 +149,6 @@ Two behaviors are worth calling out:
    a *success* (`done(true)`), because it says nothing about whether the destination is healthy. The
    breaker tracks destination *health*, not task *outcomes*.
 
-### What makes an error a `DestinationDownError`
-
-The executors decide this. A Nexus operation may be run by either the HSM-based executor
-([`components/nexusoperations/executors.go`](../../components/nexusoperations/executors.go)) or the
-newer CHASM-based executor
-([`chasm/lib/nexusoperation`](../../chasm/lib/nexusoperation/task_handler_helpers.go)) — two
-implementations of the same task — and each categorizes failures with its own `isDestinationDown(err)`
-function. (The two functions are separate but apply the same rules; they differ only in Go error-inspection
-idiom.) Roughly, the destination is "down" for connectivity-level problems (retryable HTTP handler errors
-and timeouts), but **not** for:
-
-- `serviceerror.ServiceError` (e.g. system/internal-endpoint errors),
-- `nexus.OperationError` (the operation ran but failed as an application concern),
-- non-retryable `nexus.HandlerError`,
-- oversized-response, invalid-token, and below-minimum-timeout errors.
-
-Only when `isDestinationDown` returns true does the executor wrap its result in a
-`DestinationDownError`, which is what `CircuitBreakerExecutable` looks for.
-
 ### Pipeline position
 
 ```mermaid
