@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -948,10 +948,8 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		release(nil)
 		return errNoTimerFired
 	}
-	// 2) fast-forward is disabled/reached, or this task was superseded by a newer fast-forward.
-	// The versioned transition's TransitionCount identifies the specific fast-forward instance
-	// (a re-applied fast-forward records a fresh transition), so a mismatch means this task is
-	// stale and is dropped silently.
+
+	// 2) match current pending fast-forward
 	if !tsiUtil.HasPendingFastForward() {
 		release(nil)
 		return errNoTimerFired
@@ -966,11 +964,17 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
 		ffVersion := ffVT.GetNamespaceFailoverVersion()
 		if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
-			release(nil)
-			return errNoTimerFired
+			// ErrTaskVersionMismatch: the framework drops the task and records the TaskVersionMisMatch metric.
+			return err
 		}
 	} else {
-		return errors.New("time skipping timer task validation failed: nil versioned transition")
+		// Invariant: for a pending fast-forward and a task both exist, they must both have a non-nil versioned transition.
+		errorMsg := fmt.Sprintf(
+			"time-skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
+			task.VersionedTransition == nil,
+			ffVT == nil,
+		)
+		return softassert.UnexpectedDataLoss(t.logger, errorMsg, nil)
 	}
 
 	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
