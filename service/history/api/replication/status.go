@@ -18,9 +18,7 @@ func GetStatus(
 	resp := &historyservice.ShardReplicationStatus{
 		ShardId:        shard.GetShardID(),
 		ShardLocalTime: timestamppb.New(shard.GetTimeSource().Now()),
-		// RangeId increments on every shard (re)acquire; a change between polls signals
-		// ownership churn (which resets the per-remote ack watermarks). WaitReplication uses it
-		// to refuse a shard whose ownership is bouncing rather than accept its unreported ack.
+		// RangeId lets callers detect shard ownership churn (it changes on every re-acquire).
 		RangeId: shard.GetRangeID(),
 	}
 

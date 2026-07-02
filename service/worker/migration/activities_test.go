@@ -1003,9 +1003,8 @@ func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotR
 	s.False(ready) // single poll: below the stability grace window, so not accepted
 }
 
-// A no-watermark shard that stays stable (no ack regression, no ready↔not-ready flip) across the
-// grace window is accepted (WaitHandover then confirms). Uses a persistent observations map to
-// simulate repeated polls of the same run.
+// A no-watermark shard that stays stable across the grace window is accepted. The persistent
+// observations map simulates repeated polls of the same run.
 func (s *activitiesSuite) TestCheckReplicationOnce_StableNoWatermarkAcceptedAfterGrace() {
 	req := WaitReplicationRequest{
 		Namespace:           mockedNamespace,
@@ -1041,8 +1040,8 @@ func (s *activitiesSuite) TestCheckReplicationOnce_StableNoWatermarkAcceptedAfte
 	s.True(ready)
 }
 
-// A shard whose ack advances and then regresses to 0 (stream reset = churn) must NEVER be
-// accepted, even after the grace window — this is the "don't continue a churning handover" guard.
+// A shard whose ack advances then regresses to 0 (stream reset) must never be accepted, even
+// after the grace window.
 func (s *activitiesSuite) TestCheckReplicationOnce_AckRegressionNeverAccepted() {
 	req := WaitReplicationRequest{
 		Namespace:           mockedNamespace,
@@ -1078,11 +1077,11 @@ func (s *activitiesSuite) TestCheckReplicationOnce_AckRegressionNeverAccepted() 
 	)
 
 	obs := map[int32]*shardObservation{}
-	// poll 1: acked=50 (advanced, everAcked=true) — behind target, not ready.
+	// poll 1: acked=50 (advanced, everAcked=true), behind target, not ready.
 	ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
 	s.NoError(err)
 	s.False(ready)
-	// subsequent polls: acked back to 0 → ackRegressed → never accepted, even past the grace window.
+	// subsequent polls: acked back to 0 (ackRegressed), never accepted even past the grace window.
 	for i := 0; i < noWatermarkStableGraceMinPolls+3; i++ {
 		ready, err := s.a.checkReplicationOnce(context.Background(), req, obs)
 		s.NoError(err)
@@ -1091,9 +1090,9 @@ func (s *activitiesSuite) TestCheckReplicationOnce_AckRegressionNeverAccepted() 
 	s.True(obs[1].ackRegressed)
 }
 
-// A no-watermark shard whose RangeId changes between polls (ownership churn / re-acquire) must
-// NEVER be accepted, even after the grace window — this is the silent-churn case that ack
-// regression alone can't catch (the ack never advances, so there's nothing to regress from).
+// A no-watermark shard whose RangeId changes between polls (ownership churn) must never be
+// accepted, even after the grace window. This is the silent-churn case ack regression can't catch,
+// since the ack never advances.
 func (s *activitiesSuite) TestCheckReplicationOnce_RangeIDChurnNeverAccepted() {
 	req := WaitReplicationRequest{
 		Namespace:           mockedNamespace,

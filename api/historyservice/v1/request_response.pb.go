@@ -6724,8 +6724,7 @@ type ShardReplicationStatus struct {
 	RemoteClusters                   map[string]*ShardReplicationStatusPerCluster `protobuf:"bytes,4,rep,name=remote_clusters,json=remoteClusters,proto3" json:"remote_clusters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	HandoverNamespaces               map[string]*HandoverNamespaceInfo            `protobuf:"bytes,5,rep,name=handover_namespaces,json=handoverNamespaces,proto3" json:"handover_namespaces,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	MaxReplicationTaskVisibilityTime *timestamppb.Timestamp                       `protobuf:"bytes,6,opt,name=max_replication_task_visibility_time,json=maxReplicationTaskVisibilityTime,proto3" json:"max_replication_task_visibility_time,omitempty"`
-	// Current shard range id. It increments each time the shard is (re)acquired, so a change
-	// between polls signals shard ownership churn (which resets the per-remote ack watermarks).
+	// Current shard range id; changes on every shard re-acquire (ownership churn signal).
 	RangeId       int64 `protobuf:"varint,7,opt,name=range_id,json=rangeId,proto3" json:"range_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
