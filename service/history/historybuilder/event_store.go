@@ -340,9 +340,13 @@ func (b *EventStore) bufferEvent(
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
 		return false
 
-	case // time skipping related events should not be buffered
+	case // Buffer this event to ensure:
+		// 1) The transition is emitted after WORKFLOW_EXECUTION_OPTIONS_UPDATED in the
+		//    same transaction, so history reflects when time skipping actually becomes enabled.
+		// 2) The transition is not inserted between workflow task events when the
+		//    fast-forward timer disables time skipping.
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
-		return false
+		return true
 
 	// A paused workflow event *should be* allowed to be buffered since we want to accept any inflight workflow task completion.
 	// Since we buffer the paused event, we need to buffer unpaused event as well so that they don't go out of order.
