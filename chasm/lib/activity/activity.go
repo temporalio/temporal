@@ -1169,7 +1169,7 @@ func (a *Activity) tryReschedule(
 	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
 	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
 	// A pending reset request is always honored, regardless of the should retry result.
-	if !(shouldRetry || resetRequested) {
+	if !shouldRetry && !resetRequested {
 		return false, nil
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
