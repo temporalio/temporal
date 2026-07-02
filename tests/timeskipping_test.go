@@ -15,6 +15,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -1199,4 +1200,49 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 		"activity-2 ActivityTimeoutTask VisibilityTimestamp %v is later than expected ~wallAtSchedule+5min %v; this would happen if the virtual ScheduledTime leaked into VisibilityTimestamp (would show ≈ wallAtSchedule + 1h + 5min)",
 		activity2TimeoutTask.VisibilityTimestamp, activity2TimerExpected,
 	)
+}
+
+func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeoutTimesOutIdleWorkflow() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const executionTimeout = 5 * time.Minute
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool { return false })
+	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
+
+	startWall := time.Now()
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		TimeSkippingConfig:       &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// The workflow is idle (blocked on Await) with the execution timeout as its only skip
+	// target, so it skips straight to the timeout and times out — without waiting out 5 min
+	// of real time.
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	s.Less(time.Since(startWall), executionTimeout,
+		"time skipping must reach the execution timeout in far less than the 5 min real timeout")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 1, "exactly one transition: skip to the execution timeout")
+	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+		"timing out at the execution timeout is not a fast-forward disable")
+	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }
