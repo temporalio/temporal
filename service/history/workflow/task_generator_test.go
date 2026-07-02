@@ -1480,6 +1480,8 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 	// Distinct from the live current version so the assertion proves the regenerated task carries the
 	// versioned transition stored on the fast-forward, not a recomputed one.
 	fastForwardVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 42, TransitionCount: 7}
+	// Distinct, non-workflow value so the assertion proves the task carries the mutable state's archetype.
+	const archetypeID = uint32(7)
 
 	for _, tc := range []struct {
 		name                string
@@ -1553,6 +1555,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
 			// Step (4) is gated by HadOrHasWorkflowTask: true short-circuits and isolates step (3).
 			mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
 
 			var captured []tasks.Task
 			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
@@ -1580,6 +1585,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			require.Equal(t, tc.wantFastForwardTask.visibilityTimestamp, bt.VisibilityTimestamp)
 			// VersionedTransition must come from stored FastForwardInfo, not a recomputed one.
 			protorequire.ProtoEqual(t, tc.wantFastForwardTask.versionedTransition, bt.VersionedTransition)
+			require.Equal(t, archetypeID, bt.ArchetypeID, "ArchetypeID must come from the mutable state's chasm tree")
 			require.Equal(t, int64(0), bt.TaskID, "TaskID must be zero (set by shard)")
 		})
 	}
@@ -1883,6 +1889,11 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 	// consulted by regen but is stubbed in case that changes.
 	mutableState.EXPECT().GetStartVersion().Return(startVersion, nil).AnyTimes()
 	mutableState.EXPECT().GetCurrentVersion().Return(currentVersion).AnyTimes()
+	// The fast-forward task reads the archetype from the chasm tree; a non-zero value satisfies the
+	// all-fields-populated drift guard below.
+	mockChasmTree := historyi.NewMockChasmTree(ctrl)
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
 
 	var captured []tasks.Task
 	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {

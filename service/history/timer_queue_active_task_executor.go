@@ -956,17 +956,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	ffVT := tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()
-	if ffVT != nil && task.VersionedTransition != nil {
-		if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {
-			release(nil)
-			return errNoTimerFired
-		}
-		taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
-		ffVersion := ffVT.GetNamespaceFailoverVersion()
-		if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
-			return err
-		}
-	} else {
+	if ffVT == nil || task.VersionedTransition == nil {
 		// Invariant: when a pending fast-forward and a task both exist, they must both have a
 		// non-nil versioned transition. A nil here is a "should never happen" state bug, not lost
 		// data, so we soft-assert (loud in dev/test) and return a terminal task error. The task
@@ -979,6 +969,16 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		)
 		softassert.Fail(t.logger, errorMsg)
 		return consts.NewTerminalTaskError(errorMsg)
+	}
+
+	if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {
+		release(nil)
+		return errNoTimerFired
+	}
+	taskVersion := task.VersionedTransition.GetNamespaceFailoverVersion()
+	ffVersion := ffVT.GetNamespaceFailoverVersion()
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), ffVersion, taskVersion, task); err != nil {
+		return err
 	}
 
 	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)

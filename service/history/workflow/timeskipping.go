@@ -258,6 +258,9 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 // =============================================================================
 // Time Skipping Utility Functions
 // =============================================================================
+
+// TimeSkippingInfoUtil provides read-only helpers over a TimeSkippingInfo, guarding against nil
+// info/config/fast-forward so callers don't have to repeat the nil checks.
 type TimeSkippingInfoUtil struct {
 	tsi *persistencespb.TimeSkippingInfo
 }
