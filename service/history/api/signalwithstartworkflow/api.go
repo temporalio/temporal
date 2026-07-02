@@ -3,6 +3,7 @@ package signalwithstartworkflow
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -87,6 +88,16 @@ func Invoke(
 		return nil, err
 	}
 
+	// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob, which
+	// may not have first_execution_run_id populated on records written before that field existed.
+	// Load mutable state once to recover the canonical head-of-chain run id in that case (mirrors
+	// StartWorkflowExecution's behavior).
+	if firstExecutionRunID == "" && runID != "" {
+		if id, derr := getFirstExecutionRunID(ctx, shard, workflowConsistencyChecker, namespaceID, signalWithStartRequest.SignalWithStartRequest.GetWorkflowId(), runID); derr == nil {
+			firstExecutionRunID = id
+		}
+	}
+
 	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
 	if started {
 		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
@@ -105,4 +116,35 @@ func Invoke(
 			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		),
 	}, nil
+}
+
+// getFirstExecutionRunID loads mutable state for the given run and resolves the head-of-chain run id
+// via MutableState.GetFirstRunID() (which checks ExecutionState, then the deprecated ExecutionInfo
+// field, then falls back to reading the WorkflowExecutionStarted event). Used to recover the value
+// for legacy workflows whose persisted WorkflowExecutionState predates first_execution_run_id.
+func getFirstExecutionRunID(
+	ctx context.Context,
+	shard historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+) (_ string, retErr error) {
+	workflowContext, releaseFn, err := workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+		ctx,
+		shard,
+		namespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer func() { releaseFn(retErr) }()
+
+	ms, err := workflowContext.LoadMutableState(ctx, shard)
+	if err != nil {
+		return "", err
+	}
+	return ms.GetFirstRunID(ctx)
 }
