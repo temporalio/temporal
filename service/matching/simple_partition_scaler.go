@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/number"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -62,7 +63,7 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	if !cfg.Enabled {
 		return PartitionScalerDecision{NewTarget: 0}
 	} else if cfg.Fixed > 0 {
-		return PartitionScalerDecision{NewTarget: int(cfg.Fixed)}
+		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
 	}
 
 	// init trackers in use
@@ -93,7 +94,11 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 	state.AddTarget = int32(addTarget)
 
-	totalTarget := addTarget
+	// update backlog target based on counts
+	backlogTarget := updateBacklogTarget(cfg, in.BacklogCounts, (*bitSet)(&state.BacklogTarget))
+
+	// add them and clamp
+	totalTarget := addTarget + backlogTarget
 	if cfg.Min > 0 {
 		totalTarget = max(totalTarget, int(cfg.Min))
 	}
@@ -104,6 +109,7 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
 	return PartitionScalerDecision{
 		NewTarget:    totalTarget,
+		BacklogCap:   int(cfg.BacklogCap),
 		PrivateState: privateState,
 	}
 }
@@ -143,4 +149,29 @@ func (s *simplePartitionScaler) updateAddTarget(
 	}
 
 	return target, true
+}
+
+func updateBacklogTarget(
+	cfg dynamicconfig.SimplePartitionScalerSettings,
+	counts []byte,
+	bs *bitSet,
+) int {
+	if cfg.BacklogBase <= 0 || cfg.BacklogReset <= 0 {
+		return 0
+	}
+
+	target := 0
+	for i, v := range counts {
+		count := int32(number.DecodeCompact8(v))
+		if count > cfg.BacklogBase {
+			bs.set(int32(i))
+		} else if count < cfg.BacklogReset {
+			bs.clear(int32(i))
+		}
+
+		if bs.get(int32(i)) {
+			target++
+		}
+	}
+	return target
 }

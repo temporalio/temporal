@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
@@ -8,6 +9,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/number"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -21,17 +23,23 @@ const partitionCountsTrailerName = "pcnt-bin"
 // PartitionCounts is a smaller version of taskqueuespb.ClientPartitionCounts that we can more
 // easily pass around and put in a map.
 type PartitionCounts struct {
-	Read, Write int32
+	Read, Write  int32
+	BacklogCap   number.Compact8
+	BacklogCount []number.Compact8
 }
 
 func (pc PartitionCounts) Valid() bool {
 	return pc.Read > 0 && pc.Write > 0
 }
 
-func (pc PartitionCounts) encode() (string, error) {
+func (pc PartitionCounts) encode(includeBacklogInfo bool) (string, error) {
 	cpc := taskqueuespb.ClientPartitionCounts{
 		Read:  pc.Read,
 		Write: pc.Write,
+	}
+	if includeBacklogInfo {
+		cpc.BacklogCap = int32(pc.BacklogCap)
+		cpc.BacklogCount = pc.BacklogCount
 	}
 	b, err := proto.Marshal(&cpc)
 	if err != nil {
@@ -41,7 +49,7 @@ func (pc PartitionCounts) encode() (string, error) {
 }
 
 func (pc PartitionCounts) appendToOutgoingContext(ctx context.Context) context.Context {
-	v, err := pc.encode()
+	v, err := pc.encode(false) // don't include backlog info in header (client -> server)
 	if err != nil {
 		return ctx
 	}
@@ -49,7 +57,7 @@ func (pc PartitionCounts) appendToOutgoingContext(ctx context.Context) context.C
 }
 
 func (pc PartitionCounts) SetTrailer(ctx context.Context) error {
-	v, err := pc.encode()
+	v, err := pc.encode(true) // include backlog info in trailer (server -> client)
 	if err != nil {
 		return err
 	}
@@ -57,7 +65,10 @@ func (pc PartitionCounts) SetTrailer(ctx context.Context) error {
 }
 
 func (pc PartitionCounts) Equal(other PartitionCounts) bool {
-	return pc.Read == other.Read && pc.Write == other.Write
+	return pc.Read == other.Read &&
+		pc.Write == other.Write &&
+		pc.BacklogCap == other.BacklogCap &&
+		bytes.Equal(pc.BacklogCount, other.BacklogCount)
 }
 
 func parsePartitionCounts(hdr string) (PartitionCounts, error) {
