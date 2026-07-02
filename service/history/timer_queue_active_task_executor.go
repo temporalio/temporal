@@ -929,8 +929,14 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
-	// todo@time-skipping: chasm execution path is not implemented yet.
-	if !mutableState.IsWorkflow() {
+	// Route by execution archetype. Treat an unspecified archetype — a record persisted before
+	// archetype IDs existed, or a not-yet-initialized chasm tree — as the built-in workflow archetype.
+	archetypeID := mutableState.ChasmTree().ArchetypeID()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	if archetypeID != chasm.WorkflowArchetypeID {
+		// TODO@time-skipping: chasm execution path is not implemented yet.
 		release(nil)
 		return nil
 	}

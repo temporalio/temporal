@@ -87,7 +87,7 @@ var (
 	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 
-	_ MaybeTerminalTaskError = (*terminalTaskError)(nil)
+	_ MaybeTerminalTaskError = terminalTaskError{}
 )
 
 const (

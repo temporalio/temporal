@@ -83,7 +83,11 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
 	}
 
-	currentVersionedTransition := ms.CurrentVersionedTransition()
+	currentVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		TransitionCount:          ms.NextTransitionCount(),
+	}
+
 	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
 		TargetTime:                    timestamppb.New(targetTime),
 		HasReached:                    false,
@@ -269,12 +273,27 @@ func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkipping
 	return &TimeSkippingInfoUtil{tsi: tsi}
 }
 
+// HasPendingFastForward reports whether time skipping is enabled and carries a fast-forward that has
+// not yet been reached and has a real (non-zero) target time. A fast-forward on a disabled config is
+// not "pending" because it can never fire. All accesses go through nil-safe proto getters, so a nil
+// util, nil info, nil config, or nil fast-forward all yield false.
 func (util *TimeSkippingInfoUtil) HasPendingFastForward() bool {
-	return util.tsi != nil && util.tsi.GetFastForwardInfo() != nil && !util.tsi.GetFastForwardInfo().GetHasReached() &&
-		util.tsi.GetFastForwardInfo().GetTargetTime() != nil && !util.tsi.GetFastForwardInfo().GetTargetTime().AsTime().IsZero()
+	if util == nil || !util.IsEnabled() {
+		return false
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	return ff != nil &&
+		!ff.GetHasReached() &&
+		ff.GetTargetTime() != nil &&
+		!ff.GetTargetTime().AsTime().IsZero()
 }
 
+// IsEnabled reports whether time skipping is enabled. Nil-safe: a nil util, nil info, or nil config
+// all yield false.
 func (util *TimeSkippingInfoUtil) IsEnabled() bool {
+	if util == nil {
+		return false
+	}
 	return util.tsi.GetConfig().GetEnabled()
 }
 
