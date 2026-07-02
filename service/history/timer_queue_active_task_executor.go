@@ -968,7 +968,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 			ffVT == nil,
 		)
 		softassert.Fail(t.logger, errorMsg)
-		return consts.NewTerminalTaskError(errorMsg)
+		return queues.NewTerminalTaskError(errorMsg)
 	}
 
 	if ffVT.GetTransitionCount() != task.VersionedTransition.GetTransitionCount() {

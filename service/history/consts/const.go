@@ -159,25 +159,3 @@ func (staleStateError) Error() string {
 func (staleStateError) IsTerminalTaskError() bool {
 	return true
 }
-
-// terminalTaskError indicates a task hit an unexpected, unrecoverable invariant violation in its
-// own state. Unlike staleStateError, reloading mutable state will not help. The task framework
-// treats it as terminal: it records failure/corruption metrics, drops the task, and only sends it
-// to the DLQ if that is enabled for the category.
-type terminalTaskError struct {
-	Message string
-}
-
-// NewTerminalTaskError returns an error that the task framework treats as terminal (non-retryable).
-func NewTerminalTaskError(message string) error {
-	return terminalTaskError{Message: message}
-}
-
-func (e terminalTaskError) Error() string {
-	return e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (terminalTaskError) IsTerminalTaskError() bool {
-	return true
-}
