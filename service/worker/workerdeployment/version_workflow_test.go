@@ -54,6 +54,11 @@ func (s *VersionWorkflowSuite) SetupTest() {
 	}
 	s.env.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
+	var a *VersionActivities
+	s.env.OnActivity(a.DescribeWorkerControllerInstanceStatus, mock.Anything, mock.Anything).
+		Return(&deploymentpb.ComputeStatus{}, nil).
+		Maybe()
+
 	// Initialize an empty ClientImpl to use its helper methods
 	s.workerDeploymentClient = &ClientImpl{}
 }
