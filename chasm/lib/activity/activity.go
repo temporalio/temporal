@@ -297,7 +297,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		ActivityRunId:               key.RunID,
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
-		CurrentAttemptScheduledTime: a.attemptScheduleTime(attempt),
+		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
@@ -319,10 +319,9 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	}, nil
 }
 
-// attemptScheduleTime returns when the given attempt was scheduled to run:
-// the activity's schedule time plus start delay for the first attempt, or
-// calculated from dispatchTimeForRetry on retries.
-func (a *Activity) attemptScheduleTime(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+// dispatchTimeForAttempt returns the dispatch time of the given attempt: the activity's schedule
+// time plus start delay for the first attempt, or dispatchTimeForRetry on retries.
+func (a *Activity) dispatchTimeForAttempt(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
 	if attempt.GetCount() == 1 {
 		return timestamppb.New(a.firstDispatchTime())
 	}
