@@ -549,7 +549,10 @@ func (a *Activity) HandleFailed(
 		!appFailure.GetNonRetryable() &&
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
-	if isRetryable {
+	// A pending reset is honored even for a non-retryable failure: the reset discards the failed
+	// attempt and re-dispatches attempt 1. tryReschedule honors the reset regardless of shouldRetry.
+	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
+	if isRetryable || resetRequested {
 		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
 		if err != nil {
 			return nil, err
