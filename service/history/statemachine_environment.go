@@ -309,8 +309,14 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	if node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
-		ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
+	// A ref reconstructed from a cross-tree Nexus completion (see completeNexusOperationHSMFallback) has no
+	// MachineInitialVersionedTransition: it is built from a CHASM completion token that carries no HSM
+	// versioned-transition info. There is nothing to compare for staleness in that case, and the op node
+	// was already located by ScheduledEventId above, so skip the failover-version check rather than
+	// dereferencing a nil transition.
+	if ref.StateMachineRef.MachineInitialVersionedTransition != nil &&
+		node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
+			ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
 		if potentialStaleState {
 			return fmt.Errorf("%w: state machine ref initial failover version mismatch", consts.ErrStaleState)
 		}

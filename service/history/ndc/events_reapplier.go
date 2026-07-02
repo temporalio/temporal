@@ -8,6 +8,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/hsm"
@@ -27,9 +28,10 @@ type (
 	}
 
 	EventsReapplierImpl struct {
-		stateMachineRegistry *hsm.Registry
-		metricsHandler       metrics.Handler
-		logger               log.Logger
+		stateMachineRegistry  *hsm.Registry
+		chasmWorkflowRegistry *chasmworkflow.Registry
+		metricsHandler        metrics.Handler
+		logger                log.Logger
 	}
 )
 
@@ -46,6 +48,14 @@ func NewEventsReapplier(
 	}
 }
 
+// WithChasmWorkflowRegistry sets the CHASM workflow registry used to resolve CHASM-backed events on the
+// reapply path. Kept separate from NewEventsReapplier so the constructor signature stays backward compatible
+// for external callers.
+func (r *EventsReapplierImpl) WithChasmWorkflowRegistry(chasmWorkflowRegistry *chasmworkflow.Registry) *EventsReapplierImpl {
+	r.chasmWorkflowRegistry = chasmWorkflowRegistry
+	return r
+}
+
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
 	ms historyi.MutableState,
@@ -57,7 +67,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
-	reappliedEvents, err := reapplyEvents(ctx, ms, updateRegistry, r.stateMachineRegistry, historyEvents, nil, runID, false)
+	reappliedEvents, err := reapplyEvents(ctx, ms, updateRegistry, r.stateMachineRegistry, r.chasmWorkflowRegistry, historyEvents, nil, runID, false)
 	if err != nil {
 		return nil, err
 	}
