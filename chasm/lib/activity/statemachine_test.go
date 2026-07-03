@@ -93,6 +93,7 @@ func TestTransitionScheduled(t *testing.T) {
 				ActivityState: &activitypb.ActivityState{
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
 					RetryPolicy:            defaultRetryPolicy,
+					ScheduleTime:           timestamppb.New(defaultTime),
 					ScheduleToCloseTimeout: durationpb.New(tc.scheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(tc.scheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
@@ -932,7 +933,7 @@ func TestTransitionResetFromPaused(t *testing.T) {
 				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 			}
 
-			err := TransitionReset.Apply(act, ctx, resetEvent{scheduleTime: defaultTime, handler: metrics.NoopMetricsHandler})
+			err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, handler: metrics.NoopMetricsHandler})
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, act.Status)
 			require.Equal(t, int32(1), attemptState.Count)
@@ -970,7 +971,7 @@ func TestTransitionResetClearsCurrentRetryInterval(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 	}
 
-	err := TransitionReset.Apply(act, ctx, resetEvent{scheduleTime: defaultTime, handler: metrics.NoopMetricsHandler})
+	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, handler: metrics.NoopMetricsHandler})
 	require.NoError(t, err)
 	require.Nil(t, attemptState.GetCurrentRetryInterval(), "TransitionReset must clear CurrentRetryInterval")
 	require.Equal(t, int32(1), attemptState.Count, "TransitionReset must reset Count to 1")

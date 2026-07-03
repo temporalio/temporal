@@ -191,7 +191,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	rescheduled, err := activity.tryReschedule(ctx, 0, createStartToCloseTimeoutFailure())
+	rescheduled, err := activity.tryReschedule(ctx, true, 0, createStartToCloseTimeoutFailure())
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	rescheduled, err := activity.tryReschedule(ctx, 0, createHeartbeatTimeoutFailure())
+	rescheduled, err := activity.tryReschedule(ctx, true, 0, createHeartbeatTimeoutFailure())
 	if err != nil {
 		return err
 	}

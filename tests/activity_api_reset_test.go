@@ -66,7 +66,6 @@ type ActivityApiResetClientTestSuite struct {
 // ResetActivity API and once with the newer ResetActivityExecution API.
 func TestActivityApiResetClientTestSuite(t *testing.T) {
 	for _, apiName := range []string{"legacy-api", "execution-api"} {
-		apiName := apiName
 		t.Run(apiName, func(t *testing.T) {
 			s := new(ActivityApiResetClientTestSuite)
 			s.apiName = apiName
