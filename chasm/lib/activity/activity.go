@@ -1025,22 +1025,13 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
-	keepPaused := frontendReq.GetKeepPaused()
 
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityResetScope)
 	if err != nil {
 		return nil, err
 	}
 
-	resetTime := ctx.Now(a)
-	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-		resetTime = resetTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
-	}
-
-	restore := frontendReq.GetRestoreOriginalOptions()
-
 	switch a.Status {
-
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
@@ -1049,73 +1040,99 @@ func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetAc
 		// TODO (dan): define desired behavior and implement
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending reset")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		// The worker is still executing.
-		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
-			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
-			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
-				req:            &workflowservice.UnpauseActivityExecutionRequest{},
-				metricsHandler: metricsHandler,
-			}); err != nil {
-				return nil, err
-			}
-		}
-		// Defer mutations (option restore, heartbeat details clear, attempt-count rewind) so that
-		// the in-flight attempt is undisturbed.
-		if restore {
-			a.ResetRestoreOptions = true
-		}
-		if frontendReq.GetResetHeartbeat() {
-			a.ResetHeartbeats = true
-		}
-		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
-		// yields the activity lands back in PAUSED rather than SCHEDULED.
-		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
-		if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
-			return nil, err
-		}
-		a.emitOnResetMetrics(metricsHandler)
-		return &activitypb.ResetActivityExecutionResponse{}, nil
-
+		return a.deferResetWhileRunning(ctx, frontendReq, metricsHandler)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
 		// No worker is running; restore takes effect immediately.
-		if restore {
+		if frontendReq.GetRestoreOriginalOptions() {
 			a.restoreOriginalOptions(ctx)
 		}
-		if keepPaused {
-			// Reset counts but keep the activity paused.
-			attempt := a.LastAttempt.Get(ctx)
-			attempt.Count = 1
-			attempt.Stamp++
-			attempt.CurrentRetryInterval = nil
-			if frontendReq.GetResetHeartbeat() {
-				a.clearHeartbeat(ctx)
-			}
-			a.emitOnResetMetrics(metricsHandler)
-			return &activitypb.ResetActivityExecutionResponse{}, nil
+		if frontendReq.GetKeepPaused() {
+			return a.resetKeepPaused(ctx, frontendReq, metricsHandler)
 		}
-		fallthrough
-
+		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
+		// ran above, so skip it in resetImmediately to avoid restoring twice.
+		return a.resetImmediately(ctx, frontendReq, metricsHandler, false)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		// No worker is running: restore immediately so the re-dispatched attempt 1 uses the originals.
-		// When reached via the PAUSED fallthrough above, restoreOriginalOptions already ran (a.Status is
-		// still PAUSED at that point, since TransitionReset has not been applied), so guard against
-		// restoring twice.
-		if restore && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-			a.restoreOriginalOptions(ctx)
-		}
-		if err := TransitionReset.Apply(a, ctx, resetEvent{
-			req:       frontendReq,
-			resetTime: resetTime,
-			handler:   metricsHandler,
-		}); err != nil {
-			return nil, err
-		}
-		return &activitypb.ResetActivityExecutionResponse{}, nil
-
+		return a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
 	default:
 		// Terminal or unspecified state.
 		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
 	}
+}
+
+// deferResetWhileRunning defers reset mutations (option restore, heartbeat details clear,
+// attempt-count rewind) while a worker is still executing (STARTED or PAUSE_REQUESTED), so that the
+// in-flight attempt is undisturbed. The deferred reset applies on the next retry via STARTED->SCHEDULED.
+func (a *Activity) deferResetWhileRunning(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	keepPaused := frontendReq.GetKeepPaused()
+	pauseRequested := a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
+
+	if pauseRequested && !keepPaused {
+		// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
+		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
+			req:            &workflowservice.UnpauseActivityExecutionRequest{},
+			metricsHandler: metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if frontendReq.GetRestoreOriginalOptions() {
+		a.ResetRestoreOptions = true
+	}
+	if frontendReq.GetResetHeartbeat() {
+		a.ResetHeartbeats = true
+	}
+	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
+	// yields the activity lands back in PAUSED rather than SCHEDULED.
+	a.ResetKeepPaused = keepPaused && pauseRequested
+	if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
+		return nil, err
+	}
+	a.emitOnResetMetrics(metricsHandler)
+	return &activitypb.ResetActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) resetKeepPaused(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count = 1
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	if frontendReq.GetResetHeartbeat() {
+		a.clearHeartbeat(ctx)
+	}
+	a.emitOnResetMetrics(metricsHandler)
+	return &activitypb.ResetActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) resetImmediately(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+	restore bool,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	if restore {
+		a.restoreOriginalOptions(ctx)
+	}
+	resetTime := ctx.Now(a)
+	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+		resetTime = resetTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+	if err := TransitionReset.Apply(a, ctx, resetEvent{
+		req:       frontendReq,
+		resetTime: resetTime,
+		handler:   metricsHandler,
+	}); err != nil {
+		return nil, err
+	}
+	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
