@@ -1122,14 +1122,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	eventBlobs []*commonpb.DataBlob,
 	isNewMutableState bool,
 ) ([]byte, error) {
-	nsName := namespace.EmptyName.String()
-	if ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID); err == nil && ns != nil {
-		nsName = ns.Name().String()
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
 	}
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.ReplicationBackfillEventsLatency.With(r.shardContext.GetMetricsHandler()).
-			Record(time.Since(startTime), metrics.NamespaceTag(nsName))
+			Record(time.Since(startTime), metrics.NamespaceTag(ns.Name().String()))
 	}()
 
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
@@ -1221,10 +1221,6 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
-	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err == nil && ns != nil {
-		nsName = ns.Name().String()
-	}
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
 	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
@@ -1234,7 +1230,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	quotaRequest := quotas.NewRequest(
 		"AppendRawHistoryNodes",
 		1,
-		nsName,
+		ns.Name().String(),
 		callerType,
 		0,
 		"",
@@ -1279,7 +1275,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 				localMutableState.AddReapplyCandidateEvent(event)
 				r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 			}
-			if r.enablePersistenceRateLimiter(nsName) {
+			if r.enablePersistenceRateLimiter(ns.Name().String()) {
 				if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 					return err
 				}
@@ -1306,7 +1302,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			isNewBranch = false
 
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
-			if r.shardContext.GetConfig().ExternalPayloadsEnabled(nsName) {
+			if r.shardContext.GetConfig().ExternalPayloadsEnabled(ns.Name().String()) {
 				externalPayloadSize, externalPayloadCount, err := workflow.CalculateExternalPayloadSize(
 					events,
 					metrics.NoopMetricsHandler, // don't record metrics since those are not new uploads
@@ -1350,7 +1346,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			localMutableState.AddReapplyCandidateEvent(event)
 			r.addEventToCache(localMutableState.GetWorkflowKey(), event)
 		}
-		if r.enablePersistenceRateLimiter(nsName) {
+		if r.enablePersistenceRateLimiter(ns.Name().String()) {
 			if err := r.persistenceRateLimiter.Wait(ctx, quotaRequest); err != nil {
 				return newBranchToken, err
 			}
