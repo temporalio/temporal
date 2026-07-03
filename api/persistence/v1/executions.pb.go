@@ -2196,8 +2196,7 @@ type TimerTaskInfo struct {
 	//	*TimerTaskInfo_ChasmTaskInfo
 	TaskDetails isTimerTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
 	// VersionedTransition provides a unified solution for both intra-cluster and inter-cluster
-	// task replication. It is intended to replace previous validation mechanisms, such as
-	// version + stamp.
+	// task verification. Task types can opt in to use it.
 	VersionedTransition *VersionedTransition `protobuf:"bytes,18,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache

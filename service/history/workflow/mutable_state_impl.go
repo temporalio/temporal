@@ -7748,12 +7748,14 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq)
 	}
 
+	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
+	// generate tasks
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		eventBatches,
