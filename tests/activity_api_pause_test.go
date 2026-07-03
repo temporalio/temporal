@@ -89,7 +89,6 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 	t.Parallel()
 
 	for _, api := range pauseAPIs() {
-		api := api
 		t.Run(api.name, func(t *testing.T) {
 			t.Parallel()
 
