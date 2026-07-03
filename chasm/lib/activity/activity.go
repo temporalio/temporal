@@ -1,3 +1,21 @@
+// A note on times and terminology:
+//
+// We name 3 times in the lifecycle of an activity attempt:
+//
+// schedule time - the time at which the activity entered SCHEDULED state
+// dispatch time - the time at which the activity task will be dispatched to Matching (AddActivityTask)
+// start time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
+//
+// They are always ordered as: (schedule time) <= (dispatch time) < (start time).
+//
+// A ScheduleToStart timeout applies to the time between dispatch and start. If there is a delay
+// before dispatch (i.e. a start delay on the first attempt, or a backoff interval / next retry
+// delay on a second or subsequent attempt) then schedule time < dispatch time. Otherwise, they are
+// equal.
+//
+// The main Activity struct has a.ScheduleTime which is the schedule time of the first
+// attempt; i.e. the time at which the activity was created. This is never changed.
+
 package activity
 
 import (
@@ -184,6 +202,7 @@ func NewStandaloneActivity(
 				HeartbeatTimeout:       request.GetHeartbeatTimeout(),
 				RetryPolicy:            request.GetRetryPolicy(),
 				Priority:               request.GetPriority(),
+				StartDelay:             request.GetStartDelay(),
 			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
@@ -278,7 +297,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		ActivityRunId:               key.RunID,
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
-		CurrentAttemptScheduledTime: a.attemptScheduleTime(attempt),
+		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
@@ -300,19 +319,18 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	}, nil
 }
 
-// attemptScheduleTime returns when the given attempt was scheduled to run:
-// the activity's schedule time plus start delay for the first attempt, or
-// calculated from attemptScheduleTimeForRetry on retries.
-func (a *Activity) attemptScheduleTime(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+// dispatchTimeForAttempt returns the dispatch time of the given attempt: the activity's schedule
+// time plus start delay for the first attempt, or dispatchTimeForRetry on retries.
+func (a *Activity) dispatchTimeForAttempt(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
 	if attempt.GetCount() == 1 {
 		return timestamppb.New(a.firstDispatchTime())
 	}
-	return attemptScheduleTimeForRetry(attempt)
+	return dispatchTimeForRetry(attempt)
 }
 
-// attemptScheduleTimeForRetry computes the time a retried attempt is scheduled to start,
+// dispatchTimeForRetry computes the time a retried attempt will be dispatched to Matching,
 // as complete_time + retry_interval. Returns nil if either field is missing or zero.
-func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+func dispatchTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
 	retryInterval := attempt.GetCurrentRetryInterval()
 	completeTime := attempt.GetCompleteTime()
 	if retryInterval != nil && retryInterval.AsDuration() > 0 && completeTime != nil {
@@ -531,16 +549,14 @@ func (a *Activity) HandleFailed(
 		!appFailure.GetNonRetryable() &&
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
-	if isRetryable {
-		rescheduled, err := a.tryReschedule(ctx, appFailure.GetNextRetryDelay().AsDuration(), failure)
-		if err != nil {
-			return nil, err
-		}
-		if rescheduled {
-			a.emitOnAttemptFailedMetrics(ctx, metricsHandler)
+	rescheduled, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	if err != nil {
+		return nil, err
+	}
+	if rescheduled {
+		a.emitOnAttemptFailedMetrics(ctx, metricsHandler)
 
-			return &historyservice.RespondActivityTaskFailedResponse{}, nil
-		}
+		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
 
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
@@ -624,6 +640,29 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	frontendReq := req.GetFrontendRequest()
 
+	// start_delay updates are only valid while the activity is still in its delay window.
+	var hasStartDelayInMask bool
+	if mask := frontendReq.GetUpdateMask(); mask != nil {
+		_, hasStartDelayInMask = util.ParseFieldMask(mask)["startDelay"]
+	}
+	if !frontendReq.GetRestoreOriginal() && hasStartDelayInMask {
+		newDelay := frontendReq.GetActivityOptions().GetStartDelay()
+		if err := validateStartDelay(newDelay); err != nil {
+			return nil, err
+		}
+		if newDelay.AsDuration() > 0 {
+			actCtx := activityContextFromChasm(ctx)
+			if !actCtx.config.StartDelayEnabled(frontendReq.GetNamespace()) {
+				return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
+			}
+		}
+		if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
+			!a.firstDispatchTime().After(ctx.Now(a)) {
+			return nil, serviceerror.NewFailedPrecondition(
+				"cannot update start_delay: activity is no longer in its delay window")
+		}
+	}
+
 	if frontendReq.GetRestoreOriginal() {
 		ogOptions := a.GetOriginalOptions()
 		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
@@ -633,6 +672,11 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
 		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
 		a.Priority = common.CloneProto(ogOptions.GetPriority())
+		// start_delay only governs the first dispatch. Once the first attempt has started, restoring
+		// the original value would shift ScheduleToClose without affecting dispatch timing.
+		if a.GetFirstAttemptStartedTime() == nil {
+			a.StartDelay = common.CloneProto(ogOptions.GetStartDelay())
+		}
 	} else {
 		if err := a.mergeActivityOptions(frontendReq); err != nil {
 			return nil, err
@@ -641,89 +685,25 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	attempt := a.LastAttempt.Get(ctx)
 
-	// Recalculate the current retry interval based on the (possibly updated) retry policy.
+	// Recalculate the retry interval based on the (possibly updated) retry policy.
 	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED && attempt.GetCurrentRetryInterval() != nil {
+	status := a.GetStatus()
+	if (status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
+		status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED) &&
+		attempt.GetCurrentRetryInterval() != nil {
+
 		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
 		attempt.CurrentRetryInterval = durationpb.New(newInterval)
 	}
 
-	// Add a new ScheduleToCloseTimeoutTask at the (possibly updated) deadline.
-	// Increment the stamp so the previous task is invalidated by the Validate check.
-	if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
-		a.ScheduleToCloseStamp++
-		deadline := a.GetScheduleTime().AsTime().Add(timeout)
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{ScheduledTime: deadline},
-			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
-		)
-	}
+	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
+	a.reissueScheduleToClose(ctx)
 
 	attempt.Stamp++
 
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED ||
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
-		// Re-create the start-to-close timeout task with the new stamp and (possibly updated) timeout.
-		// The old task was invalidated by the stamp increment above.
-		if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
-			deadline := attempt.GetStartedTime().AsTime().Add(timeout)
-			ctx.AddTask(
-				a,
-				chasm.TaskAttributes{ScheduledTime: deadline},
-				&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
-			)
-		}
-
-		if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
-			// The next heartbeat time is the max of (the last heartbeats recorded time and
-			// the current attempts started time) plus the heartbeat timeout
-			lastHb, _ := a.LastHeartbeat.TryGet(ctx)
-			lastHbTime := util.MaxTime(
-				lastHb.GetRecordedTime().AsTime(),
-				attempt.GetStartedTime().AsTime(),
-			).Add(hbTimeout)
-			ctx.AddTask(
-				a,
-				chasm.TaskAttributes{
-					ScheduledTime: lastHbTime,
-				},
-				&activitypb.HeartbeatTimeoutTask{
-					Stamp: attempt.GetStamp(),
-				},
-			)
-		}
-	}
-
-	// TODO(saa-ga): need to handle the StartDelay timer
-
+	a.reissueRunningAttemptTimers(ctx, attempt)
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		// Re dispatch this activity
-		retryTime := attemptScheduleTimeForRetry(attempt)
-		var dispatchAttrs chasm.TaskAttributes
-		if retryTime != nil {
-			// in backoff, future retry time
-			dispatchAttrs.ScheduledTime = retryTime.AsTime()
-		}
-		ctx.AddTask(
-			a,
-			dispatchAttrs,
-			&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
-		)
-
-		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-			schedToStart := ctx.Now(a).Add(timeout)
-			if retryTime != nil {
-				schedToStart = retryTime.AsTime().Add(timeout)
-			}
-			ctx.AddTask(
-				a,
-				chasm.TaskAttributes{ScheduledTime: schedToStart},
-				&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
-			)
-		}
+		a.reissueDispatchAndScheduleToStart(ctx, attempt)
 	}
 
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
@@ -742,6 +722,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 				HeartbeatTimeout:       a.GetHeartbeatTimeout(),
 				RetryPolicy:            a.GetRetryPolicy(),
 				Priority:               a.GetPriority(),
+				StartDelay:             a.GetStartDelay(),
 			},
 		},
 	}, nil
@@ -763,6 +744,7 @@ func (a *Activity) mergeActivityOptions(
 		HeartbeatTimeout:       a.HeartbeatTimeout,
 		Priority:               a.Priority,
 		RetryPolicy:            a.RetryPolicy,
+		StartDelay:             a.StartDelay,
 	}
 
 	if err := activityoptions.MergeActivityOptions(ao, req.GetActivityOptions(), updateFields); err != nil {
@@ -784,6 +766,7 @@ func (a *Activity) mergeActivityOptions(
 	a.HeartbeatTimeout = ao.HeartbeatTimeout
 	a.Priority = ao.Priority
 	a.RetryPolicy = ao.RetryPolicy
+	a.StartDelay = ao.StartDelay
 
 	return nil
 }
@@ -938,6 +921,9 @@ func (a *Activity) unpause(
 	event unpauseEvent,
 ) {
 	attempt := a.LastAttempt.Get(ctx)
+	// Compute the dispatch time while the pending retry state is still intact; it is cleared below.
+	dispatchTime := a.unpauseDispatchTime(ctx, event)
+
 	if event.req.GetResetAttempts() {
 		attempt.Count = 1
 	}
@@ -946,20 +932,33 @@ func (a *Activity) unpause(
 	}
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
-	scheduleTime := ctx.Now(a)
-	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
-		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
-	}
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
-			chasm.TaskAttributes{ScheduledTime: scheduleTime.Add(timeout)},
+			chasm.TaskAttributes{ScheduledTime: dispatchTime.Add(timeout)},
 			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()})
 	}
 	ctx.AddTask(
 		a,
-		chasm.TaskAttributes{ScheduledTime: scheduleTime},
+		chasm.TaskAttributes{ScheduledTime: dispatchTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+}
+
+// unpauseDispatchTime computes when an unpaused attempt should be dispatched
+func (a *Activity) unpauseDispatchTime(ctx chasm.MutableContext, event unpauseEvent) time.Time {
+	unpauseTime := ctx.Now(a)
+	if jitter := event.req.GetJitter().AsDuration(); jitter > 0 {
+		unpauseTime = unpauseTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+	dispatchTime := a.dispatchTimeRespectingStartDelay(unpauseTime)
+	var retryDispatchTime *timestamppb.Timestamp
+	if !event.req.GetResetAttempts() {
+		retryDispatchTime = dispatchTimeForRetry(a.LastAttempt.Get(ctx))
+	}
+	if retryDispatchTime != nil && retryDispatchTime.AsTime().After(dispatchTime) {
+		return retryDispatchTime.AsTime()
+	}
+	return dispatchTime
 }
 
 func (a *Activity) recordPauseState(
@@ -990,115 +989,150 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	if event.req.GetResetHeartbeat() {
 		a.clearHeartbeat(ctx)
 	}
+	dispatchTime := a.dispatchTimeRespectingStartDelay(event.resetTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
 			a,
-			chasm.TaskAttributes{ScheduledTime: event.scheduleTime.Add(timeout)},
+			chasm.TaskAttributes{ScheduledTime: dispatchTime.Add(timeout)},
 			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
 		)
 	}
 	ctx.AddTask(
 		a,
-		chasm.TaskAttributes{ScheduledTime: event.scheduleTime},
+		chasm.TaskAttributes{ScheduledTime: dispatchTime},
 		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
 	)
 	a.emitOnResetMetrics(event.handler)
 }
 
 // handleReset handles the activity execution reset.
-// For SCHEDULED/PAUSED activities: immediately re-dispatches at attempt 1.
+//
+// For SCHEDULED and PAUSED activities (no worker running): re-dispatches at attempt 1. Any pending
+// retry backoff is discarded (reset clears CurrentRetryInterval), but a pending start_delay is
+// honored so the re-dispatched attempt 1 does not fire before its original requested start time. A
+// PAUSED activity is unpaused first — unless keepPaused is set, in which case the counter is reset
+// to 1 but the activity stays PAUSED until a later unpause.
+//
 // For STARTED activities: transitions to RESET_REQUESTED. The worker is notified via
 // ActivityReset=true on its next heartbeat response and continues to use its existing task token.
-// When the worker yields (failure or timeout with retries remaining), the activity transitions
-// back to SCHEDULED at attempt 1 via TransitionResetAttemptFailedToScheduled.
+// If the attempt fails, the activity transitions back to SCHEDULED at attempt 1 via
+// TransitionResetAttemptFailedToScheduled.
+//
+// RestoreOriginalOptions follows the same split: applied immediately for a non-running activity,
+// and deferred for a running one, so the in-flight attempt is not disturbed — every restored option
+// takes effect on the new attempt 1.
+//
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
-	keepPaused := frontendReq.GetKeepPaused()
 
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityResetScope)
 	if err != nil {
 		return nil, err
 	}
 
-	if frontendReq.GetRestoreOriginalOptions() {
-		ogOptions := a.GetOriginalOptions()
-		a.TaskQueue = common.CloneProto(ogOptions.GetTaskQueue())
-		a.ScheduleToCloseTimeout = common.CloneProto(ogOptions.GetScheduleToCloseTimeout())
-		a.ScheduleToStartTimeout = common.CloneProto(ogOptions.GetScheduleToStartTimeout())
-		a.StartToCloseTimeout = common.CloneProto(ogOptions.GetStartToCloseTimeout())
-		a.HeartbeatTimeout = common.CloneProto(ogOptions.GetHeartbeatTimeout())
-		a.RetryPolicy = common.CloneProto(ogOptions.GetRetryPolicy())
-		a.Priority = common.CloneProto(ogOptions.GetPriority())
-	}
-
-	scheduleTime := ctx.Now(a)
-	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
-		scheduleTime = scheduleTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
-	}
-
 	switch a.Status {
-
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
 		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending cancellation")
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		// A reset is already pending on this running attempt. For now we reject a second reset
+		// request clearly.
+		// TODO (dan): define desired behavior and implement
+		return nil, serviceerror.NewFailedPrecondition("cannot reset an activity with a pending reset")
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED && !keepPaused {
-			// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
-			if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
-				req:            &workflowservice.UnpauseActivityExecutionRequest{},
-				metricsHandler: metricsHandler,
-			}); err != nil {
-				return nil, err
-			}
-		}
-		// Worker is still executing under its existing task token. Transition to RESET_REQUESTED
-		// so heartbeat/completion calls continue to authenticate; when the worker yields the
-		// activity will land back in SCHEDULED at attempt 1.
-		if frontendReq.GetResetHeartbeat() {
-			a.ResetHeartbeats = true
-		}
-		// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
-		// yields the activity lands back in PAUSED rather than SCHEDULED.
-		a.ResetKeepPaused = keepPaused && a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
-		if err := TransitionResetRequested.Apply(a, ctx, resetEvent{
-			req:          frontendReq,
-			scheduleTime: scheduleTime,
-			handler:      metricsHandler,
-		}); err != nil {
-			return nil, err
-		}
-		a.emitOnResetMetrics(metricsHandler)
-		return &activitypb.ResetActivityExecutionResponse{}, nil
-
+		return a.deferResetWhileRunning(ctx, frontendReq, metricsHandler)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
-		if keepPaused {
-			// Reset counts but keep the activity paused.
-			attempt := a.LastAttempt.Get(ctx)
-			attempt.Count = 1
-			attempt.Stamp++
-			attempt.CurrentRetryInterval = nil
-			if frontendReq.GetResetHeartbeat() {
-				a.clearHeartbeat(ctx)
-			}
-			a.emitOnResetMetrics(metricsHandler)
-			return &activitypb.ResetActivityExecutionResponse{}, nil
+		// No worker is running; restore takes effect immediately.
+		if frontendReq.GetRestoreOriginalOptions() {
+			a.restoreOriginalOptions(ctx)
 		}
-		fallthrough
-
+		if frontendReq.GetKeepPaused() {
+			return a.resetKeepPaused(ctx, frontendReq, metricsHandler)
+		}
+		// No keepPaused: perform an immediate reset. restoreOriginalOptions (if requested) already
+		// ran above, so skip it in resetImmediately to avoid restoring twice.
+		return a.resetImmediately(ctx, frontendReq, metricsHandler, false)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
-		if err := TransitionReset.Apply(a, ctx, resetEvent{
-			req:          frontendReq,
-			scheduleTime: scheduleTime,
-			handler:      metricsHandler,
-		}); err != nil {
-			return nil, err
-		}
-		return &activitypb.ResetActivityExecutionResponse{}, nil
-
+		return a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
 	default:
 		// Terminal or unspecified state.
 		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
 	}
+}
+
+// deferResetWhileRunning defers reset mutations (option restore, heartbeat details clear,
+// attempt-count rewind) while a worker is still executing (STARTED or PAUSE_REQUESTED), so that the
+// in-flight attempt is undisturbed. The deferred reset applies on the next retry via STARTED->SCHEDULED.
+func (a *Activity) deferResetWhileRunning(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	keepPaused := frontendReq.GetKeepPaused()
+	pauseRequested := a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED
+
+	if pauseRequested && !keepPaused {
+		// Unpause; the deferred reset will apply on the next retry via STARTED->SCHEDULED.
+		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, unpauseEvent{
+			req:            &workflowservice.UnpauseActivityExecutionRequest{},
+			metricsHandler: metricsHandler,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if frontendReq.GetRestoreOriginalOptions() {
+		a.ResetRestoreOptions = true
+	}
+	if frontendReq.GetResetHeartbeat() {
+		a.ResetHeartbeats = true
+	}
+	// keepPaused on a paused (PAUSE_REQUESTED) activity preserves the pause: when the worker
+	// yields the activity lands back in PAUSED rather than SCHEDULED.
+	a.ResetKeepPaused = keepPaused && pauseRequested
+	if err := TransitionResetRequested.Apply(a, ctx, nil); err != nil {
+		return nil, err
+	}
+	a.emitOnResetMetrics(metricsHandler)
+	return &activitypb.ResetActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) resetKeepPaused(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count = 1
+	attempt.Stamp++
+	attempt.CurrentRetryInterval = nil
+	if frontendReq.GetResetHeartbeat() {
+		a.clearHeartbeat(ctx)
+	}
+	a.emitOnResetMetrics(metricsHandler)
+	return &activitypb.ResetActivityExecutionResponse{}, nil
+}
+
+func (a *Activity) resetImmediately(
+	ctx chasm.MutableContext,
+	frontendReq *workflowservice.ResetActivityExecutionRequest,
+	metricsHandler metrics.Handler,
+	restore bool,
+) (*activitypb.ResetActivityExecutionResponse, error) {
+	if restore {
+		a.restoreOriginalOptions(ctx)
+	}
+	resetTime := ctx.Now(a)
+	if jitter := frontendReq.GetJitter().AsDuration(); jitter > 0 {
+		resetTime = resetTime.Add(time.Duration(rand.Int63n(int64(jitter)))) //nolint:gosec
+	}
+	if err := TransitionReset.Apply(a, ctx, resetEvent{
+		req:       frontendReq,
+		resetTime: resetTime,
+		handler:   metricsHandler,
+	}); err != nil {
+		return nil, err
+	}
+	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
 
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
@@ -1159,32 +1193,33 @@ func (a *Activity) recordFailedAttempt(
 }
 
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible. If a reset request has been received then the retry transitions
-// through TransitionResetAttemptFailedToScheduled which applies the deferred reset (attempt count
-// goes back to 1), unless the reset was issued with keepPaused (ResetKeepPaused), in which case it
-// transitions through TransitionResetAttemptFailedToPaused and the activity stays paused.
+// if retry is not possible. It handles the cases of pause and reset requests that were received
+// while the last attempt was in progress. failureRetryable reports whether the failure itself
+// permits a retry (timeouts always do; RespondActivityTaskFailed depends on the failure).
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
+	failureRetryable bool,
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
 ) (bool, error) {
 	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
-	if !shouldRetry {
+	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
+	// A pending reset request is always honored, regardless of retryability or the should retry result.
+	if !resetRequested && !(failureRetryable && shouldRetry) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
 		return false, nil
 	}
 	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
-	}
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
-		// keepPaused=true on a paused activity (ResetKeepPaused) requires the yield to land in
-		// PAUSED rather than SCHEDULED so the activity stays paused until unpaused.
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		if a.ResetKeepPaused {
 			return true, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
 		}
 		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+	default:
+		return true, TransitionRescheduled.Apply(a, ctx, event)
 	}
-	return true, TransitionRescheduled.Apply(a, ctx, event)
 }
 
 func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
@@ -1224,6 +1259,120 @@ func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInter
 
 func (a *Activity) firstDispatchTime() time.Time {
 	return a.ScheduleTime.AsTime().Add(a.GetStartDelay().AsDuration())
+}
+
+// reissueDispatchAndScheduleToStart re-emits the ActivityDispatchTask and ScheduleToStart timeout task for
+// a SCHEDULED activity. Retries fire at the retry time; first attempts dispatch now, lifted to
+// honor any pending start_delay.
+func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
+	var dispatchTime time.Time
+	if retryDispatchTime := dispatchTimeForRetry(attempt); retryDispatchTime != nil {
+		dispatchTime = retryDispatchTime.AsTime()
+	} else {
+		dispatchTime = a.dispatchTimeRespectingStartDelay(ctx.Now(a))
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{ScheduledTime: dispatchTime},
+		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+	)
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: dispatchTime.Add(timeout)},
+			&activitypb.ScheduleToStartTimeoutTask{Stamp: attempt.GetStamp()},
+		)
+	}
+}
+
+// reissueRunningAttemptTimers re-emits the StartToClose and Heartbeat timeout tasks for the
+// currently-running attempt, anchored to the attempt's StartedTime. Called from options-update
+// paths after stamp bump so the old tasks are invalidated and replaced with the (possibly
+// updated) timeouts. No-op unless the activity is in a status where a worker holds the task token
+// (STARTED / CANCEL_REQUESTED / PAUSE_REQUESTED / RESET_REQUESTED).
+func (a *Activity) reissueRunningAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
+		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
+		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
+		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+		return
+	}
+	if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
+		deadline := attempt.GetStartedTime().AsTime().Add(timeout)
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()},
+		)
+	}
+	if hbTimeout := a.GetHeartbeatTimeout().AsDuration(); hbTimeout > 0 {
+		// Next heartbeat fires at max(last recorded heartbeat, current attempt start) + heartbeat timeout.
+		lastHb, _ := a.LastHeartbeat.TryGet(ctx)
+		lastHbTime := util.MaxTime(
+			lastHb.GetRecordedTime().AsTime(),
+			attempt.GetStartedTime().AsTime(),
+		).Add(hbTimeout)
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: lastHbTime},
+			&activitypb.HeartbeatTimeoutTask{Stamp: attempt.GetStamp()},
+		)
+	}
+}
+
+// dispatchTimeRespectingStartDelay advances a candidate dispatch time t to the first dispatch time
+// (ScheduleTime + start_delay) while the activity has not yet been picked up by a worker, so that
+// pre-dispatch re-scheduling (unpause, reset, options update) honors any remaining start_delay.
+// Returns t unchanged if the first attempt has already started.
+func (a *Activity) dispatchTimeRespectingStartDelay(t time.Time) time.Time {
+	if a.GetFirstAttemptStartedTime() != nil {
+		return t
+	}
+	if dispatchTime := a.firstDispatchTime(); dispatchTime.After(t) {
+		return dispatchTime
+	}
+	return t
+}
+
+// reissueScheduleToClose bumps the ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
+// at the current deadline.
+func (a *Activity) reissueScheduleToClose(ctx chasm.MutableContext) {
+	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
+		a.ScheduleToCloseStamp++
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: deadline},
+			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()},
+		)
+	}
+}
+
+// applyDeferredOptionRestore applies a Reset(RestoreOriginalOptions) that was deferred because a
+// worker was running an attempt at reset time (see handleReset).
+func (a *Activity) applyDeferredOptionRestore(ctx chasm.MutableContext) {
+	if !a.ResetRestoreOptions {
+		return
+	}
+	a.ResetRestoreOptions = false
+	a.restoreOriginalOptions(ctx)
+}
+
+// restoreOriginalOptions resets the activity's options to the values it was originally scheduled
+// with and reissues the ScheduleToClose timer at the resulting deadline. start_delay is restored
+// only if the activity has never started.
+func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
+	og := a.GetOriginalOptions()
+	a.TaskQueue = common.CloneProto(og.GetTaskQueue())
+	a.ScheduleToCloseTimeout = common.CloneProto(og.GetScheduleToCloseTimeout())
+	a.ScheduleToStartTimeout = common.CloneProto(og.GetScheduleToStartTimeout())
+	a.StartToCloseTimeout = common.CloneProto(og.GetStartToCloseTimeout())
+	a.HeartbeatTimeout = common.CloneProto(og.GetHeartbeatTimeout())
+	a.RetryPolicy = common.CloneProto(og.GetRetryPolicy())
+	a.Priority = common.CloneProto(og.GetPriority())
+	if a.GetFirstAttemptStartedTime() == nil {
+		a.StartDelay = common.CloneProto(og.GetStartDelay())
+	}
+	a.reissueScheduleToClose(ctx)
 }
 
 // scheduleToCloseDeadline returns the absolute time at which the ScheduleToClose timeout expires,
@@ -1380,6 +1529,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		CloseTime:               closeTime,
 		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
 		ExecutionDuration:       executionDuration,
+		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
 		Header:                  requestData.GetHeader(),
 		HeartbeatDetails:        heartbeat.GetDetails(),
@@ -1393,7 +1543,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
-		NextAttemptScheduleTime: attemptScheduleTimeForRetry(attempt),
+		NextAttemptScheduleTime: dispatchTimeForRetry(attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,

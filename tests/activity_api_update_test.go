@@ -106,7 +106,6 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 	t.Parallel()
 
 	for _, api := range updateAPIs() {
-		api := api
 		t.Run(api.name, func(t *testing.T) {
 			t.Parallel()
 

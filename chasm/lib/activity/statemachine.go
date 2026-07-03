@@ -42,39 +42,38 @@ var TransitionScheduled = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		attempt := a.LastAttempt.Get(ctx)
-		currentTime := ctx.Now(a)
+
 		attempt.Count++
 		attempt.Stamp++
 
 		// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
 		// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
-		startDelay := a.GetStartDelay().AsDuration()
-		startDelayEnd := currentTime.Add(startDelay)
+		dispatchTime := a.firstDispatchTime()
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: startDelayEnd.Add(timeout),
+					ScheduledTime: dispatchTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
 				})
 		}
 
-		if timeout := a.GetScheduleToCloseTimeout().AsDuration(); timeout > 0 {
+		if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
 			a.ScheduleToCloseStamp++
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: startDelayEnd.Add(timeout),
+					ScheduledTime: deadline,
 				},
 				&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 		}
 
 		dispatchAttrs := chasm.TaskAttributes{}
-		if startDelay > 0 {
-			dispatchAttrs.ScheduledTime = startDelayEnd
+		if dispatchTime.After(a.ScheduleTime.AsTime()) {
+			dispatchAttrs.ScheduledTime = dispatchTime
 		}
 		ctx.AddTask(
 			a,
@@ -106,7 +105,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		}
 
 		attempt := a.LastAttempt.Get(ctx)
-		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
+		retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
@@ -141,6 +140,10 @@ var TransitionStarted = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
+		// Record the first-ever worker pickup time once and never update on retries or resets.
+		if a.FirstAttemptStartedTime == nil {
+			a.FirstAttemptStartedTime = attempt.GetStartedTime()
+		}
 		attempt.StartRequestId = request.GetRequestId()
 		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 		attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
@@ -485,9 +488,9 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	req          *workflowservice.ResetActivityExecutionRequest
-	scheduleTime time.Time
-	handler      metrics.Handler
+	req       *workflowservice.ResetActivityExecutionRequest
+	resetTime time.Time
+	handler   metrics.Handler
 }
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
@@ -520,7 +523,7 @@ var TransitionResetRequested = chasm.NewTransition(
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-	func(a *Activity, ctx chasm.MutableContext, _ resetEvent) error {
+	func(a *Activity, ctx chasm.MutableContext, _ any) error {
 		return nil
 	},
 )
@@ -538,21 +541,26 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event rescheduleEvent) error {
 		attempt := a.LastAttempt.Get(ctx)
 		a.ResetKeepPaused = false
+		a.applyDeferredOptionRestore(ctx)
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)
 		}
 		attempt.Count = 1
 		attempt.Stamp++
-		return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false)
+		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false); err != nil {
+			return err
+		}
+		// Reset discards the retry backoff
+		attempt.CurrentRetryInterval = nil
+		return nil
 	},
 )
 
 // TransitionResetAttemptFailedToScheduled transitions RESET_REQUESTED → SCHEDULED. It is performed
 // instead of TransitionRescheduled when the activity is in RESET_REQUESTED and the worker yields
-// (failure or timeout) with retries remaining. The failed attempt is recorded, the count is reset
-// to 0 and then incremented to 1 (so the next attempt is "attempt 1"), and a fresh dispatch task
-// is emitted at the next retry time.
+// (failure or timeout) with retries remaining. The failed attempt is recorded and the count is
+// reset to 1 (so the next attempt is "attempt 1").
 var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
@@ -563,6 +571,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		currentTime := ctx.Now(a)
 
 		a.ResetKeepPaused = false
+		a.applyDeferredOptionRestore(ctx)
 		if a.ResetHeartbeats {
 			a.ResetHeartbeats = false
 			a.clearHeartbeat(ctx)
@@ -574,13 +583,15 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false); err != nil {
 			return err
 		}
+		// Reset discards the retry backoff
+		attempt.CurrentRetryInterval = nil
 
-		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
+		dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: retryScheduledTime.Add(timeout),
+					ScheduledTime: dispatchTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
@@ -589,7 +600,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: retryScheduledTime,
+				ScheduledTime: dispatchTime,
 			},
 			&activitypb.ActivityDispatchTask{
 				Stamp: attempt.GetStamp(),
