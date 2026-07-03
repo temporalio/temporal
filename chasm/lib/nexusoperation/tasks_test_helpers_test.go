@@ -51,6 +51,7 @@ type mockStoreComponent struct {
 	startLinks      []*commonpb.Link
 	completionLinks []*commonpb.Link
 	startTime       *time.Time
+	closeTime       *time.Time
 }
 
 func (m *mockStoreComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
@@ -78,17 +79,20 @@ func (m *mockStoreComponent) OnNexusOperationStarted(ctx chasm.MutableContext, o
 	})
 }
 
-func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
+func (m *mockStoreComponent) OnNexusOperationCompleted(ctx chasm.MutableContext, op *Operation, result *commonpb.Payload, closeTime *time.Time, links []*commonpb.Link) error {
 	m.completionLinks = links
-	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result})
+	m.closeTime = closeTime
+	return TransitionSucceeded.Apply(op, ctx, EventSucceeded{Result: result, CompleteTime: closeTime})
 }
 
-func (m *mockStoreComponent) OnNexusOperationFailed(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
-	return TransitionFailed.Apply(op, ctx, EventFailed{Failure: cause})
+func (m *mockStoreComponent) OnNexusOperationFailed(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure, closeTime *time.Time) error {
+	m.closeTime = closeTime
+	return TransitionFailed.Apply(op, ctx, EventFailed{Failure: cause, CompleteTime: closeTime})
 }
 
-func (m *mockStoreComponent) OnNexusOperationCanceled(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure) error {
-	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause})
+func (m *mockStoreComponent) OnNexusOperationCanceled(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure, closeTime *time.Time) error {
+	m.closeTime = closeTime
+	return TransitionCanceled.Apply(op, ctx, EventCanceled{Failure: cause, CompleteTime: closeTime})
 }
 
 func (m *mockStoreComponent) OnNexusOperationTimedOut(ctx chasm.MutableContext, op *Operation, cause *failurepb.Failure, fromAttempt bool) error {

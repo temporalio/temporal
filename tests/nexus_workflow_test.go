@@ -1073,11 +1073,17 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	// Send an invalid completion request and verify that we get an error that the namespace in the URL doesn't match the namespace in the token.
 	invalidCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(invalidNamespace)
 
+	// Use "recent now" as the callback-reported close time: it lands after the operation's scheduled
+	// time (so schedule-to-close latency stays non-negative) yet is a distinct, explicit value we can
+	// assert the completed event was stamped with. Truncate+UTC so it round-trips cleanly through the
+	// nexus-operation-close-time header.
+	closeTime := time.Now().Truncate(time.Millisecond).UTC()
 	completion := nexusrpc.CompleteOperationOptions{
 		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 		// Repeat the handler link on completion to verify callback links do not leak onto the completed event.
-		Links: []nexus.Link{handlerNexusLink},
+		Links:     []nexus.Link{handlerNexusLink},
+		CloseTime: closeTime,
 	}
 	err = s.sendNexusCompletionRequest(ctx, invalidCallbackURL, completion)
 	// Verify we get the correct error response
@@ -1217,6 +1223,17 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	opStartedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 	s.Len(opStartedEvent.Links, 1)
 	protorequire.ProtoEqual(s.T(), handlerLink, opStartedEvent.Links[0].GetWorkflowEvent())
+
+	if chasmEnabled {
+		// The completed event must be stamped with the callback-reported close time, not the server
+		// time at which the completion was processed. The HSM path does not carry CloseTime, so this
+		// assertion is CHASM-only. Compare instants (not structs) since the value loses its monotonic
+		// reading on the header round-trip.
+		completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+		s.True(closeTime.Equal(completedEvent.GetEventTime().AsTime()),
+			"completed event must carry the callback close time; got %s want %s",
+			completedEvent.GetEventTime().AsTime(), closeTime)
+	}
 
 	// Find the first WFT completed after the started event for reset tests.
 	wftCompletedIdx := slices.IndexFunc(hist, func(e *historypb.HistoryEvent) bool {
