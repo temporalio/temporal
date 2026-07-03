@@ -3629,7 +3629,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			protorequire.ProtoEqual(t, expected, respInfo,
 				protorequire.IgnoreFields(
 					"execution_duration",
-					"requested_start_time",
+					"execution_time",
 					"schedule_time",
 					"state_size_bytes",
 					"state_transition_count",
@@ -3677,11 +3677,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 		})
 		require.NoError(t, err)
 		protorequire.ProtoEqual(t, startDelay, describeResp.GetInfo().GetStartDelay())
-		expectedRequested := describeResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay.AsDuration())
-		require.Equal(t, expectedRequested, describeResp.GetInfo().GetRequestedStartTime().AsTime(),
-			"requested_start_time should equal scheduleTime + start_delay")
-		require.Nil(t, describeResp.GetInfo().GetActualStartTime(),
-			"actual_start_time should be unset before any worker pickup")
+		expectedExecution := describeResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay.AsDuration())
+		require.Equal(t, expectedExecution, describeResp.GetInfo().GetExecutionTime().AsTime(),
+			"execution_time should equal scheduleTime + start_delay")
 	})
 
 	s.Run("WaitAnyStateChange", func(s *standaloneActivityTestSuite) {
@@ -3727,7 +3725,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 		protorequire.ProtoEqual(t, expected, firstDescribeResp.GetInfo(),
 			protorequire.IgnoreFields(
 				"execution_duration",
-				"requested_start_time",
+				"execution_time",
 				"schedule_time",
 				"state_size_bytes",
 				"state_transition_count",
@@ -3786,10 +3784,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			// Ignore non-deterministic fields. Validated separately.
 			protorequire.ProtoEqual(t, expected, describeResp.GetInfo(),
 				protorequire.IgnoreFields(
-					"actual_start_time",
 					"execution_duration",
+					"execution_time",
 					"last_started_time",
-					"requested_start_time",
 					"schedule_time",
 					"state_size_bytes",
 					"state_transition_count",
@@ -5947,8 +5944,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			})
 			require.NoError(c, err)
 			require.Equal(c, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, resp.GetInfo().GetStatus())
-			require.Nil(c, resp.GetInfo().GetActualStartTime(),
-				"actual_start_time should remain unset when the activity times out before any worker pickup")
 		}, 10*time.Second, 100*time.Millisecond)
 	})
 
@@ -6048,8 +6043,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
-		require.Nil(t, descResp.GetInfo().GetActualStartTime(),
-			"actual_start_time should remain unset when the activity is cancelled before any worker pickup")
 	})
 
 	t.Run("TerminateDuringDelay", func(t *testing.T) {
@@ -6090,8 +6083,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
-		require.Nil(t, descResp.GetInfo().GetActualStartTime(),
-			"actual_start_time should remain unset when the activity is terminated before any worker pickup")
 	})
 
 	// Validates that the retry deadline accounts for start delay: the effective ScheduleToClose
@@ -6549,7 +6540,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 	// RestoreOriginal on an already-dispatched activity must NOT touch start_delay. Restoring it would
 	// shift the close-deadline recomputation (firstDispatchTime + scheduleToClose) and rewrite the
-	// recorded requested_start_time without any functional effect on the running attempt.
+	// recorded execution_time without any functional effect on the running attempt.
 	s.Run("UpdateRestoreOriginal_OnStartedActivity_LeavesStartDelayUnchanged", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
@@ -6796,8 +6787,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// 3s > timerSafetyMargin so a buggy "dispatch at reset time" produces actualStart ≈ T0+ε,
-		// while expectedRequested = T0+3s. The assertion (actualStart + 1.5s ≥ T0+3s) fails by ~1.5s.
+		// 3s > timerSafetyMargin so a buggy "dispatch at reset time" produces lastStart ≈ T0+ε,
+		// while executionTime = T0+3s. The assertion (lastStart + 1.5s ≥ T0+3s) fails by ~1.5s.
 		originalDelay := 3 * time.Second
 
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
@@ -6838,20 +6829,20 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
 
-		// actualStartTime should be at-or-after the original target (scheduleTime + originalDelay), within a small safety
-		// margin to absorb timer firing imprecision.
+		// lastStart (first worker pickup) should be at-or-after the original target (execution_time =
+		// scheduleTime + originalDelay), within a small safety margin to absorb timer firing imprecision.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		requestedStart := descResp.GetInfo().GetRequestedStartTime().AsTime()
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, requestedStart.IsZero(), "requested_start_time should be populated")
-		require.False(t, actualStart.IsZero(), "actual_start_time should be populated after pickup")
-		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), requestedStart.UnixNano(),
-			"activity dispatched before its original requested_start_time; RestoreOriginalOptions did not honor the original delay")
+		executionTime := descResp.GetInfo().GetExecutionTime().AsTime()
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, executionTime.IsZero(), "execution_time should be populated")
+		require.False(t, lastStart.IsZero(), "last_started_time should be populated after pickup")
+		require.GreaterOrEqual(t, lastStart.Add(timerSafetyMargin).UnixNano(), executionTime.UnixNano(),
+			"activity dispatched before its original execution_time; RestoreOriginalOptions did not honor the original delay")
 	})
 
 	// If the original delay has already elapsed when Reset+RestoreOriginalOptions is called, the clamp
@@ -6895,16 +6886,16 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
 
-		// actualStartTime should be close to the reset time since the delay was already in the past.
+		// lastStart should be close to the reset time since the delay was already in the past.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero(), "actual_start_time should be populated after pickup")
-		require.WithinDuration(t, resetTime, actualStart, timerSafetyMargin,
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, lastStart.IsZero(), "last_started_time should be populated after pickup")
+		require.WithinDuration(t, resetTime, lastStart, timerSafetyMargin,
 			"dispatch did not fire promptly after reset; expected close to resetTime since delay was already in the past")
 	})
 
@@ -7296,202 +7287,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"retry was delayed beyond the retry interval, suggesting start_delay was incorrectly re-applied")
 	})
 
-	// Describe should expose both requested_start_time (= scheduleTime + start_delay) and
-	// actual_start_time (= when worker first picked up the activity).
-	s.Run("DescribeExposesRequestedAndActualStartTime", func(s *standaloneActivityTestSuite) {
-		t := s.T()
-		env := s.newTestEnv()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-		// > timerSafetyMargin so actualStart is meaningfully later than scheduleTime (lets the
-		// WithinDuration check below distinguish "near requested target" from "fired immediately").
-		startDelay := 2 * time.Second
-
-		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			StartDelay:          durationpb.New(startDelay),
-		})
-		require.NoError(t, err)
-
-		// Before pickup: requested_start_time set, actual_start_time still nil.
-		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
-		require.Equal(t, expectedRequested, descResp.GetInfo().GetRequestedStartTime().AsTime(),
-			"requested_start_time should equal scheduleTime + start_delay")
-		require.Nil(t, descResp.GetInfo().GetActualStartTime(), "actual_start_time should be unset before first pickup")
-
-		// Poll and let worker pick up.
-		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
-		require.NoError(t, err)
-		require.NotEmpty(t, pollResp.GetTaskToken())
-
-		// After pickup: actual_start_time populated, close to requested_start_time.
-		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		require.Equal(t, expectedRequested, descResp.GetInfo().GetRequestedStartTime().AsTime(),
-			"requested_start_time should be stable across pickups")
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero(), "actual_start_time should be populated after pickup")
-		require.WithinDuration(t, expectedRequested, actualStart, timerSafetyMargin,
-			"actual_start_time should be near requested_start_time on the happy path")
-	})
-
-	// actual_start_time records the FIRST pickup and does not move on subsequent retry attempts.
-	s.Run("ActualStartTime_StableAcrossRetries", func(s *standaloneActivityTestSuite) {
-		t := s.T()
-		env := s.newTestEnv()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-		// Short so the test waits ~1s between attempts; only needs to be > 0 for a real retry path.
-		retryInterval := 1 * time.Second
-
-		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(30 * time.Second),
-			RetryPolicy: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(retryInterval),
-				BackoffCoefficient: 1.0,
-				MaximumAttempts:    3,
-			},
-		})
-		require.NoError(t, err)
-
-		// Attempt 1: pickup, capture actual_start_time, fail.
-		pollResp1, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
-		require.NoError(t, err)
-		require.EqualValues(t, 1, pollResp1.GetAttempt())
-
-		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		actualStartAttempt1 := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStartAttempt1.IsZero())
-		require.Equal(t, descResp.GetInfo().GetScheduleTime().AsTime(), descResp.GetInfo().GetRequestedStartTime().AsTime(),
-			"requested_start_time should equal schedule_time when start_delay is unset")
-
-		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp1.TaskToken,
-			Failure: &failurepb.Failure{
-				Message: "retryable failure",
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
-				},
-			},
-		})
-		require.NoError(t, err)
-
-		// Attempt 2: pickup, actual_start_time should be unchanged from attempt 1.
-		pollResp2, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
-		require.NoError(t, err)
-		require.EqualValues(t, 2, pollResp2.GetAttempt())
-
-		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		require.Equal(t, actualStartAttempt1, descResp.GetInfo().GetActualStartTime().AsTime(),
-			"actual_start_time should record the first pickup only and not move on retries")
-
-		// Complete attempt 2 and verify actual_start_time still reflects the first attempt's pickup.
-		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: env.Namespace().String(),
-			TaskToken: pollResp2.TaskToken,
-			Result:    defaultResult,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-
-		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
-		require.Equal(t, actualStartAttempt1, descResp.GetInfo().GetActualStartTime().AsTime(),
-			"actual_start_time should still reflect the first pickup after the activity has completed")
-	})
-
-	// actual_start_time persists across Reset+RestoreOriginalOptions on a STARTED activity. The reset
-	// must not unset the field; it records the original first-pickup wall-clock time for the lifetime
-	// of the activity.
-	s.Run("ActualStartTime_PreservedAcrossReset", func(s *standaloneActivityTestSuite) {
-		t := s.T()
-		env := s.newTestEnv()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(30 * time.Second),
-		})
-		require.NoError(t, err)
-
-		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
-		require.NoError(t, err)
-		require.NotEmpty(t, pollResp.GetTaskToken())
-
-		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		actualStartBeforeReset := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStartBeforeReset.IsZero())
-
-		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
-			Namespace:              env.Namespace().String(),
-			ActivityId:             activityID,
-			RunId:                  startResp.RunId,
-			RestoreOriginalOptions: true,
-		})
-		require.NoError(t, err)
-
-		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		require.Equal(t, actualStartBeforeReset, descResp.GetInfo().GetActualStartTime().AsTime(),
-			"actual_start_time should persist across Reset+RestoreOriginalOptions")
-	})
-
 	// Pause during the delay window must not let unpause dispatch before the original wall-clock
 	// target. Without respectStartDelay in unpause(), pausing then quickly unpausing would let
 	// the activity dispatch at "now," skipping the rest of the original delay.
@@ -7501,7 +7296,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// The assertion below allows actualStart to land within timerSafetyMargin (1.5s) of the original
+		// The assertion below allows lastStart to land within timerSafetyMargin (1.5s) of the original
 		// target (T0+3s). 3s leaves room for a regression that dispatches immediately on unpause to fall
 		// well below T0+1.5s and fail visibly.
 		startDelay := 3 * time.Second
@@ -7523,7 +7318,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
+		expectedExecution := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
 
 		_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -7554,10 +7349,10 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero())
-		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedRequested.UnixNano(),
-			"activity dispatched before its original requested_start_time; unpause did not honor the original delay")
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, lastStart.IsZero())
+		require.GreaterOrEqual(t, lastStart.Add(timerSafetyMargin).UnixNano(), expectedExecution.UnixNano(),
+			"activity dispatched before its original execution_time; unpause did not honor the original delay")
 	})
 
 	// Reset (without RestoreOriginalOptions) of an activity still inside its start_delay window must
@@ -7604,16 +7399,16 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.NotEmpty(t, pollResp.GetTaskToken())
 
-		// Assert that it STARTED after the expected dispatch time
+		// Assert that it STARTED after the expected dispatch time.
 		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero())
-		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedDispatchTime.UnixNano(),
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, lastStart.IsZero())
+		require.GreaterOrEqual(t, lastStart.Add(timerSafetyMargin).UnixNano(), expectedDispatchTime.UnixNano(),
 			"activity dispatched before start delay end; Reset did not honor the remaining start delay")
 	})
 
@@ -7674,9 +7469,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero())
-		require.WithinDuration(t, unpauseTime, actualStart, timerSafetyMargin,
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, lastStart.IsZero())
+		require.WithinDuration(t, unpauseTime, lastStart, timerSafetyMargin,
 			"expected near-immediate dispatch on unpause when the original delay had already elapsed")
 	})
 
@@ -7843,7 +7638,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		// Lower-bound margin below is startDelay-timerSafetyMargin = 3.5s. A buggy "dispatch at last
-		// unpauseTime" would produce actualStart at most a few seconds in (cycle latency), well below
+		// unpauseTime" would produce lastStart at most a few seconds in (cycle latency), well below
 		// T0+3.5s. 5s keeps the catch reliable even if pause+unpause cycles take ~3s on slow CI.
 		startDelay := 5 * time.Second
 
@@ -7864,7 +7659,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		expectedRequested := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
+		expectedExecution := descResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay)
 
 		for range 2 {
 			_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
@@ -7896,10 +7691,10 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			RunId:      startResp.RunId,
 		})
 		require.NoError(t, err)
-		actualStart := descResp.GetInfo().GetActualStartTime().AsTime()
-		require.False(t, actualStart.IsZero())
-		require.GreaterOrEqual(t, actualStart.Add(timerSafetyMargin).UnixNano(), expectedRequested.UnixNano(),
-			"activity dispatched before its original requested_start_time; multiple pause cycles let the target drift")
+		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
+		require.False(t, lastStart.IsZero())
+		require.GreaterOrEqual(t, lastStart.Add(timerSafetyMargin).UnixNano(), expectedExecution.UnixNano(),
+			"activity dispatched before its original execution_time; multiple pause cycles let the target drift")
 	})
 }
 
@@ -8532,7 +8327,6 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, queueB, descResp.GetInfo().GetTaskQueue())
-		require.False(t, descResp.GetInfo().GetActualStartTime().AsTime().IsZero())
 
 		// There are no tasks on queue A.
 		shortCtx, shortCancel := context.WithTimeout(ctx, 5*time.Second)
