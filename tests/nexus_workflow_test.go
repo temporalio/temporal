@@ -1073,10 +1073,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	// Send an invalid completion request and verify that we get an error that the namespace in the URL doesn't match the namespace in the token.
 	invalidCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(invalidNamespace)
 
-	// Use "recent now" as the callback-reported close time: it lands after the operation's scheduled
-	// time (so schedule-to-close latency stays non-negative) yet is a distinct, explicit value we can
-	// assert the completed event was stamped with. Truncate+UTC so it round-trips cleanly through the
-	// nexus-operation-close-time header.
 	closeTime := time.Now().Truncate(time.Millisecond).UTC()
 	completion := nexusrpc.CompleteOperationOptions{
 		Result: testcore.MustToPayload(s.T(), "result"),
@@ -1227,8 +1223,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	if chasmEnabled {
 		// The completed event must be stamped with the callback-reported close time, not the server
 		// time at which the completion was processed. The HSM path does not carry CloseTime, so this
-		// assertion is CHASM-only. Compare instants (not structs) since the value loses its monotonic
-		// reading on the header round-trip.
+		// assertion is CHASM-only.
 		completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 		s.True(closeTime.Equal(completedEvent.GetEventTime().AsTime()),
 			"completed event must carry the callback close time; got %s want %s",
