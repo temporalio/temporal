@@ -1122,6 +1122,16 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	eventBlobs []*commonpb.DataBlob,
 	isNewMutableState bool,
 ) ([]byte, error) {
+	nsName := namespace.EmptyName.String()
+	if ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID); err == nil && ns != nil {
+		nsName = ns.Name().String()
+	}
+	startTime := time.Now().UTC()
+	defer func() {
+		metrics.ReplicationBackfillEventsLatency.With(r.shardContext.GetMetricsHandler()).
+			Record(time.Since(startTime), metrics.NamespaceTag(nsName))
+	}()
+
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		return nil, err
@@ -1211,7 +1221,6 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
-	nsName := namespace.EmptyName.String()
 	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err == nil && ns != nil {
 		nsName = ns.Name().String()
