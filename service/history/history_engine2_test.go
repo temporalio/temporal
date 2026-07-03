@@ -20,6 +20,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -37,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -103,7 +104,7 @@ type (
 // by the history engine as a function value.
 type noopWorkerDeploymentClient struct{ workerdeployment.Client }
 
-func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string) error {
+func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string, int64) error {
 	return nil
 }
 
@@ -218,6 +219,8 @@ func (s *engine2Suite) SetupTest() {
 			s.mockVisibilityManager,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			metrics.NoopMetricsHandler,
+			log.NewNoopLogger(),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
@@ -258,8 +261,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -364,8 +367,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -682,8 +685,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							"Keyword01":             payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+							"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+							"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 						},
 					},
 				},
@@ -779,8 +782,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessWithInternalRawHistor
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"Keyword01":             payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
+								"Keyword01":             sadefs.MustEncodeValue("random-keyword", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+								"TemporalChangeVersion": sadefs.MustEncodeValue("random-data", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 							},
 						},
 					},
@@ -953,6 +956,75 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.Nil(err)
 	s.NotNil(response)
 	s.Equal(scheduledEvent, response.ScheduledEvent)
+	s.NotNil(response.Clock, "Clock must be set for shard staleness check")
+}
+
+func (s *engine2Suite) TestRecordActivityTaskStartedDuplicateRequest() {
+	namespaceID := tests.NamespaceID
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+
+	identity := "testIdentity"
+	tl := "testTaskQueue"
+
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := payloads.EncodeString("input1")
+
+	ms := s.createExecutionStartedState(workflowExecution, tl, identity, true, true)
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, int64(2), int64(3), identity)
+	scheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
+
+	// Start the activity so it has StartedEventId set.
+	addActivityTaskStartedEvent(ms, scheduledEvent.GetEventId(), identity)
+
+	ms1 := workflow.TestCloneToProto(context.Background(), ms)
+
+	// Simulate what the API layer does on first start: store StartedClock in ActivityInfo.
+	// Set it on the proto directly (after cloning) to avoid dirtying mutable state,
+	// since the duplicate request path should not write back to persistence.
+	for _, ai := range ms1.ActivityInfos {
+		ai.StartedClock = &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	}
+
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		events.EventKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowExecution.GetWorkflowId(),
+			RunID:       workflowExecution.GetRunId(),
+			EventID:     scheduledEvent.GetEventId(),
+			Version:     0,
+		},
+		workflowTaskCompletedEvent.GetEventId(),
+		gomock.Any(),
+	).Return(scheduledEvent, nil)
+
+	// Send the same RequestId that addActivityTaskStartedEvent used (tests.RunID).
+	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: workflowExecution,
+		ScheduledEventId:  5,
+		RequestId:         tests.RunID,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tl,
+			},
+			Identity: identity,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(response)
+	s.NotNil(response.Clock, "Clock must be set for shard staleness check on duplicate request")
+	s.Equal(int64(42), response.Clock.Clock, "Should return the stored StartedClock")
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
@@ -1242,15 +1314,19 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-			Namespace:    tests.Namespace.String(),
-			WorkflowId:   tests.WorkflowID,
-			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
-			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForText01": payload.EncodeString("search attribute value")},
+		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+			StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+				Namespace:    tests.Namespace.String(),
+				WorkflowId:   tests.WorkflowID,
+				WorkflowType: &commonpb.WorkflowType{Name: "wType"},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						"AliasForText01": sadefs.MustEncodeValue("search attribute value", enumspb.INDEXED_VALUE_TYPE_TEXT),
+					},
+				},
 			},
-		}},
+		},
 	}}
 
 	wfMs := workflow.TestCloneToProto(context.Background(), ms)
@@ -1267,7 +1343,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		startChildEventAttributes := eventsToSave[1].GetStartChildWorkflowExecutionInitiatedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
-			payload.EncodeString("search attribute value"),
+			sadefs.MustEncodeValue("search attribute value", enumspb.INDEXED_VALUE_TYPE_TEXT),
 			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["Text01"])
 		return tests.UpdateWorkflowExecutionResponse, nil
 	})
@@ -1424,7 +1500,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 		startEventAttributes := eventsToSave[0].GetWorkflowExecutionStartedEventAttributes()
 		// Search attribute name was mapped and saved under field name.
 		s.ProtoEqual(
-			payload.EncodeString("test"),
+			sadefs.MustEncodeValue("test", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			startEventAttributes.GetSearchAttributes().GetIndexedFields()["Keyword01"])
 		return tests.CreateWorkflowExecutionResponse, nil
 	})
@@ -1444,7 +1520,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"Keyword01": payload.EncodeString("test"),
+				"Keyword01": sadefs.MustEncodeValue("test", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			}}},
 	})
 	s.Nil(err)
@@ -1630,10 +1706,10 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
+func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.setupStartWorkflowExecutionForTerminate()
 
-	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 
@@ -1642,10 +1718,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
+func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {
 	s.setupStartWorkflowExecutionForTerminate()
 
-	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+	//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED)
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 
@@ -1759,6 +1836,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
+					//nolint:staticcheck // SA1019: intentional coverage for deprecated policy migration
 					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
 
 				s.NoError(err)
@@ -2558,7 +2636,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -2605,7 +2682,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	_, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -2784,7 +2860,6 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	startEvent := addWorkflowExecutionStartedEvent(ms, execution, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	startVersion := startEvent.GetVersion()
 	timeoutEvent, err := ms.AddTimeoutWorkflowEvent(
-		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)

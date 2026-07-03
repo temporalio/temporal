@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -151,21 +152,20 @@ func NewMetadata(
 		panic("Version increment <= 0 or > 2147483647")
 	}
 
-	versionToClusterName := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
+	versionToClusterName, err := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
+	if err != nil {
+		// nolint:forbidigo // matches the other startup-config panics in this constructor
+		panic(err.Error())
+	}
 	if _, ok := clusterInfo[currentClusterName]; !ok {
 		panic("Current cluster is not specified in cluster info")
 	}
 	if _, ok := clusterInfo[masterClusterName]; !ok {
 		panic("Master cluster is not specified in cluster info")
 	}
-	if len(versionToClusterName) != len(clusterInfo) {
-		panic("Cluster info initial versions have duplicates")
-	}
 
 	copyClusterInfo := make(map[string]ClusterInformation)
-	for k, v := range clusterInfo {
-		copyClusterInfo[k] = v
-	}
+	maps.Copy(copyClusterInfo, clusterInfo)
 	if refreshDuration == nil {
 		refreshDuration = dynamicconfig.GetDurationPropertyFn(refreshInterval)
 	}
@@ -214,6 +214,10 @@ func (m *metadataImpl) Start() {
 	)
 	err := m.refreshClusterMetadata(ctx)
 	if err != nil {
+		// Crash rather than start with partial cluster metadata (e.g. an invalid
+		// or missing row in cluster_metadata): replication and failover routing
+		// would be incorrect. The Fatal forces operators to fix or remove the bad
+		// row before the next start can succeed.
 		m.logger.Fatal("Unable to initialize cluster metadata cache", tag.Error(err))
 	}
 	m.refresher = goro.NewHandle(ctx).Go(m.refreshLoop)
@@ -317,9 +321,7 @@ func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	defer m.clusterLock.RUnlock()
 
 	result := make(map[string]ClusterInformation, len(m.clusterInfo))
-	for k, v := range m.clusterInfo {
-		result[k] = v
-	}
+	maps.Copy(result, m.clusterInfo)
 	return result
 }
 
@@ -453,9 +455,19 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 	}
 
 	if len(oldEntries) > 0 {
+		// Build a candidate map, validate it, and only commit on success.
+		// A bad row in cluster_metadata must not be able to crash the refresher
+		// or corrupt the in-memory state.
+		candidate := maps.Clone(clusterInfoMap)
+		applyClusterInfoUpdates(candidate, oldEntries, newEntries)
+		newVersionMap, err := updateVersionToClusterName(candidate, m.failoverVersionIncrement)
+		if err != nil {
+			return fmt.Errorf("rejecting cluster metadata refresh: %w", err)
+		}
+
 		m.clusterLock.Lock()
-		m.updateClusterInfoLocked(oldEntries, newEntries)
-		m.updateFailoverVersionToClusterName()
+		m.clusterInfo = candidate
+		m.versionToClusterName = newVersionMap
 		m.clusterLock.Unlock()
 
 		m.clusterCallbackLock.RLock()
@@ -467,44 +479,60 @@ func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
 	return nil
 }
 
-func (m *metadataImpl) updateClusterInfoLocked(
+func applyClusterInfoUpdates(
+	clusterInfo map[string]ClusterInformation,
 	oldClusterMetadata map[string]*ClusterInformation,
 	newClusterMetadata map[string]*ClusterInformation,
 ) {
 	for clusterName := range oldClusterMetadata {
 		if oldClusterMetadata[clusterName] != nil && newClusterMetadata[clusterName] == nil {
-			delete(m.clusterInfo, clusterName)
+			delete(clusterInfo, clusterName)
 		} else {
-			m.clusterInfo[clusterName] = *newClusterMetadata[clusterName]
+			clusterInfo[clusterName] = *newClusterMetadata[clusterName]
 		}
 	}
 }
 
-func (m *metadataImpl) updateFailoverVersionToClusterName() {
-	m.versionToClusterName = updateVersionToClusterName(m.clusterInfo, m.failoverVersionIncrement)
+// ValidateClusterInformation checks the invariants that NewMetadata and the
+// runtime refresh both depend on. It is also used at admin/operator RPC
+// boundaries so that bad input is rejected before it can be persisted and
+// later crash the metadata refresher.
+func ValidateClusterInformation(
+	clusterName string,
+	info ClusterInformation,
+	failoverVersionIncrement int64,
+) error {
+	if clusterName == "" {
+		return errors.New("cluster name must not be empty")
+	}
+	if info.InitialFailoverVersion <= 0 {
+		return fmt.Errorf("cluster %q: InitialFailoverVersion must be > 0, got %d",
+			clusterName, info.InitialFailoverVersion)
+	}
+	if info.InitialFailoverVersion >= failoverVersionIncrement {
+		return fmt.Errorf("cluster %q: InitialFailoverVersion (%d) must be < FailoverVersionIncrement (%d)",
+			clusterName, info.InitialFailoverVersion, failoverVersionIncrement)
+	}
+	if info.Enabled && info.RPCAddress == "" {
+		return fmt.Errorf("cluster %q: RPCAddress must not be empty when Enabled=true", clusterName)
+	}
+	return nil
 }
 
-func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failoverVersionIncrement int64) map[int64]string {
+func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failoverVersionIncrement int64) (map[int64]string, error) {
 	versionToClusterName := make(map[int64]string)
 	for clusterName, info := range clusterInfo {
-		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion <= 0 {
-			panic(fmt.Sprintf(
-				"Version increment %v is smaller than initial version: %v.",
-				failoverVersionIncrement,
-				clusterInfo,
-			))
+		if err := ValidateClusterInformation(clusterName, info, failoverVersionIncrement); err != nil {
+			return nil, err
 		}
-		if len(clusterName) == 0 {
-			panic("Cluster name needs to be defined in Cluster Information")
+		if existing, dup := versionToClusterName[info.InitialFailoverVersion]; dup {
+			return nil, fmt.Errorf(
+				"duplicate InitialFailoverVersion %d for clusters %q and %q",
+				info.InitialFailoverVersion, existing, clusterName)
 		}
 		versionToClusterName[info.InitialFailoverVersion] = clusterName
-
-		if info.Enabled && info.RPCAddress == "" {
-			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
-		}
-		// It's ok if info.HTTPAddress is empty
 	}
-	return versionToClusterName
+	return versionToClusterName, nil
 }
 
 func (m *metadataImpl) listAllClusterMetadataFromDB(

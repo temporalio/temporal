@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -24,7 +26,8 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine chasm.Engine
+	chasmEngine              chasm.Engine
+	workerCommandsDispatcher *workercommands.Dispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -35,17 +38,25 @@ func newOutboundQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
+	matchingClient resource.MatchingClient,
 ) *outboundQueueActiveTaskExecutor {
+	scopedMetricsHandler := metricsHandler.WithTags(
+		metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
+	)
 	return &outboundQueueActiveTaskExecutor{
 		stateMachineEnvironment: stateMachineEnvironment{
-			shardContext: shardCtx,
-			cache:        workflowCache,
-			logger:       logger,
-			metricsHandler: metricsHandler.WithTags(
-				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
-			),
+			shardContext:   shardCtx,
+			cache:          workflowCache,
+			logger:         logger,
+			metricsHandler: scopedMetricsHandler,
 		},
 		chasmEngine: chasmEngine,
+		workerCommandsDispatcher: workercommands.NewDispatcher(
+			matchingClient,
+			shardCtx.GetConfig(),
+			scopedMetricsHandler,
+			logger,
+		),
 	}
 }
 
@@ -93,6 +104,8 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
+	case *tasks.WorkerCommandsTask:
+		return respond(e.workerCommandsDispatcher.Execute(ctx, task, executable.Attempt(), namespaceTag.Value))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

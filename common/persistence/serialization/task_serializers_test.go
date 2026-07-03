@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -169,6 +170,38 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 	s.assertEqualTasks(resetTask)
 }
 
+func (s *taskSerializerSuite) TestOutboundWorkerCommandsTask() {
+	workerCommandsTask := &tasks.WorkerCommandsTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Commands: []*workerpb.WorkerCommand{
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token1")},
+			}},
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token2")},
+			}},
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token3")},
+			}},
+		},
+		Destination: "test-control-queue",
+	}
+
+	s.assertEqualTasksWithOpts(workerCommandsTask,
+		func(task, deserializedTask tasks.Task) {
+			orig := task.(*tasks.WorkerCommandsTask).Commands
+			deser := deserializedTask.(*tasks.WorkerCommandsTask).Commands
+			s.Require().Len(deser, len(orig))
+			for i := range orig {
+				protorequire.ProtoEqual(s.T(), orig[i], deser[i])
+			}
+		},
+		cmpopts.IgnoreFields(tasks.WorkerCommandsTask{}, "Commands"),
+	)
+}
+
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 	workflowTaskTimer := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey:         s.workflowKey,
@@ -307,6 +340,8 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 		ArchetypeID:                    rand.Uint32(),
 		CloseExecutionVisibilityTaskID: rand.Int63(),
 		CloseTime:                      time.Unix(0, 0).UTC(),
+		StartTime:                      time.Unix(0, 0).UTC(),
+		IsRetentionDelete:              false,
 	}
 
 	s.assertEqualTasks(deleteExecutionVisibilityTask)
@@ -440,8 +475,8 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
-	s.Assert().Equal(tasks.CategoryArchival, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
+	s.Equal(tasks.CategoryArchival, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 
 	s.assertEqualTasks(task)
 }
@@ -499,8 +534,8 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 		Destination: "foo",
 	}
 
-	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
+	s.Equal(tasks.CategoryOutbound, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
 	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
@@ -550,8 +585,8 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 		Version:             rand.Int63(),
 	}
 
-	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
+	s.Equal(tasks.CategoryTimer, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
 
 	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)

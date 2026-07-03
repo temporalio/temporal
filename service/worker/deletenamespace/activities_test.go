@@ -90,7 +90,7 @@ func Test_ValidateNexusEndpointsActivity(t *testing.T) {
 	nexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(nil, errors.New("persistence failure"))
 	err = a.ValidateNexusEndpointsActivity(context.Background(), "namespace-id", "namespace")
 	require.Error(t, err)
-	require.Equal(t, err.Error(), "unable to list Nexus endpoints for namespace namespace: persistence failure")
+	require.Equal(t, "unable to list Nexus endpoints for namespace namespace: persistence failure", err.Error())
 
 	ctrl.Finish()
 }

@@ -33,7 +33,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/workflow"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -63,11 +65,13 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
@@ -218,6 +222,8 @@ func NewAdminHandler(
 				args.Config.VisibilityAllowList,
 			),
 			args.Config.SuppressErrorSetSystemSearchAttribute,
+			args.MetricsHandler,
+			args.Logger,
 		),
 		clusterMetadata:      args.ClusterMetadata,
 		healthServer:         args.HealthServer,
@@ -986,7 +992,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
-		return errWorkflowIDNotSet
+		return workflow.ErrWorkflowIDNotSet
 	}
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
@@ -1147,13 +1153,16 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
-	hostIDEqual, err := uuid.Parse(request.GetHostId())
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
-	}
-	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
-	if err != nil {
-		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	var hostIDEqualBytes []byte
+	if request.GetHostId() != "" {
+		hostIDEqual, err := uuid.Parse(request.GetHostId())
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+		}
+		hostIDEqualBytes, err = hostIDEqual.MarshalBinary()
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+		}
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
@@ -1216,6 +1225,20 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, err
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := cluster.ValidateClusterInformation(
+		resp.GetClusterName(),
+		cluster.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		adh.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid remote cluster metadata: %v", err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.clusterMetadataManager
@@ -1265,6 +1288,10 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
+
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, request.GetClusterName()); err != nil {
+		return nil, err
+	}
 
 	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
@@ -1374,10 +1401,10 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, errExecutionNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	if request.GetEvents() == nil {
-		return nil, errWorkflowIDNotSet
+		return nil, workflow.ErrWorkflowIDNotSet
 	}
 	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -1643,8 +1670,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	}
 
 	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&searchAttributes,
+		chasm.SearchAttributeBatcherUser.Value(identity),
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
+	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.Namespace,
@@ -1791,6 +1821,7 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+		ScaleInfo:            resp.ScaleInfo,
 	}, nil
 }
 
@@ -1826,6 +1857,61 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 	// The response returned is for multiple build Id's
 	return &adminservice.ForceUnloadTaskQueuePartitionResponse{
 		WasLoaded: resp.WasLoaded,
+	}, nil
+}
+
+func (adh *AdminHandler) GetTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueUserDataRequest,
+) (_ *adminservice.GetTaskQueueUserDataResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	// Admin API takes namespace name; matching requires namespace ID.
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the partition object to get its wire-format RPC name.
+	// partition_id=0 (root) → bare task queue name, e.g. "my-queue".
+	// partition_id=N       → mangled name, e.g. "/_sys/my-queue/N".
+	// The matching client uses this name for consistent-hash routing to the correct host,
+	// and the matching engine parses it to find the right in-memory partition manager.
+	// namespaceID is passed for correctness even though RpcName() only uses the task queue name.
+	family, err := tqid.NewTaskQueueFamily(namespaceID.String(), request.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	partition := family.TaskQueue(request.GetTaskQueueType()).NormalPartition(int(request.GetPartitionId()))
+
+	// Fetch the user data currently loaded by the target partition.
+	// LastKnownUserDataVersion=0: no cached version, always return current data.
+	// LastKnownEphemeralDataVersion=-1: skip ephemeral data; we only need persisted per-type data.
+	resp, err := adh.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		NamespaceId:                   namespaceID.String(),
+		TaskQueue:                     partition.RpcName(),
+		TaskQueueType:                 request.GetTaskQueueType(),
+		LastKnownUserDataVersion:      0,
+		LastKnownEphemeralDataVersion: -1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// User data is a family-level map keyed by TaskQueueType (int32).
+	// Extract only the entry for the requested type and return it alongside the version,
+	// so callers can compare versions across partitions to check replication lag.
+	perType := resp.GetUserData().GetData().GetPerType()
+	return &adminservice.GetTaskQueueUserDataResponse{
+		UserData: perType[int32(request.GetTaskQueueType())],
+		Version:  resp.GetUserData().GetVersion(),
 	}, nil
 }
 
@@ -1875,6 +1961,10 @@ func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.De
 	if metadata.GetFailoverVersionIncrement() != currentClusterInfo.GetFailoverVersionIncrement() {
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
+	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
 	}
 	if metadata.GetHistoryShardCount() != adh.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()
@@ -2494,7 +2584,37 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	request *adminservice.MigrateScheduleRequest,
 	namespaceID string,
 ) (*adminservice.MigrateScheduleResponse, error) {
-	_, err := adh.schedulerClient.MigrateToWorkflow(ctx,
+	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
+	descResp, err := adh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.GetNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+		},
+	})
+	switch {
+	case common.IsNotFoundError(err):
+	case err != nil:
+		return nil, err
+	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
+		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+		adh.logger.Warn(
+			"schedule migration to workflow blocked by workflow sentinel",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+		)
+		return nil, chasmscheduler.ErrSentinelBlocked
+	default:
+		adh.logger.Warn(
+			"schedule migration to workflow found existing workflow",
+			tag.ScheduleID(request.GetScheduleId()),
+			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+		)
+	}
+
+	_, err = adh.schedulerClient.MigrateToWorkflow(ctx,
 		&schedulerpb.MigrateToWorkflowRequest{
 			NamespaceId: namespaceID,
 			ScheduleId:  request.GetScheduleId(),

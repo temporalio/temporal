@@ -2,10 +2,16 @@ package chasm
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc/metadata"
 )
 
 type Context interface {
@@ -24,6 +30,10 @@ type Context interface {
 	ExecutionInfo() ExecutionInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
+	// NamespaceEntry returns the namespace entry for the execution.
+	NamespaceEntry() *namespace.Namespace
+	// EndpointByName resolves a nexus endpoint entry.
+	EndpointByName(endpointName string) (*persistencespb.NexusEndpointEntry, error)
 	// MetricsHandler returns a metrics handler with namespace tag.
 	MetricsHandler() metrics.Handler
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
@@ -31,6 +41,21 @@ type Context interface {
 	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
 	// Alternatively, use ContextWithValue() to manually set values on Context which will take precedence over registered ones.
 	Value(key any) any
+	// RequestHeader returns the first value of the named gRPC metadata header from the inbound request context, or ""
+	// if absent.
+	//
+	// Only available when this Context was constructed from an inbound gRPC request, i.e. inside the start/update/read
+	// callbacks invoked by the chasm engine. In other contexts, such as pure tasks executed at the end of a transaction
+	// or background task handlers, the underlying ctx has no gRPC metadata and this method always returns "".
+	RequestHeader(key string) string
+	// Links returns the union of links attached to the given component across all requests.
+	// Returns nil for components that are not (yet) registered as tree nodes.
+	Links(Component) []*commonpb.Link
+	// RequestLinks returns the links attached to the given component for the specific requestID.
+	// Returns nil if no entry exists for that requestID. Empty requestID is rejected.
+	RequestLinks(Component, string) ([]*commonpb.Link, error)
+	// UserMetadata returns the user metadata attached to the given component, or nil if none.
+	UserMetadata(Component) *sdkpb.UserMetadata
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -54,6 +79,10 @@ type ExecutionInfo struct {
 	CloseTime time.Time
 }
 
+type EndpointRegistry interface {
+	GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+}
+
 type MutableContext interface {
 	Context
 
@@ -61,9 +90,12 @@ type MutableContext interface {
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
-
-	// Add more methods here for other storage commands/primitives.
-	// e.g. HistoryEvent
+	// SetRequestLinks records the links contributed by the given request on the
+	// component, replacing any prior entry for the same request ID. Passing
+	// nil/empty links removes the entry.
+	SetRequestLinks(Component, string, []*commonpb.Link) error
+	// SetUserMetadata replaces the user metadata attached to the given component.
+	SetUserMetadata(Component, *sdkpb.UserMetadata) error
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -80,6 +112,8 @@ type immutableCtx struct {
 	// But it will be when we support partial loading later,
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
+	// now is constant for this context; child contexts inherit the same value.
+	now time.Time
 
 	executionKey ExecutionKey
 
@@ -108,10 +142,12 @@ func newContext(
 	ctx context.Context,
 	node *Node,
 ) *immutableCtx {
+	root := node.root()
 	workflowKey := node.backend.GetWorkflowKey()
 	return &immutableCtx{
 		ctx:  ctx,
-		root: node.root(),
+		now:  root.Now(nil),
+		root: root,
 		executionKey: ExecutionKey{
 			NamespaceID: workflowKey.NamespaceID,
 			BusinessID:  workflowKey.WorkflowID,
@@ -124,8 +160,20 @@ func (c *immutableCtx) Ref(component Component) ([]byte, error) {
 	return c.root.Ref(component)
 }
 
-func (c *immutableCtx) Now(component Component) time.Time {
-	return c.root.Now(component)
+func (c *immutableCtx) Links(component Component) []*commonpb.Link {
+	return c.root.componentLinks(component)
+}
+
+func (c *immutableCtx) RequestLinks(component Component, requestID string) ([]*commonpb.Link, error) {
+	return c.root.componentRequestLinks(component, requestID)
+}
+
+func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
+	return c.root.componentUserMetadata(component)
+}
+
+func (c *immutableCtx) Now(_ Component) time.Time {
+	return c.now
 }
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
@@ -167,6 +215,7 @@ func (c *immutableCtx) Value(key any) any {
 func (c *immutableCtx) withValue(key any, value any) Context {
 	return &immutableCtx{
 		ctx:          context.WithValue(c.goContext(), key, value),
+		now:          c.now,
 		root:         c.root,
 		executionKey: c.executionKey,
 	}
@@ -176,8 +225,27 @@ func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) 
 	return c.root.structuredRef(component)
 }
 
+func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
+	return c.root.backend.GetNamespaceEntry()
+}
+
 func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
+}
+
+func (c *immutableCtx) RequestHeader(key string) string {
+	if values := metadata.ValueFromIncomingContext(c.ctx, key); len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	reg := c.root.backend.EndpointRegistry()
+	if reg == nil {
+		return nil, errors.New("endpoint registry not available")
+	}
+	return reg.GetByName(c.ctx, c.NamespaceEntry().ID(), name)
 }
 
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
@@ -199,6 +267,14 @@ func (c *mutableCtx) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *mutableCtx) SetRequestLinks(component Component, requestID string, links []*commonpb.Link) error {
+	return c.root.setComponentRequestLinks(component, requestID, links)
+}
+
+func (c *mutableCtx) SetUserMetadata(component Component, md *sdkpb.UserMetadata) error {
+	return c.root.setComponentUserMetadata(component, md)
 }
 
 func (c *mutableCtx) withValue(key any, value any) Context {

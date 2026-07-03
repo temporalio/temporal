@@ -1,21 +1,34 @@
 package nexusoperation
 
 import (
-	"go.temporal.io/api/serviceerror"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // EventCancellationScheduled is triggered when cancellation is meant to be scheduled for the first time - immediately
 // after it has been requested.
 type EventCancellationScheduled struct {
+	// Destination is the endpoint name for the cancellation task.
+	// Must be provided by the caller because ParentPtr is not available during inline creation.
+	Destination string
 }
 
-var transitionCancellationScheduled = chasm.NewTransition(
+var TransitionCancellationScheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationScheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		c.Attempt++
+
+		ctx.AddTask(c, chasm.TaskAttributes{
+			Destination: event.Destination,
+		}, &nexusoperationpb.CancellationTask{
+			Attempt: c.Attempt,
+		})
+
+		return nil
 	},
 )
 
@@ -28,36 +41,68 @@ var transitionCancellationRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF},
 	nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationRescheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		c.Attempt++
+		c.NextAttemptScheduleTime = nil
+
+		ctx.AddTask(c, chasm.TaskAttributes{
+			Destination: c.Operation.Get(ctx).GetEndpoint(),
+		}, &nexusoperationpb.CancellationTask{
+			Attempt: c.Attempt,
+		})
+
+		return nil
 	},
 )
 
 // EventCancellationAttemptFailed is triggered when a cancellation attempt is failed with a retryable error.
 type EventCancellationAttemptFailed struct {
+	Failure     *failurepb.Failure
+	RetryPolicy backoff.RetryPolicy
 }
 
 var transitionCancellationAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAttemptFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		currentTime := ctx.Now(c)
+
+		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		c.LastAttemptFailure = event.Failure
+
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), nil)
+		nextAttemptScheduleTime := currentTime.Add(nextDelay)
+		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
+
+		ctx.AddTask(c, chasm.TaskAttributes{
+			ScheduledTime: nextAttemptScheduleTime,
+		}, &nexusoperationpb.CancellationBackoffTask{
+			Attempt: c.Attempt,
+		})
+
+		return nil
 	},
 )
 
 // EventCancellationFailed is triggered when a cancellation attempt is failed with a non retryable error.
 type EventCancellationFailed struct {
+	Failure *failurepb.Failure
 }
 
-var transitionCancellationFailed = chasm.NewTransition(
+var TransitionCancellationFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{
-		// We can immediately transition to failed to since we don't know how to send a cancellation request for an
+		// We can immediately transition to failed since we don't know how to send a cancellation request for an
 		// unstarted operation.
+		// TODO: This doesn't seem to happen in either the HSM or CHASM implementations.
 		nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED,
 		nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
 	},
 	nexusoperationpb.CANCELLATION_STATUS_FAILED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		currentTime := ctx.Now(c)
+		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		c.LastAttemptFailure = event.Failure
+		// Terminal state - no tasks to emit.
+		return nil
 	},
 )
 
@@ -65,10 +110,15 @@ var transitionCancellationFailed = chasm.NewTransition(
 type EventCancellationSucceeded struct {
 }
 
-var transitionCancellationSucceeded = chasm.NewTransition(
+var TransitionCancellationSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationSucceeded) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		currentTime := ctx.Now(c)
+		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		c.LastAttemptFailure = nil
+
+		// Terminal state - no tasks to emit.
+		return nil
 	},
 )

@@ -29,7 +29,7 @@ type (
 )
 
 type (
-	// JWTAudienceMapper returns JWT audience for a given request
+	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil from streaming RPCs.
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
@@ -92,6 +92,7 @@ type Interceptor struct {
 	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
 	enablePrincipalPropagation   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	disableStreamingAuthorizer   dynamicconfig.BoolPropertyFn
 }
 
 // NewInterceptor creates an authorization interceptor.
@@ -107,6 +108,7 @@ func NewInterceptor(
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
 	enablePrincipalPropagation dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	disableStreamingAuthorizer dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
 		claimMapper:                  claimMapper,
@@ -120,6 +122,7 @@ func NewInterceptor(
 		exposeAuthorizerErrors:       exposeAuthorizerErrors,
 		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
 		enablePrincipalPropagation:   enablePrincipalPropagation,
+		disableStreamingAuthorizer:   disableStreamingAuthorizer,
 	}
 }
 
@@ -180,6 +183,67 @@ func (a *Interceptor) Intercept(
 	}
 	return handler(ctx, req)
 }
+
+// InterceptStream is a gRPC stream server interceptor that enforces authorization.
+func (a *Interceptor) InterceptStream(
+	srv any,
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	ctx := ss.Context()
+	bypassAuth := a.disableStreamingAuthorizer()
+	if !bypassAuth {
+		tlsConnection := TLSInfoFromContext(ctx)
+		headerGetter := headers.NewGRPCHeaderGetter(ctx)
+
+		authInfo := a.GetAuthInfo(tlsConnection, headerGetter, func() string {
+			// Skip the mapper for tokenless streams; calling custom impls with nil req/info would be a behavior change.
+			if a.audienceGetter == nil || headerGetter.Get(a.authHeaderName) == "" {
+				return ""
+			}
+			return a.audienceGetter.Audience(ctx, nil, nil)
+		})
+
+		var claims *Claims
+		if authInfo != nil {
+			var err error
+			claims, err = a.GetClaims(authInfo)
+			if err != nil {
+				a.logger.Error("Authorization error", tag.Error(err))
+				return errUnauthorized
+			}
+			ctx = a.EnhanceContext(ctx, authInfo, claims)
+		}
+
+		// Always strip inbound principal headers to prevent external callers from
+		// spoofing principal identity, regardless of whether the authorizer is enabled.
+		ctx = headers.StripPrincipal(ctx)
+
+		if a.authorizer != nil {
+			// Namespace is not available in the stream handshake (no initial request body).
+			ct := &CallTarget{
+				Namespace: "",
+				APIName:   info.FullMethod,
+				Request:   nil,
+			}
+			if _, err := a.Authorize(ctx, claims, ct); err != nil {
+				a.logger.Error("Authorization error", tag.Error(err))
+				return err
+			}
+		}
+	}
+
+	return handler(srv, &wrappedServerStream{ServerStream: ss, ctx: ctx})
+}
+
+// wrappedServerStream wraps grpc.ServerStream to allow replacing the context.
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedServerStream) Context() context.Context { return w.ctx }
 
 // GetAuthInfo extracts auth info from TLS info and headers.
 // Returns nil if either the policy's claimMapper or authorizer are nil or when there is no auth information in the

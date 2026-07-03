@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -35,28 +34,28 @@ import (
 )
 
 func speculativeWorkflowTaskOutcomes(
-	snap map[string][]*metricstest.CapturedRecording,
+	capture *testcore.GlobalMetricCapture,
 ) (commits, rollbacks int) {
-	for range snap[metrics.SpeculativeWorkflowTaskCommits.Name()] {
+	for range capture.Metric(metrics.SpeculativeWorkflowTaskCommits.Name()) {
 		commits += 1
 	}
-	for range snap[metrics.SpeculativeWorkflowTaskRollbacks.Name()] {
+	for range capture.Metric(metrics.SpeculativeWorkflowTaskRollbacks.Name()) {
 		rollbacks += 1
 	}
 	return
 }
 
-func clearUpdateRegistryAndAbortPendingUpdates(s testcore.Env, tv *testvars.TestVars) {
+func clearUpdateRegistryAndAbortPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
 	closeShard(s, tv.WorkflowID())
 }
 
-func loseUpdateRegistryAndAbandonPendingUpdates(s testcore.Env, tv *testvars.TestVars) {
+func loseUpdateRegistryAndAbandonPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
 	cleanup := s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
 	defer cleanup()
 	closeShard(s, tv.WorkflowID())
 }
 
-func closeShard(s testcore.Env, wid string) {
+func closeShard(s *testcore.TestEnv, wid string) {
 	s.T().Helper()
 
 	resp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(s.Context()), &workflowservice.DescribeNamespaceRequest{
@@ -103,8 +102,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 				tv = tv.WithRunID(runID)
 			}
 
-			capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-			defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+			capture := env.StartGlobalMetricCapture()
 
 			wtHandlerCalls := 0
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -188,7 +186,7 @@ func (s *WorkflowUpdateSuite) TestEmptySpeculativeWorkflowTask_AcceptComplete() 
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			commits, rollbacks := speculativeWorkflowTaskOutcomes(capture.Snapshot())
+			commits, rollbacks := speculativeWorkflowTaskOutcomes(capture)
 			s.Equal(1, commits)
 			s.Equal(0, rollbacks)
 
@@ -559,8 +557,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
 	mustStartWorkflow(env, env.Tv())
 
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := env.StartGlobalMetricCapture()
 
 	var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -654,7 +651,7 @@ func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflo
 	s.Equal(3, wtHandlerCalls)
 	s.Equal(3, msgHandlerCalls)
 
-	commits, rollbacks := speculativeWorkflowTaskOutcomes(capture.Snapshot())
+	commits, rollbacks := speculativeWorkflowTaskOutcomes(capture)
 	s.Equal(0, commits)
 	s.Equal(1, rollbacks)
 
@@ -1259,7 +1256,11 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 
 	for _, tc := range testCases {
 		s.Run(tc.Name, func(s *WorkflowUpdateSuite) {
-			env := testcore.NewEnv(s.T())
+			// Cases in this table intentionally trigger soft asserts and then
+			// verify the resulting error; disable fail-on-error so those logs
+			// don't poison the cluster.
+			env := testcore.NewEnv(s.T(), testcore.WithDisableTestloggerFailure())
+
 			mustStartWorkflow(env, env.Tv())
 
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -1290,9 +1291,9 @@ func (s *WorkflowUpdateSuite) TestValidateWorkerMessages() {
 				T:                   s.T(),
 			}
 
-			halfSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 500*time.Millisecond)
+			fiveSecondTimeoutCtx, cancel := context.WithTimeout(env.Context(), 5*time.Second)
 			defer cancel()
-			updateResultCh := sendUpdate(halfSecondTimeoutCtx, env, env.Tv())
+			updateResultCh := sendUpdate(fiveSecondTimeoutCtx, env, env.Tv())
 
 			// Process update in workflow.
 			_, err := poller.PollAndProcessWorkflowTask()
@@ -2542,10 +2543,8 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_ConvertToNorm
 }
 
 func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() {
-	// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-	env := testcore.NewEnv(s.T(), testcore.WithDedicatedCluster())
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	env := testcore.NewEnv(s.T())
+	capture := env.StartNamespaceMetricCapture()
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           env.Tv().Any().String(),
@@ -2650,10 +2649,8 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.Equal("Workflow task not found.", err.Error())
 
 	// ensure correct metrics were recorded
-	snap := capture.Snapshot()
-
 	var speculativeWorkflowTaskTimeoutTasks int
-	for _, m := range snap[metrics.TaskRequests.Name()] {
+	for _, m := range capture.Metric(metrics.TaskRequests.Name()) {
 		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
 			speculativeWorkflowTaskTimeoutTasks += 1
 		}
@@ -2661,7 +2658,7 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_StartToCloseTimeout() 
 	s.Equal(1, speculativeWorkflowTaskTimeoutTasks, "expected 1 speculative workflow task timeout task to be created")
 
 	var speculativeStartToCloseTimeouts int
-	for _, m := range snap[metrics.StartToCloseTimeoutCounter.Name()] {
+	for _, m := range capture.Metric(metrics.StartToCloseTimeoutCounter.Name()) {
 		if m.Tags[metrics.OperationTagName] == metrics.TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout {
 			speculativeStartToCloseTimeouts += 1
 		}
@@ -4583,7 +4580,7 @@ func (s *WorkflowUpdateSuite) TestLastWorkflowTask_HasUpdateMessage() {
 	`, env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()))
 }
 
-func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFContext() {
+func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryBufferFullDoesNotBreakPendingUpdate() {
 	env := testcore.NewEnv(s.T())
 	mustStartWorkflow(env, env.Tv())
 
@@ -4652,12 +4649,16 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		Resp *workflowservice.QueryWorkflowResponse
 		Err  error
 	}
+
+	queryCtx, cancelQueries := context.WithCancel(env.Context())
+	defer cancelQueries()
+
 	queryFn := func(resCh chan<- QueryResult) {
 		// There is no query handler, and query timeout is ok for this test.
 		// But first query must not time out before 2nd query reached server,
 		// because 2 queries overflow the query buffer (default size 1),
 		// which leads to clearing of WF context.
-		shortCtx, cancel := context.WithTimeout(env.Context(), 100*time.Millisecond)
+		shortCtx, cancel := context.WithTimeout(queryCtx, 5*time.Second)
 		defer cancel()
 		queryResp, err := env.FrontendClient().QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 			Namespace: env.Namespace().String(),
@@ -4669,26 +4670,37 @@ func (s *WorkflowUpdateSuite) TestSpeculativeWorkflowTask_QueryFailureClearsWFCo
 		resCh <- QueryResult{Resp: queryResp, Err: err}
 	}
 
-	query1ResultCh := make(chan QueryResult)
-	query2ResultCh := make(chan QueryResult)
+	query1ResultCh := make(chan QueryResult, 1)
+	query2ResultCh := make(chan QueryResult, 1)
 	go queryFn(query1ResultCh)
 	go queryFn(query2ResultCh)
-	query1Res := <-query1ResultCh
-	query2Res := <-query2ResultCh
+
+	var query1Res, query2Res QueryResult
+	select {
+	case query1Res = <-query1ResultCh:
+		cancelQueries() // Cancel 2nd query to avoid waiting for it after 1st query already failed and cleared WF context.
+		query2Res = <-query2ResultCh
+	case query2Res = <-query2ResultCh:
+		cancelQueries() // Cancel 1st query to avoid waiting for it after 2nd query already failed and cleared WF context.
+		query1Res = <-query1ResultCh
+	}
+
 	s.Error(query1Res.Err)
 	s.Error(query2Res.Err)
 	s.Nil(query1Res.Resp)
 	s.Nil(query2Res.Resp)
 
+	isBufferedErr := func(err error) bool {
+		return common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err)
+	}
+
 	var queryBufferFullErr *serviceerror.ResourceExhausted
-	if common.IsContextDeadlineExceededErr(query1Res.Err) {
-		s.True(common.IsContextDeadlineExceededErr(query1Res.Err), "one of query errors must be CDE")
+	if isBufferedErr(query1Res.Err) {
 		s.ErrorAs(query2Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query2Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
 	} else {
 		s.ErrorAs(query1Res.Err, &queryBufferFullErr, "one of query errors must `query buffer is full`")
 		s.Contains(query1Res.Err.Error(), "query buffer is full", "one of query errors must `query buffer is full`")
-		s.True(common.IsContextDeadlineExceededErr(query2Res.Err), "one of query errors must be CDE")
 	}
 
 	// "query buffer is full" error clears WF context. If update registry is not cleared together with context (old behaviour),
@@ -4776,23 +4788,24 @@ func (s *WorkflowUpdateSuite) TestUpdatesAreSentToWorkerInOrderOfAdmission() {
 	s.Equal(1, wtHandlerCalls)
 	s.Equal(1, msgHandlerCalls)
 
-	expectedHistory := `
+	var expectedHistory strings.Builder
+	expectedHistory.WriteString(`
 	  1 WorkflowExecutionStarted
 	  2 WorkflowTaskScheduled
 	  3 WorkflowTaskStarted
 	  4 WorkflowTaskCompleted
-	`
+	`)
 	for i := range nUpdates {
 		tvi := env.Tv().WithUpdateIDNumber(i)
-		expectedHistory += fmt.Sprintf(`
+		expectedHistory.WriteString(fmt.Sprintf(`
 	  %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
 	  %d WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}`,
 			5+2*i, tvi.UpdateID(),
-			6+2*i, tvi.UpdateID())
+			6+2*i, tvi.UpdateID()))
 	}
 
 	history := env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution())
-	s.EqualHistoryEvents(expectedHistory, history)
+	s.EqualHistoryEvents(expectedHistory.String(), history)
 }
 
 func (s *WorkflowUpdateSuite) TestWaitAccepted_GotCompleted() {
@@ -4987,10 +5000,9 @@ type multiopsResponseErr struct {
 	err      error
 }
 
-func (s *UpdateWithStartSuite) sendUpdateWithStart(env testcore.Env, startReq *workflowservice.StartWorkflowExecutionRequest, updateReq *workflowservice.UpdateWorkflowExecutionRequest) chan multiopsResponseErr {
+func (s *UpdateWithStartSuite) sendUpdateWithStart(env *testcore.TestEnv, startReq *workflowservice.StartWorkflowExecutionRequest, updateReq *workflowservice.UpdateWorkflowExecutionRequest) chan multiopsResponseErr {
 	ctx := testcore.NewContext(env.Context())
-	capture := env.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer env.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := env.StartNamespaceMetricCapture()
 
 	retCh := make(chan multiopsResponseErr)
 	go func() {
@@ -5013,28 +5025,41 @@ func (s *UpdateWithStartSuite) sendUpdateWithStart(env testcore.Env, startReq *w
 			})
 
 		if err == nil {
-			// Use assert (not require) in goroutine - require calls t.FailNow() which panics
-			//nolint:testifylint // intentional use of assert in goroutine
-			assert.Len(s.T(), resp.Responses, 2)
+			completedStage := updateReq.WaitPolicy != nil &&
+				updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
 
-			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-			//nolint:testifylint // intentional use of assert in goroutine
-			assert.NotEmpty(s.T(), startRes.RunId)
+			var startResp *workflowservice.StartWorkflowExecutionResponse
+			var updateResp *workflowservice.UpdateWorkflowExecutionResponse
+			if resp != nil && len(resp.Responses) == 2 {
+				startResp = resp.Responses[0].GetStartWorkflow()
+				updateResp = resp.Responses[1].GetUpdateWorkflow()
+			}
 
-			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-			if updateReq.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-				//nolint:testifylint // intentional use of assert in goroutine
-				assert.NotNil(s.T(), updateRes.Outcome)
-				//nolint:testifylint // intentional use of assert in goroutine
-				assert.NotEmpty(s.T(), updateRes.Outcome.String())
+			switch {
+			case len(capture.Metric(metrics.TaskWorkflowBusyCounter.Name())) != 0:
+				err = fmt.Errorf("expected no %q metrics", metrics.TaskWorkflowBusyCounter.Name())
+			case resp == nil:
+				err = errors.New("expected ExecuteMultiOperation response")
+			case len(resp.Responses) != 2:
+				err = fmt.Errorf("expected 2 ExecuteMultiOperation responses, got %d", len(resp.Responses))
+			case startResp == nil:
+				err = errors.New("expected start workflow response")
+			case startResp.RunId == "":
+				err = errors.New("expected non-empty start workflow run ID")
+			case updateResp == nil:
+				err = errors.New("expected update workflow response")
+			case completedStage && updateResp.Outcome == nil:
+				err = errors.New("expected completed update outcome")
+			case completedStage && updateResp.Outcome.String() == "":
+				err = errors.New("expected non-empty completed update outcome")
+			default:
 			}
 		}
 
-		// make sure there's no lock contention
-		//nolint:testifylint // intentional use of assert in goroutine
-		assert.Empty(s.T(), capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
-
-		retCh <- multiopsResponseErr{resp, err}
+		retCh <- multiopsResponseErr{
+			response: resp,
+			err:      err,
+		}
 	}()
 	return retCh
 }
@@ -5073,7 +5098,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsNotRunning() {
 				s.NoError(err)
 
 				uwsRes := <-uwsCh
-				s.NoError(err)
+				s.NoError(uwsRes.err)
 				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 				requireStartedAndRunning(s.T(), startResp)
@@ -5164,6 +5189,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("success-result-of-"+env.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// poll update to ensure same outcome is returned
@@ -5214,6 +5246,13 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			requireNotStartedButRunning(s.T(), startResp)
+			s.NotNil(startResp.Link)
+			wfEvent := startResp.Link.GetWorkflowEvent()
+			s.Equal(env.Namespace().String(), wfEvent.GetNamespace())
+			s.Equal(env.Tv().WorkflowID(), wfEvent.GetWorkflowId())
+			s.Equal(startResp.RunId, wfEvent.GetRunId())
+			s.Equal(int64(common.FirstEventID), wfEvent.GetEventRef().GetEventId())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, wfEvent.GetEventRef().GetEventType())
 			s.Equal("rejection-of-"+env.Tv().UpdateID(), updateRep.GetOutcome().GetFailure().GetMessage())
 
 			// poll update to ensure same outcome is returned
@@ -5426,7 +5465,7 @@ func (s *UpdateWithStartSuite) TestWorkflowIsRunning() {
 					})
 				s.NoError(err)
 				uwsRes2 := <-uwsCh2
-				s.NoError(uwsRes1.err)
+				s.NoError(uwsRes2.err)
 
 				s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 			})

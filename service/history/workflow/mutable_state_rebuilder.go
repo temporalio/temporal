@@ -89,7 +89,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	// TODO: There doesn't seem to be a good reason to generate tasks here since they'll be generated eventually when we
 	// close the transaction.
 	// Previously this comment was here: must generate the activity timer / user timer at the very end
-	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
+	taskGenerator := GetTaskGeneratorProvider().NewTaskGenerator(b.shard, b.mutableState)
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
 
-	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
+	taskGenerator := GetTaskGeneratorProvider().NewTaskGenerator(b.shard, b.mutableState)
 
 	// Need to clear the sticky task queue because workflow turned to passive.
 	b.mutableState.ClearStickyTaskQueue()
@@ -143,6 +143,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 		return nil, err
 	}
 	executionInfo.LastRunningClock = lastEvent.GetTaskId()
+
+	// [history] is a single persistence batch, so firstEvent.EventId is the batch ID for every
+	// event applied below. Event definitions that generate load tokens (e.g. NexusOperationScheduled)
+	// read this via GenerateEventLoadToken to find the original batch ID.
+	b.mutableState.SetReplayEventBatchID(firstEvent.GetEventId())
 
 	for _, event := range history {
 		switch event.GetEventType() {
@@ -237,7 +242,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetWorkerVersion(),
 				attributes.GetBuildIdRedirectCounter(),
 				attributes.GetSuggestContinueAsNewReasons(),
-				attributes.GetTargetWorkerDeploymentVersionChanged(),
 			)
 			if err != nil {
 				return nil, err
@@ -670,6 +674,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED:
 			if err := b.mutableState.ApplyWorkflowExecutionUnpausedEvent(event); err != nil {
+				return nil, err
+			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			if err := b.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event); err != nil {
 				return nil, err
 			}
 

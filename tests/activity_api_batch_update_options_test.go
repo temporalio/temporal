@@ -45,7 +45,10 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) createBatchUpdateOptionsWorkflow(en
 }
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSuccess() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit))
+	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("batch operations"),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+	)
 
 	ctx := env.Context()
 
@@ -190,7 +193,10 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsSucce
 }
 
 func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFailed() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit))
+	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("batch operations"),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+	)
 
 	// neither activity type nor "match all" is provided
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{

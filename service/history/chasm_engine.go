@@ -447,6 +447,11 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	serializedRef, err := mutableContext.Ref(component)
 	if err != nil {
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			// The update may legitimately delete the addressed component, in which case
+			// there is no new ref to return even though the transition succeeded.
+			return nil, nil
+		}
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
@@ -580,7 +585,7 @@ func (e *ChasmEngine) deleteExecution(
 		if err != nil {
 			return err
 		}
-		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: ref.BusinessID}) == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 			chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 			if !ok {
 				return serviceerror.NewInternalf(
@@ -922,6 +927,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		historyi.TransactionPolicyActive,
 	)
 	if err == nil {
 		return currentExecutionInfo{}, false, nil
@@ -1107,6 +1113,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err

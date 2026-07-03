@@ -152,6 +152,16 @@ func recordActivityTaskStarted(
 		if ai.RequestId == requestID {
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
+			if ai.StartedClock != nil {
+				response.Clock = ai.StartedClock
+			} else {
+				// Activity started before the StartedClock field was added.
+				// Create a fresh clock for the shard staleness check.
+				response.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, rejectCodeUndefined, err
+				}
+			}
 			return response, rejectCodeAccepted, nil
 		}
 
@@ -238,10 +248,21 @@ func recordActivityTaskStarted(
 		}
 	}
 
+	// Create the shard clock before recording the start event. Matching uses the returned clock
+	// to build the task token sent to the worker. We store it in ActivityInfo so that history
+	// can later reconstruct the same task token that matching created (e.g. for cancel worker
+	// commands). On retries of this RPC, we return the stored clock from the early return
+	// path above.
+	clock, err := shardContext.NewVectorClock()
+	if err != nil {
+		return nil, rejectCodeUndefined, err
+	}
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions) //nolint:staticcheck // SA1019: WorkerVersionCapabilities is deprecated but still used for old versioning [cleanup-old-wv]
 	if _, err := mutableState.AddActivityTaskStartedEvent(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
+		request.PollRequest.GetWorkerControlTaskQueue(),
+		clock,
 	); err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -259,6 +280,8 @@ func recordActivityTaskStarted(
 				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
 	).Record(scheduleToStartLatency)
+
+	response.Clock = clock
 
 	response.StartedTime = ai.StartedTime
 	response.Attempt = ai.Attempt
@@ -315,7 +338,16 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	}
 
 	// Apply workflow-specific routing logic
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId)
+	// Note: Passing false useRampingVersionForInitialTask because activity is never the initial task.
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
+		routingInfo.Current,
+		routingInfo.CurrentRevisionNumber,
+		routingInfo.Ramping,
+		routingInfo.RampPercentage,
+		routingInfo.RampingRevisionNumber,
+		workflowId,
+		false,
+	)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
@@ -355,10 +387,7 @@ func processActivityWorkflowRules(
 
 	// activity was paused, need to update activity
 	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
-		activityInfo.StartedEventId = common.EmptyEventID
-		activityInfo.StartVersion = common.EmptyVersion
-		activityInfo.StartedTime = nil
-		activityInfo.RequestId = ""
+		workflow.ClearActivityStartedState(activityInfo)
 		return nil
 	}); err != nil {
 		return rejectCodeUndefined, err

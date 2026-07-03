@@ -26,7 +26,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -478,7 +477,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -541,6 +540,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
 			nil,
+			-1, // sentinel: synthetic event, no routing info
 		)
 		if err != nil {
 			return err
@@ -872,6 +872,7 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
+				attr.GetRequestId(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
@@ -969,6 +970,9 @@ func reapplyEvents(
 				event.Links,
 				attr.GetIdentity(),
 				attr.GetPriority(),
+				attr.GetTimeSkippingConfig(),
+				attr.GetTimeSkippingConfigUpdated(),
+				attr.GetWorkflowUpdateOptions(),
 			); err != nil {
 				return reappliedEvents, err
 			}

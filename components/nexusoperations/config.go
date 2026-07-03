@@ -147,9 +147,9 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.metrics.tags",
 	chasmnexus.NexusMetricTagConfig{},
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
-1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
-2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
+1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag). Used by callers and handlers.
+2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag). Used by callers and handlers.
+3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage
@@ -179,6 +179,7 @@ type Config struct {
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
+	MetricTagConfig                     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
@@ -198,6 +199,7 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
+		MetricTagConfig:                     MetricTagConfiguration.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -209,4 +211,14 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		},
 		NumHistoryShards: cfg.NumHistoryShards,
 	}
+}
+
+// ResolvedMetricTagConfig returns the configured metric tag config, defaulting to an empty config
+// when the receiver or the setting is nil (e.g. in tests that construct a bare Config). It is
+// nil-receiver safe.
+func (c *Config) ResolvedMetricTagConfig() chasmnexus.NexusMetricTagConfig {
+	if c == nil || c.MetricTagConfig == nil {
+		return chasmnexus.NexusMetricTagConfig{}
+	}
+	return c.MetricTagConfig()
 }

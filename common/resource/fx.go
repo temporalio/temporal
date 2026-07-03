@@ -40,7 +40,9 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -86,6 +88,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
+	fx.Provide(func() namespace.NamespaceStateChangedFn { return nsregistry.DefaultNamespaceStateChanged }),
 	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
@@ -156,11 +159,12 @@ func SearchAttributeMapperProviderProvider(
 	searchAttributeProvider searchattribute.Provider,
 	persistenceConfig *config.Persistence,
 ) searchattribute.MapperProvider {
+	primaryVisibilityStoreConfig := persistenceConfig.GetVisibilityStoreConfig()
 	return searchattribute.NewMapperProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		persistenceConfig.IsSQLVisibilityStore() || persistenceConfig.IsCustomVisibilityStore(),
+		primaryVisibilityStoreConfig.GetIndexName(),
 	)
 }
 
@@ -198,6 +202,8 @@ func SearchAttributeValidatorProvider(
 	saMapperProvider searchattribute.MapperProvider,
 	visibilityMgr manager.VisibilityManager,
 	dynamicCollection *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *searchattribute.Validator {
 	return searchattribute.NewValidator(
 		saProvider,
@@ -211,26 +217,34 @@ func SearchAttributeValidatorProvider(
 			dynamicconfig.VisibilityAllowList.Get(dynamicCollection),
 		),
 		dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dynamicCollection),
+		metricsHandler,
+		logger,
 	)
 }
 
-func NamespaceRegistryProvider(
-	logger log.SnTaggedLogger,
-	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
-	metadataManager persistence.MetadataManager,
-	dynamicCollection *dynamicconfig.Collection,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
-) namespace.Registry {
+type NamespaceRegistryParams struct {
+	fx.In
+
+	Logger                     log.SnTaggedLogger
+	MetricsHandler             metrics.Handler
+	ClusterMetadata            cluster.Metadata
+	MetadataManager            persistence.MetadataManager
+	DynamicCollection          *dynamicconfig.Collection
+	ReplicationResolverFactory namespace.ReplicationResolverFactory
+	NamespaceStateChangedFn    namespace.NamespaceStateChangedFn
+}
+
+func NamespaceRegistryProvider(params NamespaceRegistryParams) namespace.Registry {
 	return nsregistry.NewRegistry(
-		metadataManager,
-		clusterMetadata.IsGlobalNamespaceEnabled(),
-		clusterMetadata.GetCurrentClusterName(),
-		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
-		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(dynamicCollection),
-		metricsHandler,
-		logger,
-		replicationResolverFactory,
+		params.MetadataManager,
+		params.ClusterMetadata.IsGlobalNamespaceEnabled(),
+		params.ClusterMetadata.GetCurrentClusterName(),
+		dynamicconfig.NamespaceCacheRefreshInterval.Get(params.DynamicCollection),
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Get(params.DynamicCollection),
+		params.MetricsHandler,
+		params.Logger,
+		params.ReplicationResolverFactory,
+		params.NamespaceStateChangedFn,
 	)
 }
 
@@ -303,10 +317,10 @@ func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
 	return clientBean.GetHistoryClient()
 }
 
-func HistoryClientProvider(historyRawClient HistoryRawClient) HistoryClient {
+func HistoryClientProvider(historyRawClient HistoryRawClient, dc *dynamicconfig.Collection) HistoryClient {
 	return history.NewRetryableClient(
 		historyRawClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 		common.IsServiceClientTransientError,
 	)
 }
@@ -318,10 +332,10 @@ func MatchingRawClientProvider(
 	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 }
 
-func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient {
+func MatchingClientProvider(matchingRawClient MatchingRawClient, dc *dynamicconfig.Collection) MatchingClient {
 	return matching.NewRetryableClient(
 		matchingRawClient,
-		common.CreateMatchingClientRetryPolicy(),
+		common.CreateMatchingClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 		common.CreateMatchingClientLongPollRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
@@ -387,8 +401,15 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 	return cfg.DCRedirectionPolicy
 }
 
-func PerServiceDialOptionsProvider() map[primitives.ServiceName][]grpc.DialOption {
-	return map[primitives.ServiceName][]grpc.DialOption{}
+func PerServiceDialOptionsProvider(
+	logger log.SnTaggedLogger,
+) map[primitives.ServiceName][]grpc.DialOption {
+	trailerInterceptor := interceptor.TrailerToContextMetadataInterceptor(logger)
+	dialOpt := grpc.WithChainUnaryInterceptor(trailerInterceptor)
+	return map[primitives.ServiceName][]grpc.DialOption{
+		primitives.HistoryService:  {dialOpt},
+		primitives.MatchingService: {dialOpt},
+	}
 }
 
 func RPCFactoryProvider(
@@ -402,6 +423,7 @@ func RPCFactoryProvider(
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
+	tokenProvider auth.TokenProvider,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -427,6 +449,7 @@ func RPCFactoryProvider(
 		options,
 		perServiceDialOptions,
 		monitor,
+		tokenProvider,
 	)
 	factory.EnableInternodeServerKeepalive = enableServerKeepalive
 	factory.EnableInternodeClientKeepalive = enableClientKeepalive

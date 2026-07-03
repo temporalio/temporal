@@ -301,6 +301,18 @@ type (
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
 		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
+
+		// Injector optionally injects faults using runtime code instead of static YAML config.
+		Injector FaultInjector `yaml:"-" json:"-"`
+	}
+
+	FaultInjector func(FaultInjectionTarget) error
+
+	FaultInjectionTarget struct {
+		Store  DataStoreName
+		Method string
+		// Request is optionally populated by fault injection wrappers for request-aware faults.
+		Request any
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
@@ -400,6 +412,18 @@ type (
 		SerialConsistency string `yaml:"serialConsistency"`
 	}
 
+	// PasswordCommandConfig configures an external command to fetch the datastore password.
+	// The command's stdout is used as the password.
+	PasswordCommandConfig struct {
+		// Command is the path to the executable to run.
+		Command string `yaml:"command"`
+		// Args is the list of arguments to pass to the command.
+		Args []string `yaml:"args"`
+		// Timeout is the maximum duration to wait for the command to complete.
+		// Defaults to 30 seconds if unset.
+		Timeout time.Duration `yaml:"timeout"`
+	}
+
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
 		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
@@ -408,6 +432,11 @@ type (
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
 		Password string `yaml:"password"`
+		// PasswordCommand executes an external command and uses its stdout as the password.
+		// Mutually exclusive with Password.
+		// If the command returns an expiring token (e.g. cloud IAM), set MaxConnLifetime
+		// to ensure connections are recycled before the token expires.
+		PasswordCommand *PasswordCommandConfig `yaml:"passwordCommand"`
 		// PluginName is the name of SQL plugin
 		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
@@ -623,6 +652,14 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

@@ -23,10 +23,11 @@ type (
 
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
-		namespaceRegistry               namespace.Registry
-		tokenSerializer                 *tasktoken.Serializer
-		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
-		maxNamespaceLength              dynamicconfig.IntPropertyFn
+		namespaceRegistry                      namespace.Registry
+		tokenSerializer                        *tasktoken.Serializer
+		enableTokenNamespaceEnforcement        dynamicconfig.BoolPropertyFn
+		maxNamespaceLength                     dynamicconfig.IntPropertyFn
+		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 )
 
@@ -92,12 +93,18 @@ func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
+	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceValidatorInterceptor {
+	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
+	for _, m := range additionalAllowedMethodsDuringHandover {
+		additional[m] = struct{}{}
+	}
 	return &NamespaceValidatorInterceptor{
-		namespaceRegistry:               namespaceRegistry,
-		tokenSerializer:                 tasktoken.NewSerializer(),
-		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
-		maxNamespaceLength:              maxNamespaceLength,
+		namespaceRegistry:                      namespaceRegistry,
+		tokenSerializer:                        tasktoken.NewSerializer(),
+		enableTokenNamespaceEnforcement:        enableTokenNamespaceEnforcement,
+		additionalAllowedMethodsDuringHandover: additional,
+		maxNamespaceLength:                     maxNamespaceLength,
 	}
 }
 
@@ -203,7 +210,7 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	if err := ni.ValidateState(namespaceEntry, info.FullMethod, GetBusinessIDFromContext(ctx)); err != nil {
+	if err := ni.ValidateState(namespaceEntry, info.FullMethod, GetRoutingKeyFromContext(ctx).ID); err != nil {
 		return nil, err
 	}
 
@@ -389,6 +396,9 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 	methodName := api.MethodName(fullMethod)
 
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
+		return nil
+	}
+	if _, ok := ni.additionalAllowedMethodsDuringHandover[methodName]; ok {
 		return nil
 	}
 

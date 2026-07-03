@@ -19,6 +19,7 @@ type (
 		adminservice.AdminServiceClient
 		describeTaskQueuePartitionFn    func(request *adminservice.DescribeTaskQueuePartitionRequest) (*adminservice.DescribeTaskQueuePartitionResponse, error)
 		forceUnloadTaskQueuePartitionFn func(request *adminservice.ForceUnloadTaskQueuePartitionRequest) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error)
+		getTaskQueueUserDataFn          func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error)
 	}
 )
 
@@ -82,6 +83,10 @@ func (t *testClient) ForceUnloadTaskQueuePartition(_ context.Context, request *a
 	return t.forceUnloadTaskQueuePartitionFn(request)
 }
 
+func (t *testClient) GetTaskQueueUserData(_ context.Context, request *adminservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*adminservice.GetTaskQueueUserDataResponse, error) {
+	return t.getTaskQueueUserDataFn(request)
+}
+
 func (s *taskQueueCommandTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
@@ -93,6 +98,9 @@ func (s *taskQueueCommandTestSuite) SetupTest() {
 		},
 		forceUnloadTaskQueuePartitionFn: func(request *adminservice.ForceUnloadTaskQueuePartitionRequest) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error) {
 			return &adminservice.ForceUnloadTaskQueuePartitionResponse{}, nil
+		},
+		getTaskQueueUserDataFn: func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error) {
+			return &adminservice.GetTaskQueueUserDataResponse{}, nil
 		},
 	}
 	s.app = NewCliApp(func(params *Params) {
@@ -162,4 +170,53 @@ func (s *taskQueueCommandTestSuite) TestForceUnloadTaskQueuePartition() {
 			s.ErrorContainsf(resp, test.err.Error(), "error present")
 		}
 	}
+}
+
+// TestGetTaskQueueUserData tests that the cli accepts the various arguments for get-user-data.
+func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
+	baseCommand := []string{"tdbg", "taskqueue", "get-user-data",
+		"--namespace", "default", "--task-queue", "test"}
+
+	// Run shared test cases, skipping sticky-name (not a registered flag on this command)
+	// and unspecified type (this command defaults to workflow instead of erroring).
+	for _, test := range testCases {
+		if len(test.inputFlags) > 0 && (test.inputFlags[0] == "--sticky-name" ||
+			test.inputFlags[1] == "TASK_QUEUE_TYPE_UNSPECIFIED") {
+			continue
+		}
+		cliCommand := append(baseCommand, test.inputFlags...)
+		resp := s.app.Run(cliCommand)
+		if test.err != nil {
+			s.ErrorContainsf(resp, test.err.Error(), "error present")
+		} else {
+			s.NoError(resp)
+		}
+	}
+
+	// TASK_QUEUE_TYPE_UNSPECIFIED defaults to WORKFLOW (no error).
+	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data",
+		"--namespace", "default", "--task-queue", "test",
+		"--task-queue-type", "TASK_QUEUE_TYPE_UNSPECIFIED"}))
+
+	// Missing --task-queue is enforced by cli/v2 (Required: true) before the action runs.
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data", "--namespace", "default"}))
+
+	// Missing --namespace is enforced by cli/v2 (Required: true) before the action runs.
+	s.Error(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data", "--task-queue", "test"}))
+
+	// No --task-queue-type or --partition-id: both use their defaults and succeed.
+	s.NoError(s.app.Run([]string{"tdbg", "taskqueue", "get-user-data",
+		"--namespace", "default", "--task-queue", "test"}))
+
+	// Matching client returns an error: CLI wraps and returns it.
+	errorClient := &testClient{
+		getTaskQueueUserDataFn: func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error) {
+			return nil, errors.New("matching unavailable")
+		},
+	}
+	errorApp := NewCliApp(func(params *Params) { params.ClientFactory = errorClient })
+	errorApp.ExitErrHandler = func(context *cli.Context, err error) {}
+	resp := errorApp.Run([]string{"tdbg", "taskqueue", "get-user-data",
+		"--namespace", "default", "--task-queue", "test"})
+	s.ErrorContains(resp, "unable to get Task Queue User Data")
 }

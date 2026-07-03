@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -132,6 +134,47 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.Len(t, generator.FutureActionTimes, 2)
 }
 
+func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Exhaust the schedule's actions so it goes idle (no more work to do).
+	sched.Schedule.State.LimitedActions = true
+	sched.Schedule.State.RemainingActions = 0
+
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	// The idle-close deadline must be recorded so it can be surfaced as the
+	// ScheduleIdleCloseTime search attribute.
+	require.NotNil(t, sched.IdleCloseTime, "expected IdleCloseTime to be set once idle")
+	require.True(t, sched.IdleCloseTime.AsTime().After(ctx.Now(generator)),
+		"expected idle-close deadline in the future, got %v", sched.IdleCloseTime.AsTime())
+}
+
+func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Simulate a stale deadline left over from a prior idle period.
+	sched.IdleCloseTime = timestamppb.New(ctx.Now(generator).Add(7 * 24 * time.Hour))
+
+	// A normal execution generates future actions, so the schedule is not idle.
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, generator.FutureActionTimes)
+	require.Nil(t, sched.IdleCloseTime, "expected IdleCloseTime to be cleared when the schedule has work")
+}
+
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
@@ -152,4 +195,32 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	for _, futureTime := range generator.FutureActionTimes {
 		require.True(t, futureTime.AsTime().After(updateTime))
 	}
+}
+
+func TestUnpause_ResumesProcessing(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Pause the schedule.
+	env.Scheduler.Schedule.State.Paused = true
+	require.NoError(t, env.CloseTransaction())
+
+	// Clear tasks from setup, then unpause. UpdateTime is captured at T0.
+	env.NodeBackend.TasksByCategory = nil
+	ctx := env.MutableContext()
+	_, err := env.Scheduler.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Patch: &schedulepb.SchedulePatch{Unpause: "resuming"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Advance time before closing so the generator has actions to process.
+	env.TimeSource.Update(env.TimeSource.Now().Add(defaultInterval * 3))
+	require.NoError(t, env.CloseTransaction())
+
+	// With the fix, Patch kicks an immediate generator task. During CloseTransaction
+	// it processes the elapsed interval, buffers starts, and the invoker schedules
+	// side-effect tasks to start workflows. Without the fix, nothing runs.
+	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
+		"schedule should resume processing after unpause")
 }

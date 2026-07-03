@@ -12,6 +12,10 @@ type MatchingBehavior struct {
 	ForceAsync       bool
 }
 
+type hookInjector interface {
+	InjectHook(hook testhooks.Hook) (cleanup func())
+}
+
 // Name returns a descriptive name for this behavior combination.
 func (b MatchingBehavior) Name() string {
 	name := "NoTaskForward"
@@ -33,7 +37,9 @@ func (b MatchingBehavior) Name() string {
 
 // Options returns the TestOptions to configure matching behavior.
 func (b MatchingBehavior) Options() []TestOption {
-	var opts []TestOption
+	opts := []TestOption{
+		WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
+	}
 	if b.ForceTaskForward || b.ForcePollForward {
 		opts = append(opts,
 			WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13),
@@ -49,7 +55,7 @@ func (b MatchingBehavior) Options() []TestOption {
 }
 
 // InjectHooks injects the test hooks for this matching behavior.
-func (b MatchingBehavior) InjectHooks(env Env) {
+func (b MatchingBehavior) InjectHooks(env hookInjector) {
 	if b.ForceTaskForward {
 		env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 11))
 	} else {

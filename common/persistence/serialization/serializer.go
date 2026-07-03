@@ -139,7 +139,7 @@ type (
 )
 
 func NewSerializer() Serializer {
-	return &serializerImpl{encodingType: EncodingTypeFromEnv()}
+	return &serializerImpl{encodingType: encodingTypeFromEnv()}
 }
 
 func (t *serializerImpl) EncodingType() enumspb.EncodingType {
