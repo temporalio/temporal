@@ -1122,14 +1122,11 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	eventBlobs []*commonpb.DataBlob,
 	isNewMutableState bool,
 ) ([]byte, error) {
-	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
 	startTime := time.Now().UTC()
+	nsName := namespace.EmptyName.String()
 	defer func() {
 		metrics.ReplicationBackfillEventsLatency.With(r.shardContext.GetMetricsHandler()).
-			Record(time.Since(startTime), metrics.NamespaceTag(ns.Name().String()))
+			Record(time.Since(startTime), metrics.NamespaceTag(nsName))
 	}()
 
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
@@ -1221,6 +1218,11 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return newBranchToken, err
+	}
+	nsName = ns.Name().String()
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
 	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
