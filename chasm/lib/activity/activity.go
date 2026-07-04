@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -639,12 +640,13 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 
 	frontendReq := req.GetFrontendRequest()
+	updateFields := map[string]struct{}{}
+	if mask := frontendReq.GetUpdateMask(); mask != nil {
+		updateFields = util.ParseFieldMask(mask)
+	}
 
 	// start_delay updates are only valid while the activity is still in its delay window.
-	var hasStartDelayInMask bool
-	if mask := frontendReq.GetUpdateMask(); mask != nil {
-		_, hasStartDelayInMask = util.ParseFieldMask(mask)["startDelay"]
-	}
+	_, hasStartDelayInMask := updateFields["startDelay"]
 	if !frontendReq.GetRestoreOriginal() && hasStartDelayInMask {
 		newDelay := frontendReq.GetActivityOptions().GetStartDelay()
 		if err := validateStartDelay(newDelay); err != nil {
@@ -662,6 +664,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 				"cannot update start_delay: activity is no longer in its delay window")
 		}
 	}
+
+	attempt := a.LastAttempt.Get(ctx)
+	policyRetryIntervalBeforeUpdate := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
 
 	if frontendReq.GetRestoreOriginal() {
 		ogOptions := a.GetOriginalOptions()
@@ -683,15 +688,14 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 	}
 
-	attempt := a.LastAttempt.Get(ctx)
-
-	// Recalculate the retry interval based on the (possibly updated) retry policy.
-	// This ensures a shortened retry interval takes effect immediately on re-dispatch.
-	status := a.GetStatus()
-	if (status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
-		status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED) &&
-		attempt.GetCurrentRetryInterval() != nil {
-
+	// Recalculate policy-derived retry intervals based on the (possibly updated) retry policy.
+	// Worker-provided NextRetryDelay values are preserved for their already-scheduled retry.
+	if a.shouldRecalculateCurrentRetryInterval(
+		attempt,
+		frontendReq.GetRestoreOriginal(),
+		updateFields,
+		policyRetryIntervalBeforeUpdate,
+	) {
 		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
 		attempt.CurrentRetryInterval = durationpb.New(newInterval)
 	}
@@ -726,6 +730,42 @@ func (a *Activity) UpdateActivityExecutionOptions(
 			},
 		},
 	}, nil
+}
+
+func (a *Activity) shouldRecalculateCurrentRetryInterval(
+	attempt *activitypb.ActivityAttemptState,
+	restoreOriginal bool,
+	updateFields map[string]struct{},
+	policyRetryIntervalBeforeUpdate time.Duration,
+) bool {
+	status := a.GetStatus()
+	if status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
+		status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+		return false
+	}
+
+	currentRetryInterval := attempt.GetCurrentRetryInterval()
+	if currentRetryInterval == nil {
+		return false
+	}
+
+	if !restoreOriginal {
+		hasRetryPolicyInMask := false
+		for field := range updateFields {
+			if field == "retryPolicy" || strings.HasPrefix(field, "retryPolicy.") {
+				hasRetryPolicyInMask = true
+				break
+			}
+		}
+		if !hasRetryPolicyInMask {
+			return false
+		}
+	}
+
+	// CurrentRetryInterval stores either policy-derived backoff or worker-provided NextRetryDelay overrides.
+	// Only recalculate intervals that match the old policy value; different values are treated as explicit
+	// worker overrides.
+	return currentRetryInterval.AsDuration() == policyRetryIntervalBeforeUpdate
 }
 
 // mergeActivityOptions applies the field mask from the request to the activity state.
