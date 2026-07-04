@@ -230,6 +230,9 @@ message ActivityAttemptState {
   // The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
   // `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
   string sdk_version = 11;
+
+  // Time the current activity attempt is scheduled to dispatch.
+  google.protobuf.Timestamp dispatch_time = 12;
 }
 
 message ActivityHeartbeatState {

@@ -49,6 +49,7 @@ var TransitionScheduled = chasm.NewTransition(
 		// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
 		// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
 		dispatchTime := a.firstDispatchTime()
+		attempt.DispatchTime = timestamppb.New(dispatchTime)
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
@@ -106,6 +107,7 @@ var TransitionRescheduled = chasm.NewTransition(
 
 		attempt := a.LastAttempt.Get(ctx)
 		retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
+		attempt.DispatchTime = timestamppb.New(retryScheduledTime)
 
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
@@ -553,6 +555,7 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		}
 		// Reset discards the retry backoff
 		attempt.CurrentRetryInterval = nil
+		attempt.DispatchTime = nil
 		return nil
 	},
 )
@@ -587,6 +590,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		attempt.CurrentRetryInterval = nil
 
 		dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
+		attempt.DispatchTime = timestamppb.New(dispatchTime)
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
