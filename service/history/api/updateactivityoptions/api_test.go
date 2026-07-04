@@ -284,6 +284,43 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	s.NotNil(response)
 }
 
+func (s *activityOptionsSuite) Test_updateActivityOptionsRejectsInvalidMergedRetryPolicy() {
+	activityInfo := &persistencespb.ActivityInfo{
+		TaskQueue:               "task_queue_name",
+		ScheduleToCloseTimeout:  durationpb.New(30 * time.Second),
+		ScheduleToStartTimeout:  durationpb.New(20 * time.Second),
+		StartToCloseTimeout:     durationpb.New(10 * time.Second),
+		RetryBackoffCoefficient: 2,
+		RetryInitialInterval:    durationpb.New(10 * time.Second),
+		RetryMaximumInterval:    durationpb.New(30 * time.Second),
+		RetryMaximumAttempts:    5,
+		HasRetryPolicy:          true,
+		ActivityId:              "activity_id",
+		ActivityType:            &commonpb.ActivityType{Name: "activity_type"},
+	}
+
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(60 * time.Second),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{
+				Paths: []string{"retry_policy.initial_interval"},
+			},
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
+		},
+	}
+
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
+
+	_, err := processActivityOptionsRequest(
+		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	s.ErrorContains(err, "MaximumInterval cannot be less than InitialInterval")
+}
+
 func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	updateMask := &fieldmaskpb.FieldMask{
 		Paths: []string{

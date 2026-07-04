@@ -36,13 +36,30 @@ func ConvertPathToCamel(input string) []string {
 }
 
 func ParseFieldMask(mask *fieldmaskpb.FieldMask) map[string]struct{} {
-	updateFields := make(map[string]struct{})
+	fieldMaskPaths := make(map[string]struct{})
 
 	for _, path := range mask.Paths {
 		pathParts := ConvertPathToCamel(path)
 		jsonPath := strings.Join(pathParts, ".")
-		updateFields[jsonPath] = struct{}{}
+		fieldMaskPaths[jsonPath] = struct{}{}
 	}
 
-	return updateFields
+	return fieldMaskPaths
+}
+
+func FieldMaskHasSubPath(fieldMaskPaths map[string]struct{}, path string) bool {
+	prefix := path + "."
+	for field := range fieldMaskPaths {
+		if strings.HasPrefix(field, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func FieldMaskHasPathOrSubPath(fieldMaskPaths map[string]struct{}, path string) bool {
+	if _, ok := fieldMaskPaths[path]; ok {
+		return true
+	}
+	return FieldMaskHasSubPath(fieldMaskPaths, path)
 }
