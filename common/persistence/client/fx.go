@@ -42,6 +42,7 @@ type (
 		fx.In
 
 		DataStoreFactory                            persistence.DataStoreFactory
+		NsReplicationQueueDataStoreFactory          NamespaceReplicationQueueDataStoreFactory
 		EventBlobCache                              persistence.XDCCache
 		Cfg                                         *config.Persistence
 		PersistenceMaxQPS                           PersistenceMaxQps
@@ -61,11 +62,22 @@ type (
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
+
+	// NamespaceReplicationQueueDataStoreFactory is a named-type wrapper around a
+	// persistence.DataStoreFactory dedicated to the namespace replication queue.
+	// When the config.Persistence.NamespaceReplicationQueueStore field is set to a
+	// non-empty datastore name, a factory is constructed against that datastore.
+	// When empty, this value is nil and callers fall back to the default factory.
+	NamespaceReplicationQueueDataStoreFactory struct {
+		persistence.DataStoreFactory
+	}
 )
 
 var Module = fx.Options(
 	fx.Provide(DataStoreFactoryProvider),
+	fx.Provide(NamespaceReplicationQueueDataStoreFactoryProvider),
 	fx.Invoke(DataStoreFactoryLifetimeHooks),
+	fx.Invoke(NamespaceReplicationQueueDataStoreFactoryLifetimeHooks),
 	fx.Provide(managerProvider(Factory.NewClusterMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewMetadataManager)),
 	fx.Provide(managerProvider(Factory.NewTaskManager)),
@@ -145,6 +157,7 @@ func FactoryProvider(
 
 	return NewFactory(
 		params.DataStoreFactory,
+		params.NsReplicationQueueDataStoreFactory.DataStoreFactory,
 		params.Cfg,
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
@@ -218,6 +231,65 @@ func DataStoreFactoryProvider(
 
 func DataStoreFactoryLifetimeHooks(lc fx.Lifecycle, f persistence.DataStoreFactory) {
 	lc.Append(fx.StopHook(f.Close))
+}
+
+// NamespaceReplicationQueueDataStoreFactoryProvider constructs a separate
+// DataStoreFactory rooted at cfg.NamespaceReplicationQueueStore. If that field
+// is empty, returns a zero-value wrapper (nil embedded factory) — callers
+// treat that as "fall back to the default factory."
+func NamespaceReplicationQueueDataStoreFactoryProvider(
+	clusterName ClusterName,
+	r resolver.ServiceResolver,
+	cfg *config.Persistence,
+	abstractDataStoreFactory AbstractDataStoreFactory,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	tracerProvider trace.TracerProvider,
+	serializer serialization.Serializer,
+) NamespaceReplicationQueueDataStoreFactory {
+	if !cfg.NamespaceReplicationQueueConfigExist() {
+		return NamespaceReplicationQueueDataStoreFactory{}
+	}
+
+	storeCfg, ok := cfg.DataStores[cfg.NamespaceReplicationQueueStore]
+	if !ok {
+		logger.Fatal(
+			"invalid config: namespaceReplicationQueueStore references an undefined datastore",
+		)
+	}
+
+	var dataStoreFactory persistence.DataStoreFactory
+	switch {
+	case storeCfg.Cassandra != nil:
+		dataStoreFactory = cassandra.NewFactory(*storeCfg.Cassandra, r, string(clusterName), logger, metricsHandler, serializer)
+	case storeCfg.SQL != nil:
+		dataStoreFactory = sql.NewFactory(*storeCfg.SQL, r, string(clusterName), logger, metricsHandler, serializer)
+	case storeCfg.CustomDataStoreConfig != nil:
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(*storeCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler, serializer)
+	default:
+		logger.Fatal("invalid config: namespaceReplicationQueueStore must specify cassandra, sql, or custom datastore params")
+	}
+
+	if storeCfg.FaultInjection != nil {
+		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(storeCfg.FaultInjection, dataStoreFactory)
+	}
+
+	tracer := tracerProvider.Tracer(otel.ComponentPersistence)
+	if otel.IsEnabled(tracer) {
+		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, logger, tracer)
+	}
+
+	return NamespaceReplicationQueueDataStoreFactory{DataStoreFactory: dataStoreFactory}
+}
+
+// NamespaceReplicationQueueDataStoreFactoryLifetimeHooks registers Close on the
+// queue-specific factory when it is set. Safe to call when the factory is
+// unset (Close is a no-op on the zero value).
+func NamespaceReplicationQueueDataStoreFactoryLifetimeHooks(lc fx.Lifecycle, f NamespaceReplicationQueueDataStoreFactory) {
+	if f.DataStoreFactory == nil {
+		return
+	}
+	lc.Append(fx.StopHook(f.DataStoreFactory.Close))
 }
 
 func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, error)) func(Factory, fx.Lifecycle) (T, error) {

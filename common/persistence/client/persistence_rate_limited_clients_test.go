@@ -159,6 +159,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			serializer := serialization.NewSerializer()
 			factory := client.NewFactory(
 				dataStoreFactory,
+				nil, // nsReplicationQueueDataStoreFactory
 				&config.Persistence{
 					NumHistoryShards: 1,
 				},

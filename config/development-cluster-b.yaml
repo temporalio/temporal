@@ -5,6 +5,7 @@ log:
 persistence:
   defaultStore: cass-default
   visibilityStore: es-visibility
+  namespaceReplicationQueueStore: pg-nsrepl
   numHistoryShards: 16
   datastores:
     cass-default:
@@ -22,6 +23,17 @@ persistence:
           visibility: temporal_visibility_v1_dev_cluster_b
           # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
+    pg-nsrepl:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "temporal_nsrepl_b"
+        connectAddr: "127.0.0.1:5432"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 10
+        maxIdleConns: 5
+        maxConnLifetime: "1h"
 
 global:
   membership:

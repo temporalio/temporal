@@ -49,6 +49,7 @@ type (
 
 	factoryImpl struct {
 		dataStoreFactory                            persistence.DataStoreFactory
+		nsReplicationQueueDataStoreFactory          persistence.DataStoreFactory
 		config                                      *config.Persistence
 		serializer                                  serialization.Serializer
 		eventBlobCache                              persistence.XDCCache
@@ -73,6 +74,7 @@ type (
 // given configuration. In addition, all objects will emit metrics automatically
 func NewFactory(
 	dataStoreFactory persistence.DataStoreFactory,
+	nsReplicationQueueDataStoreFactory persistence.DataStoreFactory,
 	cfg *config.Persistence,
 	systemRateLimiter quotas.RequestRateLimiter,
 	namespaceRateLimiter quotas.RequestRateLimiter,
@@ -87,18 +89,19 @@ func NewFactory(
 	enableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate,
 ) Factory {
 	factory := &factoryImpl{
-		dataStoreFactory:      dataStoreFactory,
-		config:                cfg,
-		serializer:            serializer,
-		eventBlobCache:        eventBlobCache,
-		metricsHandler:        metricsHandler,
-		logger:                logger,
-		clusterName:           clusterName,
-		systemRateLimiter:     systemRateLimiter,
-		namespaceRateLimiter:  namespaceRateLimiter,
-		shardRateLimiter:      shardRateLimiter,
-		healthSignals:         healthSignals,
-		enableDataLossMetrics: dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
+		dataStoreFactory:                   dataStoreFactory,
+		nsReplicationQueueDataStoreFactory: nsReplicationQueueDataStoreFactory,
+		config:                             cfg,
+		serializer:                         serializer,
+		eventBlobCache:                     eventBlobCache,
+		metricsHandler:                     metricsHandler,
+		logger:                             logger,
+		clusterName:                        clusterName,
+		systemRateLimiter:                  systemRateLimiter,
+		namespaceRateLimiter:               namespaceRateLimiter,
+		shardRateLimiter:                   shardRateLimiter,
+		healthSignals:                      healthSignals,
+		enableDataLossMetrics:              dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
 		enableBestEffortDeleteTasksOnWorkflowUpdate: dynamicconfig.BoolPropertyFn(enableBestEffortDeleteTasksOnWorkflowUpdate),
 	}
 	factory.initDependencies()
@@ -219,7 +222,15 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 }
 
 func (f *factoryImpl) NewNamespaceReplicationQueue() (persistence.NamespaceReplicationQueue, error) {
-	result, err := f.dataStoreFactory.NewQueue(persistence.NamespaceReplicationQueueType)
+	// Use the dedicated namespace-replication-queue datastore factory when
+	// configured; otherwise fall back to the default factory. Enables
+	// deployments to keep the queue on a different backend from the primary
+	// persistence (e.g., Postgres for the queue while Cassandra serves the rest).
+	dsf := f.dataStoreFactory
+	if f.nsReplicationQueueDataStoreFactory != nil {
+		dsf = f.nsReplicationQueueDataStoreFactory
+	}
+	result, err := dsf.NewQueue(persistence.NamespaceReplicationQueueType)
 	if err != nil {
 		return nil, err
 	}

@@ -261,6 +261,11 @@ type (
 		VisibilityStore string `yaml:"visibilityStore"`
 		// SecondaryVisibilityStore is the name of the secondary datastore to be used for visibility records
 		SecondaryVisibilityStore string `yaml:"secondaryVisibilityStore"`
+		// NamespaceReplicationQueueStore is the name of the datastore to be used for the
+		// namespace replication queue (queue and queue_metadata tables). If empty, the
+		// default store is used. Split-store useful for deployments that want to keep
+		// the queue on a different backend from the primary persistence.
+		NamespaceReplicationQueueStore string `yaml:"namespaceReplicationQueueStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't
 		// belong here, needs refactoring
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`

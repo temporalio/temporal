@@ -219,6 +219,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,
+		nil, // nsReplicationQueueDataStoreFactory: fall back to default
 		&cfg,
 		s.PersistenceRateLimiter,
 		quotas.NoopRequestRateLimiter,

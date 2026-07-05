@@ -36,6 +36,7 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 
 			factory := client.NewFactory(
 				dataStoreFactory,
+				nil, // nsReplicationQueueDataStoreFactory
 				&config.Persistence{
 					NumHistoryShards: 1,
 				},

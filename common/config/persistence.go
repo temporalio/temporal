@@ -40,6 +40,9 @@ func (c *Persistence) Validate() error {
 	if c.SecondaryVisibilityStore != "" {
 		stores = append(stores, c.SecondaryVisibilityStore)
 	}
+	if c.NamespaceReplicationQueueStore != "" {
+		stores = append(stores, c.NamespaceReplicationQueueStore)
+	}
 
 	// There are 3 config keys:
 	// - visibilityStore: can set any data store
@@ -98,6 +101,12 @@ func (c *Persistence) Validate() error {
 // VisibilityConfigExist returns whether user specified visibilityStore in config
 func (c *Persistence) VisibilityConfigExist() bool {
 	return c.VisibilityStore != ""
+}
+
+// NamespaceReplicationQueueConfigExist returns whether the user specified a
+// dedicated datastore for the namespace replication queue.
+func (c *Persistence) NamespaceReplicationQueueConfigExist() bool {
+	return c.NamespaceReplicationQueueStore != ""
 }
 
 // SecondaryVisibilityConfigExist returns whether user specified secondaryVisibilityStore in config
