@@ -443,7 +443,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
 }
 
-func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_DuringStartedWorkflowTask() {
+func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTimerFiredDuringStartedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
@@ -479,23 +479,23 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_DuringStartedWo
 	// WT2: poll (marks it STARTED), then hold it open until the fast-forward disable fires, so the
 	// transition is emitted while this workflow task is in flight. The eventual complete response is
 	// expected to be rejected (UnhandledCommand) because the buffered transition invalidated the WT.
-	ffFired := false
 	_, _ = env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
 		HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			deadline := time.Now().Add(75 * time.Second)
-			for time.Now().Before(deadline) {
+			s.AwaitTruef(func() bool {
 				ms := s.getMutableState(env, tv.WorkflowID(), runID)
-				if ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo().GetHasReached() {
-					ffFired = true
-					break
-				}
-				time.Sleep(200 * time.Millisecond)
-			}
+				return ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo().GetHasReached()
+			}, 75*time.Second, 200*time.Millisecond, "fast-forward disable did not fire while the workflow task was started")
+
+			// The disable transition mutates state synchronously in the close-transaction,
+			// even though its history event is still buffered while this WT is in flight:
+			// time skipping is already disabled here, before the event is flushed to history.
+			ms := s.getMutableState(env, tv.WorkflowID(), runID)
+			s.False(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+				"time skipping must be disabled in mutable state once the fast-forward timer fired")
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{completeWorkflowCmd()},
 			}, nil
 		}, taskpoller.WithTimeout(90*time.Second))
-	s.True(ffFired, "fast-forward disable did not fire while the workflow task was started")
 
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 
