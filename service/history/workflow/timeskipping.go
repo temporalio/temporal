@@ -62,6 +62,14 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	return nil
 }
 
+func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if ms.executionInfo.GetTimeSkippingInfo() == nil {
+		ms.initTimeSkippingInfo(config, nil, 0)
+	} else {
+		ms.updateTimeSkippingInfo(config, 0)
+	}
+}
+
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
 // This method should be called whenever the TimeSkippingConfig is initialized or updated.
 // An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
