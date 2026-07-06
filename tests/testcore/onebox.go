@@ -17,9 +17,11 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -223,6 +225,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.logger,
 		impl.hostsByProtocolByService[grpcProtocol],
 		impl.tlsConfigProvider,
+		impl.newMatchingClient,
 	)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
@@ -237,6 +240,59 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
 	return impl
+}
+
+func (c *TemporalImpl) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	var tlsConfigProvider encryption.TLSConfigProvider
+	var frontendTLSConfig *tls.Config
+	if c.tlsConfigProvider != nil {
+		var err error
+		tlsConfigProvider = c.tlsConfigProvider
+		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+		}
+	}
+
+	monitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
+	monitor.Start()
+	rpcFactory := rpc.NewFactory(
+		&config.Config{},
+		primitives.FrontendService,
+		c.logger,
+		c.GetMetricsHandler(),
+		tlsConfigProvider,
+		c.frontendMembershipAddress,
+		c.frontendMembershipAddress,
+		0,
+		frontendTLSConfig,
+		nil,
+		nil,
+		monitor,
+		c.tokenProvider,
+	)
+	clientFactory := client.NewFactoryProvider().NewFactory(
+		rpcFactory,
+		monitor,
+		c.GetMetricsHandler(),
+		dynamicconfig.NewCollection(c.dcClient, c.logger),
+		c.testHooks,
+		c.historyConfig.NumHistoryShards,
+		c.logger,
+		c.logger,
+	)
+	namespaceIDToName := func(id namespace.ID) (namespace.Name, error) {
+		resp, err := c.metadataMgr.GetNamespace(NewContext(), &persistence.GetNamespaceRequest{ID: id.String()})
+		if err != nil {
+			return "", err
+		}
+		return namespace.Name(resp.Namespace.Info.Name), nil
+	}
+	return clientFactory.NewMatchingClientWithTimeout(
+		namespaceIDToName,
+		matchingclient.DefaultTimeout,
+		matchingclient.DefaultLongPollTimeout,
+	)
 }
 
 func (c *TemporalImpl) Start() error {
@@ -326,12 +382,10 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	var matchingRawClient resource.MatchingRawClient
 	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
-		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -388,7 +442,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
+			fx.Populate(&grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
@@ -399,8 +453,6 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		// TODO: create matching client without reaching into fx graph
-		c.matching.client = matchingRawClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
