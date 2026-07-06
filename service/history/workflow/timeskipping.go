@@ -404,7 +404,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. state change
+		// 3. state change.
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
 		if err != nil {
