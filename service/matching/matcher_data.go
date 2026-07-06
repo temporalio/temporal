@@ -42,8 +42,12 @@ const (
 	syncMatchBacklogPresent
 	// Sync match was attempted but no poller was available.
 	syncMatchNoPoller
-	// A poller was available but rate limiting blocked the match.
+	// A poller was available but whole-queue rate limiting blocked the match.
 	syncMatchRateLimited
+	// A poller was available but per-fairness-key rate limiting blocked the match.
+	// This is distinct from syncMatchRateLimited because WCI should still scale
+	// up workers when only per-key limits are hit.
+	syncMatchPerKeyRateLimited
 )
 
 type taskForwarderType int32
@@ -359,14 +363,14 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchOutcome 
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	rateLimited := d.findAndWakeMatches()
+	outcome := d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
 		return syncMatchSuccess
 	}
 	d.tasks.Remove(task)
-	if rateLimited {
-		return syncMatchRateLimited
+	if outcome == syncMatchRateLimited || outcome == syncMatchPerKeyRateLimited {
+		return outcome
 	}
 	return syncMatchNoPoller
 }
@@ -408,7 +412,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
 // nolint:revive // will improve later
-func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration) {
+func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration, wholeQueueLimited bool) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
 	// tree.Iter() cursor escapes to the heap.
@@ -422,7 +426,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
 	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
 		if delay := wholeQueueReady.delay(now); delay > 0 {
-			return nil, nil, delay
+			return nil, nil, delay, true
 		}
 	}
 
@@ -513,23 +517,26 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	return delayToForwardingAllowed <= 0
 }
 
-// call with lock held. Returns true if a match was found but blocked by rate limiting.
-func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
+// call with lock held. Returns the rate limit outcome if a match was blocked.
+func (d *matcherData) findAndWakeMatches() (outcome syncMatchOutcome) {
 	allowForwarding := d.canForward && d.allowForwarding()
 
 	now := d.timeSource.Now().UnixNano()
 
 	for {
 		// search for highest-priority ready match; skip per-key rate-limited tasks
-		task, poller, minDelay := d.findMatch(allowForwarding, now)
+		task, poller, minDelay, wholeQueueLimited := d.findMatch(allowForwarding, now)
 		if task == nil || poller == nil {
 			if minDelay > 0 {
 				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
-				return true
+				if wholeQueueLimited {
+					return syncMatchRateLimited
+				}
+				return syncMatchPerKeyRateLimited
 			}
 			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()
-			return false
+			return syncMatchUnspecified
 		}
 
 		// ready to signal match

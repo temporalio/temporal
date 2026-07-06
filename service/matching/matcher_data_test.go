@@ -227,6 +227,34 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 }
 
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyPerKeyRateLimited() {
+	// Set per-key rate limit with a low RPS and zero burst so consuming one token
+	// puts the key well into the future.
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Consume one token for "key1" by directly consuming via the rate limit manager.
+	dummyTask := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+		CreateTime: timestamppb.New(s.now()),
+		Priority:   &commonpb.Priority{FairnessKey: "key1"},
+	}, nil, 0, nil)
+	s.md.rateLimitManager.consumeTokens(s.now().UnixNano(), dummyTask, 1)
+
+	// Now sync-match another key1 task. Should return per-key rate limited, not whole-queue.
+	syncTask := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+		CreateTime: timestamppb.New(s.now()),
+		Priority:   &commonpb.Priority{FairnessKey: "key1"},
+	}, nil, 0, nil)
+	s.Equal(syncMatchPerKeyRateLimited, s.md.MatchTaskImmediately(syncTask))
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
@@ -888,7 +916,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			// Call findMatch
 			s.md.lock.Lock()
 			now := s.ts.Now().UnixNano()
-			foundTask, foundPoller, _ := s.md.findMatch(tc.allowForwarding, now)
+			foundTask, foundPoller, _, _ := s.md.findMatch(tc.allowForwarding, now)
 			s.md.lock.Unlock()
 
 			if tc.shouldMatch {

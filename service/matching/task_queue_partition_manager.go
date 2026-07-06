@@ -676,6 +676,9 @@ func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	case syncMatchUnspecified:
 		return hooks.SyncMatchOutcomeUnspecified
 	default:
+		// syncMatchPerKeyRateLimited, syncMatchNoPoller, syncMatchBacklogPresent
+		// all map to NotMatched. Per-key rate limiting should not suppress WCI
+		// scaling because other fairness keys may still need workers.
 		return hooks.SyncMatchOutcomeNotMatched
 	}
 }
