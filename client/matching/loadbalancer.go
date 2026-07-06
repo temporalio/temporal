@@ -105,7 +105,49 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
+	// Backlog-aware add-task load balancing (blueprint approach 3): if the server provided a
+	// backlog cap and per-partition counts covering all write partitions, bias new tasks toward
+	// partitions whose backlog is further below the cap (weighted random by gap to cap). Tasks
+	// concentrate on emptier partitions while every under-cap partition still gets some. Falls
+	// back to uniform when backlog data or cap is unavailable, or when every partition is at cap.
+	if backlogCap := number.DecodeCompact8(pc.BacklogCap); backlogCap > 0 &&
+		partitionCount > 0 && len(pc.BacklogCount) >= partitionCount {
+		if p, ok := pickWritePartitionByGap(pc.BacklogCount, partitionCount, backlogCap); ok {
+			return taskQueue.NormalPartition(p)
+		}
+	}
+
 	return taskQueue.NormalPartition(rand.Intn(partitionCount))
+}
+
+// pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
+// is below backlogCap (blueprint approach 3: weighted random by gap between cap and current size).
+// It returns ok=false when every partition is at or above the cap, so the caller falls back to
+// uniform selection rather than starving all writes. Counts are decoded inline (rather than into
+// a slice) to avoid an allocation on the per-AddTask hot path; the caller must ensure
+// len(counts) >= partitionCount.
+func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) (int, bool) {
+	var total int64
+	for i := 0; i < partitionCount; i++ {
+		if gap := backlogCap - number.DecodeCompact8(counts[i]); gap > 0 {
+			total += gap
+		}
+	}
+	if total <= 0 {
+		return 0, false
+	}
+	r := rand.Int63n(total)
+	for i := 0; i < partitionCount; i++ {
+		gap := backlogCap - number.DecodeCompact8(counts[i])
+		if gap <= 0 {
+			continue
+		}
+		if r < gap {
+			return i, true
+		}
+		r -= gap
+	}
+	return partitionCount - 1, true // unreachable in practice; guard against rounding
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.

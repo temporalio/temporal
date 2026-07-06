@@ -317,6 +317,85 @@ func TestPickReadPartition_ShortBacklogFallsBack(t *testing.T) {
 	}
 }
 
+func TestPickWritePartitionByGap(t *testing.T) {
+	// compact8: byte 0 -> 0, byte 192 -> ~12.6M (see common/number/compact8_test.go).
+	// cap ~21M: partition 0 is empty (gap ~21M), partition 1 is partly full (gap ~8.4M).
+	counts := []number.Compact8{0, 192}
+	backlogCap := number.DecodeCompact8(200)
+	partitionCount := 2
+
+	picks := make([]int, partitionCount)
+	const n = 3000
+	for range n {
+		p, ok := pickWritePartitionByGap(counts, partitionCount, backlogCap)
+		assert.True(t, ok)
+		picks[p]++
+	}
+	// partition 0 gets the larger share (bigger gap), but partition 1 still gets some.
+	assert.Greater(t, picks[0], picks[1])
+	assert.Greater(t, picks[1], 0, "the below-cap partition still gets some tasks")
+	gap0 := backlogCap - number.DecodeCompact8(0)
+	gap1 := backlogCap - number.DecodeCompact8(192)
+	assert.InDelta(t, float64(n)*float64(gap0)/float64(gap0+gap1), picks[0], float64(n)*0.05)
+
+	// every partition at/above cap -> ok=false so caller falls back to uniform.
+	_, ok := pickWritePartitionByGap([]number.Compact8{200, 200}, 2, backlogCap)
+	assert.False(t, ok)
+}
+
+func TestPickWritePartition_BacklogAware(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// cap (byte 200) decodes to ~21M. Both partitions are below the cap: partition 0 is empty
+	// (gap ~21M) and partition 1 is partially full (byte 192 ~12.6M, gap ~8.4M). Writes should
+	// favor the emptier partition 0 while partition 1 still receives a meaningful share. This
+	// exercises the weighting gradient through the full path, not just at-cap exclusion.
+	pc := PartitionCounts{
+		Read:         2,
+		Write:        2,
+		BacklogCap:   200,
+		BacklogCount: []number.Compact8{0, 192},
+	}
+	counts := make([]int, 2)
+	const n = 1000
+	for range n {
+		p := lb.PickWritePartition(taskQueue, pc)
+		counts[p.PartitionId()]++
+	}
+	assert.Greater(t, counts[0], counts[1], "emptier partition should receive more writes")
+	assert.Greater(t, counts[1], 0, "the below-cap partition should still receive some writes")
+}
+
+func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// no backlog cap -> uniform random across the 4 write partitions.
+	pc := PartitionCounts{Read: 4, Write: 4}
+	counts := make([]int, 4)
+	const n = 4000
+	for range n {
+		p := lb.PickWritePartition(taskQueue, pc)
+		counts[p.PartitionId()]++
+	}
+	for i := range counts {
+		assert.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)
+	}
+}
+
 func maxPollerCount(tqlb *tqLoadBalancer) int {
 	res := -1
 	for _, c := range tqlb.pollerCounts {
