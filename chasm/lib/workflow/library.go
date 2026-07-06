@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-type library struct {
+type Library struct {
 	chasm.UnimplementedLibrary
 
 	registry                    *Registry
@@ -23,8 +23,8 @@ func newLibrary(
 	config Config,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
-) *library {
-	return &library{
+) *Library {
+	return &Library{
 		registry:         registry,
 		config:           config,
 		saMapperProvider: saMapperProvider,
@@ -39,16 +39,14 @@ func newLibrary(
 // NewLibrary creates a new CHASM library for the workflow package.
 // Use newLibrary (via fx) for the full setup including Nexus services.
 func NewLibrary(registry *Registry) chasm.Library {
-	return &library{registry: registry}
+	return &Library{registry: registry}
 }
 
-// NewNilLibrary creates a Library with nil handlers. Useful for
-// decoding contexts like tdbg where no task execution is needed.
-func NewNilLibrary() chasm.Library {
-	return &library{registry: NewRegistry()}
-}
+// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
+// like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library { return &Library{} }
 
-func (l *library) Name() string {
+func (l *Library) Name() string {
 	return chasm.WorkflowLibraryName
 }
 
@@ -68,7 +66,7 @@ func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
 	return wc
 }
 
-func (l *library) Components() []*chasm.RegistrableComponent {
+func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
 			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
@@ -83,7 +81,7 @@ func SetEventRegistryOnContext[C chasm.Context](ctx C, registry *Registry) C {
 	return chasm.ContextWithValue(ctx, ctxKeyWorkflowContext, &workflowContext{registry: registry})
 }
 
-func (l *library) NexusServices() []*nexus.Service {
+func (l *Library) NexusServices() []*nexus.Service {
 	if l.workflowServiceNexusHandler == nil {
 		return nil
 	}
@@ -92,7 +90,7 @@ func (l *library) NexusServices() []*nexus.Service {
 	}
 }
 
-func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
+func (l *Library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 	if l.workflowServiceNexusHandler == nil {
 		return nil
 	}

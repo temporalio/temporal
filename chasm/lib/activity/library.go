@@ -34,7 +34,9 @@ var (
 	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
-type componentOnlyLibrary struct {
+// ComponentOnlyLibrary registers activity components without task handlers.
+// Used by services that need component serialization but not task execution (e.g. frontend).
+type ComponentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 	config            *Config
 	namespaceRegistry namespace.Registry
@@ -43,18 +45,22 @@ type componentOnlyLibrary struct {
 func newComponentOnlyLibrary(
 	config *Config,
 	namespaceRegistry namespace.Registry,
-) *componentOnlyLibrary {
-	return &componentOnlyLibrary{
+) *ComponentOnlyLibrary {
+	return &ComponentOnlyLibrary{
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 	}
 }
 
-func (l *componentOnlyLibrary) Name() string {
+// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
+// like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library { return &ComponentOnlyLibrary{} }
+
+func (l *ComponentOnlyLibrary) Name() string {
 	return libraryName
 }
 
-func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
+func (l *ComponentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Activity](
 			componentName,
@@ -74,16 +80,8 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	}
 }
 
-// NewNilLibrary creates a Library with all nil handlers. Useful for
-// decoding contexts like tdbg where no task execution is needed.
-func NewNilLibrary() chasm.Library {
-	return &library{
-		componentOnlyLibrary: *newComponentOnlyLibrary(nil, nil),
-	}
-}
-
 type library struct {
-	componentOnlyLibrary
+	ComponentOnlyLibrary
 
 	handler                           *handler
 	activityDispatchTaskHandler       *activityDispatchTaskHandler
@@ -104,7 +102,7 @@ func newLibrary(
 	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
+		ComponentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,

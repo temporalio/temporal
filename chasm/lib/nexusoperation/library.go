@@ -41,12 +41,6 @@ func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary
 	}
 }
 
-// NewNilLibrary creates a Library with nil handlers and nil config.
-// Useful for decoding contexts like tdbg where no task execution is needed.
-func NewNilLibrary() *Library {
-	return &Library{}
-}
-
 func (l *componentOnlyLibrary) Name() string {
 	return libraryName
 }
@@ -111,6 +105,10 @@ func newLibrary(
 		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
 	}
 }
+
+// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
+// like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library { return &Library{} }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
