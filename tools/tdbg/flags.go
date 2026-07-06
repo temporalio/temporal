@@ -92,6 +92,7 @@ var (
 	FlagConcurrency                = "concurrency"
 	FlagRPS                        = "rps"
 	FlagDelayThreshold             = "delay-threshold"
+	FlagIncludePaused              = "include-paused"
 )
 
 var (

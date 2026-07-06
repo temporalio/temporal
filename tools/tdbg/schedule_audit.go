@@ -29,13 +29,14 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	wfClient := factory.WorkflowClient(c)
 	limiter := scheduleaudit.NewNamespaceRateLimiter(in.RPS)
 	auditor := &scheduleaudit.Auditor{
-		WindowStart: in.WindowStart,
-		WindowEnd:   in.WindowEnd,
-		Concurrency: in.Concurrency,
-		RPS:         in.RPS,
-		Progress:    os.Stderr,
-		Schedules:   scheduleaudit.NewGRPCScheduleLoader(wfClient, os.Stderr, limiter),
-		Executions:  scheduleaudit.NewGRPCExecutionLoader(wfClient, os.Stderr, limiter),
+		WindowStart:   in.WindowStart,
+		WindowEnd:     in.WindowEnd,
+		Concurrency:   in.Concurrency,
+		RPS:           in.RPS,
+		IncludePaused: in.IncludePaused,
+		Progress:      os.Stderr,
+		Schedules:     scheduleaudit.NewGRPCScheduleLoader(wfClient, os.Stderr, limiter),
+		Executions:    scheduleaudit.NewGRPCExecutionLoader(wfClient, os.Stderr, limiter),
 	}
 
 	auditStart := time.Now()
@@ -78,6 +79,7 @@ type auditInputs struct {
 	Concurrency    int
 	RPS            int
 	DelayThreshold time.Duration
+	IncludePaused  bool
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
@@ -89,6 +91,7 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 		Concurrency:    c.Int(FlagConcurrency),
 		RPS:            c.Int(FlagRPS),
 		DelayThreshold: c.Duration(FlagDelayThreshold),
+		IncludePaused:  c.Bool(FlagIncludePaused),
 	}
 	if in.Concurrency <= 0 {
 		in.Concurrency = 1

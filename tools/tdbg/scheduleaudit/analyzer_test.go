@@ -420,6 +420,48 @@ func TestAuditor(t *testing.T) {
 		require.Equal(t, "active", results[0].ScheduleID)
 	})
 
+	t.Run("paused schedule included with flag is classified paused, not real_miss", func(t *testing.T) {
+		loader := &fakeScheduleLoader{entries: []ScheduleEntry{
+			{ID: "s1", Spec: hourlyAllHoursSpec(), WorkflowType: "W", Paused: true},
+		}}
+		a := &Auditor{
+			WindowStart:   mustParseTime("2026-05-19T18:00:00Z"),
+			WindowEnd:     mustParseTime("2026-05-19T20:00:00Z"),
+			IncludePaused: true,
+			Schedules:     loader,
+			Executions:    &fakeExecutionLoader{byScheduleID: map[string][]Execution{}},
+			Progress:      io.Discard,
+		}
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		require.True(t, results[0].Paused)
+		require.Equal(t, 2, results[0].Count(categoryPaused), "19:00 and 20:00 are benign paused")
+		require.Zero(t, results[0].Count(categoryRealMiss))
+	})
+
+	t.Run("paused mid-window included is inconclusive", func(t *testing.T) {
+		loader := &fakeScheduleLoader{entries: []ScheduleEntry{{
+			ID: "s1", Spec: hourlyAllHoursSpec(), WorkflowType: "W", Paused: true,
+			CreateTime: mustParseTime("2026-01-01T00:00:00Z"),
+			UpdateTime: mustParseTime("2026-05-19T19:30:00Z"), // paused mid-window bumps UpdateTime
+		}}}
+		a := &Auditor{
+			WindowStart:   mustParseTime("2026-05-19T18:00:00Z"),
+			WindowEnd:     mustParseTime("2026-05-19T22:00:00Z"),
+			IncludePaused: true,
+			Schedules:     loader,
+			Executions:    &fakeExecutionLoader{byScheduleID: map[string][]Execution{}},
+			Progress:      io.Discard,
+		}
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		require.True(t, results[0].Paused)
+		require.Equal(t, 4, results[0].Count(categoryInconclusiveChanged))
+		require.Zero(t, results[0].Count(categoryPaused))
+	})
+
 	t.Run("window entirely past retention yields nothing after clamping", func(t *testing.T) {
 		// WindowEnd (39d ago) is older than the retention boundary (30d ago), so clamping the start to the boundary
 		// leaves an empty window -> no scheduled times -> no result.

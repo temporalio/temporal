@@ -261,6 +261,21 @@ func Classify(r *Result, scheduled []time.Time, inWindow, active startedWorkflow
 	}
 }
 
+// classifyPaused classifies a currently-paused schedule whose pause predates the window: any scheduled time without a
+// matching workflow is benign (categoryPaused), not a real_miss, because the scheduler intentionally wasn't firing.
+func classifyPaused(r *Result, scheduled []time.Time, inWindow startedWorkflows) {
+	r.Missed = map[time.Time]string{}
+	r.Expected = len(scheduled)
+	r.Actual = len(inWindow)
+	for _, st := range scheduled {
+		if inWindow.matchNominal(st) {
+			r.Matched++
+			continue
+		}
+		r.Missed[st] = categoryPaused
+	}
+}
+
 // ScheduleLoader fetches schedule specs from the cluster.
 type ScheduleLoader interface {
 	// ListScheduleIDs pages through the namespace's schedules and calls yield with each schedule ID as pages arrive,
@@ -319,6 +334,9 @@ type Auditor struct {
 	// RPS bounds the number of schedules a single namespace analyzes concurrently, so it does not outrun the
 	// per-namespace API rate limit configured on the loaders. Defaults to 1 if <= 0.
 	RPS int
+	// IncludePaused audits currently-paused schedules instead of dropping them. Their unmatched scheduled times are
+	// classified paused (benign) rather than real_miss, unless the pause/change happened mid-window (then inconclusive).
+	IncludePaused bool
 
 	// Progress receives one-line progress updates. Required -- callers that don't want logs should pass io.Discard.
 	Progress io.Writer
@@ -332,6 +350,9 @@ const (
 	categoryRealMiss            = "real_miss"
 	categorySkipOverlap         = "skip_overlap"
 	categoryInconclusiveChanged = "inconclusive_schedule_changed"
+	// categoryPaused marks an unmatched scheduled time on a currently-paused schedule whose pause predates the window:
+	// the scheduler intentionally didn't fire it, so it is benign rather than a real_miss.
+	categoryPaused = "paused"
 )
 
 // Result is the complete analysis record for one schedule: the identity, the audit window, every input the
@@ -348,6 +369,8 @@ type Result struct {
 	CatchupWindow time.Duration
 	CreateTime    time.Time
 	UpdateTime    time.Time
+	// Paused is the schedule's current pause state (only ever true when the run included paused schedules).
+	Paused bool
 
 	// Scheduled is every nominal time the spec produced in the window; Observed is every workflow execution seen in
 	// visibility. Together with OverlapPolicy they are sufficient to replay the classification.
@@ -656,7 +679,10 @@ func (a *Auditor) analyzeJob(ctx context.Context, job scheduleJob) (*Result, err
 		}
 		return nil, fmt.Errorf("lookup schedule %s/%s: %w", job.namespace, job.scheduleID, err)
 	}
-	if entry.Paused || entry.Exhausted {
+	if entry.Exhausted {
+		return nil, nil
+	}
+	if entry.Paused && !a.IncludePaused {
 		return nil, nil
 	}
 	if !entry.CreateTime.IsZero() && !entry.CreateTime.Before(a.WindowEnd) {
@@ -705,6 +731,12 @@ func (a *Auditor) analyzeSchedule(namespace, namespaceID string, windowStart tim
 		}
 		return r, nil
 	}
+	if s.Paused {
+		// Paused before the window and unchanged since (a mid-window pause bumps UpdateTime -> the inconclusive path
+		// above). The scheduler wasn't firing, so unmatched times are benign rather than real_miss.
+		classifyPaused(r, nominals, inWindow)
+		return r, nil
+	}
 	Classify(r, nominals, inWindow, active, s.Policies.GetOverlapPolicy())
 	r.Delays = buildDelays(inWindow, active, jitterByNominal(scheduled))
 	return r, nil
@@ -733,6 +765,7 @@ func (a *Auditor) baseResult(namespace string, windowStart time.Time, s Schedule
 		CatchupWindow: s.CatchupWindow,
 		CreateTime:    s.CreateTime,
 		UpdateTime:    s.UpdateTime,
+		Paused:        s.Paused,
 		Scheduled:     scheduled,
 		Observed:      observed,
 	}

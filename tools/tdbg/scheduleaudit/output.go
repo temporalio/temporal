@@ -27,6 +27,7 @@ type row struct {
 	OverlapPolicy string     `json:"overlap_policy"`
 	OverlapClass  string     `json:"overlap_class"`
 	CatchupWindow string     `json:"catchup_window"`
+	Paused        bool       `json:"paused"`
 	CreateTime    *time.Time `json:"create_time"`
 	UpdateTime    *time.Time `json:"update_time"`
 
@@ -39,6 +40,7 @@ type row struct {
 		RealMiss                    int `json:"real_miss"`
 		SkipOverlap                 int `json:"skip_overlap"`
 		InconclusiveScheduleChanged int `json:"inconclusive_schedule_changed"`
+		Paused                      int `json:"paused"`
 	} `json:"counts"`
 
 	Misses         []missRow      `json:"misses"`
@@ -134,6 +136,7 @@ func toRow(r Result) row {
 	out.OverlapPolicy = overlapPolicyName(r.OverlapPolicy)
 	out.OverlapClass = overlapClassOf(r.OverlapPolicy).String()
 	out.CatchupWindow = r.CatchupWindow.String()
+	out.Paused = r.Paused
 	out.CreateTime = utcPtr(r.CreateTime)
 	out.UpdateTime = utcPtr(r.UpdateTime)
 
@@ -145,6 +148,7 @@ func toRow(r Result) row {
 	out.Counts.RealMiss = r.Count(categoryRealMiss)
 	out.Counts.SkipOverlap = r.Count(categorySkipOverlap)
 	out.Counts.InconclusiveScheduleChanged = r.Count(categoryInconclusiveChanged)
+	out.Counts.Paused = r.Count(categoryPaused)
 
 	out.Misses = missRows(r)
 	out.ScheduledTimes = utcTimes(r.Scheduled)

@@ -378,10 +378,11 @@ OUTPUT FORMAT
                                      delays      BufferAll / CancelOther / TerminateOther -- overlaps run later
                                      concurrent  AllowAll -- overlaps run immediately
     catchup_window                 the schedule's configured catchupWindow (Go duration string, e.g. "1m0s")
+    paused                         whether the schedule is currently paused (only audited with --include-paused)
     create_time, update_time       schedule create/update times (null if unknown)
     expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
     missed                         total unmatched scheduled times
-    counts {real_miss, skip_overlap, inconclusive_schedule_changed}
+    counts {real_miss, skip_overlap, inconclusive_schedule_changed, paused}
     misses [{nominal, category}]   every unmatched scheduled time and why:
                                      real_miss                      no workflow and the policy doesn't justify a skip
                                                                     (a delays/concurrent policy, or a drops policy with
@@ -389,6 +390,8 @@ OUTPUT FORMAT
                                      skip_overlap                   a drops policy legitimately skipped because a prior
                                                                     workflow was still running
                                      inconclusive_schedule_changed  spec was modified DURING the window; can't be judged
+                                     paused                         schedule was paused before the window; benign
+                                                                    (only with --include-paused)
     scheduled_times []             every nominal time the spec produced in the window
     observed [{workflow_id, run_id, nominal, start, close, status}]  every workflow seen in visibility
     delays [{workflow_id, nominal, actual, desired, start, ...}]  per started action, how late it was:
@@ -412,8 +415,9 @@ CAVEATS AND LIMITATIONS
   Schedule modified during window: marked inconclusive_schedule_changed. The audit can't compute the historical spec,
     so the schedule's times are marked inconclusive rather than producing untrustworthy classifications.
 
-  Paused / exhausted schedules: dropped from analysis (their spec evaluates to scheduled times but the scheduler
-    won't start them).
+  Paused / exhausted schedules: exhausted schedules are always dropped. Paused schedules are dropped unless
+    --include-paused, which audits them and classifies unmatched times as 'paused' (benign) -- or as
+    inconclusive_schedule_changed when the pause happened mid-window (there is no pause-history to pinpoint when).
 
   Catchup window: a schedule with a tight catchupWindow (e.g. 10s) will lose actions if the scheduler is briefly
     unavailable. The audit reports such losses as real_miss; catchup_window lets users distinguish "true sustained
@@ -522,6 +526,11 @@ EXAMPLES
 					Usage: "Also flag a schedule (even with no missed runs) when a started action's dispatch delay " +
 						"reaches this -- surfaces schedules the system was slow to start. 0 flags on missed runs only.",
 					Value: 0,
+				},
+				&cli.BoolFlag{
+					Name: FlagIncludePaused,
+					Usage: "Audit currently-paused schedules too (excluded by default). Their unmatched times are " +
+						"classified 'paused' rather than real_miss, or inconclusive_schedule_changed if paused mid-window.",
 				},
 			},
 			Action: func(c *cli.Context) error {
