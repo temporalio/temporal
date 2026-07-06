@@ -46,6 +46,76 @@ func TestAuditInputs_Validate(t *testing.T) {
 	})
 }
 
+func TestParseDuration(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+		err  bool
+	}{
+		{"24h", 24 * time.Hour, false},
+		{"3d", 72 * time.Hour, false},
+		{"1.5d", 36 * time.Hour, false},
+		{"90m", 90 * time.Minute, false},
+		{"0s", 0, false},
+		{"2d12h", 60 * time.Hour, false},
+		{"", 0, true},
+		{"3w", 0, true}, // weeks unsupported, matching the CLI
+		{"banana", 0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := parseDuration(tc.in)
+			if tc.err {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestResolveBound(t *testing.T) {
+	now := mustParseTime("2026-07-06T12:00:00Z")
+
+	t.Run("duration is interpreted as before now", func(t *testing.T) {
+		got, ok, err := resolveBound("3d", "", now)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, mustParseTime("2026-07-03T12:00:00Z"), got)
+	})
+
+	t.Run("timestamp is absolute", func(t *testing.T) {
+		got, ok, err := resolveBound("", "2026-07-01T00:00:00Z", now)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, mustParseTime("2026-07-01T00:00:00Z"), got)
+	})
+
+	t.Run("neither set reports not provided", func(t *testing.T) {
+		_, ok, err := resolveBound("", "", now)
+		require.NoError(t, err)
+		require.False(t, ok)
+	})
+
+	t.Run("both set is rejected", func(t *testing.T) {
+		_, _, err := resolveBound("24h", "2026-07-01T00:00:00Z", now)
+		require.ErrorContains(t, err, "not both")
+	})
+
+	t.Run("bad duration surfaces the error", func(t *testing.T) {
+		_, ok, err := resolveBound("nope", "", now)
+		require.True(t, ok)
+		require.Error(t, err)
+	})
+
+	t.Run("bad timestamp surfaces the error", func(t *testing.T) {
+		_, ok, err := resolveBound("", "not-a-time", now)
+		require.True(t, ok)
+		require.Error(t, err)
+	})
+}
+
 func TestAuditCommandIsRegistered(t *testing.T) {
 	app := NewCliApp()
 	var found bool

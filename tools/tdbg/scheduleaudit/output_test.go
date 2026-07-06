@@ -80,7 +80,8 @@ func TestWriteFlat(t *testing.T) {
 		emit := func(threshold time.Duration) string {
 			var buf bytes.Buffer
 			rw := NewRowWriter(&buf, threshold)
-			require.NoError(t, rw.Write(slow))
+			_, err := rw.Write(slow)
+			require.NoError(t, err)
 			return buf.String()
 		}
 		require.Empty(t, emit(0), "threshold 0 flags on missed times only")

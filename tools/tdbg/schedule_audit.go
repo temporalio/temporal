@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -47,8 +50,11 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	})
 	g.Go(func() error {
 		return auditor.Run(ctx, targets, func(r scheduleaudit.Result) error {
-			flagged++
-			return rw.Write(r)
+			wrote, err := rw.Write(r)
+			if wrote {
+				flagged++
+			}
+			return err
 		})
 	})
 	if err := g.Wait(); err != nil {
@@ -91,18 +97,66 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 		in.RPS = 1
 	}
 
-	var err error
-	if in.WindowStart, err = time.Parse(time.RFC3339, c.String(FlagStart)); err != nil {
-		return nil, fmt.Errorf("--start: %w", err)
+	now := time.Now()
+	start, ok, err := resolveBound(c.String(FlagStart), c.String(FlagStartTime), now)
+	if err != nil {
+		return nil, fmt.Errorf("--start/--start-time: %w", err)
 	}
-	if in.WindowEnd, err = time.Parse(time.RFC3339, c.String(FlagEnd)); err != nil {
-		return nil, fmt.Errorf("--end: %w", err)
+	if !ok {
+		return nil, errors.New("one of --start (duration before now) or --start-time (RFC3339) is required")
 	}
+	in.WindowStart = start
+
+	end, ok, err := resolveBound(c.String(FlagEnd), c.String(FlagEndTime), now)
+	if err != nil {
+		return nil, fmt.Errorf("--end/--end-time: %w", err)
+	}
+	if !ok {
+		end = now // default: audit up to now
+	}
+	in.WindowEnd = end
 
 	if err := in.validate(); err != nil {
 		return nil, err
 	}
 	return in, nil
+}
+
+// resolveBound turns a window bound into an absolute time from either a duration before now (dur, e.g. "24h"/"3d") or an
+// absolute RFC3339 timestamp (ts). At most one may be set. ok reports whether a value was provided at all, so the caller
+// can distinguish "not set" (apply a default or require it) from a parse error.
+func resolveBound(dur, ts string, now time.Time) (t time.Time, ok bool, err error) {
+	switch {
+	case dur != "" && ts != "":
+		return time.Time{}, false, errors.New("specify a duration or a timestamp, not both")
+	case ts != "":
+		t, err = time.Parse(time.RFC3339, ts)
+		return t, true, err
+	case dur != "":
+		d, derr := parseDuration(dur)
+		if derr != nil {
+			return time.Time{}, true, derr
+		}
+		return now.Add(-d), true, nil
+	default:
+		return time.Time{}, false, nil
+	}
+}
+
+// reDurationDays matches a days component ("3d", "1.5d") within a duration string.
+var reDurationDays = regexp.MustCompile(`(\d+(\.\d*)?|(\.\d+))d`)
+
+// parseDuration is time.ParseDuration extended with a "d" (days = exactly 24h) unit, mirroring
+// cliext.ParseFlagDuration in the Temporal CLI so "3d" works the same way here.
+func parseDuration(s string) (time.Duration, error) {
+	s = reDurationDays.ReplaceAllStringFunc(s, func(v string) string {
+		f, err := strconv.ParseFloat(strings.TrimSuffix(v, "d"), 64)
+		if err != nil {
+			return v // leave it; time.ParseDuration will report the error
+		}
+		return fmt.Sprintf("%fh", 24*f)
+	})
+	return time.ParseDuration(s)
 }
 
 func (in *auditInputs) validate() error {

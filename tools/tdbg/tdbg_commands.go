@@ -372,13 +372,13 @@ OUTPUT FORMAT
   classification -- so a verdict can be inspected or replayed offline. Fields:
     namespace, schedule_id, workflow_type
     window {start, end}            the audited time range
-    overlap_policy                 the schedule's overlap policy (short name, e.g. BUFFER_ALL)
+    overlap_policy                 the schedule's overlap policy (short name, e.g. BufferAll)
     overlap_class                  how that policy treats overlaps, which drives classification:
-                                     drops       SKIP / BUFFER_ONE -- overlapping fires can be dropped for good
-                                     delays      BUFFER_ALL / CANCEL_OTHER / TERMINATE_OTHER -- overlaps run later
-                                     concurrent  ALLOW_ALL -- overlaps run immediately
+                                     drops       Skip / BufferOne -- overlapping fires can be dropped for good
+                                     delays      BufferAll / CancelOther / TerminateOther -- overlaps run later
+                                     concurrent  AllowAll -- overlaps run immediately
     catchup_window                 the schedule's configured catchupWindow (Go duration string, e.g. "1m0s")
-    create_time, update_time       schedule create/update times (omitted if unknown)
+    create_time, update_time       schedule create/update times (null if unknown)
     expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
     missed                         total unmatched scheduled times
     counts {real_miss, skip_overlap, inconclusive_schedule_changed}
@@ -416,7 +416,7 @@ CAVEATS AND LIMITATIONS
     won't start them).
 
   Catchup window: a schedule with a tight catchupWindow (e.g. 10s) will lose actions if the scheduler is briefly
-    unavailable. The audit reports such losses as real_miss; catchup_window_s lets users distinguish "true sustained
+    unavailable. The audit reports such losses as real_miss; catchup_window lets users distinguish "true sustained
     outage" from "brief blip + tight catchup".
 
   Catchup under overlap=SKIP after a brief outage: when the V1 scheduler resumes with multiple queued actions, it
@@ -443,24 +443,31 @@ PRECEDENCE
   With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
   audits that whole namespace; --namespace + --schedule-id audits that one schedule.
 
-EXAMPLES
-  Single namespace, 1-day window, save to a file:
-    tdbg schedule audit --namespace my-ns --start 2026-05-19T00:00:00Z --end 2026-05-20T00:00:00Z > audit.jsonl
+TIME WINDOW
+  --start / --end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h. --start-time / --end-time
+  take an absolute RFC3339 timestamp instead. --start is required (or --start-time); --end defaults to now. The
+  duration and timestamp forms of a bound are mutually exclusive.
 
-  Many targets from a file:
-    tdbg schedule audit -f ./targets.jsonl --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z > audit.jsonl
+EXAMPLES
+  Last 24 hours of a namespace, save to a file:
+    tdbg schedule audit --namespace my-ns --start 24h > audit.jsonl
+
+  Last 3 days ending 6 hours ago:
+    tdbg schedule audit --namespace my-ns --start 3d --end 6h > audit.jsonl
+
+  Absolute window from a file of targets:
+    tdbg schedule audit -f ./targets.jsonl \
+      --start-time 2026-05-01T19:30:00Z --end-time 2026-05-02T10:00:00Z > audit.jsonl
 
   Pipe a JSONL target stream from stdin (jq, psql, awk, etc.):
-    cat ./targets.jsonl | tdbg schedule audit --start 2026-05-01T00:00:00Z --end 2026-05-02T00:00:00Z
+    cat ./targets.jsonl | tdbg schedule audit --start 2d
 
-  Single schedule deep-dive:
+  Single schedule deep-dive over an absolute window:
     tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
-      --start 2026-05-19T18:00:00Z --end 2026-05-19T22:00:00Z
+      --start-time 2026-05-19T18:00:00Z --end-time 2026-05-19T22:00:00Z
 
   Pipe stdout through jq (e.g. only schedules with real misses):
-    tdbg schedule audit -f ./targets.jsonl \
-      --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
-      | jq 'select(.counts.real_miss > 0)'`,
+    tdbg schedule audit -f ./targets.jsonl --start 1d | jq 'select(.counts.real_miss > 0)'`,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    FlagNamespace,
@@ -483,14 +490,22 @@ EXAMPLES
 						"with a stream, it is a constraint: every streamed target's schedule_id must match or the run errors.",
 				},
 				&cli.StringFlag{
-					Name:     FlagStart,
-					Usage:    "Window start (RFC3339)",
-					Required: true,
+					Name: FlagStart,
+					Usage: "Window start as a duration before now (e.g. 24h, 3d). Required unless --start-time is given; " +
+						"mutually exclusive with it.",
 				},
 				&cli.StringFlag{
-					Name:     FlagEnd,
-					Usage:    "Window end (RFC3339)",
-					Required: true,
+					Name:  FlagStartTime,
+					Usage: "Window start as an absolute RFC3339 timestamp. Mutually exclusive with --start.",
+				},
+				&cli.StringFlag{
+					Name: FlagEnd,
+					Usage: "Window end as a duration before now (e.g. 1h, 0s). Defaults to now; mutually exclusive with " +
+						"--end-time.",
+				},
+				&cli.StringFlag{
+					Name:  FlagEndTime,
+					Usage: "Window end as an absolute RFC3339 timestamp. Defaults to now; mutually exclusive with --end.",
 				},
 				&cli.IntFlag{
 					Name:  FlagConcurrency,

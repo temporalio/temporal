@@ -93,12 +93,16 @@ func NewRowWriter(w io.Writer, delayThreshold time.Duration) *RowWriter {
 	return &RowWriter{enc: json.NewEncoder(w), delayThreshold: delayThreshold}
 }
 
-// Write emits one row for r if it is flagged, otherwise it is a no-op.
-func (rw *RowWriter) Write(r Result) error {
+// Write emits one row for r if it is flagged and reports whether it did; for an unflagged schedule it is a no-op and
+// returns false.
+func (rw *RowWriter) Write(r Result) (bool, error) {
 	if !rw.flagged(r) {
-		return nil
+		return false, nil
 	}
-	return rw.enc.Encode(toRow(r))
+	if err := rw.enc.Encode(toRow(r)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (rw *RowWriter) flagged(r Result) bool {
@@ -113,7 +117,7 @@ func (rw *RowWriter) flagged(r Result) bool {
 func WriteFlat(w io.Writer, results []Result) error {
 	rw := NewRowWriter(w, 0)
 	for _, r := range results {
-		if err := rw.Write(r); err != nil {
+		if _, err := rw.Write(r); err != nil {
 			return err
 		}
 	}
