@@ -26,6 +26,7 @@ func SingleLocalHost(host string) Hosts {
 	return Hosts{All: []string{host}, Self: host}
 }
 
+// NewMonitor creates a new Monitor with the given host mappings.
 func NewMonitor(hosts map[primitives.ServiceName]Hosts) membership.Monitor {
 	resolvers := make(map[primitives.ServiceName]*staticResolver, len(hosts))
 	for service, hostList := range hosts {
