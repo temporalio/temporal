@@ -393,6 +393,9 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (needRegenTasks bool) {
+	if !ms.IsWorkflow() {
+		return false
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
