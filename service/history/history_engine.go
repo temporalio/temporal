@@ -311,6 +311,8 @@ func NewEngineWithShardContext(
 			config.VisibilityAllowList,
 		),
 		config.SuppressErrorSetSystemSearchAttribute,
+		shard.GetMetricsHandler(),
+		logger,
 	)
 
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(

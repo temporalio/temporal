@@ -48,7 +48,6 @@ func TestQueueModule_ArchivalQueue(t *testing.T) {
 			ExpectArchivalQueue: true,
 		},
 	} {
-		c := c
 		t.Run(c.Name, c.Run)
 	}
 }
