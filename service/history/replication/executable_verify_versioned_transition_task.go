@@ -82,7 +82,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	}
 	e.MarkExecutionStart()
 
-	emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+	}
 
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
 	// best-effort "applied" lifecycle event emitted below.
@@ -222,11 +224,11 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	ms *persistencespb.WorkflowMutableState,
 	retErr error,
 ) {
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
-	if err != nil {
+	if !e.Config.EmitReplicationLifecycleEvents() {
 		return
 	}
-	if !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
+	if err != nil {
 		return
 	}
 	handler := shardContext.GetEventHandler()

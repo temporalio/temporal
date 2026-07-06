@@ -75,7 +75,9 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
-	emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
+	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(

@@ -19,11 +19,11 @@ func emitReplicationExecuting(
 	taskType string,
 	attempt int32,
 ) {
-	shardContext, err := toolBox.ShardController.GetShardByNamespaceWorkflow(namespace.ID(key.NamespaceID), key.WorkflowID)
-	if err != nil {
+	if !toolBox.Config.EmitReplicationLifecycleEvents() {
 		return
 	}
-	if !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+	shardContext, err := toolBox.ShardController.GetShardByNamespaceWorkflow(namespace.ID(key.NamespaceID), key.WorkflowID)
+	if err != nil {
 		return
 	}
 	handler := shardContext.GetEventHandler()

@@ -668,11 +668,11 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	task *replicationspb.ReplicationTask,
 	item tasks.Task,
 ) {
-	handler := s.shardContext.GetEventHandler()
-	if handler == nil {
+	if !s.config.EmitReplicationLifecycleEvents() {
 		return
 	}
-	if !s.config.EmitReplicationLifecycleEvents() {
+	handler := s.shardContext.GetEventHandler()
+	if handler == nil {
 		return
 	}
 
