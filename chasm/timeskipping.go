@@ -41,7 +41,10 @@ type TimeSkippingRuntimeGate interface {
 // =============================================================================
 // Time Skipping Data Structure
 // =============================================================================
+<<<<<<< HEAD
 
+=======
+>>>>>>> ecc8e5e32 (add time skipping to chasm framework)
 type TimeSkippingTransition struct {
 	CurrentTime              time.Time
 	TargetTime               time.Time
