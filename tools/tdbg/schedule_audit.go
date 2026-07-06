@@ -26,19 +26,17 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	wfClient := factory.WorkflowClient(c)
 	limiter := scheduleaudit.NewNamespaceRateLimiter(in.RPS)
 	auditor := &scheduleaudit.Auditor{
-		WindowStart:           in.WindowStart,
-		WindowEnd:             in.WindowEnd,
-		DelayedFireBuffer:     in.DelayedFireBuffer,
-		RetentionSafetyBuffer: in.RetentionSafetyBuffer,
-		Concurrency:           in.Concurrency,
-		RPS:                   in.RPS,
-		Progress:              os.Stderr,
-		Schedules:             scheduleaudit.NewGRPCScheduleLoader(wfClient, os.Stderr, limiter),
-		Executions:            scheduleaudit.NewGRPCExecutionLoader(wfClient, os.Stderr, limiter),
+		WindowStart: in.WindowStart,
+		WindowEnd:   in.WindowEnd,
+		Concurrency: in.Concurrency,
+		RPS:         in.RPS,
+		Progress:    os.Stderr,
+		Schedules:   scheduleaudit.NewGRPCScheduleLoader(wfClient, os.Stderr, limiter),
+		Executions:  scheduleaudit.NewGRPCExecutionLoader(wfClient, os.Stderr, limiter),
 	}
 
 	auditStart := time.Now()
-	rw := scheduleaudit.NewRowWriter(os.Stdout)
+	rw := scheduleaudit.NewRowWriter(os.Stdout, in.DelayThreshold)
 	var flagged int
 
 	g, ctx := errgroup.WithContext(c.Context)
@@ -71,22 +69,20 @@ type auditInputs struct {
 	WindowStart time.Time
 	WindowEnd   time.Time
 
-	Concurrency           int
-	RPS                   int
-	DelayedFireBuffer     time.Duration
-	RetentionSafetyBuffer time.Duration
+	Concurrency    int
+	RPS            int
+	DelayThreshold time.Duration
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	in := &auditInputs{
-		Namespace:             c.String(FlagNamespace),
-		ScheduleID:            c.String(FlagScheduleID),
-		File:                  c.String(FlagFile),
-		Stdin:                 os.Stdin,
-		Concurrency:           c.Int(FlagConcurrency),
-		RPS:                   c.Int(FlagRPS),
-		DelayedFireBuffer:     c.Duration(FlagDelayedFireBuffer),
-		RetentionSafetyBuffer: c.Duration(FlagRetentionSafetyBuffer),
+		Namespace:      c.String(FlagNamespace),
+		ScheduleID:     c.String(FlagScheduleID),
+		File:           c.String(FlagFile),
+		Stdin:          os.Stdin,
+		Concurrency:    c.Int(FlagConcurrency),
+		RPS:            c.Int(FlagRPS),
+		DelayThreshold: c.Duration(FlagDelayThreshold),
 	}
 	if in.Concurrency <= 0 {
 		in.Concurrency = 1

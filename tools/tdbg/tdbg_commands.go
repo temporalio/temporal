@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -378,7 +377,7 @@ OUTPUT FORMAT
                                      drops       SKIP / BUFFER_ONE -- overlapping fires can be dropped for good
                                      delays      BUFFER_ALL / CANCEL_OTHER / TERMINATE_OTHER -- overlaps run later
                                      concurrent  ALLOW_ALL -- overlaps run immediately
-    catchup_window_s               the schedule's configured catchupWindow in seconds
+    catchup_window                 the schedule's configured catchupWindow (Go duration string, e.g. "1m0s")
     create_time, update_time       schedule create/update times (omitted if unknown)
     expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
     missed                         total unmatched scheduled times
@@ -392,11 +391,23 @@ OUTPUT FORMAT
                                      inconclusive_schedule_changed  spec was modified DURING the window; can't be judged
     scheduled_times []             every nominal time the spec produced in the window
     observed [{workflow_id, run_id, nominal, start, close, status}]  every workflow seen in visibility
+    delays [{workflow_id, nominal, actual, desired, start, ...}]  per started action, how late it was:
+                                     nominal          pre-jitter scheduled time (N)
+                                     actual           jittered intended fire time (A = N + deterministic jitter)
+                                     desired          when it became eligible (D; a prior action's close time if a
+                                                      delaying overlap policy held it, else = actual)
+                                     start            actual workflow start (S)
+                                     jitter_offset  A - N (intended load spreading)
+                                     overlap_wait   max(0, D - A) (held behind a prior action by the overlap policy)
+                                     dispatch_delay S - D -- system was slow to start it once eligible
+                                     e2e_delay      S - A (total delay from the intended fire time)
+                                   (durations are Go duration strings, e.g. "5m0s")
 
 CAVEATS AND LIMITATIONS
-  Retention: a namespace whose windowStart is past (retention - --retention-safety-buffer, default 24h) is skipped.
-    Visibility purges closed workflows after retention; the guard prevents silent false-positive real_miss against
-    purged data. Skipped namespaces are logged to stderr.
+  Retention: when --start is older than the namespace's retention boundary (now - retention), the window start is
+    clamped to that boundary and a warning is logged to stderr. Visibility purges closed workflows after retention, so
+    querying past it would surface purged data as false-positive real_miss; clamping audits only the portion that still
+    has data.
 
   Schedule modified during window: marked inconclusive_schedule_changed. The audit can't compute the historical spec,
     so the schedule's times are marked inconclusive rather than producing untrustworthy classifications.
@@ -492,16 +503,10 @@ EXAMPLES
 					Value: 10,
 				},
 				&cli.DurationFlag{
-					Name: FlagDelayedFireBuffer,
-					Usage: "How far past --end to keep scanning visibility for delayed buffered actions " +
-						"(nominal time in-window, actual start well after --end).",
-					Value: 24 * time.Hour,
-				},
-				&cli.DurationFlag{
-					Name: FlagRetentionSafetyBuffer,
-					Usage: "Slack inside the retention boundary; a namespace is skipped when --start is older than " +
-						"(retention - this). Guards against false real_miss from purged workflows. Set 0 to disable.",
-					Value: 24 * time.Hour,
+					Name: FlagDelayThreshold,
+					Usage: "Also flag a schedule (even with no missed runs) when a started action's dispatch delay " +
+						"reaches this -- surfaces schedules the system was slow to start. 0 flags on missed runs only.",
+					Value: 0,
 				},
 			},
 			Action: func(c *cli.Context) error {

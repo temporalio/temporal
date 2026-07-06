@@ -89,8 +89,7 @@ var (
 	FlagEnd                        = "end"
 	FlagConcurrency                = "concurrency"
 	FlagRPS                        = "rps"
-	FlagDelayedFireBuffer          = "delayed-fire-buffer"
-	FlagRetentionSafetyBuffer      = "retention-safety-buffer"
+	FlagDelayThreshold             = "delay-threshold"
 )
 
 var (

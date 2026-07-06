@@ -32,7 +32,7 @@ func TestScheduledTimes(t *testing.T) {
 		spec := &schedulepb.ScheduleSpec{
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{hourlyStructured()},
 		}
-		actual, err := ScheduledTimes(spec,
+		sts, err := ScheduledTimes(spec, "",
 			time.Date(2026, 5, 19, 18, 0, 0, 0, time.UTC),
 			time.Date(2026, 5, 19, 23, 0, 0, 0, time.UTC))
 		require.NoError(t, err)
@@ -42,12 +42,12 @@ func TestScheduledTimes(t *testing.T) {
 			time.Date(2026, 5, 19, 21, 0, 0, 0, time.UTC),
 			time.Date(2026, 5, 19, 22, 0, 0, 0, time.UTC),
 			time.Date(2026, 5, 19, 23, 0, 0, 0, time.UTC),
-		}, actual)
+		}, nominalTimes(sts))
 	})
 
 	t.Run("cron_string hourly", func(t *testing.T) {
 		spec := &schedulepb.ScheduleSpec{CronString: []string{"0 * * * *"}}
-		actual, err := ScheduledTimes(spec,
+		sts, err := ScheduledTimes(spec, "",
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T21:00:00Z"))
 		require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestScheduledTimes(t *testing.T) {
 			mustParseTime("2026-05-19T19:00:00Z"),
 			mustParseTime("2026-05-19T20:00:00Z"),
 			mustParseTime("2026-05-19T21:00:00Z"),
-		}, actual)
+		}, nominalTimes(sts))
 	})
 
 	t.Run("timezone_name shifts daily fire to UTC offset", func(t *testing.T) {
@@ -71,11 +71,11 @@ func TestScheduledTimes(t *testing.T) {
 			}},
 			TimezoneName: "America/Los_Angeles",
 		}
-		actual, err := ScheduledTimes(spec,
+		sts, err := ScheduledTimes(spec, "",
 			mustParseTime("2026-05-19T00:00:00Z"),
 			mustParseTime("2026-05-20T00:00:00Z"))
 		require.NoError(t, err)
-		require.Equal(t, []time.Time{mustParseTime("2026-05-19T16:00:00Z")}, actual)
+		require.Equal(t, []time.Time{mustParseTime("2026-05-19T16:00:00Z")}, nominalTimes(sts))
 	})
 
 	t.Run("end_time in past returns no fires", func(t *testing.T) {
@@ -83,11 +83,11 @@ func TestScheduledTimes(t *testing.T) {
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{hourlyStructured()},
 			EndTime:            timestamppb.New(mustParseTime("2026-01-01T00:00:00Z")),
 		}
-		actual, err := ScheduledTimes(spec,
+		sts, err := ScheduledTimes(spec, "",
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T22:00:00Z"))
 		require.NoError(t, err)
-		require.Empty(t, actual)
+		require.Empty(t, sts)
 	})
 
 	t.Run("interval with phase produces 15-min cadence offset by phase", func(t *testing.T) {
@@ -97,10 +97,11 @@ func TestScheduledTimes(t *testing.T) {
 				Phase:    durationpb.New(6*time.Minute + 7*time.Second),
 			}},
 		}
-		actual, err := ScheduledTimes(spec,
+		sts, err := ScheduledTimes(spec, "",
 			mustParseTime("2026-05-19T18:00:00Z"),
 			mustParseTime("2026-05-19T19:00:00Z"))
 		require.NoError(t, err)
+		actual := nominalTimes(sts)
 		require.NotEmpty(t, actual)
 		for i := 1; i < len(actual); i++ {
 			require.Equal(t, 15*time.Minute, actual[i].Sub(actual[i-1]),
@@ -200,7 +201,7 @@ func TestClassify(t *testing.T) {
 		completed(sw, "w1", "2026-05-19T18:00:00Z", "2026-05-19T18:05:00Z")
 		completed(sw, "w2", "2026-05-19T19:00:00Z", "2026-05-19T19:05:00Z")
 		r := &Result{}
-		Classify(r, scheduled, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
+		Classify(r, scheduled, sw, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
 		require.Equal(t, 2, r.Matched)
 		require.Empty(t, r.Missed)
 	})
@@ -209,7 +210,7 @@ func TestClassify(t *testing.T) {
 		sw := startedWorkflows{}
 		completed(sw, "w1", "2026-05-19T18:00:00Z", "2026-05-19T18:05:00Z")
 		r := &Result{}
-		Classify(r, scheduled, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
+		Classify(r, scheduled, sw, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
 		require.Equal(t, 1, r.Matched)
 		require.Equal(t, categoryRealMiss, r.Missed[mustParseTime("2026-05-19T19:00:00Z")])
 	})
@@ -224,7 +225,7 @@ func TestClassify(t *testing.T) {
 			NominalTime: mustParseTime("2026-05-19T18:00:00Z"),
 		})
 		r := &Result{}
-		Classify(r, scheduled, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
+		Classify(r, scheduled, sw, sw, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP)
 		require.Equal(t, categorySkipOverlap, r.Missed[mustParseTime("2026-05-19T19:00:00Z")])
 	})
 
@@ -238,15 +239,16 @@ func TestClassify(t *testing.T) {
 			NominalTime: mustParseTime("2026-05-19T18:00:00Z"),
 		})
 		r := &Result{}
-		Classify(r, scheduled, sw, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL)
+		Classify(r, scheduled, sw, sw, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL)
 		require.Equal(t, categoryRealMiss, r.Missed[mustParseTime("2026-05-19T19:00:00Z")])
 		require.Zero(t, r.Count(categorySkipOverlap))
 	})
 }
 
 type fakeScheduleLoader struct {
-	entries   []ScheduleEntry
-	retention time.Duration
+	entries     []ScheduleEntry
+	retention   time.Duration
+	namespaceID string
 }
 
 func (f *fakeScheduleLoader) ListScheduleIDs(_ context.Context, _ string, yield func(id string) error) error {
@@ -267,8 +269,8 @@ func (f *fakeScheduleLoader) LookupSchedule(_ context.Context, _, scheduleID str
 	return ScheduleEntry{}, status.Error(codes.NotFound, "schedule not found")
 }
 
-func (f *fakeScheduleLoader) NamespaceRetention(_ context.Context, _ string) (time.Duration, error) {
-	return f.retention, nil
+func (f *fakeScheduleLoader) DescribeNamespace(_ context.Context, _ string) (NamespaceInfo, error) {
+	return NamespaceInfo{ID: f.namespaceID, Retention: f.retention}, nil
 }
 
 type fakeExecutionLoader struct {
@@ -309,7 +311,7 @@ func TestAuditor(t *testing.T) {
 			}},
 		}}
 		a := &Auditor{
-			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
+			WindowStart: mustParseTime("2026-05-19T17:00:00Z"),
 			WindowEnd:   mustParseTime("2026-05-19T20:00:00Z"),
 			Schedules:   loader,
 			Executions:  exec,
@@ -318,11 +320,13 @@ func TestAuditor(t *testing.T) {
 		results, err := runAudit(a, Target{Namespace: "ns"})
 		require.NoError(t, err)
 		require.Len(t, results, 1)
-		// Window (18:00, 20:00] yields 19:00 and 20:00; nothing running -> both real_miss.
+		// Window (17:00, 20:00] yields 18:00, 19:00, 20:00. Only the 18:00 fire ran; nothing was running at 19:00/20:00
+		// (w1 closed at 18:05) -> both real_miss.
+		require.Equal(t, 1, results[0].Matched)
 		require.Equal(t, 2, results[0].Count(categoryRealMiss))
 		require.Equal(t, "ns", results[0].Namespace)
 		require.Len(t, results[0].Observed, 1)
-		require.Len(t, results[0].Scheduled, 2)
+		require.Len(t, results[0].Scheduled, 3)
 	})
 
 	t.Run("concurrency: whole namespace streams every schedule", func(t *testing.T) {
@@ -416,11 +420,12 @@ func TestAuditor(t *testing.T) {
 		require.Equal(t, "active", results[0].ScheduleID)
 	})
 
-	t.Run("window past retention is skipped", func(t *testing.T) {
+	t.Run("window entirely past retention yields nothing after clamping", func(t *testing.T) {
+		// WindowEnd (39d ago) is older than the retention boundary (30d ago), so clamping the start to the boundary
+		// leaves an empty window -> no scheduled times -> no result.
 		a := &Auditor{
-			WindowStart:           time.Now().Add(-40 * 24 * time.Hour),
-			WindowEnd:             time.Now().Add(-39 * 24 * time.Hour),
-			RetentionSafetyBuffer: 24 * time.Hour,
+			WindowStart: time.Now().Add(-40 * 24 * time.Hour),
+			WindowEnd:   time.Now().Add(-39 * 24 * time.Hour),
 			Schedules: &fakeScheduleLoader{
 				entries:   []ScheduleEntry{{ID: "s1", Spec: hourlyAllHoursSpec(), WorkflowType: "W"}},
 				retention: 30 * 24 * time.Hour,
@@ -430,7 +435,31 @@ func TestAuditor(t *testing.T) {
 		}
 		results, err := runAudit(a, Target{Namespace: "ns"})
 		require.NoError(t, err)
-		require.Empty(t, results, "expected no results when window is past retention")
+		require.Empty(t, results, "expected no results when the whole window is past retention")
+	})
+
+	t.Run("window partly past retention clamps start to the boundary", func(t *testing.T) {
+		// WindowStart (40d ago) precedes the retention boundary (30d ago) but WindowEnd (10d ago) is within it, so the
+		// audited window is clamped to (boundary, WindowEnd] and the result reflects the clamped start.
+		windowStart := time.Now().Add(-40 * 24 * time.Hour)
+		retention := 30 * 24 * time.Hour
+		a := &Auditor{
+			WindowStart: windowStart,
+			WindowEnd:   time.Now().Add(-10 * 24 * time.Hour),
+			Schedules: &fakeScheduleLoader{
+				entries:   []ScheduleEntry{{ID: "s1", Spec: hourlyAllHoursSpec(), WorkflowType: "W"}},
+				retention: retention,
+			},
+			Executions: &fakeExecutionLoader{byScheduleID: map[string][]Execution{}},
+			Progress:   io.Discard,
+		}
+		results, err := runAudit(a, Target{Namespace: "ns"})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		boundary := time.Now().Add(-retention)
+		require.WithinDuration(t, boundary, results[0].WindowStart, time.Minute,
+			"window start should be clamped to the retention boundary")
+		require.True(t, results[0].WindowStart.After(windowStart), "clamped start must be after the original start")
 	})
 
 	t.Run("still-running workflow started before window -> skip_overlap under SKIP", func(t *testing.T) {
@@ -560,6 +589,101 @@ func TestAuditor(t *testing.T) {
 		require.Equal(t, 4, r.Count(categoryRealMiss))
 		require.Zero(t, r.Count(categorySkipOverlap))
 	})
+}
+
+func TestScheduledTimesJitter(t *testing.T) {
+	spec := &schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{{
+			Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+			Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
+			Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 1}},
+			DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
+			Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
+			DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
+		}},
+		Jitter: durationpb.New(30 * time.Minute),
+	}
+	start := mustParseTime("2026-05-19T00:00:00Z")
+	end := mustParseTime("2026-05-20T00:00:00Z")
+
+	got, err := ScheduledTimes(spec, jitterSeed("ns-id", "s1"), start, end)
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+
+	sawJitter := false
+	for _, st := range got {
+		require.False(t, st.Jittered.Before(st.Nominal), "jittered must not precede nominal")
+		require.LessOrEqual(t, st.Jittered.Sub(st.Nominal), 30*time.Minute, "jitter bounded by spec")
+		if st.Jittered.After(st.Nominal) {
+			sawJitter = true
+		}
+	}
+	require.True(t, sawJitter, "over 24 hourly fires with a 30m jitter window, at least one should be jittered")
+
+	// Deterministic: the same seed reproduces the scheduler's jittered times exactly.
+	again, err := ScheduledTimes(spec, jitterSeed("ns-id", "s1"), start, end)
+	require.NoError(t, err)
+	require.Equal(t, got, again)
+}
+
+func TestActionDelays(t *testing.T) {
+	// Four hourly fires (19:00-22:00). wfA/wfLong start on time; wfB is a pure "system was slow" case (no blocker, 40m
+	// late); wfC is held behind the still-running wfLong and then takes a further 5m to start.
+	closeA := mustParseTime("2026-05-19T19:30:00Z")
+	closeB := mustParseTime("2026-05-19T20:50:00Z")
+	closeLong := mustParseTime("2026-05-19T22:10:00Z")
+	closeC := mustParseTime("2026-05-19T22:30:00Z")
+	completed := enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	exec := &fakeExecutionLoader{byScheduleID: map[string][]Execution{
+		"s1": {
+			{WorkflowID: "wfA", StartTime: mustParseTime("2026-05-19T19:00:00Z"), CloseTime: &closeA, Status: completed, NominalTime: mustParseTime("2026-05-19T19:00:00Z")},
+			{WorkflowID: "wfB", StartTime: mustParseTime("2026-05-19T20:40:00Z"), CloseTime: &closeB, Status: completed, NominalTime: mustParseTime("2026-05-19T20:00:00Z")},
+			{WorkflowID: "wfLong", StartTime: mustParseTime("2026-05-19T21:00:00Z"), CloseTime: &closeLong, Status: completed, NominalTime: mustParseTime("2026-05-19T21:00:00Z")},
+			{WorkflowID: "wfC", StartTime: mustParseTime("2026-05-19T22:15:00Z"), CloseTime: &closeC, Status: completed, NominalTime: mustParseTime("2026-05-19T22:00:00Z")},
+		},
+	}}
+	loader := &fakeScheduleLoader{namespaceID: "ns-id", entries: []ScheduleEntry{{
+		ID: "s1", Spec: hourlyAllHoursSpec(), WorkflowType: "W",
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL},
+	}}}
+	a := &Auditor{
+		WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
+		WindowEnd:   mustParseTime("2026-05-19T22:00:00Z"),
+		Schedules:   loader,
+		Executions:  exec,
+		Progress:    io.Discard,
+	}
+	results, err := runAudit(a, Target{Namespace: "ns"})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	byWF := map[string]ActionDelay{}
+	for _, d := range results[0].Delays {
+		byWF[d.WorkflowID] = d
+	}
+	require.Len(t, byWF, 4)
+
+	// hourlyAllHoursSpec has no jitter, so actual == nominal everywhere.
+	for id, d := range byWF {
+		require.Equal(t, d.Nominal, d.Actual, "%s: no jitter -> actual == nominal", id)
+		require.Zero(t, d.JitterOffset, "%s", id)
+	}
+
+	// On-time starts: no delay of any kind.
+	require.Zero(t, byWF["wfA"].DispatchDelay)
+	require.Zero(t, byWF["wfLong"].DispatchDelay)
+
+	// wfB: system was slow to start it -- 40m dispatch delay with no overlap wait.
+	require.Zero(t, byWF["wfB"].OverlapWait)
+	require.Equal(t, 40*time.Minute, byWF["wfB"].DispatchDelay)
+	require.Equal(t, 40*time.Minute, byWF["wfB"].E2EDelay)
+
+	// wfC: held behind wfLong (closed 22:10), then a further 5m of system delay.
+	c := byWF["wfC"]
+	require.Equal(t, closeLong, c.Desired, "eligible when the blocking action closed")
+	require.Equal(t, 10*time.Minute, c.OverlapWait)
+	require.Equal(t, 5*time.Minute, c.DispatchDelay)
+	require.Equal(t, 15*time.Minute, c.E2EDelay) // overlap_wait + dispatch_delay
 }
 
 // listExtraLoader wraps a ScheduleLoader to yield extra schedule IDs during listing that LookupSchedule doesn't know

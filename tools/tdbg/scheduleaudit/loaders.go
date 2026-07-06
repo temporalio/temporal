@@ -153,9 +153,9 @@ func (l *grpcScheduleLoader) LookupSchedule(ctx context.Context, namespace, sche
 	return entry, nil
 }
 
-func (l *grpcScheduleLoader) NamespaceRetention(ctx context.Context, namespace string) (time.Duration, error) {
+func (l *grpcScheduleLoader) DescribeNamespace(ctx context.Context, namespace string) (NamespaceInfo, error) {
 	if err := l.limiter.Wait(ctx, namespace); err != nil {
-		return 0, err
+		return NamespaceInfo{}, err
 	}
 	var resp *workflowservice.DescribeNamespaceResponse
 	err := l.retrier.do(ctx, fmt.Sprintf("DescribeNamespace(%s)", namespace), func() error {
@@ -166,12 +166,13 @@ func (l *grpcScheduleLoader) NamespaceRetention(ctx context.Context, namespace s
 		return rpcErr
 	})
 	if err != nil {
-		return 0, err
+		return NamespaceInfo{}, err
 	}
+	info := NamespaceInfo{ID: resp.GetNamespaceInfo().GetId()}
 	if d := resp.GetConfig().GetWorkflowExecutionRetentionTtl(); d != nil {
-		return d.AsDuration(), nil
+		info.Retention = d.AsDuration()
 	}
-	return 0, nil
+	return info, nil
 }
 
 // NewGRPCExecutionLoader returns an ExecutionLoader backed by the workflow-service frontend. log receives rate-limit
@@ -193,16 +194,25 @@ type grpcExecutionLoader struct {
 const visibilityPageSize = 1000
 const pageProgressEvery = 5
 
-// ListExecutions issues one paginated visibility query returning every workflow started by scheduleID that was alive
-// at some moment in [windowStart, queryEnd]. The predicate `StartTime <= queryEnd AND (CloseTime >= windowStart OR
-// CloseTime IS NULL)` captures in-window starts, still-running long-runners, closed long-runners that crossed
-// windowStart, and heavily-delayed buffered actions in one query.
-func (l *grpcExecutionLoader) ListExecutions(ctx context.Context, namespace, scheduleID string, windowStart, queryEnd time.Time) ([]Execution, error) {
+// ListExecutions issues one paginated visibility query returning the workflows this audit needs, keyed on the nominal
+// (pre-jitter) scheduled time recorded in the TemporalScheduledStartTime search attribute rather than on actual
+// StartTime. Two OR'd groups:
+//
+//   - nominal in (windowStart, windowEnd]: every action scheduled inside the window, regardless of when it actually
+//     started -- so a heavily-delayed action (nominal in-window, started long after windowEnd) is still captured
+//     without a look-ahead buffer, and actions scheduled after the window aren't pulled in.
+//   - nominal <= windowStart AND still alive at windowStart (CloseTime >= windowStart OR running): pre-window
+//     long-runners that were active during the window, needed to classify overlap skips at the leading edge.
+//
+// Matching nominal on the search attribute is what makes the delayed-fire and retention-safety buffers unnecessary.
+func (l *grpcExecutionLoader) ListExecutions(ctx context.Context, namespace, scheduleID string, windowStart, windowEnd time.Time) ([]Execution, error) {
+	start := windowStart.UTC().Format(time.RFC3339)
+	end := windowEnd.UTC().Format(time.RFC3339)
 	query := fmt.Sprintf(
-		`TemporalScheduledById = %q AND StartTime <= %q AND (CloseTime >= %q OR CloseTime IS NULL)`,
-		scheduleID,
-		queryEnd.UTC().Format(time.RFC3339),
-		windowStart.UTC().Format(time.RFC3339),
+		`TemporalScheduledById = %q AND (`+
+			`(TemporalScheduledStartTime > %q AND TemporalScheduledStartTime <= %q) OR `+
+			`(TemporalScheduledStartTime <= %q AND (CloseTime >= %q OR CloseTime IS NULL)))`,
+		scheduleID, start, end, start, start,
 	)
 	return l.paginate(ctx, namespace, scheduleID, query)
 }

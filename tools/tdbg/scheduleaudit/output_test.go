@@ -51,7 +51,7 @@ func TestWriteFlat(t *testing.T) {
 		require.Equal(t, mustParseTime("2026-05-19T22:00:00Z"), got.Window.End)
 		require.Equal(t, "Skip", got.OverlapPolicy)
 		require.Equal(t, "drops", got.OverlapClass)
-		require.Equal(t, int64(600), got.CatchupWindowSecond)
+		require.Equal(t, "10m0s", got.CatchupWindow)
 		require.Equal(t, 2, got.Missed)
 		require.Equal(t, 1, got.Counts.RealMiss)
 		require.Equal(t, 1, got.Counts.SkipOverlap)
@@ -70,6 +70,46 @@ func TestWriteFlat(t *testing.T) {
 		var buf bytes.Buffer
 		require.NoError(t, WriteFlat(&buf, results))
 		require.Empty(t, buf.String())
+	})
+
+	t.Run("delay threshold flags a slow schedule with no missed times", func(t *testing.T) {
+		slow := Result{
+			Namespace: "ns1", ScheduleID: "slow",
+			Delays: []ActionDelay{{WorkflowID: "w1", DispatchDelay: 10 * time.Minute}},
+		}
+		emit := func(threshold time.Duration) string {
+			var buf bytes.Buffer
+			rw := NewRowWriter(&buf, threshold)
+			require.NoError(t, rw.Write(slow))
+			return buf.String()
+		}
+		require.Empty(t, emit(0), "threshold 0 flags on missed times only")
+		require.Empty(t, emit(30*time.Minute), "dispatch delay below threshold is not flagged")
+		require.NotEmpty(t, emit(5*time.Minute), "dispatch delay at/over threshold is flagged with no misses")
+	})
+
+	t.Run("delays are emitted on the row", func(t *testing.T) {
+		miss := mustParseTime("2026-05-19T19:00:00Z")
+		results := []Result{{
+			Namespace: "ns1", ScheduleID: "s1",
+			Delays: []ActionDelay{{
+				WorkflowID:    "w1",
+				Nominal:       mustParseTime("2026-05-19T19:00:00Z"),
+				Actual:        mustParseTime("2026-05-19T19:00:00Z"),
+				Desired:       mustParseTime("2026-05-19T19:00:00Z"),
+				Start:         mustParseTime("2026-05-19T19:10:00Z"),
+				DispatchDelay: 10 * time.Minute,
+				E2EDelay:      10 * time.Minute,
+			}},
+			Missed: map[time.Time]string{miss: categoryRealMiss},
+		}}
+		var buf bytes.Buffer
+		require.NoError(t, WriteFlat(&buf, results))
+		var got row
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &got))
+		require.Len(t, got.Delays, 1)
+		require.Equal(t, "w1", got.Delays[0].WorkflowID)
+		require.Equal(t, "10m0s", got.Delays[0].DispatchDelay)
 	})
 
 	t.Run("running execution renders close as null", func(t *testing.T) {

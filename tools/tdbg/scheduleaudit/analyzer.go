@@ -17,13 +17,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ScheduledTimes returns the nominal times the spec would produce in (start, end]. It is a thin wrapper over the
-// server's own spec compiler (scheduler.CompiledSpec.GetNextTime) so the semantics exactly match the live scheduler.
+// ScheduledTime is one fire the spec produced: the nominal (pre-jitter) time and the jittered time the scheduler
+// actually intended to fire at. Jitter is a deterministic function of (nominal, jitterSeed, spec), so we reproduce the
+// scheduler's intended fire time locally instead of reading it back from the started workflow.
+type ScheduledTime struct {
+	// Nominal is the pre-jitter time. It is what the scheduler stamps into the TemporalScheduledStartTime search
+	// attribute, so it is the value we match observed workflows against.
+	Nominal time.Time
+	// Jittered is Nominal plus the scheduler's deterministic jitter (== nominal when the spec has no jitter). It is the
+	// time the scheduler intended to fire, used as the baseline for delay measurement.
+	Jittered time.Time
+}
+
+// ScheduledTimes returns the fires the spec would produce in (start, end]. It is a thin wrapper over the server's own
+// spec compiler (scheduler.CompiledSpec.GetNextTime) so the semantics exactly match the live scheduler.
 //
-// We consume res.Nominal (the pre-jitter time), not res.Next, because that is what the scheduler stamps into the
-// TemporalScheduledStartTime search attribute -- the value we match observed workflows against. The frontend's
-// ListScheduleMatchingTimes RPC returns jittered .Next times, so it is not reusable here.
-func ScheduledTimes(spec *schedulepb.ScheduleSpec, start, end time.Time) ([]time.Time, error) {
+// jitterSeed must be the same seed the scheduler uses (see jitterSeed) so the returned Jittered times match the real
+// ones. Matching still keys on Nominal (jitter-independent), so an incorrect seed only affects the delay numbers, not
+// hit/miss classification.
+func ScheduledTimes(spec *schedulepb.ScheduleSpec, jitterSeed string, start, end time.Time) ([]ScheduledTime, error) {
 	if spec == nil {
 		return nil, nil
 	}
@@ -32,22 +44,45 @@ func ScheduledTimes(spec *schedulepb.ScheduleSpec, start, end time.Time) ([]time
 	if err != nil {
 		return nil, fmt.Errorf("compile spec: %w", err)
 	}
-	var out []time.Time
+	var out []ScheduledTime
 	cursor := start
 	for {
-		// Empty jitter seed: only GetNextTimeResult.Nominal is consumed, which is computed without the seed
-		// (the seed only feeds GetNextTimeResult.Next, which we discard).
-		res := compiled.GetNextTime("", cursor)
+		res := compiled.GetNextTime(jitterSeed, cursor)
 		if res.Nominal.IsZero() || res.Nominal.After(end) {
 			return out, nil
 		}
-		out = append(out, res.Nominal)
+		out = append(out, ScheduledTime{Nominal: res.Nominal, Jittered: res.Next})
 		cursor = res.Nominal
 		if len(out) > 100_000 {
 			// Defensive cap -- sub-minute schedules over very large windows could otherwise OOM. Caller should chunk windows.
 			return nil, errors.New("scheduled times exceeded cap (100k)")
 		}
 	}
+}
+
+// jitterSeed reproduces the CHASM scheduler's per-schedule jitter seed (chasm/lib/scheduler Scheduler.jitterSeed:
+// "{namespaceID}-{scheduleID}"), so ScheduledTimes yields the same jittered fire times the scheduler used.
+func jitterSeed(namespaceID, scheduleID string) string {
+	return namespaceID + "-" + scheduleID
+}
+
+// nominalTimes projects the nominal times out of a slice of ScheduledTime for matching/classification.
+func nominalTimes(sts []ScheduledTime) []time.Time {
+	out := make([]time.Time, len(sts))
+	for i, st := range sts {
+		out[i] = st.Nominal
+	}
+	return out
+}
+
+// jitterByNominal maps each nominal time to its jittered time, so an observed action (matched by nominal) can recover
+// the intended fire time it was measured against.
+func jitterByNominal(sts []ScheduledTime) map[time.Time]time.Time {
+	out := make(map[time.Time]time.Time, len(sts))
+	for _, st := range sts {
+		out[st.Nominal] = st.Jittered
+	}
+	return out
 }
 
 // Execution is a single workflow execution row observed in visibility.
@@ -118,6 +153,26 @@ func (s startedWorkflows) anyActiveAt(at time.Time) bool {
 	return false
 }
 
+// desiredTime reconstructs when an action fired at jittered time actual became eligible to start. If a prior action of
+// the same schedule was still running at actual, a delaying overlap policy held this start until that action closed, so
+// eligibility is the prior action's close time -- exactly the value the scheduler records in BufferedStart.DesiredTime
+// (chasm/lib/scheduler invoker.go: DesiredTime = completed.CloseTime). Otherwise the action was eligible at actual.
+//
+// Delaying policies run actions serially, so at most one prior action is active at any instant; a still-running blocker
+// is ignored because this action could not have started behind it, and max() is defensive against grouped overlaps.
+func (s startedWorkflows) desiredTime(self string, actual time.Time) time.Time {
+	desired := actual
+	for id, w := range s {
+		if id == self || w.StillRunning {
+			continue
+		}
+		if w.activeAt(actual) && w.ChainEnd.After(desired) {
+			desired = w.ChainEnd
+		}
+	}
+	return desired
+}
+
 // matchNominal uses strict equality: the server's spec compiler produces whole-second UTC nominal times and our local
 // ScheduledTimes uses the same compiler, so both sides are byte-identical when the spec hasn't changed.
 func (s startedWorkflows) matchNominal(scheduled time.Time) bool {
@@ -180,23 +235,25 @@ func overlapPolicyName(policy enumspb.ScheduleOverlapPolicy) string {
 }
 
 // Classify diffs scheduled times against the observed workflows and populates Expected/Actual/Matched/Missed on r.
+// inWindow is the actions whose nominal falls inside the window (used for matching and the Actual count); active is the
+// superset that also includes pre-window long-runners (used only to detect overlap at scheduled times).
 //
 // An unmatched scheduled time is bucketed by the schedule's overlap policy class:
 //   - dropsOnOverlap: skip_overlap if some action was active at that moment (a legitimate policy skip), else real_miss.
 //   - delaysOnOverlap / concurrent: always real_miss -- these policies never drop a scheduled time, so a missing
-//     workflow is a genuine gap (the delayed-fire-buffer query window already gave delayed actions a chance to appear).
-func Classify(r *Result, scheduled []time.Time, observed startedWorkflows, policy enumspb.ScheduleOverlapPolicy) {
+//     workflow is a genuine gap (the visibility query keys on nominal time, so a delayed action would still be matched).
+func Classify(r *Result, scheduled []time.Time, inWindow, active startedWorkflows, policy enumspb.ScheduleOverlapPolicy) {
 	r.Missed = map[time.Time]string{}
 	r.Expected = len(scheduled)
-	r.Actual = len(observed)
+	r.Actual = len(inWindow)
 
 	class := overlapClassOf(policy)
 	for _, st := range scheduled {
-		if observed.matchNominal(st) {
+		if inWindow.matchNominal(st) {
 			r.Matched++
 			continue
 		}
-		if class == dropsOnOverlap && observed.anyActiveAt(st) {
+		if class == dropsOnOverlap && active.anyActiveAt(st) {
 			r.Missed[st] = categorySkipOverlap
 			continue
 		}
@@ -211,8 +268,16 @@ type ScheduleLoader interface {
 	ListScheduleIDs(ctx context.Context, namespace string, yield func(id string) error) error
 	// LookupSchedule fetches a single schedule's full data via DescribeSchedule.
 	LookupSchedule(ctx context.Context, namespace, scheduleID string) (ScheduleEntry, error)
-	// NamespaceRetention returns the workflow execution retention TTL for the namespace.
-	NamespaceRetention(ctx context.Context, namespace string) (time.Duration, error)
+	// DescribeNamespace returns the namespace's UUID and workflow execution retention TTL. The UUID feeds the jitter
+	// seed; the retention TTL gates the audit window.
+	DescribeNamespace(ctx context.Context, namespace string) (NamespaceInfo, error)
+}
+
+// NamespaceInfo is the subset of DescribeNamespace the audit needs: the namespace's UUID (part of the scheduler's
+// jitter seed) and its workflow execution retention TTL.
+type NamespaceInfo struct {
+	ID        string
+	Retention time.Duration
 }
 
 // ScheduleEntry carries everything the audit needs to classify a schedule.
@@ -230,12 +295,11 @@ type ScheduleEntry struct {
 	CatchupWindow time.Duration
 }
 
-// ExecutionLoader fetches every workflow started by one schedule that was alive at some moment in
-// [windowStart, queryEnd] -- where "alive" is the natural interval predicate StartTime <= queryEnd AND
-// (CloseTime >= windowStart OR CloseTime IS NULL). One paginated query per schedule covers everything our analysis
-// needs: in-window starts, still-running long-runners, closed long-runners, and heavily-delayed buffered actions.
+// ExecutionLoader fetches the workflows one schedule needs for the audit, keyed on the nominal (pre-jitter) scheduled
+// time: every action whose nominal falls in (windowStart, windowEnd] (regardless of when it actually started), plus any
+// pre-window action still alive at windowStart (needed for overlap classification). One paginated query per schedule.
 type ExecutionLoader interface {
-	ListExecutions(ctx context.Context, namespace, scheduleID string, windowStart, queryEnd time.Time) ([]Execution, error)
+	ListExecutions(ctx context.Context, namespace, scheduleID string, windowStart, windowEnd time.Time) ([]Execution, error)
 }
 
 // Target names an audit unit: a whole namespace (ScheduleID empty) or a single schedule within it.
@@ -248,15 +312,6 @@ type Target struct {
 type Auditor struct {
 	WindowStart time.Time
 	WindowEnd   time.Time
-
-	// DelayedFireBuffer is how far past WindowEnd the visibility query keeps looking for workflows, to catch
-	// heavily-delayed buffered actions whose nominal time falls in the window but whose actual StartTime lands well
-	// after WindowEnd (e.g. a 5-min schedule whose workflows take a day to run).
-	DelayedFireBuffer time.Duration
-	// RetentionSafetyBuffer is how far inside the retention boundary WindowStart must sit to be considered safe to
-	// audit. Visibility purges workflows retention-from-CloseTime ago, so a WindowStart at the boundary risks missing
-	// workflows that closed near it; this slack absorbs clock skew and retention-job lag. Zero disables the slack.
-	RetentionSafetyBuffer time.Duration
 
 	// Concurrency bounds how many namespaces are audited at once (the namespace worker-pool size). Defaults to 1 if
 	// <= 0. Within each namespace, schedules are fanned out and analyzed concurrently, paced by RPS.
@@ -299,11 +354,36 @@ type Result struct {
 	Scheduled []time.Time
 	Observed  []Execution
 
+	// Delays decomposes how late each started action was (one per observed action). Empty for inconclusive schedules,
+	// whose changed spec makes the jittered baseline untrustworthy.
+	Delays []ActionDelay
+
 	Expected int
 	Actual   int
 	Matched  int
 	// Missed maps each unmatched nominal time to its category (real_miss | skip_overlap | inconclusive_schedule_changed).
 	Missed map[time.Time]string
+}
+
+// ActionDelay decomposes how late one started action was, from four timestamps: the nominal (pre-jitter) time N, the
+// jittered intended fire time A, the eligibility time D (a prior action's close time when a delaying overlap policy
+// held this start, otherwise A), and the actual workflow start S. The components sum consistently:
+//
+//	S - N = (A - N) + (D - A) + (S - D) = JitterOffset + OverlapWait + DispatchDelay
+//
+// DispatchDelay is the key "system was slow to start it" signal: the action was eligible at D but did not start until
+// S, for reasons other than an intentional overlap wait.
+type ActionDelay struct {
+	WorkflowID string
+	Nominal    time.Time // N
+	Actual     time.Time // A: jittered intended fire time
+	Desired    time.Time // D: eligibility time (prior close under a delaying overlap, else A)
+	Start      time.Time // S: actual workflow start
+
+	JitterOffset  time.Duration // A - N: intended load spreading
+	OverlapWait   time.Duration // max(0, D - A): time held behind a prior action by the overlap policy
+	DispatchDelay time.Duration // S - D: system lateness once eligible
+	E2EDelay      time.Duration // S - A: total delay from the intended fire time
 }
 
 // TotalMissed is the number of unmatched scheduled times across all categories.
@@ -332,17 +412,61 @@ func (r Result) MissedTimes(category string) []time.Time {
 	return out
 }
 
+// MaxDispatchDelay returns the largest system dispatch delay across the started actions, or 0 if there were none. It
+// is the "how badly was the scheduler slowed" summary used to decide whether a schedule with no misses is still worth
+// flagging.
+func (r Result) MaxDispatchDelay() time.Duration {
+	var maxDelay time.Duration
+	for _, d := range r.Delays {
+		if d.DispatchDelay > maxDelay {
+			maxDelay = d.DispatchDelay
+		}
+	}
+	return maxDelay
+}
+
 func sortTimes(times []time.Time) {
 	slices.SortFunc(times, func(a, b time.Time) int { return a.Compare(b) })
+}
+
+// buildDelays computes the per-action delay decomposition for each in-window action. actual (A) comes from the jittered
+// scheduled time matching the action's nominal (falling back to nominal when the action doesn't match a scheduled fire,
+// e.g. a manual/backfill start); desired (D) is reconstructed from the close times in active, which includes pre-window
+// blockers so an action held behind one is attributed correctly.
+func buildDelays(inWindow, active startedWorkflows, jittered map[time.Time]time.Time) []ActionDelay {
+	out := make([]ActionDelay, 0, len(inWindow))
+	for _, w := range inWindow {
+		n := w.NominalTime
+		a := n
+		if j, ok := jittered[n]; ok {
+			a = j
+		}
+		d := active.desiredTime(w.WorkflowID, a)
+		s := w.ChainStart
+		out = append(out, ActionDelay{
+			WorkflowID:    w.WorkflowID,
+			Nominal:       n,
+			Actual:        a,
+			Desired:       d,
+			Start:         s,
+			JitterOffset:  a.Sub(n),
+			OverlapWait:   max(0, d.Sub(a)),
+			DispatchDelay: s.Sub(d),
+			E2EDelay:      s.Sub(a),
+		})
+	}
+	return out
 }
 
 // scheduleJob is one concrete schedule to analyze. explicit distinguishes a schedule the caller named directly (a
 // NotFound is a hard error) from one discovered by listing a namespace (a NotFound just means it was deleted between
 // listing and describe, so it is skipped).
 type scheduleJob struct {
-	namespace  string
-	scheduleID string
-	explicit   bool
+	namespace   string
+	namespaceID string    // namespace UUID, for the jitter seed
+	windowStart time.Time // effective window start after retention clamping
+	scheduleID  string
+	explicit    bool
 }
 
 // Run consumes targets and calls emit once per analyzed schedule, as soon as that schedule's analysis completes.
@@ -364,7 +488,7 @@ func (a *Auditor) Run(ctx context.Context, targets <-chan Target, emit func(Resu
 
 	g, ctx := errgroup.WithContext(ctx)
 	results := make(chan Result)
-	retention := newRetentionCache(a)
+	namespaces := newNamespaceCache(a)
 
 	// Namespace pool: up to Concurrency targets are processed at once.
 	var workers sync.WaitGroup
@@ -373,7 +497,7 @@ func (a *Auditor) Run(ctx context.Context, targets <-chan Target, emit func(Resu
 		g.Go(func() error {
 			defer workers.Done()
 			for t := range targets {
-				if err := a.processTarget(ctx, retention, t, results); err != nil {
+				if err := a.processTarget(ctx, namespaces, t, results); err != nil {
 					return err
 				}
 			}
@@ -399,26 +523,25 @@ func (a *Auditor) Run(ctx context.Context, targets <-chan Target, emit func(Resu
 	return g.Wait()
 }
 
-// processTarget audits one target: a single named schedule, or every schedule in a whole namespace. Namespaces whose
-// window is past retention are skipped.
-func (a *Auditor) processTarget(ctx context.Context, retention *retentionCache, t Target, results chan<- Result) error {
-	skip, err := retention.skip(ctx, t.Namespace)
+// processTarget audits one target: a single named schedule, or every schedule in a whole namespace. The effective
+// window start is clamped to the namespace's retention boundary (with a warning) so the audit never queries purged
+// workflows, which would otherwise surface as false real_miss.
+func (a *Auditor) processTarget(ctx context.Context, namespaces *namespaceCache, t Target, results chan<- Result) error {
+	ns, err := namespaces.get(ctx, t.Namespace)
 	if err != nil {
 		return err
 	}
-	if skip {
-		return nil
-	}
 	if t.ScheduleID != "" {
-		return a.runJob(ctx, scheduleJob{namespace: t.Namespace, scheduleID: t.ScheduleID, explicit: true}, results)
+		job := scheduleJob{namespace: t.Namespace, namespaceID: ns.info.ID, windowStart: ns.windowStart, scheduleID: t.ScheduleID, explicit: true}
+		return a.runJob(ctx, job, results)
 	}
-	return a.fanOutNamespace(ctx, t.Namespace, results)
+	return a.fanOutNamespace(ctx, t.Namespace, ns.info.ID, ns.windowStart, results)
 }
 
 // fanOutNamespace pages the namespace's schedule IDs and analyzes each one concurrently, bounded by RPS. errgroup's
 // SetLimit makes the listing block once RPS analyses are in flight, providing backpressure so schedule IDs are not
 // buffered ahead of the workers -- memory stays bounded regardless of how many schedules the namespace has.
-func (a *Auditor) fanOutNamespace(ctx context.Context, namespace string, results chan<- Result) error {
+func (a *Auditor) fanOutNamespace(ctx context.Context, namespace, namespaceID string, windowStart time.Time, results chan<- Result) error {
 	inner := a.RPS
 	if inner <= 0 {
 		inner = 1
@@ -432,7 +555,7 @@ func (a *Auditor) fanOutNamespace(ctx context.Context, namespace string, results
 			return err
 		}
 		g.Go(func() error {
-			return a.runJob(ctx, scheduleJob{namespace: namespace, scheduleID: id}, results)
+			return a.runJob(ctx, scheduleJob{namespace: namespace, namespaceID: namespaceID, windowStart: windowStart, scheduleID: id}, results)
 		})
 		return nil
 	})
@@ -460,57 +583,63 @@ func (a *Auditor) runJob(ctx context.Context, job scheduleJob, results chan<- Re
 	}
 }
 
-// retentionCache memoizes the per-namespace retention skip decision. It is shared across the namespace workers, so its
-// map is mutex-guarded. Racing first lookups for the same namespace may each call checkRetention, which is harmless
-// (the result is deterministic).
-type retentionCache struct {
+// nsEntry is a namespace's cached describe result plus the effective window start after retention clamping.
+type nsEntry struct {
+	info        NamespaceInfo
+	windowStart time.Time
+}
+
+// namespaceCache memoizes DescribeNamespace (retention TTL + UUID) and the clamped window start per namespace. It is
+// shared across the namespace workers, so its map is mutex-guarded. Racing first lookups for the same namespace may
+// each issue the RPC and clamp/warn, which is harmless (the result is deterministic bar a sub-second boundary jitter).
+type namespaceCache struct {
 	a    *Auditor
 	mu   sync.Mutex
-	seen map[string]bool
+	seen map[string]nsEntry
 }
 
-func newRetentionCache(a *Auditor) *retentionCache {
-	return &retentionCache{a: a, seen: map[string]bool{}}
+func newNamespaceCache(a *Auditor) *namespaceCache {
+	return &namespaceCache{a: a, seen: map[string]nsEntry{}}
 }
 
-func (rc *retentionCache) skip(ctx context.Context, namespace string) (bool, error) {
-	rc.mu.Lock()
-	s, ok := rc.seen[namespace]
-	rc.mu.Unlock()
+func (nc *namespaceCache) get(ctx context.Context, namespace string) (nsEntry, error) {
+	nc.mu.Lock()
+	e, ok := nc.seen[namespace]
+	nc.mu.Unlock()
 	if ok {
-		return s, nil
+		return e, nil
 	}
-	s, err := rc.a.checkRetention(ctx, namespace)
+	info, err := nc.a.Schedules.DescribeNamespace(ctx, namespace)
 	if err != nil {
-		return false, err
+		return nsEntry{}, fmt.Errorf("describe namespace %s: %w", namespace, err)
 	}
-	rc.mu.Lock()
-	rc.seen[namespace] = s
-	rc.mu.Unlock()
-	return s, nil
+	e = nsEntry{info: info, windowStart: nc.a.clampToRetention(namespace, info.Retention)}
+	nc.mu.Lock()
+	nc.seen[namespace] = e
+	nc.mu.Unlock()
+	return e, nil
 }
 
-// checkRetention refuses to audit a window that crosses the retention boundary -- purged workflows would silently turn
-// into false-positive real_miss. Returns (skip=true, nil) when the caller should treat the namespace as a no-op.
-func (a *Auditor) checkRetention(ctx context.Context, namespace string) (bool, error) {
-	retention, err := a.Schedules.NamespaceRetention(ctx, namespace)
-	if err != nil {
-		return false, fmt.Errorf("namespace retention %s: %w", namespace, err)
-	}
+// clampToRetention returns the window start to use for a namespace: WindowStart, unless it precedes the retention
+// boundary (now - retention), in which case it is clamped to the boundary and a warning is emitted. Visibility purges
+// workflows retention-from-CloseTime ago, so querying before the boundary would surface purged runs as false real_miss;
+// clamping shortens the audited window to the portion that still has data.
+func (a *Auditor) clampToRetention(namespace string, retention time.Duration) time.Time {
 	if retention == 0 {
-		return false, nil
+		return a.WindowStart
 	}
-	safeStart := time.Now().Add(-retention + a.RetentionSafetyBuffer)
-	if !a.WindowStart.Before(safeStart) {
-		return false, nil
+	boundary := time.Now().Add(-retention)
+	if !a.WindowStart.Before(boundary) {
+		return a.WindowStart
 	}
 	_, _ = fmt.Fprintf(a.Progress,
-		"    %s: SKIPPING - windowStart %s is past retention boundary (retention=%s, safe-start=%s)\n",
+		"    %s: WARNING - windowStart %s is past the retention boundary (retention=%s); clamping window start to %s "+
+			"to avoid false real_miss from purged workflows\n",
 		namespace,
 		a.WindowStart.UTC().Format(time.RFC3339),
 		retention,
-		safeStart.UTC().Format(time.RFC3339))
-	return true, nil
+		boundary.UTC().Format(time.RFC3339))
+	return boundary
 }
 
 // analyzeJob describes one schedule, applies the load-time filters (paused / exhausted / created at or after
@@ -534,25 +663,24 @@ func (a *Auditor) analyzeJob(ctx context.Context, job scheduleJob) (*Result, err
 		return nil, nil
 	}
 
-	queryEnd := a.WindowEnd.Add(a.DelayedFireBuffer)
-	entries, err := a.Executions.ListExecutions(ctx, job.namespace, job.scheduleID, a.WindowStart, queryEnd)
+	entries, err := a.Executions.ListExecutions(ctx, job.namespace, job.scheduleID, job.windowStart, a.WindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("list executions %s/%s: %w", job.namespace, job.scheduleID, err)
 	}
-	return a.analyzeSchedule(job.namespace, entry, entries)
+	return a.analyzeSchedule(job.namespace, job.namespaceID, job.windowStart, entry, entries)
 }
 
 // analyzeSchedule runs the audit for a single schedule against its executions. A schedule whose spec was modified
 // after the window began is classified inconclusive_schedule_changed (the current spec can't be trusted to describe
 // what was scheduled earlier). A schedule created mid-window has its scheduled times truncated to CreateTime.
-func (a *Auditor) analyzeSchedule(namespace string, s ScheduleEntry, entries []Execution) (*Result, error) {
-	inconclusive := !s.UpdateTime.IsZero() && s.UpdateTime.After(a.WindowStart)
+func (a *Auditor) analyzeSchedule(namespace, namespaceID string, windowStart time.Time, s ScheduleEntry, entries []Execution) (*Result, error) {
+	inconclusive := !s.UpdateTime.IsZero() && s.UpdateTime.After(windowStart)
 
-	scheduledStart := a.WindowStart
+	scheduledStart := windowStart
 	if !inconclusive && !s.CreateTime.IsZero() && s.CreateTime.After(scheduledStart) {
 		scheduledStart = s.CreateTime
 	}
-	scheduled, err := ScheduledTimes(s.Spec, scheduledStart, a.WindowEnd)
+	scheduled, err := ScheduledTimes(s.Spec, jitterSeed(namespaceID, s.ID), scheduledStart, a.WindowEnd)
 	if err != nil {
 		return nil, fmt.Errorf("scheduled times for %s: %w", s.ID, err)
 	}
@@ -560,27 +688,46 @@ func (a *Auditor) analyzeSchedule(namespace string, s ScheduleEntry, entries []E
 		return nil, nil
 	}
 
-	observed := groupExecutions(entries)
-	r := a.baseResult(namespace, s, scheduled, entries)
+	nominals := nominalTimes(scheduled)
+	// The query returns in-window-nominal actions plus pre-window long-runners (blockers). Overlap classification and
+	// desired-time reconstruction need the full set (active); matching, the Actual count, delays, and the Observed
+	// output are scoped to the in-window actions.
+	active := groupExecutions(entries)
+	inWindowEntries := filterInWindow(entries, windowStart, a.WindowEnd)
+	inWindow := groupExecutions(inWindowEntries)
+	r := a.baseResult(namespace, windowStart, s, nominals, inWindowEntries)
 	if inconclusive {
-		r.Expected = len(scheduled)
-		r.Actual = len(observed)
-		r.Missed = make(map[time.Time]string, len(scheduled))
-		for _, st := range scheduled {
+		r.Expected = len(nominals)
+		r.Actual = len(inWindow)
+		r.Missed = make(map[time.Time]string, len(nominals))
+		for _, st := range nominals {
 			r.Missed[st] = categoryInconclusiveChanged
 		}
 		return r, nil
 	}
-	Classify(r, scheduled, observed, s.Policies.GetOverlapPolicy())
+	Classify(r, nominals, inWindow, active, s.Policies.GetOverlapPolicy())
+	r.Delays = buildDelays(inWindow, active, jitterByNominal(scheduled))
 	return r, nil
 }
 
-func (a *Auditor) baseResult(namespace string, s ScheduleEntry, scheduled []time.Time, observed []Execution) *Result {
+// filterInWindow returns the executions whose nominal time falls in (windowStart, windowEnd] -- the actions actually
+// scheduled inside the window, excluding pre-window blockers that the query also returns for overlap analysis.
+func filterInWindow(entries []Execution, windowStart, windowEnd time.Time) []Execution {
+	out := make([]Execution, 0, len(entries))
+	for _, e := range entries {
+		if e.NominalTime.After(windowStart) && !e.NominalTime.After(windowEnd) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func (a *Auditor) baseResult(namespace string, windowStart time.Time, s ScheduleEntry, scheduled []time.Time, observed []Execution) *Result {
 	return &Result{
 		Namespace:     namespace,
 		ScheduleID:    s.ID,
 		WorkflowType:  s.WorkflowType,
-		WindowStart:   a.WindowStart,
+		WindowStart:   windowStart,
 		WindowEnd:     a.WindowEnd,
 		OverlapPolicy: s.Policies.GetOverlapPolicy(),
 		CatchupWindow: s.CatchupWindow,
