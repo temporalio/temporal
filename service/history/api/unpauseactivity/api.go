@@ -56,6 +56,8 @@ func Invoke(
 	targetingMethod := "type"
 	if _, ok := frontendReq.GetActivity().(*workflowservice.UnpauseActivityRequest_Id); ok {
 		targetingMethod = "id"
+	} else if _, ok := frontendReq.GetActivity().(*workflowservice.UnpauseActivityRequest_UnpauseAll); ok {
+		targetingMethod = "unpause_all"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
 		metrics.ActivityUnpauseRequests.With(shardContext.GetMetricsHandler().WithTags(
