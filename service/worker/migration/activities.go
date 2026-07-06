@@ -302,8 +302,9 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	}
 
 	var (
-		readyShardCount    int
-		notReadyShardCount int
+		readyShardCount       int
+		notReadyShardCount    int
+		noWatermarkShardCount int
 
 		maxLaggingTasksShardID int32
 		maxLaggingTasks        int64
@@ -320,8 +321,11 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 
 		notReadyShardCount++
 
-		// No-ack-watermark shards carry zero lag values, so they naturally never win the
-		// comparisons below — no special-casing needed to keep the Max* stats clean.
+		// No-ack-watermark shards carry zero lag values
+		if status.laggingTasks == 0 {
+			noWatermarkShardCount++
+		}
+
 		if status.laggingTasks > maxLaggingTasks {
 			maxLaggingTasks = status.laggingTasks
 			maxLaggingTasksShardID = status.shardID
@@ -356,6 +360,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			tag.Int("TotalShards", len(localShards)),
 			tag.Int("ReadyShards", readyShardCount),
 			tag.Int("NotReadyShards", len(localShards)-readyShardCount),
+			tag.Int("NoWatermarkShards", noWatermarkShardCount),
 			tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
 			tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 			tag.Int32("MaxLaggingTasksShardID", maxLaggingTasksShardID),
