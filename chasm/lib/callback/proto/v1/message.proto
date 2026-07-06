@@ -61,9 +61,30 @@ message Callback {
     map<string, string> header = 2;
   }
 
+  // Duplicated from commonpb.Callback::NexusWorker.
+  message NexusWorker {
+    // Endpoint name, resolved to a URL via the cluster's endpoint registry.
+    // If unspecified, defaults to a synthesized endpoint name based on the current namespace and task queue.
+    string endpoint = 1;
+    // Nexus service name the worker callback should be routed to.
+    string service = 2;
+    // Operation name.
+    string operation = 3;
+
+    // Header to attach to the Nexus request.
+    map<string, string> nexus_header = 4;
+    // Serialized input to the operation. Passed as the request payload.
+    // Operations dispatched to Nexus workers require special care to ensure the payload is decoded properly.
+    temporal.api.common.v1.Payload input = 5;
+
+    // User-provided context attached at the callsite. Passed along to the worker callback.
+    temporal.api.common.v1.Payloads source_context = 6;
+  }
+
   reserved 1; // For a generic callback mechanism to be added later.
   oneof variant {
     Nexus nexus = 2;
+    NexusWorker nexus_worker = 3;
   }
 
   repeated temporal.api.common.v1.Link links = 100;

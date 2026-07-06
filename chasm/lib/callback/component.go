@@ -86,6 +86,15 @@ func (c *Callback) loadInvocationArgs(
 		return nil, err
 	}
 
+	if nexusWorker := c.GetCallback().GetNexusWorker(); nexusWorker != nil {
+		return invocableNexusWorker{
+			callback:   nexusWorker,
+			completion: completion,
+			requestID:  c.RequestId,
+		}, nil
+	}
+
+	// Fallback to Nexus callbacks (outbound HTTP requests).
 	callback := c.GetCallback().GetNexus()
 	if callback == nil {
 		return nil, queueserrors.NewUnprocessableTaskError(

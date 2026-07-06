@@ -20,11 +20,11 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
-		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
+		destination, err := callbackDestination(cb.Callback)
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return err
 		}
-		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
+		ctx.AddTask(cb, chasm.TaskAttributes{Destination: destination}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -37,18 +37,31 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		destination, err := callbackDestination(cb.Callback)
 		if err != nil {
-			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+			return err
 		}
 		ctx.AddTask(
 			cb,
-			chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host},
+			chasm.TaskAttributes{Destination: destination},
 			&callbackspb.InvocationTask{Attempt: cb.Attempt},
 		)
 		return nil
 	},
 )
+
+// callbackDestination returns the task queue routing destination for a callback. Outbound Nexus callbacks are
+// routed by their URL's scheme://host, while NexusWorker callbacks are routed by their endpoint name.
+func callbackDestination(cb *callbackspb.Callback) (string, error) {
+	if nexusWorker := cb.GetNexusWorker(); nexusWorker != nil {
+		return nexusWorker.GetEndpoint(), nil
+	}
+	u, err := url.Parse(cb.GetNexus().GetUrl())
+	if err != nil {
+		return "", fmt.Errorf("failed to parse URL: %v: %w", cb, err)
+	}
+	return u.Scheme + "://" + u.Host, nil
+}
 
 // EventAttemptFailed is triggered when an attempt is failed with a retryable error.
 type EventAttemptFailed struct {

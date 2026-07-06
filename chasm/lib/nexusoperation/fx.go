@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -33,6 +34,12 @@ var Module = fx.Module(
 	fx.Invoke(endpointRegistryLifetimeHooks),
 	fx.Provide(defaultNexusTransportProvider),
 	fx.Provide(clientProviderFactory),
+	// Expose the Nexus client provider to the callback library so its NexusWorker callback variant can
+	// initiate outbound Nexus operations. The type is duplicated in the callback package to avoid an import
+	// cycle, so adapt it here.
+	fx.Provide(func(cp ClientProvider) callback.ClientProvider {
+		return callback.ClientProvider(cp)
+	}),
 	fx.Provide(newHandler),
 	fx.Provide(newCancellationBackoffTaskHandler),
 	fx.Provide(newCancellationInvocationTaskHandler),

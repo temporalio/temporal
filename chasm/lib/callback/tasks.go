@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
@@ -21,6 +23,12 @@ type HTTPCaller func(*http.Request) (*http.Response, error)
 
 // HTTPCallerProvider is a method that can be used to retrieve an HTTPCaller for a given namespace and destination.
 type HTTPCallerProvider func(common.NamespaceIDAndDestination) HTTPCaller
+
+// ClientProvider provides a Nexus client for a given endpoint. Used by the NexusWorker callback variant to
+// initiate an outbound Nexus operation against a worker (or external) endpoint. It mirrors
+// nexusoperation.ClientProvider; the type is duplicated here to avoid an import cycle (the nexusoperation
+// package depends on this callback package).
+type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
 
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the handler how to handle the
 // invocation outcome.
@@ -79,6 +87,11 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	// EndpointRegistry and ClientProvider are only required by the NexusWorker callback variant. They are
+	// marked optional because not every service that registers the callback library (e.g. the worker service)
+	// wires the Nexus operation dependencies that provide them.
+	EndpointRegistry commonnexus.EndpointRegistry `optional:"true"`
+	ClientProvider   ClientProvider               `optional:"true"`
 }
 
 type invocationTaskHandler struct {
@@ -90,6 +103,8 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	endpointRegistry   commonnexus.EndpointRegistry
+	clientProvider     ClientProvider
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -101,6 +116,8 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		endpointRegistry:   opts.EndpointRegistry,
+		clientProvider:     opts.ClientProvider,
 	}
 }
 
