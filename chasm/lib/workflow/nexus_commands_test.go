@@ -639,15 +639,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 }
 
 func TestHandleCancelCommand(t *testing.T) {
-	t.Run("chasm nexus not enabled", func(t *testing.T) {
-		tcx := newTestContext(t, &nexusoperation.Config{
-			EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		})
-		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		require.ErrorIs(t, err, ErrCommandNotSupported)
-		require.Empty(t, tcx.history.Events)
-	})
-
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
@@ -658,21 +649,32 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Empty(t, tcx.history.Events)
 	})
 
-	t.Run("operation not found", func(t *testing.T) {
-		tcx := newTestContext(t, defaultConfig)
-
-		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
-			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-					ScheduledEventId: 5,
-				},
-			},
-		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Empty(t, tcx.history.Events)
+	t.Run("operation not in chasm tree defers to hsm", func(t *testing.T) {
+		// The operation is not in the CHASM tree (it lives in HSM, or does not exist). The handler must defer to the
+		// HSM command handler via ErrCommandNotSupported rather than failing the workflow task, so cancelation follows
+		// the tree that owns the operation.
+		for _, cfg := range []struct {
+			name   string
+			config *nexusoperation.Config
+		}{
+			{name: "flag on", config: defaultConfig},
+			{name: "flag off", config: &nexusoperation.Config{
+				EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			}},
+		} {
+			t.Run(cfg.name, func(t *testing.T) {
+				tcx := newTestContext(t, cfg.config)
+				err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
+					Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+						RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+							ScheduledEventId: 5,
+						},
+					},
+				}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+				require.ErrorIs(t, err, ErrCommandNotSupported)
+				require.Empty(t, tcx.history.Events)
+			})
+		}
 	})
 
 	t.Run("operation already completed", func(t *testing.T) {
@@ -694,7 +696,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
 		tcx.wf.removeNexusOperation(event.EventId)
 
-		// Try to cancel - should fail since operation is completed/deleted.
+		// The operation is no longer in the CHASM tree, so the handler defers to the HSM command handler
+		// via ErrCommandNotSupported.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
@@ -702,10 +705,7 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.ErrorIs(t, err, ErrCommandNotSupported)
 		require.Len(t, tcx.history.Events, 1) // Only scheduled event should be recorded.
 	})
 
