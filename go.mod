@@ -64,9 +64,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.63.0
+	go.temporal.io/api v1.63.2-0.20260706181050-ca16ca959ed7 // DO NOT SUBMIT, api-go repo branch "feature/worker-callbacks"
 	go.temporal.io/auto-scaled-workers v0.0.0-20260622220320-9b1e3849116d
-	go.temporal.io/sdk v1.41.1
+	go.temporal.io/sdk v1.45.1-0.20260706202353-526c2325b4b6 // DO NOT SUBMIT, sdk-go repo branch "feature/worker-callbacks"
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
