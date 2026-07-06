@@ -221,15 +221,8 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplic
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks
-// classifyShardReplicationStatus determines a shard's catchup readiness for a remote
-// cluster. It guards against an uninitialized/unreported ack watermark: if the remote has
-// no recorded ack for this shard (AckedTaskId == 0 with a nil or epoch visibility time)
-// while the shard has produced tasks, the naive lag math would yield a bogus
-// now-since-1970 timeLag and a maxTaskId-sized laggingTasks that read as "infinitely
-// behind" and fail catchup forever. That case is returned as not-ready with zero lag
-// values, so it neither pollutes the Max* stats nor masquerades as real lag. The watermark
-// is typically zero only transiently (e.g. a freshly (re)created replication stream that
-// has not reported its first ack yet).
+// classifyShardReplicationStatus determines a shard's catchup readiness, guarding an
+// uninitialized ack watermark (returned as not-ready with zero lag) from reading as infinite lag.
 func classifyShardReplicationStatus(
 	localShard *historyservice.ShardReplicationStatus,
 	remoteProgress *historyservice.ShardReplicationStatusPerCluster,
