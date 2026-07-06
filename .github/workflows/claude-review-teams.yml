@@ -40,8 +40,8 @@ jobs:
         id: generate_token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
-          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          app-id: ${{ secrets.TEMPORAL_CLAUDE_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CLAUDE_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           # Least-privilege: members:read for team-membership lookups,
           # pull-requests:read for the workflow_dispatch PR lookup, and
