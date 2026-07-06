@@ -25,6 +25,8 @@ type clients struct {
 	logger            log.Logger
 	hostsByService    map[primitives.ServiceName]static.Hosts
 	tlsConfigProvider *encryption.FixedTLSConfigProvider
+	// The matching client is built lazily because routing depends on the
+	// frontend membership address populated during startup.
 	newMatchingClient func() (matchingservice.MatchingServiceClient, error)
 
 	frontend frontendClients
@@ -117,6 +119,11 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
+	c.ensureMatching()
+	return c.matching.client
+}
+
+func (c *clients) ensureMatching() {
 	c.matching.once.Do(func() {
 		client, err := c.newMatchingClient()
 		if err != nil {
@@ -124,7 +131,6 @@ func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
 		}
 		c.matching.client = client
 	})
-	return c.matching.client
 }
 
 func (c *clients) close() []error {
