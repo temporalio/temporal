@@ -19,9 +19,7 @@ type logLineValidator interface {
 }
 
 // substringValidator fails a line that contains `include` unless the line also
-// contains one of `exclude` (known-good lines to skip). This mirrors the
-// |= / != operators in saas-cicd oss-cicd/e2e/workflows/generic/activities/check_logs.go;
-// keep the two in sync when adjusting the exclude lists.
+// contains one of `exclude` (known-good lines to skip).
 type substringValidator struct {
 	name    string
 	include string
@@ -46,7 +44,6 @@ var serverLogValidators = []logLineValidator{
 	substringValidator{
 		name:    "soft assertion",
 		include: "failed assertion:",
-		// per saas-cicd check_logs.go assertionQueryTemplate
 		exclude: []string{"found otherHasTasks in classic metadata"},
 	},
 	substringValidator{
@@ -54,7 +51,7 @@ var serverLogValidators = []logLineValidator{
 		include: "panic",
 		exclude: []string{
 			"Potential deadlock detected", // expected under resource-constrained load
-			"[TMPRL1100]",                 // invalid state transition, sdk-side (per saas-cicd)
+			"[TMPRL1100]",                 // invalid state transition, sdk-side
 		},
 	},
 }
