@@ -1549,6 +1549,10 @@ var (
 		"schedule_callback_latency",
 		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
 	)
+	ScheduleCallbackIgnored = NewCounterDef(
+		"schedule_callback_ignored",
+		WithDescription("Scheduler received a completion callback unassociated with any known running actions"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
