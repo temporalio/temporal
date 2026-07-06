@@ -566,6 +566,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	info *persistencespb.ChasmNexusCompletion,
 ) error {
 	invoker := s.Invoker.Get(ctx)
+	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 
 	workflowID := invoker.runningWorkflowID(info.RequestId)
 	if workflowID == "" {
@@ -574,7 +575,10 @@ func (s *Scheduler) HandleNexusCompletion(
 		msg := "handled Nexus completion with an unrecognized request ID"
 		s.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("%s: %s", msg, info.RequestId))
-		ctx.Logger().Warn(msg, tag.RequestID(info.RequestId))
+		ctx.Logger().Warn(msg,
+			tag.RequestID(info.RequestId),
+			tag.ScheduleID(s.ScheduleId))
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1)
 		return nil
 	}
 
@@ -583,9 +587,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	// and clamp to zero in case of clock skew.
 	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
 		latency := max(0, ctx.Now(s).Sub(closeTime))
-		newTaggedMetricsHandler(ctx.MetricsHandler(), s).
-			Timer(metrics.ScheduleCallbackLatency.Name()).
-			Record(latency)
+		metricsHandler.Timer(metrics.ScheduleCallbackLatency.Name()).Record(latency)
 	}
 
 	// Handle last completed/failed status and payloads.
