@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -353,6 +354,158 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 						return AdminScheduleStatus(c, clientFactory)
 					},
 				},
+			},
+		},
+		{
+			Name:  "audit",
+			Usage: "Audit a namespace's schedules for missed runs in a time window",
+			Description: `Lists every schedule in the target namespace(s), computes the nominal times each spec should have
+produced in the audit window, and classifies each against actual workflow executions found in visibility.
+Designed to answer: did the scheduler start workflows when it should have, during a specific time range?
+
+Input and output both stream: schedules are processed as they page in (per-schedule describe -> visibility query ->
+classify), so a namespace with millions of schedules runs with bounded memory and rows begin appearing immediately.
+
+OUTPUT FORMAT
+  JSONL streamed to stdout: one self-contained JSON object per flagged schedule (redirect to a file if desired).
+  Rows are emitted in completion order (NOT sorted) as each schedule finishes; pipe through 'sort' or 'jq -s' if you
+  need a stable order. Each object is the full analysis result -- identity, audit window, every input used, and the
+  classification -- so a verdict can be inspected or replayed offline. Fields:
+    namespace, schedule_id, workflow_type
+    window {start, end}            the audited time range
+    overlap_policy                 the schedule's overlap policy (short name, e.g. BUFFER_ALL)
+    overlap_class                  how that policy treats overlaps, which drives classification:
+                                     drops       SKIP / BUFFER_ONE -- overlapping fires can be dropped for good
+                                     delays      BUFFER_ALL / CANCEL_OTHER / TERMINATE_OTHER -- overlaps run later
+                                     concurrent  ALLOW_ALL -- overlaps run immediately
+    catchup_window_s               the schedule's configured catchupWindow in seconds
+    create_time, update_time       schedule create/update times (omitted if unknown)
+    expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
+    missed                         total unmatched scheduled times
+    counts {real_miss, skip_overlap, inconclusive_schedule_changed}
+    misses [{nominal, category}]   every unmatched scheduled time and why:
+                                     real_miss                      no workflow and the policy doesn't justify a skip
+                                                                    (a delays/concurrent policy, or a drops policy with
+                                                                    nothing running). Warrants investigation.
+                                     skip_overlap                   a drops policy legitimately skipped because a prior
+                                                                    workflow was still running
+                                     inconclusive_schedule_changed  spec was modified DURING the window; can't be judged
+    scheduled_times []             every nominal time the spec produced in the window
+    observed [{workflow_id, run_id, nominal, start, close, status}]  every workflow seen in visibility
+
+CAVEATS AND LIMITATIONS
+  Retention: a namespace whose windowStart is past (retention - --retention-safety-buffer, default 24h) is skipped.
+    Visibility purges closed workflows after retention; the guard prevents silent false-positive real_miss against
+    purged data. Skipped namespaces are logged to stderr.
+
+  Schedule modified during window: marked inconclusive_schedule_changed. The audit can't compute the historical spec,
+    so the schedule's times are marked inconclusive rather than producing untrustworthy classifications.
+
+  Paused / exhausted schedules: dropped from analysis (their spec evaluates to scheduled times but the scheduler
+    won't start them).
+
+  Catchup window: a schedule with a tight catchupWindow (e.g. 10s) will lose actions if the scheduler is briefly
+    unavailable. The audit reports such losses as real_miss; catchup_window_s lets users distinguish "true sustained
+    outage" from "brief blip + tight catchup".
+
+  Catchup under overlap=SKIP after a brief outage: when the V1 scheduler resumes with multiple queued actions, it
+    dispatches only the oldest and discards the rest. The audit reports the discarded actions as real_miss. A burst of
+    real_miss across many schedules within minutes typically indicates this behavior. To confirm, the user must:
+    (1) ListWorkflowExecutions with WorkflowId='temporal-sys-scheduler:<schedule_id>' and
+    TemporalNamespaceDivision='TemporalScheduler' to find the scheduler workflow run active during the window;
+    (2) GetWorkflowExecutionHistory on that run and look for WORKFLOW_TASK_TIMED_OUT events with escalating attempt
+    numbers, followed by a multi-minute gap, then a single WORKFLOW_TASK_COMPLETED that resumes normal cadence;
+    (3) compare the identity field on WORKFLOW_TASK_STARTED across affected schedules. A shared worker identity points
+    to a single sick worker pod; distinct identities point to a broader frontend/matching/persistence issue.
+
+INPUT STREAM (for --file / stdin)
+  A JSONL stream of audit targets, one JSON object per line; schedule_id is optional (omit to audit the whole
+  namespace). Examples:
+    {"namespace":"my-namespace"}
+    {"namespace":"orders-prod","schedule_id":"daily-cleanup-schedule"}
+    {"namespace":"analytics-staging","schedule_id":"my-schedule"}
+
+PRECEDENCE
+  With a --file/stdin stream, the stream is the source of targets and the flags are constraints: every streamed
+  target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
+  to guarantee the audit stays within a single namespace.
+  With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
+  audits that whole namespace; --namespace + --schedule-id audits that one schedule.
+
+EXAMPLES
+  Single namespace, 1-day window, save to a file:
+    tdbg schedule audit --namespace my-ns --start 2026-05-19T00:00:00Z --end 2026-05-20T00:00:00Z > audit.jsonl
+
+  Many targets from a file:
+    tdbg schedule audit -f ./targets.jsonl --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z > audit.jsonl
+
+  Pipe a JSONL target stream from stdin (jq, psql, awk, etc.):
+    cat ./targets.jsonl | tdbg schedule audit --start 2026-05-01T00:00:00Z --end 2026-05-02T00:00:00Z
+
+  Single schedule deep-dive:
+    tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
+      --start 2026-05-19T18:00:00Z --end 2026-05-19T22:00:00Z
+
+  Pipe stdout through jq (e.g. only schedules with real misses):
+    tdbg schedule audit -f ./targets.jsonl \
+      --start 2026-05-01T19:30:00Z --end 2026-05-02T10:00:00Z \
+      | jq 'select(.counts.real_miss > 0)'`,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagNamespace,
+					Aliases: FlagNamespaceAlias,
+					Usage: "Audit this namespace. With no stream, audits the whole namespace. With a --file/stdin " +
+						"stream, it is a constraint: every streamed target must be in this namespace or the run errors, " +
+						"guaranteeing the audit stays within a single namespace.",
+				},
+				&cli.StringFlag{
+					Name:    FlagFile,
+					Aliases: FlagFileAlias,
+					Usage: "Path to a JSONL stream of audit targets, one JSON object per line as " +
+						`'{"namespace":"...","schedule_id":"..."}' (schedule_id optional). Use '-' or omit to read ` +
+						"from stdin. Targets stream in as they are read.",
+				},
+				&cli.StringFlag{
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage: "Audit only this schedule within --namespace. With no stream, audits just this schedule; " +
+						"with a stream, it is a constraint: every streamed target's schedule_id must match or the run errors.",
+				},
+				&cli.StringFlag{
+					Name:     FlagStart,
+					Usage:    "Window start (RFC3339)",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagEnd,
+					Usage:    "Window end (RFC3339)",
+					Required: true,
+				},
+				&cli.IntFlag{
+					Name:  FlagConcurrency,
+					Usage: "How many namespaces to audit at once (the namespace worker-pool size).",
+					Value: 10,
+				},
+				&cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "Max API calls per second within a single namespace (describe, list, and visibility queries).",
+					Value: 10,
+				},
+				&cli.DurationFlag{
+					Name: FlagDelayedFireBuffer,
+					Usage: "How far past --end to keep scanning visibility for delayed buffered actions " +
+						"(nominal time in-window, actual start well after --end).",
+					Value: 24 * time.Hour,
+				},
+				&cli.DurationFlag{
+					Name: FlagRetentionSafetyBuffer,
+					Usage: "Slack inside the retention boundary; a namespace is skipped when --start is older than " +
+						"(retention - this). Guards against false real_miss from purged workflows. Set 0 to disable.",
+					Value: 24 * time.Hour,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminAuditSchedules(c, clientFactory)
 			},
 		},
 	}
