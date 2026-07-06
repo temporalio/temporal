@@ -2229,14 +2229,13 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 func (s *historyBuilderSuite) TestBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[enumspb.EventType]bool{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:                    true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                  true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                     true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:                  true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:                 true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:           true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                   true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED: true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:          true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:        true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:           true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:        true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
 	}
 
 	// workflow task events will be assign event ID immediately
