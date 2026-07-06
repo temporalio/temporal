@@ -68,13 +68,30 @@ The breaker is a standard three-state machine:
 - **Half-Open** — a probing state. Up to `MaxRequests` (default 1) requests are allowed through. If
   they succeed, the breaker closes; if any fails, it re-opens and waits another `Timeout`.
 
+stateDiagram-v2
+    [*] --> Closed
+
+    state "Closed" as Closed
+    state "Open" as Open
+    state "Half Open" as HalfOpen
+
+    Closed: Requests pass through
+    Open: Requests fail fast
+    HalfOpen: Limited probe requests
+
+    Closed --> Open: done(false) > 5
+    Open --> HalfOpen: Timeout elapsed
+    HalfOpen --> Closed: probes succeed
+    HalfOpen --> Open: any probe fails
+
+
 ## Wiring into the outbound queue
 
 Rather than one global breaker, the server keeps a *pool* of breakers keyed by the identity of the
 work. A single global breaker would be far too coarse: one unhealthy destination would trip the
 breaker for *every* outbound task on the host, blocking healthy destinations too. Keying the pool
-means a failing destination only trips its own breaker. In practice the key is **(task group, source
-namespace, destination)** — for Nexus, `Destination` is the endpoint *name* (e.g. `"my-endpoint"`),
+means a failing destination only trips its own breaker. In practice the key is **(`TaskGroup`,
+`NamespaceID`, `Destination`)** — for Nexus, `Destination` is the endpoint *name* (e.g. `"my-endpoint"`),
 not a full URL nor hostname. (The endpoint name is resolved to an actual target — a task queue
 or an external URL — separately; see [below](#what-actually-gets-isolated).) Two generic pieces make
 this up:
@@ -103,6 +120,17 @@ The pool is a per-host singleton (provided once via
 factory](../../service/history/outbound_queue_factory.go)). A history host owns many *shards*, and
 each workflow execution lives on exactly one shard at a time; all shards on a host share the same
 breaker for a given key.
+
+> **Circuit Breaking for Nexus**
+>
+> `Destination` is set to the Nexus *endpoint* — a cluster-global, named routing target that resolves to
+> *either* a **Worker** target (one namespace ID + one Nexus task queue) *or* an **External** target
+> (one URL). The endpoint has no notion of "service": *service* and *operation* names travel on each
+> request, so one endpoint can route to many services and operations, and they all share one breaker
+> (for a given task group and caller).
+>
+> `nexusoperations.Invocation` and `nexusoperations.Cancelation` are distinct task groups and therefore
+> get distinct breakers.
 
 ### The `CircuitBreakerExecutable`
 
@@ -165,36 +193,6 @@ flowchart TD
     CB -->|open: ResourceExhausted, no work done| Rejected[Blocked & rescheduled]
     Executor -->|DestinationDownError| CB
 ```
-
-## What actually gets isolated
-
-If calls to a Nexus service fail and the breaker trips, who is affected? The answer follows directly
-from the breaker key — **(task group, source namespace, destination endpoint)** — and from where the
-breaker lives: in one history host's memory.
-
-- **Not global.** The breaker lives entirely on the *caller's* side (the history service making the
-  request), not on the Nexus endpoint or its target service. A tripped breaker never affects other
-  namespaces' calls to the same endpoint, nor the endpoint's ability to serve requests from
-  elsewhere.
-- **Scoped to (caller namespace, destination).** The breaker trips only for the namespace whose tasks
-  were failing, and only for the endpoint they were calling. Namespace A hammering a broken endpoint
-  does not block namespace B's calls to it, and A's calls to a *different* endpoint are unaffected.
-- **Per endpoint, not per service or operation name.** `Destination` is the Nexus *endpoint* — a
-  cluster-global, named routing target that resolves to *either* a **Worker** target (one namespace ID
-  + one Nexus task queue) *or* an **External** target (one URL). The endpoint has no notion of
-  "service": *service* and *operation* names travel on each request, so one endpoint can route to many
-  services and operations, and they all share one breaker (for a given task group and caller). The
-  endpoint is the unit of isolation because it is the thing that is actually up or down — so if
-  operation `foo` on endpoint `E` keeps timing out and trips the breaker, `bar` on `E` (even in a
-  different service) is blocked too.
-- **Separated by task group.** Starting an operation (`nexusoperations.Invocation`) and cancelling
-  one (`nexusoperations.Cancelation`) are distinct task groups and get distinct breakers, so a
-  destination failing to accept new invocations can still have cancellations attempted, and vice
-  versa.
-- **Per history host, not per shard.** Breaker state lives in the memory of a single history-service
-  process (e.g. one Kubernetes pod); nothing is persisted or shared across hosts, and nothing is keyed
-  by shard. So if a (namespace, endpoint)'s traffic is spread across shards on different hosts, each
-  host trips independently on its own view of the destination's health.
 
 ## Configuration and observability
 
