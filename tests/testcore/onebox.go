@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -499,6 +500,7 @@ func (c *TemporalImpl) startHistory() {
 			),
 			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
+			fx.Provide(func() commonevents.Handler { return commonevents.NoopHandler() }),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
