@@ -102,3 +102,79 @@ func TestEmitReplicationLifecycleNilSafe(t *testing.T) {
 		EmitReplicationLifecycle(nil, ReplicationLifecyclePayload{Phase: ReplicationSent})
 	})
 }
+
+// fullyPopulatedReplication returns a payload with every field set to a non-zero value so that
+// Encode exercises every conditional branch. Phase-specific fields are only emitted for their
+// phase, so callers must union the results across all phases to see the full field set.
+func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePayload {
+	return ReplicationLifecyclePayload{
+		Phase:                phase,
+		TaskType:             ReplTaskSyncVersionedTransition,
+		Shard:                1,
+		Namespace:            "ns",
+		NamespaceID:          "ns-id",
+		WorkflowID:           "wf-id",
+		RunID:                "run-id",
+		FailoverVersion:      5,
+		TransitionCount:      7,
+		ParentWorkflowID:     "p-wf",
+		ParentRunID:          "p-run",
+		ParentInitiatedID:    3,
+		Details:              map[string]any{"k": "v"},
+		NewRunID:             "new-run",
+		IsFirstSync:          true,
+		FirstEventID:         1,
+		NextEventID:          8,
+		Attempt:              2,
+		State:                "Running",
+		Status:               "Unspecified",
+		AppliedNextEventID:   10,
+		TransitionHistoryLen: 2,
+		LastEventID:          9,
+		Outcome:              "applied",
+		Error:                "boom",
+		NewExecutionRunID:    "ne-run",
+		ResetRunID:           "reset-run",
+		SignalCount:          6,
+		ActivityCount:        4,
+		UserTimerCount:       3,
+		ChildExecutionCount:  2,
+		UpdateCount:          1,
+	}
+}
+
+// TestReplicationLifecycleFieldSetLocked pins the complete set of field names ReplicationLifecycle
+// can emit, across every phase. This set is the event's published wire contract that downstream
+// consumers depend on. If this test fails you have added, removed, or renamed an emitted field:
+// do so deliberately, get the change reviewed, and then update `want` to match.
+func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
+	want := []string{
+		"phase", "task_type", "shard", "namespace", "namespace_id", "workflow_id", "run_id",
+		"failover_version", "transition_count",
+		"parent_workflow_id", "parent_run_id", "parent_initiated_id",
+		"details",
+		"new_run_id", "is_first_sync", "first_event_id", "next_event_id",
+		"attempt",
+		"outcome", "error", "state", "status", "applied_next_event_id",
+		"transition_history_len", "last_event_id",
+		"new_execution_run_id", "reset_run_id",
+		"signal_count", "activity_count", "user_timer_count", "child_execution_count", "update_count",
+	}
+
+	got := make(map[string]struct{})
+	for _, phase := range []ReplicationPhase{ReplicationSent, ReplicationExecuting, ReplicationApplied} {
+		enc := newCaptureEncoder()
+		fullyPopulatedReplication(phase).Encode(enc)
+		for k := range enc.fields {
+			got[k] = struct{}{}
+		}
+	}
+	gotKeys := make([]string, 0, len(got))
+	for k := range got {
+		gotKeys = append(gotKeys, k)
+	}
+
+	require.ElementsMatch(t, want, gotKeys,
+		"ReplicationLifecycle emitted-field set changed; this alters the event's published wire "+
+			"contract. Make the change deliberately, get it reviewed, then update `want`.")
+}

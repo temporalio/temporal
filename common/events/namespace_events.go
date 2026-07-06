@@ -4,11 +4,7 @@ package events
 // activity (replication, failover, configuration, admission, handover, etc.). This package owns
 // only the stable envelope: the set of phase values and the contents of Details are supplied by
 // the emitter.
-var NamespaceLifecycle = NewEventDef("namespace_lifecycle",
-	WithField("phase", FieldString),
-	WithField("namespace", FieldString),
-	WithField("namespace_id", FieldString),
-)
+var NamespaceLifecycle = NewEventDef("namespace_lifecycle")
 
 // NamespaceLifecyclePayload is the NamespaceLifecycle payload. The identity fields are stable;
 // all phase-specific data goes in Details and is emitted as a single nested "details" object.

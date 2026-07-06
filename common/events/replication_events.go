@@ -4,22 +4,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var ReplicationLifecycle = NewEventDef("replication_lifecycle",
-	WithField("phase", FieldString),
-	WithField("task_type", FieldString),
-	WithField("shard", FieldInt64),
-	WithField("namespace", FieldString),
-	WithField("namespace_id", FieldString),
-	WithField("workflow_id", FieldString),
-	WithField("run_id", FieldString),
-	WithField("failover_version", FieldInt64),
-	WithField("transition_count", FieldInt64),
-	// parent identity, present when this workflow is a child
-	WithField("parent_workflow_id", FieldString),
-	WithField("parent_run_id", FieldString),
-	WithField("parent_initiated_id", FieldInt64),
-	WithField("details", FieldAny),
-)
+var ReplicationLifecycle = NewEventDef("replication_lifecycle")
 
 type ReplicationPhase string
 
