@@ -163,6 +163,9 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ needs.check-review-eligibility.outputs.pr_number }}
 
+            Before reviewing, read `.claude/skills/review/SKILL.md` and apply it as the review skill.
+            Follow any referenced project instructions from that skill, including `.github/copilot-instructions.md`.
+
             Please review this pull request with a focus on:
             - Code quality and best practices
             - Potential bugs or issues
@@ -174,4 +177,4 @@ jobs:
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
