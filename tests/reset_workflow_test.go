@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -1007,6 +1009,115 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 		WorkflowExecution:         wfExec,
 		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
 		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+}
+
+func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissing() {
+	// Speed up the transfer/visibility queues so the DeleteExecutionTask for the closed current
+	// run is processed promptly (deleting a closed workflow is async). Mirrors the delete-execution
+	// suite (tests/workflow_delete_execution_test.go).
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
+		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
+	)
+
+	// Run a workflow that continues-as-new exactly once: run A (closed, ContinuedAsNew) -> run B.
+	env.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()}, CaNOnceWorkflow, "")
+	s.NoError(err)
+
+	// Wait for the original run to continue-as-new and the chain to stop running, so run A is
+	// closed (ContinuedAsNew) and run B is the current (closed) execution.
+	s.Eventually(func() bool {
+		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
+		})
+		s.NoError(err)
+		return resp.GetCount() >= 2
+	}, 30*time.Second, time.Second)
+
+	baseRunID := run.GetRunID() // run A
+
+	// From run A's history, find the current run (B) via its ContinuedAsNew event and run A's
+	// reset point (its last completed workflow task).
+	runAEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      baseRunID,
+	})
+	var currentRunID string
+	var lastWorkflowTask *historypb.HistoryEvent
+	for _, event := range runAEvents {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			lastWorkflowTask = event
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+			currentRunID = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+		}
+	}
+	s.NotEmpty(currentRunID)
+	s.NotNil(lastWorkflowTask)
+
+	// Delete the current run (B). This clears the current_executions record while run A survives —
+	// the "no current execution, older run exists" condition.
+	_, err = env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      currentRunID,
+		},
+	})
+	s.NoError(err)
+
+	// Wait until there is no current execution: resolving by workflowId only now returns NotFound.
+	s.Eventually(func() bool {
+		_, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		var notFound *serviceerror.NotFound
+		return errors.As(err, &notFound)
+	}, 30*time.Second, 100*time.Millisecond)
+
+	// Sanity: run A still exists and is addressable by its runId.
+	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: baseRunID},
+	})
+	s.NoError(err)
+
+	// Reset by run A's explicit runId. Before the fix this fails with NotFound (current missing);
+	// after the fix it must succeed and create a new current execution from run A.
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      baseRunID,
+		},
+		Reason:                    "reset by runId with current execution missing",
+		WorkflowTaskFinishEventId: lastWorkflowTask.GetEventId(),
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	s.NotEmpty(resetResp.GetRunId())
+	s.NotEqual(baseRunID, resetResp.GetRunId())
+
+	// The reset run exists and is derived from run A.
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      resetResp.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	s.Equal(baseRunID, descResp.WorkflowExecutionInfo.GetFirstRunId())
+
+	// The workflow again has a current execution: resolving by workflowId only now succeeds.
+	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 	})
 	s.NoError(err)
 }

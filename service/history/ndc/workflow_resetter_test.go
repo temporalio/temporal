@@ -282,6 +282,61 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	s.False(resetReleaseCalled)
 }
 
+func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
+	// No current execution exists (e.g. the current run was deleted while older runs survive).
+	// persistToDB must create the reset run as the new current via CreateWorkflowModeBrandNew,
+	// and must not touch the (nil) current or the base run.
+	baseWorkflow := NewMockWorkflow(s.controller) // must not be used in this path
+
+	resetWorkflow := NewMockWorkflow(s.controller)
+	resetReleaseCalled := false
+	resetContext := historyi.NewMockWorkflowContext(s.controller)
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	var resetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
+	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
+	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn().Return(resetReleaseFn).AnyTimes()
+
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	resetMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
+
+	resetSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+	}
+	resetEventsSeq := []*persistence.WorkflowEvents{{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  s.workflowID,
+		RunID:       s.resetRunID,
+		BranchToken: []byte("some random reset branch token"),
+		Events: []*historypb.HistoryEvent{{
+			EventId: 123,
+		}},
+	}}
+	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
+		context.Background(),
+		historyi.TransactionPolicyActive,
+	).Return(resetSnapshot, resetEventsSeq, nil)
+
+	resetNewEventsSize := int64(4321)
+	// The key assertion: reset run is created as the new current with BrandNew mode,
+	// not an Update/ConflictResolve mode (both of which assume an existing current row).
+	s.mockTransaction.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		persistence.CreateWorkflowModeBrandNew,
+		chasm.WorkflowArchetypeID,
+		int64(0),
+		resetSnapshot,
+		resetEventsSeq,
+		true, // isWorkflow
+	).Return(resetNewEventsSize, nil)
+
+	// nil current workflow, and nil current mutation/events.
+	err := s.workflowResetter.persistToDB(context.Background(), baseWorkflow, nil, nil, nil, resetWorkflow)
+	s.NoError(err)
+	// persistToDB function is not charged of releasing locks
+	s.False(resetReleaseCalled)
+}
+
 func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	ctx := context.Background()
 	baseBranchToken := []byte("some random base branch token")
