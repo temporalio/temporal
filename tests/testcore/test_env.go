@@ -501,6 +501,27 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 	return e.sdkClient
 }
 
+func (e *TestEnv) SdkClientForNamespace(ns string) sdkclient.Client {
+	clientOptions := sdkclient.Options{
+		HostPort:  e.FrontendGRPCAddress(),
+		Namespace: ns,
+		Logger:    log.NewSdkLogger(e.Logger),
+	}
+
+	if provider := e.cluster.host.tlsConfigProvider; provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+
+	var err error
+	newClient, err := sdkclient.Dial(clientOptions)
+	if err != nil {
+		e.t.Fatalf("Failed to create SDK client: %v", err)
+	}
+	e.t.Cleanup(func() { newClient.Close() })
+
+	return newClient
+}
+
 // SdkWorker returns the SDK worker. It is lazily initialized on the first call.
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
 	e.sdkWorkerOnce.Do(func() {
