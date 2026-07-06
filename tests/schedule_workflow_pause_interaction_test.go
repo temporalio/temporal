@@ -21,6 +21,24 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+const (
+	// scheduleStartWait/scheduleStartPoll bound waiting for a schedule to
+	// record a recent action for the workflow it just started.
+	scheduleStartWait = 30 * time.Second
+	scheduleStartPoll = 250 * time.Millisecond
+
+	// workflowStatusWait/workflowStatusPoll bound waiting for a workflow to
+	// reach a pause-related status (PAUSED, or RUNNING again after reset).
+	workflowStatusWait = 15 * time.Second
+	workflowStatusPoll = 200 * time.Millisecond
+
+	// scheduleCompletionWait/scheduleCompletionPoll bound waiting for the
+	// scheduler to observe a workflow's completion and record it as a
+	// COMPLETED action.
+	scheduleCompletionWait = 30 * time.Second
+	scheduleCompletionPoll = 500 * time.Millisecond
+)
+
 var allOverlapPolicies = []enumspb.ScheduleOverlapPolicy{
 	enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 	enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
@@ -54,14 +72,16 @@ func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) b
 	}
 }
 
-func TestScheduleV1PauseInteraction(t *testing.T) {
+func TestScheduleV1WorkflowPauseInteraction(t *testing.T) {
+	t.Parallel()
 	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory) })
 	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory) })
 	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory) })
 	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, v1ContextFactory) })
 }
 
-func TestScheduleCHASMPauseInteraction(t *testing.T) {
+func TestScheduleCHASMWorkflowPauseInteraction(t *testing.T) {
+	t.Parallel()
 	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, chasmContextFactory) })
 	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, chasmContextFactory) })
 	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, chasmContextFactory) })
@@ -157,9 +177,7 @@ func setupPausedScheduledWorkflow(
 	require.NoError(t, err)
 
 	// Wait for the schedule to start its first workflow. RecentActions is
-	// populated for every overlap policy (including ALLOW_ALL) and by both
-	// schedulers, unlike RunningWorkflows which V1 does not populate for
-	// ALLOW_ALL.
+	// populated for every overlap policy (including ALLOW_ALL).
 	var execution *commonpb.WorkflowExecution
 	await.RequireTruef(t, func() bool {
 		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -176,7 +194,7 @@ func setupPausedScheduledWorkflow(
 			}
 		}
 		return false
-	}, 30*time.Second, 250*time.Millisecond, "schedule should start its first workflow")
+	}, scheduleStartWait, scheduleStartPoll, "schedule should start its first workflow")
 
 	// Pause that workflow.
 	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
@@ -196,7 +214,7 @@ func setupPausedScheduledWorkflow(
 			Execution: execution,
 		})
 		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-	}, 15*time.Second, 200*time.Millisecond)
+	}, workflowStatusWait, workflowStatusPoll)
 
 	actionsAtPause, err := scheduleActionCount(ctx, s, sid)
 	require.NoError(t, err)
@@ -252,15 +270,17 @@ func testSchedulePauseOverlap(t *testing.T, newContext contextFactory, policy en
 			"schedule with %s should keep taking actions while its workflow is paused", policy)
 	} else {
 		// The schedule must not take any new action while the workflow is
-		// paused: the paused workflow keeps the overlap slot occupied. There is
-		// no await helper for asserting the *absence* of progress, so wait a
-		// fixed window during which the 1s schedule would otherwise fire ~8
-		// times, then assert ActionCount did not advance.
-		//nolint:forbidigo // asserting absence of scheduled actions over a fixed window
-		time.Sleep(8 * time.Second)
-		got, gErr := scheduleActionCount(f.ctx, f.s, f.sid)
-		require.NoError(t, gErr)
-		require.Equal(t, f.actionsAtPause, got,
+		// paused: the paused workflow keeps the overlap slot occupied. Poll
+		// over a window during which the 1s schedule would otherwise fire ~8
+		// times, confirming ActionCount never advances.
+		require.Never(
+			t,
+			func() bool {
+				c, cErr := scheduleActionCount(f.ctx, f.s, f.sid)
+				return cErr == nil && c > f.actionsAtPause
+			},
+			8*time.Second,
+			500*time.Millisecond,
 			"schedule with %s must not take new actions while its workflow is paused", policy)
 	}
 }
@@ -283,9 +303,7 @@ func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, p
 	})
 	require.NoError(t, err)
 
-	// Free the overlap slot: signal the workflow so it can complete. For
-	// CANCEL_OTHER the scheduler's pending cancellation will also close it; the
-	// signal is harmless either way.
+	// Free the overlap slot so the schedule can progress again.
 	err = f.s.SdkClient().SignalWorkflow(f.ctx, f.execution.GetWorkflowId(), f.execution.GetRunId(), "complete", nil)
 	require.NoError(t, err)
 
@@ -296,6 +314,111 @@ func testSchedulePauseUnpauseRecovery(t *testing.T, newContext contextFactory, p
 		return cErr == nil && c > f.actionsAtPause
 	}, 30*time.Second, 1*time.Second,
 		"schedule with %s should resume taking actions after the workflow is unpaused", policy)
+}
+
+// setupPausedTriggeredWorkflow creates a schedule with a long interval and
+// trigger-immediately (so exactly one run starts), registers the workflow via
+// register, waits for that run to start, optionally runs afterStart (e.g. to
+// wait for a specific point in history), pauses the run, and waits for it to
+// reach PAUSED. It is shared by the pause/continue-as-new and pause/reset
+// tests, which both need a single triggered run to pause.
+func setupPausedTriggeredWorkflow(
+	t *testing.T,
+	newContext contextFactory,
+	opts []testcore.TestOption,
+	idPrefix string,
+	register func(s *testcore.TestEnv, wt string),
+	afterStart func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution),
+) *scheduledPauseFixture {
+	s := testcore.NewEnv(t, opts...)
+
+	sid := testcore.RandomizeStr(idPrefix)
+	wid := testcore.RandomizeStr(idPrefix + "-wf")
+	wt := testcore.RandomizeStr(idPrefix + "-wt")
+
+	register(s, wt)
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			// Long interval + trigger-immediately so exactly one run starts.
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(24 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Wait for the first run to start.
+	var firstRun *commonpb.WorkflowExecution
+	await.RequireTruef(t, func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		for _, ra := range desc.GetInfo().GetRecentActions() {
+			if ex := ra.GetStartWorkflowResult(); ex.GetRunId() != "" {
+				firstRun = ex
+				return true
+			}
+		}
+		return false
+	}, scheduleStartWait, scheduleStartPoll, "schedule should start its first workflow")
+
+	if afterStart != nil {
+		afterStart(s, firstRun)
+	}
+
+	// Pause the first run.
+	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		WorkflowId: firstRun.GetWorkflowId(),
+		RunId:      firstRun.GetRunId(),
+		Identity:   "functional-test",
+		Reason:     idPrefix,
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+	await.RequireTrue(t, func() bool {
+		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: firstRun,
+		})
+		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+	}, workflowStatusWait, workflowStatusPoll)
+
+	return &scheduledPauseFixture{
+		s:         s,
+		ctx:       ctx,
+		sid:       sid,
+		wid:       wid,
+		wt:        wt,
+		execution: firstRun,
+	}
 }
 
 // testSchedulePauseContinueAsNew verifies the interaction between pause and
@@ -310,111 +433,40 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 	// the completion callback token, which only survives continue-as-new in the
 	// envelope token format (gated off by default).
 	opts := append(pauseInteractionOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
-	s := testcore.NewEnv(t, opts...)
-
-	sid := testcore.RandomizeStr("sched-pause-can")
-	wid := testcore.RandomizeStr("sched-pause-can-wf")
-	wt := testcore.RandomizeStr("sched-pause-can-wt")
 
 	// First run waits for the "go" signal, then continues-as-new; the continued
 	// run completes immediately.
-	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
-		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
-			workflow.GetSignalChannel(ctx, "go").Receive(ctx, nil)
-			return workflow.NewContinueAsNewError(ctx, wt)
-		}
-		return nil
-	}, workflow.RegisterOptions{Name: wt})
-
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Schedule: &schedulepb.Schedule{
-			// Long interval + trigger-immediately so exactly one run starts.
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{
-					{Interval: durationpb.New(24 * time.Hour)},
-				},
-			},
-			Action: &schedulepb.ScheduleAction{
-				Action: &schedulepb.ScheduleAction_StartWorkflow{
-					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-						WorkflowId:   wid,
-						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					},
-				},
-			},
-			Policies: &schedulepb.SchedulePolicies{
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
-		InitialPatch: &schedulepb.SchedulePatch{
-			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-		},
-		Identity:  "test",
-		RequestId: uuid.NewString(),
-	})
-	require.NoError(t, err)
-
-	// Wait for the first run to start.
-	var firstRun *commonpb.WorkflowExecution
-	await.RequireTruef(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: sid,
-		})
-		if descErr != nil {
-			return false
-		}
-		for _, ra := range desc.GetInfo().GetRecentActions() {
-			if ex := ra.GetStartWorkflowResult(); ex.GetRunId() != "" {
-				firstRun = ex
-				return true
+	register := func(s *testcore.TestEnv, wt string) {
+		s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+			if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+				workflow.GetSignalChannel(ctx, "go").Receive(ctx, nil)
+				return workflow.NewContinueAsNewError(ctx, wt)
 			}
-		}
-		return false
-	}, 30*time.Second, 250*time.Millisecond, "schedule should start its first workflow")
+			return nil
+		}, workflow.RegisterOptions{Name: wt})
+	}
 
-	// Pause the first run.
-	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: firstRun.GetWorkflowId(),
-		RunId:      firstRun.GetRunId(),
-		Identity:   "functional-test",
-		Reason:     "schedule-pause-can",
-		RequestId:  uuid.NewString(),
-	})
-	require.NoError(t, err)
-	await.RequireTrue(t, func() bool {
-		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
-			Execution: firstRun,
-		})
-		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-	}, 15*time.Second, 200*time.Millisecond)
+	f := setupPausedTriggeredWorkflow(t, newContext, opts, "sched-pause-can", register, nil)
 
 	// Signal "go" while paused. The signal is recorded but not processed, so the
 	// workflow must not continue-as-new: it stays on the same run, still PAUSED.
-	err = s.SdkClient().SignalWorkflow(ctx, firstRun.GetWorkflowId(), firstRun.GetRunId(), "go", nil)
+	err := f.s.SdkClient().SignalWorkflow(f.ctx, f.execution.GetWorkflowId(), f.execution.GetRunId(), "go", nil)
 	require.NoError(t, err)
-	//nolint:forbidigo // confirming the paused workflow does NOT act on the signal over a fixed window
-	time.Sleep(3 * time.Second)
-	d, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
-		Execution: firstRun,
-	})
-	require.NoError(t, err)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, d.GetWorkflowExecutionInfo().GetStatus(),
+	require.Never(t, func() bool {
+		d, dErr := f.s.FrontendClient().DescribeWorkflowExecution(f.ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: f.s.Namespace().String(),
+			Execution: f.execution,
+		})
+		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+	}, 3*time.Second, 500*time.Millisecond,
 		"paused workflow must not continue-as-new while paused")
 
 	// Unpause: the buffered signal is processed, the workflow continues-as-new,
 	// and the continued run completes.
-	_, err = s.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: firstRun.GetWorkflowId(),
-		RunId:      firstRun.GetRunId(),
+	_, err = f.s.FrontendClient().UnpauseWorkflowExecution(f.ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  f.s.Namespace().String(),
+		WorkflowId: f.execution.GetWorkflowId(),
+		RunId:      f.execution.GetRunId(),
 		Identity:   "functional-test",
 		Reason:     "schedule-pause-can-recovery",
 		RequestId:  uuid.NewString(),
@@ -423,19 +475,19 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 
 	// The latest run of the chain (the continued-as-new run) should complete.
 	await.RequireTruef(t, func() bool {
-		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: firstRun.GetWorkflowId()},
+		d, dErr := f.s.FrontendClient().DescribeWorkflowExecution(f.ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: f.s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: f.execution.GetWorkflowId()},
 		})
 		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	}, 30*time.Second, 500*time.Millisecond, "continued-as-new run should complete after unpause")
+	}, scheduleCompletionWait, scheduleCompletionPoll, "continued-as-new run should complete after unpause")
 
 	// The scheduler should observe the completion across the continue-as-new
 	// boundary and record it as a COMPLETED action.
 	await.RequireTruef(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: sid,
+		desc, descErr := f.s.FrontendClient().DescribeSchedule(f.ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  f.s.Namespace().String(),
+			ScheduleId: f.sid,
 		})
 		if descErr != nil {
 			return false
@@ -446,7 +498,7 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 			}
 		}
 		return false
-	}, 30*time.Second, 500*time.Millisecond, "scheduler should record the continued-as-new workflow as COMPLETED")
+	}, scheduleCompletionWait, scheduleCompletionPoll, "scheduler should record the continued-as-new workflow as COMPLETED")
 }
 
 // testSchedulePauseReset verifies the interaction between pause and resetting a
@@ -455,129 +507,60 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 // event is not part of the reset history), and the scheduler keeps tracking the
 // reset run through to completion.
 func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
-	s := testcore.NewEnv(t, pauseInteractionOpts(t)...)
-
-	sid := testcore.RandomizeStr("sched-pause-reset")
-	wid := testcore.RandomizeStr("sched-pause-reset-wf")
-	wt := testcore.RandomizeStr("sched-pause-reset-wt")
-
-	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
-		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
-		return nil
-	}, workflow.RegisterOptions{Name: wt})
-
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Schedule: &schedulepb.Schedule{
-			// Long interval + trigger-immediately so exactly one run starts.
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{
-					{Interval: durationpb.New(24 * time.Hour)},
-				},
-			},
-			Action: &schedulepb.ScheduleAction{
-				Action: &schedulepb.ScheduleAction_StartWorkflow{
-					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-						WorkflowId:   wid,
-						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					},
-				},
-			},
-			Policies: &schedulepb.SchedulePolicies{
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			},
-		},
-		InitialPatch: &schedulepb.SchedulePatch{
-			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
-		},
-		Identity:  "test",
-		RequestId: uuid.NewString(),
-	})
-	require.NoError(t, err)
-
-	// Wait for the first run to start.
-	var firstRun *commonpb.WorkflowExecution
-	await.RequireTruef(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: sid,
-		})
-		if descErr != nil {
-			return false
-		}
-		for _, ra := range desc.GetInfo().GetRecentActions() {
-			if ex := ra.GetStartWorkflowResult(); ex.GetRunId() != "" {
-				firstRun = ex
-				return true
-			}
-		}
-		return false
-	}, 30*time.Second, 250*time.Millisecond, "schedule should start its first workflow")
+	register := func(s *testcore.TestEnv, wt string) {
+		s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
+			return nil
+		}, workflow.RegisterOptions{Name: wt})
+	}
 
 	// Wait until the first workflow task is complete so event 3 is a valid reset point.
-	s.WaitForHistoryEvents(`
-		1 WorkflowExecutionStarted
-		2 WorkflowTaskScheduled
-		3 WorkflowTaskStarted
-		4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace().String(), firstRun),
-		10*time.Second,
-		250*time.Millisecond,
-	)
+	afterStart := func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution) {
+		s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+			s.GetHistoryFunc(s.Namespace().String(), firstRun),
+			10*time.Second,
+			250*time.Millisecond,
+		)
+	}
 
-	// Pause the first run.
-	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: firstRun.GetWorkflowId(),
-		RunId:      firstRun.GetRunId(),
-		Identity:   "functional-test",
-		Reason:     "schedule-pause-reset",
-		RequestId:  uuid.NewString(),
-	})
-	require.NoError(t, err)
-	await.RequireTrue(t, func() bool {
-		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
-			Execution: firstRun,
-		})
-		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-	}, 15*time.Second, 200*time.Millisecond)
+	f := setupPausedTriggeredWorkflow(t, newContext, pauseInteractionOpts(t), "sched-pause-reset", register, afterStart)
 
 	// Reset the paused workflow to a point before it was paused.
-	resetResp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace().String(),
-		WorkflowExecution:         firstRun,
+	resetResp, err := f.s.FrontendClient().ResetWorkflowExecution(f.ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 f.s.Namespace().String(),
+		WorkflowExecution:         f.execution,
 		Reason:                    "schedule-pause-reset",
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
 	})
 	require.NoError(t, err)
 	resetRun := &commonpb.WorkflowExecution{
-		WorkflowId: firstRun.GetWorkflowId(),
+		WorkflowId: f.execution.GetWorkflowId(),
 		RunId:      resetResp.GetRunId(),
 	}
 
 	// The reset run is created from history before the pause event, so it is
 	// running, not paused: reset clears the pause.
 	await.RequireTruef(t, func() bool {
-		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
+		d, dErr := f.s.FrontendClient().DescribeWorkflowExecution(f.ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: f.s.Namespace().String(),
 			Execution: resetRun,
 		})
 		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	}, 15*time.Second, 200*time.Millisecond, "reset run should be RUNNING (pause cleared by reset)")
+	}, workflowStatusWait, workflowStatusPoll, "reset run should be RUNNING (pause cleared by reset)")
 
 	// The scheduler keeps tracking the reset run: signalling it to completion
 	// should be observed and recorded as a COMPLETED action.
-	err = s.SdkClient().SignalWorkflow(ctx, resetRun.GetWorkflowId(), resetRun.GetRunId(), "complete", nil)
+	err = f.s.SdkClient().SignalWorkflow(f.ctx, resetRun.GetWorkflowId(), resetRun.GetRunId(), "complete", nil)
 	require.NoError(t, err)
 	await.RequireTruef(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  s.Namespace().String(),
-			ScheduleId: sid,
+		desc, descErr := f.s.FrontendClient().DescribeSchedule(f.ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  f.s.Namespace().String(),
+			ScheduleId: f.sid,
 		})
 		if descErr != nil {
 			return false
@@ -588,7 +571,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 			}
 		}
 		return false
-	}, 30*time.Second, 500*time.Millisecond, "scheduler should record the reset run as COMPLETED")
+	}, scheduleCompletionWait, scheduleCompletionPoll, "scheduler should record the reset run as COMPLETED")
 }
 
 // scheduleActionCount returns the schedule's total ActionCount (number of
