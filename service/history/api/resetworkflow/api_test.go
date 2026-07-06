@@ -23,25 +23,25 @@ func (s *resetWorkflowSuite) TestShouldTolerateMissingCurrentExecution() {
 	// No error resolving the current execution => not missing, no error.
 	missing, err := shouldTolerateMissingCurrentExecution(nil, "base-run-id")
 	s.False(missing)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	notFound := serviceerror.NewNotFound("current execution not found")
 
 	// NotFound with an explicit base runId => tolerate (proceed with no current), no error.
 	missing, err = shouldTolerateMissingCurrentExecution(notFound, "base-run-id")
 	s.True(missing)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	// NotFound with an empty base runId => not tolerated (nothing to reset from), error returned.
 	missing, err = shouldTolerateMissingCurrentExecution(notFound, "")
 	s.False(missing)
-	s.ErrorIs(err, notFound)
+	s.Require().ErrorIs(err, notFound)
 
 	// A non-NotFound error => not tolerated regardless of base runId, error returned unchanged.
 	other := serviceerror.NewUnavailable("persistence unavailable")
 	missing, err = shouldTolerateMissingCurrentExecution(other, "base-run-id")
 	s.False(missing)
-	s.ErrorIs(err, other)
+	s.Require().ErrorIs(err, other)
 }
 
 func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {

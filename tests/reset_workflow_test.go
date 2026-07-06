@@ -1029,13 +1029,13 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 
 	// Wait for the original run to continue-as-new and the chain to stop running, so run A is
 	// closed (ContinuedAsNew) and run B is the current (closed) execution.
-	s.Eventually(func() bool {
+	s.Await(func(s *ResetWorkflowTestSuite) {
 		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
 		})
 		s.NoError(err)
-		return resp.GetCount() >= 2
+		s.GreaterOrEqual(resp.GetCount(), int64(2))
 	}, 30*time.Second, time.Second)
 
 	baseRunID := run.GetRunID() // run A
@@ -1054,6 +1054,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 			lastWorkflowTask = event
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 			currentRunID = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+		default:
+			// other event types are not relevant here
 		}
 	}
 	s.NotEmpty(currentRunID)
@@ -1071,7 +1073,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 	s.NoError(err)
 
 	// Wait until there is no current execution: resolving by workflowId only now returns NotFound.
-	s.Eventually(func() bool {
+	s.AwaitTrue(func() bool {
 		_, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
