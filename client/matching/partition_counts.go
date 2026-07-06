@@ -78,8 +78,10 @@ func parsePartitionCounts(hdr string) (PartitionCounts, error) {
 		return PartitionCounts{}, err
 	}
 	return PartitionCounts{
-		Read:  cpc.Read,
-		Write: cpc.Write,
+		Read:         cpc.Read,
+		Write:        cpc.Write,
+		BacklogCap:   number.Compact8(cpc.BacklogCap),
+		BacklogCount: cpc.BacklogCount,
 	}, nil
 }
 

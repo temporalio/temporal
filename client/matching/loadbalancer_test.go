@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -152,6 +154,138 @@ func TestLoadBalancer_ReducedPartitionCount(t *testing.T) {
 	assert.Equal(t, 1, maxPollerCount(tqlb))
 	tqlb.pickReadPartition(partitionCount)
 	assert.Equal(t, 2, maxPollerCount(tqlb))
+}
+
+func TestTQLoadBalancerWeighted_ConcentratesOnBacklog(t *testing.T) {
+	partitionCount := 4
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+
+	// partition 3 has ~9x the weight of the others (i.e. much more backlog).
+	weights := []int64{100, 100, 100, 900}
+	const n = 1200
+	for range n {
+		tqlb.pickReadPartitionWeighted(partitionCount, weights)
+	}
+
+	counts := tqlb.pollerCounts
+	// the high-backlog partition gets the most pollers, by a wide margin.
+	assert.Greater(t, counts[3], counts[0])
+	assert.Greater(t, counts[3], counts[1])
+	assert.Greater(t, counts[3], counts[2])
+	// empty partitions still get some pollers (weight floor prevents starvation).
+	assert.Greater(t, counts[0], 0)
+	// distribution is roughly proportional to weights (sum 1200).
+	assert.InDelta(t, 900, counts[3], 60)
+	assert.InDelta(t, 100, counts[0], 30)
+	assert.InDelta(t, 100, counts[1], 30)
+	assert.InDelta(t, 100, counts[2], 30)
+}
+
+func TestTQLoadBalancerWeighted_EqualWeightsBalances(t *testing.T) {
+	partitionCount := 4
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+
+	// equal weights should behave like fewest-outstanding-pollers: perfectly balanced.
+	weights := []int64{100, 100, 100, 100}
+	for range 8 {
+		tqlb.pickReadPartitionWeighted(partitionCount, weights)
+	}
+	for _, c := range tqlb.pollerCounts {
+		assert.Equal(t, 2, c)
+	}
+}
+
+func TestTQLoadBalancerWeighted_Release(t *testing.T) {
+	partitionCount := 3
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+
+	// Skewed weights concentrate pollers on partition 2. Releasing every token must return all
+	// partitions to zero, which only holds if each weighted-path token releases the partition it
+	// was actually assigned (rather than, say, always partition 0).
+	weights := []int64{100, 100, 800}
+	const n = 100
+	tokens := make([]*pollToken, 0, n)
+	for range n {
+		tokens = append(tokens, tqlb.pickReadPartitionWeighted(partitionCount, weights))
+	}
+	assert.Greater(t, tqlb.pollerCounts[2], tqlb.pollerCounts[0], "pollers should concentrate on the high-weight partition")
+	assert.Greater(t, tqlb.pollerCounts[2], tqlb.pollerCounts[1], "pollers should concentrate on the high-weight partition")
+
+	for _, tok := range tokens {
+		tok.Release()
+	}
+	for _, c := range tqlb.pollerCounts {
+		assert.Equal(t, 0, c)
+	}
+}
+
+func TestPickReadPartition_BacklogAware(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// backlog counts present and covering all read partitions -> weighted toward partition 1.
+	pc := PartitionCounts{Read: 2, Write: 2, BacklogCount: []number.Compact8{0, 100}}
+	for range 200 {
+		lb.PickReadPartition(taskQueue, pc)
+	}
+	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
+	assert.Greater(t, tqlb.pollerCounts[1], tqlb.pollerCounts[0],
+		"partition with more backlog should receive more pollers")
+}
+
+func TestPickReadPartition_NoBacklogFallsBack(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// no backlog counts -> classic fewest-poller balancing across the 4 read partitions.
+	pc := PartitionCounts{Read: 4, Write: 4}
+	for range 8 {
+		lb.PickReadPartition(taskQueue, pc)
+	}
+	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
+	for _, c := range tqlb.pollerCounts {
+		assert.Equal(t, 2, c)
+	}
+}
+
+func TestPickReadPartition_ShortBacklogFallsBack(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	// backlog counts present but shorter than the read count (e.g. lagging a scale-up) -> fall
+	// back to fewest-poller balancing rather than indexing out of range.
+	pc := PartitionCounts{Read: 4, Write: 4, BacklogCount: []number.Compact8{0, 100}}
+	for range 8 {
+		lb.PickReadPartition(taskQueue, pc)
+	}
+	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
+	for _, c := range tqlb.pollerCounts {
+		assert.Equal(t, 2, c)
+	}
 }
 
 func maxPollerCount(tqlb *tqLoadBalancer) int {
