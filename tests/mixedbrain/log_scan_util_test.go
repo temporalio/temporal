@@ -31,17 +31,8 @@ func TestScanServerLogs(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 
 	// Only the un-excluded soft assertion on line 2 should be reported.
-	mock := &mockT{}
-	scanLogFile(mock, serverLogValidators, path)
-	require.Equal(t, 1, mock.errors, "expected exactly one flagged line")
+	problems, err := scanServerLogs(serverLogValidators, path)
+	require.NoError(t, err)
+	require.Len(t, problems, 1)
+	require.Contains(t, problems[0], "server.log:2")
 }
-
-// mockT captures Errorf calls so we can assert on validation hits without
-// failing the real test.
-type mockT struct {
-	testing.TB
-	errors int
-}
-
-func (m *mockT) Errorf(string, ...any) { m.errors++ }
-func (m *mockT) Helper()               {}

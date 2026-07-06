@@ -188,7 +188,11 @@ func TestMixedBrain(t *testing.T) {
 	procRelease.stop()
 
 	t.Run("scan server logs", func(st *testing.T) {
-		scanServerLogs(st, serverLogValidators, currentLog, releaseLog)
+		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
+		require.NoError(st, err)
+		for _, p := range problems {
+			st.Error(p)
+		}
 	})
 }
 
