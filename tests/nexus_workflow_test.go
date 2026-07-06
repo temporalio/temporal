@@ -66,11 +66,17 @@ func TestNexusWorkflowTestSuiteCHASM(t *testing.T) {
 }
 
 func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.TestOption) *NexusTestEnv {
+	// CHASM tests need 100% rollout because the setting defaults to 0.
+	rolloutPercent := 0
+	if chasmEnabled {
+		rolloutPercent = 100
+	}
 	return newNexusTestEnv(s.T(), true, append(
 		opts,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, chasmEnabled),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmEnabled),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, chasmEnabled),
+		testcore.WithDynamicConfig(chasmnexus.ChasmWorkflowOperationsRolloutPercent, rolloutPercent),
 	)...)
 }
 
@@ -3354,10 +3360,9 @@ func (s *NexusWorkflowTestSuite) mutateCompletionComponentRef(
 	s.NoError(err)
 }
 
-// TestNexusOperationSurvivesResetCrossTree verifies that when a workflow with a pending Nexus operation is
-// reset, the rebuild re-creates the operation on the tree implied by the current enableChasmWorkflowOperations flag
-// (HSM or CHASM), and the reset run replays without failing a workflow task. Rebuild deterministically picks the
-// framework by dynamic config, so flipping the flag before reset realigns the operation to the other tree.
+// TestNexusOperationSurvivesResetCrossTree verifies that reset rebuilds a pending
+// Nexus operation with the same creation predicate as live scheduling. This suite
+// pins rollout to 100%, so flipping the boolean moves creation between HSM and CHASM.
 func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmEnabled bool) {
 	// This test drives the creation-policy flag itself, so run it once (not per-suite-mode).
 	if chasmEnabled {
