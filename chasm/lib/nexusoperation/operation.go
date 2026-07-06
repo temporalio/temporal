@@ -191,7 +191,17 @@ func (o *Operation) addCompletionCallbacks(
 		}
 		switch variant := cb.Variant.(type) {
 		case *commonpb.Callback_NexusWorker_:
-			// OK.
+			nw := variant.NexusWorker
+			chasmCB.Variant = &callbackspb.Callback_NexusWorker_{
+				NexusWorker: &callbackspb.Callback_NexusWorker{
+					Endpoint:      nw.GetEndpoint(),
+					Service:       nw.GetService(),
+					Operation:     nw.GetOperation(),
+					NexusHeader:   nw.GetNexusHeader(),
+					Input:         nw.GetInput(),
+					SourceContext: nw.GetSourceContext(),
+				},
+			}
 		default:
 			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
 		}

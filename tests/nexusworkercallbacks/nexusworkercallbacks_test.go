@@ -185,7 +185,7 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 
 	// Confirm the worker callback was invoked.
 	s.Eventually(func() bool {
-		return caller.TimesWorkerCallbackCalled() > 1
+		return caller.TimesWorkerCallbackCalled() > 0
 	}, 10*time.Second, 200*time.Millisecond, "nexus-worker-callback was never executed")
 
 	s.Equal(1, caller.TimesWorkerCallbackCalled())
