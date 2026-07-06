@@ -139,18 +139,6 @@ type (
 		isReady      bool
 	}
 
-	// shardObservation accumulates a shard's state across the polls of one WaitReplication run so
-	// an unreported-but-stable stream (safe to accept) can be told apart from a churning one.
-	shardObservation struct {
-		everAcked    bool  // saw a non-zero AckedTaskId at least once this run
-		ackRegressed bool  // AckedTaskId went back to 0 after being non-zero (stream reset)
-		everReady    bool  // shard was ready at least once this run
-		flipped      bool  // shard was ready, then not-ready again (oscillation)
-		lastRangeID  int64 // last observed shard range id (0 = not yet seen)
-		rangeChanged bool  // range id changed between polls (shard ownership churn)
-		polls        int   // polls this shard has been observed in this run
-	}
-
 	WorkflowVerifier func(
 		ctx context.Context,
 		request *verifyReplicationTasksRequest,
@@ -174,10 +162,6 @@ const (
 	skipped     verifyStatus = 2
 
 	largeHistoryLength = 1000
-
-	// noWatermarkStableGraceMinPolls is how many stable polls (no ack regression, oscillation, or
-	// range-id change) a shard with an unreported ack must show before it is accepted as caught up.
-	noWatermarkStableGraceMinPolls = 10
 )
 
 func (r verifyResult) isVerified() bool {
@@ -222,11 +206,8 @@ func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*Replication
 func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplicationRequest) error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
 
-	// observations persist per-shard across this run's polls (see checkReplicationOnce). Churn is
-	// handled by never accepting the shard, not by returning an error, to avoid an activity retry loop.
-	observations := make(map[int32]*shardObservation)
 	for {
-		done, err := a.checkReplicationOnce(ctx, waitRequest, observations)
+		done, err := a.checkReplicationOnce(ctx, waitRequest)
 		if err != nil {
 			return err
 		}
@@ -239,12 +220,16 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplic
 	}
 }
 
-// classifyShardReplicationStatus determines a shard's catchup readiness for a remote cluster.
-// An uninitialized ack watermark (AckedTaskId == 0 with a nil/epoch visibility time) is returned
-// as not-ready with zero lag, rather than the bogus now-since-1970 timeLag / maxTaskId
-// laggingTasks the raw math would give, so it can't pollute the Max* stats or look like real lag.
-// Such a watermark is usually zero only transiently (a freshly (re)established stream not yet
-// reporting its first ack).
+// Check if remote cluster has caught up on all shards on replication tasks
+// classifyShardReplicationStatus determines a shard's catchup readiness for a remote
+// cluster. It guards against an uninitialized/unreported ack watermark: if the remote has
+// no recorded ack for this shard (AckedTaskId == 0 with a nil or epoch visibility time)
+// while the shard has produced tasks, the naive lag math would yield a bogus
+// now-since-1970 timeLag and a maxTaskId-sized laggingTasks that read as "infinitely
+// behind" and fail catchup forever. That case is returned as not-ready with zero lag
+// values, so it neither pollutes the Max* stats nor masquerades as real lag. The watermark
+// is typically zero only transiently (e.g. a freshly (re)created replication stream that
+// has not reported its first ack yet).
 func classifyShardReplicationStatus(
 	localShard *historyservice.ShardReplicationStatus,
 	remoteProgress *historyservice.ShardReplicationStatusPerCluster,
@@ -278,8 +263,7 @@ func classifyShardReplicationStatus(
 	}
 }
 
-// checkReplicationOnce checks once whether the remote cluster has caught up on all shards.
-func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest, observations map[int32]*shardObservation) (bool, error) {
+func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -301,7 +285,6 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	requiredMinTaskIDPerShard := waitRequest.WaitForTaskIds
 
 	shardStatuses := make([]shardStatus, 0, len(localShards))
-	var acceptedNoWatermarkShardCount int
 
 	for _, localShard := range localShards {
 		remoteShardProgress, hasRemoteShardProgress := localShard.RemoteClusters[waitRequest.RemoteCluster]
@@ -316,59 +299,18 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
 
-		status := classifyShardReplicationStatus(
+		shardStatuses = append(shardStatuses, classifyShardReplicationStatus(
 			localShard,
 			remoteShardProgress,
 			requiredMinTaskIDPerShard[localShard.ShardId],
 			waitRequest.AllowedLaggingTasks,
 			waitRequest.AllowedLagging,
-		)
-
-		// Update this shard's cross-poll observation. A no-watermark shard is the not-ready case
-		// with zero lag (a genuinely lagging shard always has laggingTasks > 0); we accept it only
-		// after it has been stable for the grace window (see the acceptance check below).
-		obs := observations[localShard.ShardId]
-		if obs == nil {
-			obs = &shardObservation{}
-			observations[localShard.ShardId] = obs
-		}
-		obs.polls++
-		if remoteShardProgress.AckedTaskId > 0 {
-			obs.everAcked = true
-		}
-		if obs.everAcked && remoteShardProgress.AckedTaskId == 0 {
-			obs.ackRegressed = true
-		}
-		if status.isReady {
-			obs.everReady = true
-		} else if obs.everReady {
-			obs.flipped = true
-		}
-		// A range id change means the shard was re-acquired (ownership churn), which resets the
-		// per-remote ack watermarks. RangeId is > 0 for an acquired shard.
-		if obs.lastRangeID != 0 && localShard.RangeId != 0 && localShard.RangeId != obs.lastRangeID {
-			obs.rangeChanged = true
-		}
-		if localShard.RangeId != 0 {
-			obs.lastRangeID = localShard.RangeId
-		}
-
-		// Accept a stable no-watermark shard (an established stream that just hasn't reported yet).
-		// Anything churning fails these checks, stays not-ready, and the wait times out to forceful;
-		// WaitHandover confirms whatever is accepted here.
-		isNoWatermark := !status.isReady && status.laggingTasks == 0
-		if isNoWatermark && !obs.ackRegressed && !obs.flipped && !obs.rangeChanged && obs.polls >= noWatermarkStableGraceMinPolls {
-			status.isReady = true
-			acceptedNoWatermarkShardCount++
-		}
-
-		shardStatuses = append(shardStatuses, status)
+		))
 	}
 
 	var (
-		readyShardCount       int
-		notReadyShardCount    int
-		noWatermarkShardCount int
+		readyShardCount    int
+		notReadyShardCount int
 
 		maxLaggingTasksShardID int32
 		maxLaggingTasks        int64
@@ -385,13 +327,8 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 
 		notReadyShardCount++
 
-		// A not-ready shard with zero lag is the no-watermark case (a genuinely lagging shard
-		// always has laggingTasks > 0); count it so a high NotReadyShards with a low MaxTimeLag is
-		// explainable. Its zero lag also keeps it out of the Max* comparisons below.
-		if status.laggingTasks == 0 {
-			noWatermarkShardCount++
-		}
-
+		// No-ack-watermark shards carry zero lag values, so they naturally never win the
+		// comparisons below — no special-casing needed to keep the Max* stats clean.
 		if status.laggingTasks > maxLaggingTasks {
 			maxLaggingTasks = status.laggingTasks
 			maxLaggingTasksShardID = status.shardID
@@ -426,22 +363,12 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			tag.Int("TotalShards", len(localShards)),
 			tag.Int("ReadyShards", readyShardCount),
 			tag.Int("NotReadyShards", len(localShards)-readyShardCount),
-			tag.Int("NoWatermarkShards", noWatermarkShardCount),
-			tag.Int("AcceptedNoWatermarkShards", acceptedNoWatermarkShardCount),
 			tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
 			tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 			tag.Int32("MaxLaggingTasksShardID", maxLaggingTasksShardID),
 			tag.Int64("MaxLaggingTasks", maxLaggingTasks),
 			tag.Int32("MaxTimeLagShardID", maxTimeLagShardID),
 			tag.Duration("MaxTimeLag", maxTimeLag),
-		)
-	} else if acceptedNoWatermarkShardCount > 0 {
-		// Ready only because stable-but-unreported shards were accepted; log for audit.
-		a.Logger.Info("Wait catchup ready with accepted no-watermark shards",
-			tag.String("RemoteCluster", waitRequest.RemoteCluster),
-			tag.String("Namespace", waitRequest.Namespace),
-			tag.Int("AcceptedNoWatermarkShards", acceptedNoWatermarkShardCount),
-			tag.Int("TotalShards", len(localShards)),
 		)
 	}
 

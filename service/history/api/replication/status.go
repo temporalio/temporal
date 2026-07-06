@@ -18,8 +18,6 @@ func GetStatus(
 	resp := &historyservice.ShardReplicationStatus{
 		ShardId:        shard.GetShardID(),
 		ShardLocalTime: timestamppb.New(shard.GetTimeSource().Now()),
-		// RangeId lets callers detect shard ownership churn (it changes on every re-acquire).
-		RangeId: shard.GetRangeID(),
 	}
 
 	maxReplicationTaskId, maxTaskVisibilityTimeStamp := replicationAckMgr.GetMaxTaskInfo()

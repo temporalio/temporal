@@ -962,8 +962,6 @@ message ShardReplicationStatus {
   map<string, HandoverNamespaceInfo> handover_namespaces = 5;
 
   google.protobuf.Timestamp max_replication_task_visibility_time = 6;
-  // Current shard range id; changes on every shard re-acquire (ownership churn signal).
-  int64 range_id = 7;
 }
 
 message HandoverNamespaceInfo {
