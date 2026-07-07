@@ -34,9 +34,7 @@ var (
 	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
-// ComponentOnlyLibrary registers activity components without task handlers.
-// Used by services that need component serialization but not task execution (e.g. frontend).
-type ComponentOnlyLibrary struct {
+type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 	config            *Config
 	namespaceRegistry namespace.Registry
@@ -45,8 +43,8 @@ type ComponentOnlyLibrary struct {
 func newComponentOnlyLibrary(
 	config *Config,
 	namespaceRegistry namespace.Registry,
-) *ComponentOnlyLibrary {
-	return &ComponentOnlyLibrary{
+) *componentOnlyLibrary {
+	return &componentOnlyLibrary{
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 	}
@@ -54,13 +52,13 @@ func newComponentOnlyLibrary(
 
 // NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
 // like tdbg where no task execution is needed.
-func NewNilLibrary() chasm.Library { return &ComponentOnlyLibrary{} }
+func NewNilLibrary() chasm.Library { return &componentOnlyLibrary{} }
 
-func (l *ComponentOnlyLibrary) Name() string {
+func (l *componentOnlyLibrary) Name() string {
 	return libraryName
 }
 
-func (l *ComponentOnlyLibrary) Components() []*chasm.RegistrableComponent {
+func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Activity](
 			componentName,
@@ -81,7 +79,7 @@ func (l *ComponentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 }
 
 type library struct {
-	ComponentOnlyLibrary
+	componentOnlyLibrary
 
 	handler                           *handler
 	activityDispatchTaskHandler       *activityDispatchTaskHandler
@@ -102,7 +100,7 @@ func newLibrary(
 	namespaceRegistry namespace.Registry,
 ) *library {
 	return &library{
-		ComponentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
+		componentOnlyLibrary:              *newComponentOnlyLibrary(config, namespaceRegistry),
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,
