@@ -2,6 +2,7 @@ package scheduleinvariants
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"time"
@@ -32,6 +33,11 @@ const (
 	// ScanOverdueNextActionTime. Each page is also one unit of rate-limited progress.
 	scheduleListPageSize = 100
 )
+
+// errInternal marks failures in the scanner's own machinery (e.g. a namespace-registry
+// lookup) as distinct from failures of the visibility query being scanned. Errors wrapping
+// it are counted under the internal-error metric instead of the scan-error metric.
+var errInternal = errors.New("schedule-invariants scanner internal error")
 
 // Activities holds shared dependencies for all three schedule-invariants scanner activities.
 type Activities struct {
@@ -239,13 +245,17 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 	return nil
 }
 
-// ListAllNamespaces returns the names of every namespace active in the current cluster,
+// ListAllNamespaces returns the names of every registered namespace in the current cluster,
 // from the namespace registry's in-memory snapshot. The snapshot may lag persistence by
 // up to the registry's refresh interval, which is acceptable for a best-effort scanner.
+//
+// Only namespaces in the REGISTERED (active) state are returned; namespaces being
+// deprecated, deleted, or in any other state are skipped, since scanning them for
+// schedule invariants is not meaningful.
 func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
-		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+		if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED {
 			continue
 		}
 		names = append(names, ns.Name().String())
@@ -273,7 +283,7 @@ func (a *Activities) forEachNamespace(
 	}
 	nsID, err := a.namespaceRegistry.GetNamespaceID(namespace.Name(nsName))
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: namespace lookup failed: %w", errInternal, err)
 	}
 	resp, err := a.visibilityManager.CountChasmExecutions(ctx, &visibilityservice.CountChasmExecutionsRequest{
 		ArchetypeId: chasm.SchedulerArchetypeID,
@@ -297,7 +307,7 @@ func (a *Activities) schedulesInNamespace(ctx context.Context, nsName, query str
 	return func(yield func(string, error) bool) {
 		nsID, err := a.namespaceRegistry.GetNamespaceID(namespace.Name(nsName))
 		if err != nil {
-			yield("", err)
+			yield("", fmt.Errorf("%w: namespace lookup failed: %w", errInternal, err))
 			return
 		}
 
@@ -371,10 +381,10 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 	return false
 }
 
+// emitCount records the anomaly count for a namespace. It always emits, even for a
+// zero count, so that a scanned namespace with no problems produces a time series
+// (a zero baseline) rather than a gap.
 func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64) {
-	if count <= 0 {
-		return
-	}
 	a.metricsHandler.
 		WithTags(metrics.NamespaceTag(namespaceTagValue)).
 		Counter(metricName).
@@ -382,11 +392,17 @@ func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64
 }
 
 func (a *Activities) recordScanError(nsName, subScanner string, err error) {
+	// Internal errors (e.g. a namespace-registry lookup failure) reflect a problem in the
+	// scanner itself rather than in the visibility query, so they're counted separately.
+	metricDef := metrics.ScheduleInvariantsScannerErrorCount
+	if errors.Is(err, errInternal) {
+		metricDef = metrics.ScheduleInvariantsScannerInternalErrorCount
+	}
 	a.logger.Warn("schedule-invariants scan failed for namespace",
 		tag.WorkflowNamespace(nsName),
 		tag.NewStringTag("sub_scanner", subScanner),
 		tag.Error(err))
-	metrics.ScheduleInvariantsScannerErrorCount.With(a.metricsHandler.WithTags(
+	metricDef.With(a.metricsHandler.WithTags(
 		metrics.NamespaceTag(nsName),
 		metrics.StringTag("sub_scanner", subScanner),
 	)).Record(1)
