@@ -34,6 +34,10 @@ const (
 	BatchOperationStatsMemo = "batch_operation_stats"
 	// BatchOperationVisibilityQueryMemo stores the batch operation's visibility query in memo
 	BatchOperationVisibilityQueryMemo = "batch_operation_visibility_query"
+	// BatchOperationExecutionsMemo stores the batch operation's explicit target
+	// executions (as opposed to a visibility query) in memo, encoded as a
+	// []*commonpb.Execution.
+	BatchOperationExecutionsMemo = "batch_operation_executions"
 	// Workflow batch operation memo type strings. Each operation is suffixed with
 	// the execution type it targets (workflows).
 
@@ -172,11 +176,23 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 
 // nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
+	numTargetSelectors := 0
+	if len(params.GetVisibilityQuery()) != 0 {
+		numTargetSelectors++
+	}
+	//nolint:staticcheck // SA1019: Executions is deprecated but still a valid, mutually exclusive target selector
+	if len(params.GetExecutions()) != 0 {
+		numTargetSelectors++
+	}
+	if len(params.GetArchetypeExecutions()) != 0 {
+		numTargetSelectors++
+	}
+
 	if params.GetOperation() == nil ||
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
-		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
+		numTargetSelectors == 0 {
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions/ArchetypeExecutions")
 	}
 
 	if len(params.GetJobId()) == 0 {
@@ -185,11 +201,11 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	if len(params.GetNamespace()) == 0 {
 		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	}
-	if len(params.GetVisibilityQuery()) == 0 && len(params.GetExecutions()) == 0 {
-		return serviceerror.NewInvalidArgument("VisibilityQuery or Executions must be set on request.")
+	if numTargetSelectors == 0 {
+		return serviceerror.NewInvalidArgument("VisibilityQuery, Executions, or ArchetypeExecutions must be set on request.")
 	}
-	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
-		return errors.New("batch query and executions are mutually exclusive")
+	if numTargetSelectors > 1 {
+		return serviceerror.NewInvalidArgument("visibility query, executions, and archetype executions are mutually exclusive")
 	}
 	if len(params.GetReason()) == 0 {
 		return serviceerror.NewInvalidArgument("Reason is not set on request.")
@@ -205,15 +221,15 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
-			return errors.New("must provide signal name")
+			return serviceerror.NewInvalidArgument("must provide signal name")
 		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		if op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions() == nil {
-			return errors.New("must provide UpdateOptions")
+			return serviceerror.NewInvalidArgument("must provide UpdateOptions")
 		}
 		if op.UpdateWorkflowOptionsOperation.GetUpdateMask() == nil {
-			return errors.New("must provide UpdateMask")
+			return serviceerror.NewInvalidArgument("must provide UpdateMask")
 		}
 		// Validation for Versioning Override, if present, happens in history.
 		return nil

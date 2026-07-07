@@ -3392,6 +3392,96 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
 }
 
+func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_QueryAndExecutions() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	jobID := uuid.NewString()
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	now := timestamppb.New(time.Now())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+
+	s.Run("QueryAndExecutionsDecodedFromMemo", func() {
+		executions := []*commonpb.Execution{
+			{Type: enumspb.EXECUTION_TYPE_ACTIVITY, BusinessId: "activity-id", RunId: "run-id"},
+		}
+		executionsPayload, err := payload.Encode(executions)
+		s.Require().NoError(err)
+
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo:            payload.EncodeString(batcher.BatchTypeTerminateActivities),
+								batcher.BatchOperationVisibilityQueryMemo: payload.EncodeString("ActivityType='foo'"),
+								batcher.BatchOperationExecutionsMemo:      executionsPayload,
+							},
+						},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, resp.GetOperationType())
+		s.Equal("ActivityType='foo'", resp.GetQuery())
+		s.Equal(executions, resp.GetExecutions())
+	})
+
+	s.Run("MissingTypeQueryAndExecutionsMemo_DefaultToZeroValues", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:        now,
+						CloseTime:        now,
+						Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime:    now,
+						Memo:             &commonpb.Memo{},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED, resp.GetOperationType())
+		s.Empty(resp.GetQuery())
+		s.Empty(resp.GetExecutions())
+	})
+}
+
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)

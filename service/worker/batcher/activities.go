@@ -61,6 +61,10 @@ type batchProcessorConfig struct {
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
+	// initialArchetypeExecutions holds an explicit list of activity (archetype)
+	// executions to process, set instead of initialExecutions when the request
+	// targets activity executions directly rather than via a visibility query.
+	initialArchetypeExecutions []*commonpb.Execution
 }
 
 // batchWorkerProcessor defines the interface for different worker processor types
@@ -251,7 +255,13 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 	// Initialize the first p from initial executions or fetch from query
 	var p *page
-	if len(config.initialExecutions) > 0 {
+	if len(config.initialArchetypeExecutions) > 0 {
+		p = &page{
+			archetypeExecutionInfo: config.initialArchetypeExecutions,
+			nextPageToken:          config.initialPageToken,
+			pageNumber:             hbd.CurrentPage,
+		}
+	} else if len(config.initialExecutions) > 0 {
 		// Use initial executions - convert WorkflowExecution to WorkflowExecutionInfo
 		executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialExecutions))
 		for _, exec := range config.initialExecutions {
@@ -386,6 +396,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	// Get executions based on request type (public vs admin).
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
+	var archetypeExecutions []*commonpb.Execution
 
 	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
 	rateLimiter := quotas.RequestRateLimiter(a.AdminBatcherRateLimiter)
@@ -397,14 +408,16 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		executions = adminReq.GetExecutions()
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
+		//nolint:staticcheck // SA1019: Executions is deprecated but still needed for backward compatibility
 		executions = batchParams.Request.Executions
+		archetypeExecutions = batchParams.Request.GetArchetypeExecutions()
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 			return float64(a.rps(ns))
 		}))
 	}
 
 	if startOver {
-		estimateCount := int64(len(executions))
+		estimateCount := int64(len(executions) + len(archetypeExecutions)) // NOTE: only one of these will ever be > 0
 		if len(visibilityQuery) > 0 {
 			var count int64
 			var err error
@@ -444,12 +457,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:         ns,
-		adjustedQuery:     visibilityQuery,
-		batchType:         batchParams.BatchType,
-		concurrency:       a.getOperationConcurrency(int(batchParams.Concurrency)),
-		initialPageToken:  hbd.PageToken,
-		initialExecutions: executions,
+		namespace:                  ns,
+		adjustedQuery:              visibilityQuery,
+		batchType:                  batchParams.BatchType,
+		concurrency:                a.getOperationConcurrency(int(batchParams.Concurrency)),
+		initialPageToken:           hbd.PageToken,
+		initialExecutions:          executions,
+		initialArchetypeExecutions: archetypeExecutions,
 	}
 
 	// Create a wrapper for the task processor
@@ -486,7 +500,12 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	}
 
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY:
+	//nolint:staticcheck // SA1019: legacy (non-*_WORKFLOW) enum values are deprecated but still valid input
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+		enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY:
 		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
 	default:
 		return query
