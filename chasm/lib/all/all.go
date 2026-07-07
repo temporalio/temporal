@@ -2,11 +2,11 @@ package all
 
 import (
 	"go.temporal.io/server/chasm"
-	activity "go.temporal.io/server/chasm/lib/activity"
-	callback "go.temporal.io/server/chasm/lib/callback"
-	nexusoperation "go.temporal.io/server/chasm/lib/nexusoperation"
-	scheduler "go.temporal.io/server/chasm/lib/scheduler"
-	workflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/workflow"
 )
 
 // RegisterAll registers all CHASM libraries in their decoding (nil handler) mode into registry.
