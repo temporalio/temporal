@@ -3230,9 +3230,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
-	// TestOperation's response type carries no nested Payload, so the system-Nexus-endpoint
+	// TestOperation's response type carries no nested Payload, so the systemNexusEndpoint
 	// metadata flag must not be set.
-	_, hasFlag := result.GetMetadata()["system-nexus-endpoint"]
+	_, hasFlag := result.GetMetadata()["systemNexusEndpoint"]
 	s.False(hasFlag)
 
 	// Complete the workflow
@@ -3313,9 +3313,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
-	// TestOperationWithPayload's response embeds a nested Payload, so the system-Nexus-endpoint
+	// TestOperationWithPayload's response embeds a nested Payload, so the systemNexusEndpoint
 	// metadata flag must be set.
-	s.Equal([]byte("true"), result.GetMetadata()["system-nexus-endpoint"])
+	s.Equal([]byte("true"), result.GetMetadata()["systemNexusEndpoint"])
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{

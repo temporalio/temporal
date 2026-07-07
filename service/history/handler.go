@@ -76,7 +76,7 @@ import (
 // MetadataSystemNexusEndpoint marks a Nexus response Payload, produced for an
 // operation dispatched through the system (__temporal_system) Nexus endpoint,
 // whose Data bytes hide a further, not-yet-codec-processed nested Payload.
-const MetadataSystemNexusEndpoint = "system-nexus-endpoint"
+const MetadataSystemNexusEndpoint = "systemNexusEndpoint"
 
 type (
 
