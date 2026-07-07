@@ -376,10 +376,33 @@ func (r *workflowResetterImpl) persistToDB(
 
 	currentExecutionMissing := currentWorkflow == nil
 	if currentExecutionMissing {
-		// Create the reset run as the new current execution. CreateWorkflowModeBrandNew succeeds
-		// precisely because there is no current_executions row to conflict with.
-		// NOTE: the base run is not persisted in this branch, so the base->reset ResetRunID link
-		// set by UpdateResetRunID is not saved here.
+		// There is no current_executions row (the current run was deleted), so the base->reset link
+		// and the new current run cannot be committed atomically: re-establishing a missing current
+		// requires a brand-new insert, while the base run needs a bypass-current update, and no
+		// single Transaction method does both. Write base-first so retries are safe: if the create
+		// fails, a retry rewrites the base link and the brand-new insert still succeeds. Creating
+		// first would leave the reset run as current and permanently conflict with the create.
+		baseWorkflowMutation, baseWorkflowEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
+			ctx,
+			historyi.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
+		if _, _, err := r.transaction.UpdateWorkflowExecution(
+			ctx,
+			persistence.UpdateWorkflowModeBypassCurrent,
+			chasm.WorkflowArchetypeID,
+			baseWorkflow.GetMutableState().GetCurrentVersion(),
+			baseWorkflowMutation,
+			baseWorkflowEventsSeq,
+			nil,
+			nil,
+			nil,
+			baseWorkflow.GetMutableState().IsWorkflow(),
+		); err != nil {
+			return err
+		}
 		if _, err := r.transaction.CreateWorkflowExecution(
 			ctx,
 			persistence.CreateWorkflowModeBrandNew,

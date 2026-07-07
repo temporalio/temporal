@@ -1116,6 +1116,16 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 	s.NoError(err)
 	s.Equal(baseRunID, descResp.WorkflowExecutionInfo.GetFirstRunId())
 
+	// The base run (A) records the base->reset link, so lineage navigation and child-completion
+	// redirect can follow run A to the reset run. This is persisted even though A is not the
+	// current execution (bypass-current write of the base run).
+	baseDescResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: baseRunID},
+	})
+	s.NoError(err)
+	s.Equal(resetResp.GetRunId(), baseDescResp.GetWorkflowExtendedInfo().GetResetRunId())
+
 	// The workflow again has a current execution: resolving by workflowId only now succeeds.
 	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
