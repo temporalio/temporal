@@ -46,6 +46,10 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			// Ephemeral: component is per-mutation, completes in seconds-to-minutes,
 			// then retention deletes it. Not a long-lived state machine.
 			chasm.WithEphemeral(),
+			// Surface the BusinessID (= target namespace_id) as a visibility
+			// search-attribute alias so components show up in
+			// `temporal workflow list` and can be queried by namespace UUID.
+			chasm.WithBusinessIDAlias("NamespaceId"),
 		),
 	}
 }

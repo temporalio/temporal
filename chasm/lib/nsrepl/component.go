@@ -15,6 +15,13 @@ type NamespaceMutationComponent struct {
 	chasm.UnimplementedComponent
 
 	*nsreplpb.NamespaceMutationState
+
+	// Visibility child component. Makes the parent component listable via
+	// `temporal workflow list` (with the BusinessID alias registered in
+	// library.go surfaced as the NamespaceId search attribute). Without
+	// this field, no visibility record is written and the component is
+	// only discoverable via tdbg.
+	Visibility chasm.Field[*chasm.Visibility]
 }
 
 var _ chasm.RootComponent = (*NamespaceMutationComponent)(nil)

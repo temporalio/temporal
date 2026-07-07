@@ -65,6 +65,11 @@ func (h *handler) TriggerNamespaceMutation(
 		key,
 		func(mctx chasm.MutableContext, m *nsreplpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
 			c := NewNamespaceMutationComponent(m)
+			// Attach a Visibility child component so the parent shows up in
+			// `temporal workflow list`. WithBusinessIDAlias on the registration
+			// declares the alias; this field is what causes a visibility record
+			// to actually be written for the execution.
+			c.Visibility = chasm.NewComponentField(mctx, chasm.NewVisibility(mctx))
 			// Fire the initial transition to schedule ApplyLocalTask. Without this
 			// the component is created but no task is ever queued, and the
 			// component sits idle until retention.
