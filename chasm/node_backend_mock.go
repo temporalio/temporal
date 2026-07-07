@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -39,6 +40,7 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
+	HandleSetTimeSkippingConfig       func(config *commonpb.TimeSkippingConfig)
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -251,4 +253,10 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 		count += len(ts)
 	}
 	return count
+}
+
+func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.HandleSetTimeSkippingConfig(config)
 }
