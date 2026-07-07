@@ -2509,12 +2509,12 @@ func (n *Node) PartitionedSnapshot(
 		if componentAttr == nil {
 			continue
 		}
-		if len(componentAttr.SideEffectTasks) == 0 && len(componentAttr.PureTasks) == 0 {
+		if len(componentAttr.SideEffectTasks)+len(componentAttr.PureTasks) == 0 {
 			continue
 		}
 		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
 		// read-only in a snapshot, so share its pointer rather than copying component payloads.
-		clean := &persistencespb.ChasmNode{Metadata: common.CloneProto(node.GetMetadata()), Data: node.GetData()}
+		clean := &persistencespb.ChasmNode{Metadata: proto.CloneOf(node.GetMetadata()), Data: node.GetData()}
 		cleanAttr := clean.GetMetadata().GetComponentAttributes()
 		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
 			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
@@ -2556,11 +2556,6 @@ type ClusterLocalStateMergeResult struct {
 	NodesWithExtraStatuses int
 }
 
-// Mismatched reports whether any node had a task/status count mismatch in either direction.
-func (r ClusterLocalStateMergeResult) Mismatched() bool {
-	return r.NodesWithUncoveredTasks > 0 || r.NodesWithExtraStatuses > 0
-}
-
 // MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
 // extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
 // state are updated; nodes in the state but not the snapshot are silently skipped (the node
@@ -2579,27 +2574,25 @@ func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalS
 		if componentAttr == nil {
 			continue
 		}
-		seUncovered, seExtra := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
-		pureUncovered, pureExtra := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
-		if seUncovered || pureUncovered {
+		seDiff := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureDiff := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seDiff > 0 || pureDiff > 0 {
 			result.NodesWithUncoveredTasks++
 		}
-		if seExtra || pureExtra {
+		if seDiff < 0 || pureDiff < 0 {
 			result.NodesWithExtraStatuses++
 		}
 	}
 	return result
 }
 
-// mergeTaskStatuses applies statuses to tasks by position (the overlapping prefix when lengths
-// differ) and reports the direction of any length mismatch: uncoveredTasks when there are more
-// tasks than statuses (extra tasks left zeroed), extraStatuses when there are more statuses than
-// tasks (surplus dropped). At most one is true.
-func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) (uncoveredTasks, extraStatuses bool) {
+// mergeTaskStatuses applies statuses to tasks by position and returns len(taskList) - len(statuses)
+// (>0: extra tasks left zeroed; <0: surplus statuses dropped).
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) int {
 	for i := 0; i < len(taskList) && i < len(statuses); i++ {
 		taskList[i].PhysicalTaskStatus = statuses[i]
 	}
-	return len(taskList) > len(statuses), len(taskList) < len(statuses)
+	return len(taskList) - len(statuses)
 }
 
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
