@@ -234,6 +234,7 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
