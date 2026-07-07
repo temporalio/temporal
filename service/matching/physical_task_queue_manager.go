@@ -689,7 +689,7 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		}
 		c.taskTrackerLock.RUnlock()
 
-		rateLimitingActive := c.partitionMgr.rateLimitManager.IsWholeQueueRateLimitingActive()
+		rateLimitingActive := c.partitionMgr.rateLimitManager.IsRateLimitingActive()
 		for _, s := range stats {
 			s.RateLimitingActive = rateLimitingActive
 		}

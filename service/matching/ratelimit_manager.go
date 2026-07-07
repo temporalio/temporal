@@ -380,10 +380,9 @@ func (r *rateLimitManager) GetFairnessWeightOverrides() fairnessWeightOverrides 
 	return r.perKeyOverrides
 }
 
-// IsWholeQueueRateLimitingActive returns true when the whole-queue rate limiter is currently
-// blocking dispatches. Per-key limits are excluded because throttling one fairness key does
-// not mean more workers are useless — other keys may still benefit from additional capacity.
-func (r *rateLimitManager) IsWholeQueueRateLimitingActive() bool {
+// IsRateLimitingActive returns true when the rate limiter is blocking dispatches.
+// When true, adding more workers will not increase throughput.
+func (r *rateLimitManager) IsRateLimitingActive() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := r.timeSource.Now().UnixNano()
