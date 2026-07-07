@@ -1214,3 +1214,104 @@ func (s *mutableStateSuite) TestChasmContextNowReflectsAccumulatedSkippedDuratio
 	s.Equal(baseTime.Add(accumulatedSkip), ctx.Now(nil),
 		"CHASM Context.Now must reflect the mutable state's virtual time")
 }
+
+// TestRecordTimeSkippingTransition covers the CHASM-execution entry point for applying a
+// time-skipping transition: it is a no-op for workflow-based executions (which use events) and for
+// invalid transitions, accumulates the skipped duration for a valid transition, and disables the
+// config while marking the fast-forward reached when the transition is a fast-forward completion.
+func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// asChasmExecution swaps in a chasm tree whose archetype is not a workflow, so IsWorkflow()
+	// is false and the transition is applied. asWorkflowExecution keeps IsWorkflow() true.
+	asChasmExecution := func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+		s.mutableState.chasmTree = mockChasmTree
+	}
+	asWorkflowExecution := func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+		s.mutableState.chasmTree = mockChasmTree
+	}
+
+	s.Run("WorkflowExecutionIsNoOp", func() {
+		asWorkflowExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.TrackEarliestFutureTime(baseTime.Add(2 * time.Hour))
+		s.Require().True(tr.IsValid(), "the transition itself is valid; the workflow gate is what suppresses it")
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "workflow executions use events, not this path")
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("InvalidTransitionIsNoOp", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		// A nil transition and a transition with no target are both invalid and must not mutate state.
+		s.mutableState.RecordTimeSkippingTransition(nil)
+		s.mutableState.RecordTimeSkippingTransition(chasm.NewTimeSkippingTransition(baseTime))
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("ValidTransitionAccumulatesDuration", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.TrackEarliestFutureTime(baseTime.Add(2 * time.Hour)) // skips 2h
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(3*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "1h pre-existing + 2h skipped")
+		s.True(tsi.GetConfig().GetEnabled(), "a plain skip must leave time skipping enabled")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("DisabledAfterFastForwardDisablesConfigAndMarksReached", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				HasReached: false,
+			},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(baseTime.Add(time.Hour))})
+		s.Require().True(tr.DisabledAfterFastForward)
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(2*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "1h pre-existing + 1h skipped to the fast-forward")
+		s.False(tsi.GetConfig().GetEnabled(), "reaching the fast-forward disables time skipping")
+		s.True(tsi.GetFastForwardInfo().GetHasReached(), "the fast-forward must be marked reached")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+}

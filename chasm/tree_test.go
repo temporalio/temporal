@@ -4568,3 +4568,344 @@ func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	s.NoError(err)
 	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
 }
+
+// TestCloseTransactionHandleTimeSkipping covers the framework-level guard rails of the root-only
+// close-transaction hook: it must be panic-safe and non-erroring for executions without time
+// skipping, a no-op on non-root nodes, and it must surface an internal error only when the config
+// says time skipping is on but the root component does not implement TimeSkippingRuntimeGate.
+func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
+	// executionInfo installs a GetExecutionInfo stub returning the given time-skipping info.
+	executionInfo := func(tsi *persistencespb.TimeSkippingInfo) {
+		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+			return &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: tsi}
+		}
+	}
+
+	// TestComponent (the root of testComponentTree) does not implement TimeSkippingRuntimeGate,
+	// which is exactly what the "gate not implemented" cases below rely on.
+
+	s.Run("NilTimeSkippingInfoIsSafeNoOp", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		// default GetExecutionInfo returns an empty WorkflowExecutionInfo => nil TimeSkippingInfo
+		root := s.testComponentTree()
+
+		var err error
+		s.NotPanics(func() {
+			err = root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		})
+		s.NoError(err, "an execution without time-skipping info must be a safe no-op")
+	})
+
+	s.Run("NonRootNodeIsSafeNoOp", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.timeSource.Update(time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC))
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{TypeId: testComponentTypeID},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{TypeId: testSubComponent1TypeID},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		child := root.children["SubComponent1"]
+		s.Require().NotNil(child)
+		s.Require().NotNil(child.parent, "must exercise a genuinely non-root node")
+
+		// The root-only guard is a soft assertion, which logs an error before returning nil.
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		tl.Expect(testlogger.Error, "must run on the root node")
+
+		var closeErr error
+		s.NotPanics(func() {
+			closeErr = child.closeTransactionHandleTimeSkipping(NewContext(context.Background(), child))
+		})
+		s.NoError(closeErr, "a non-root node must be a safe no-op, not an error")
+	})
+
+	s.Run("ConfigDisabledAndGateNotImplemented_NoError", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
+		})
+		root := s.testComponentTree()
+
+		// Config disabled short-circuits before the gate check, so the missing
+		// TimeSkippingRuntimeGate on TestComponent must not surface as an error.
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+	})
+
+	s.Run("ConfigEnabledAndGateNotImplemented_InternalError", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		})
+		root := s.testComponentTree()
+
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		tl.Expect(testlogger.Error, "does not implement TimeSkippingRuntimeGate")
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.Require().Error(err, "enabled config with no gate implementation is a misconfiguration")
+		var internalErr *serviceerror.Internal
+		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
+	})
+}
+
+// TestDefaultFindNextTargetTime covers the earliest-future-timer selection across the whole tree:
+// non-timer and past tasks are ignored, the earliest future timer wins, and an active fast-forward
+// caps (and disables) the skip when it is the earliest target.
+func (s *nodeSuite) TestDefaultFindNextTargetTime() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// timerTask builds a timer-category task (non-visibility type, no destination, future
+	// scheduled time). transferTask builds an immediate/transfer task (no scheduled time) that
+	// must never be treated as a skip target.
+	timerTask := func(offset time.Duration) *persistencespb.ChasmComponentAttributes_Task {
+		return &persistencespb.ChasmComponentAttributes_Task{
+			TypeId:              testSideEffectTaskTypeID,
+			ScheduledTime:       timestamppb.New(baseTime.Add(offset)),
+			VersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+		}
+	}
+	transferTask := func() *persistencespb.ChasmComponentAttributes_Task {
+		return &persistencespb.ChasmComponentAttributes_Task{
+			TypeId:              testSideEffectTaskTypeID,
+			VersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+		}
+	}
+
+	// buildRoot builds a single-root tree carrying the given side-effect and pure tasks, on a
+	// fresh backend with the clock pinned to baseTime.
+	buildRoot := func(sideEffect, pure []*persistencespb.ChasmComponentAttributes_Task) *Node {
+		s.nodeBackend = &MockNodeBackend{}
+		s.timeSource.Update(baseTime)
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId:          testComponentTypeID,
+							SideEffectTasks: sideEffect,
+							PureTasks:       pure,
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		return root
+	}
+
+	s.Run("NoTasksInvalidTransition", func() {
+		root := buildRoot(nil, nil)
+		tr := root.defaultFindNextTargetTime()
+		s.Require().NotNil(tr)
+		s.Equal(baseTime, tr.CurrentTime)
+		s.True(tr.TargetTime.IsZero())
+		s.False(tr.IsValid())
+	})
+
+	s.Run("EarliestFutureTaskWins", func() {
+		root := buildRoot(
+			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(2 * time.Hour)},
+			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(time.Hour)},
+		)
+		tr := root.defaultFindNextTargetTime()
+		s.Require().NotNil(tr)
+		s.True(tr.IsValid())
+		s.Equal(baseTime.Add(time.Hour), tr.TargetTime, "the earliest future timer across all task lists wins")
+		s.False(tr.DisabledAfterFastForward)
+	})
+
+	s.Run("PastAndNonTimerTasksIgnored", func() {
+		root := buildRoot(
+			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(-time.Hour), transferTask()},
+			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
+		)
+		tr := root.defaultFindNextTargetTime()
+		s.Require().NotNil(tr)
+		s.Equal(baseTime.Add(3*time.Hour), tr.TargetTime,
+			"past timers and non-timer (transfer) tasks must not be skip targets")
+	})
+
+	s.Run("EarlierFastForwardCapsAndDisables", func() {
+		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)})
+		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+			return &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					FastForwardInfo: &persistencespb.FastForwardInfo{
+						TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+						HasReached: false,
+					},
+				},
+			}
+		}
+		tr := root.defaultFindNextTargetTime()
+		s.Require().NotNil(tr)
+		s.True(baseTime.Add(time.Hour).Equal(tr.TargetTime),
+			"an earlier fast-forward caps the skip below the later timer")
+		s.True(tr.DisabledAfterFastForward, "reaching the fast-forward target disables time skipping")
+	})
+
+	s.Run("ReachedFastForwardIsIgnored", func() {
+		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)})
+		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+			return &persistencespb.WorkflowExecutionInfo{
+				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+					FastForwardInfo: &persistencespb.FastForwardInfo{
+						TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+						HasReached: true,
+					},
+				},
+			}
+		}
+		tr := root.defaultFindNextTargetTime()
+		s.Require().NotNil(tr)
+		s.Equal(baseTime.Add(3*time.Hour), tr.TargetTime, "an already-reached fast-forward must not gate the skip")
+		s.False(tr.DisabledAfterFastForward)
+	})
+}
+
+// TestRegenerateTimerTasksForTimeSkipping verifies task regeneration: every timer side-effect task
+// is re-created (non-timer ones are skipped), only the single earliest pure task across the tree
+// gets a physical pure task, and pure-task deletion is anchored at the earliest scheduled time (or
+// the maximum key when there are no pure tasks).
+func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	s.Run("RegeneratesSideEffectTimersAndEarliestPureTask", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{ // timer side-effect task, already-created status must be reset & regenerated
+									TypeId:                    testSideEffectTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(2 * time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+								{ // transfer (no scheduled time) task: not a timer, must be skipped
+									TypeId:                    testSideEffectTaskTypeID,
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 2,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{ // later pure task on the root
+									TypeId:                    testPureTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(2 * time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 3,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+						},
+					},
+				},
+			},
+			"SubComponent1": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testSubComponent1TypeID,
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{ // earliest pure task across the tree
+									TypeId:                    testPureTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+
+		s.NoError(root.regenerateTimerTasksForTimeSkipping())
+
+		// One physical task for the timer side-effect task + one for the single earliest pure task.
+		s.Equal(2, s.nodeBackend.NumTasksAdded())
+		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
+			"pure-task deletion is anchored at the earliest pure scheduled time")
+
+		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
+		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus,
+			"the timer side-effect task must be regenerated")
+		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[1].PhysicalTaskStatus,
+			"the non-timer side-effect task is untouched and keeps its created status")
+		s.Equal(physicalTaskStatusNone, rootAttrs.PureTasks[0].PhysicalTaskStatus,
+			"a non-earliest pure task is reset but not regenerated")
+
+		childAttrs := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+		s.Equal(physicalTaskStatusCreated, childAttrs.PureTasks[0].PhysicalTaskStatus,
+			"the earliest pure task gets a physical task")
+	})
+
+	s.Run("NoPureTasksDeletesWithMaximumKey", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									TypeId:                    testSideEffectTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusNone,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+
+		s.NoError(root.regenerateTimerTasksForTimeSkipping())
+
+		s.Equal(1, s.nodeBackend.NumTasksAdded(), "only the side-effect timer task is regenerated")
+		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+			"with no pure tasks, deletion sweeps up to the maximum key")
+	})
+}
