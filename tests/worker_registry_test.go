@@ -27,7 +27,7 @@ func TestWorkerRegistryTestSuite(t *testing.T) {
 
 func (s *WorkerRegistryTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
-		testcore.WithWorkerService(),
+		testcore.WithWorkerService("worker registry tests use system worker for heartbeat processing"),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)

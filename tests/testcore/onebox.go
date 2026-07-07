@@ -231,7 +231,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	}
 	// Override Nexus callback URL. This is parameterized on the frontend's HTTP address,
 	// so it can't be overriden in the loop above.
-	impl.setNexusCallbackURL()
+	if len(params.HostsByProtocolByService) > 0 {
+		impl.setNexusCallbackURL()
+	}
 	// Per-test overrides: cleaned up when the creating test finishes.
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigForTest(t, k, v)
@@ -923,10 +925,6 @@ func sdkClientFactoryProvider(
 }
 
 func (c *TemporalImpl) setNexusCallbackURL() {
-	addrs := c.hostsByProtocolByService[httpProtocol][primitives.FrontendService].All
-	if len(addrs) == 0 {
-		return
-	}
 	// Set Nexus callback URL with the cluster's HTTP address. This is a sensible default to avoid
 	// users to need to manually set this.
 	//nolint:revive // test callback endpoints are served by the local HTTP API in functional tests

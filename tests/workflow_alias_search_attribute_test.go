@@ -32,7 +32,7 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 
 func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
-		testcore.WithWorkerService(),
+		testcore.WithWorkerService("workflow alias search attribute tests use worker deployment system workflows"),
 
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters.
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {

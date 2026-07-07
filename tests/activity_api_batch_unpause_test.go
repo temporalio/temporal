@@ -92,7 +92,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(env *testcore.Te
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Success() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch unpause activity operations require system worker batcher"))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -199,7 +199,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch unpause activity operations require system worker batcher"))
 
 	// neither activity type not "match all" is provided
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
@@ -237,7 +237,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 // This is an end-to-end complement to the unit-level checkNamespace tests: it
 // exercises the full path from StartBatchOperation through the batcher worker.
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestBatchTerminate_NamespaceIsolation() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService())
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch terminate namespace isolation test uses system worker batcher"))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 

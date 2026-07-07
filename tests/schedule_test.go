@@ -69,7 +69,7 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 	}
 	if strings.HasPrefix(t.Name(), "TestScheduleV1") {
 		// only v1 needs the worker service
-		opts = append(opts, testcore.WithWorkerService())
+		opts = append(opts, testcore.WithWorkerService("V1 scheduler"))
 	}
 	return opts
 }
@@ -3596,7 +3596,7 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 func TestScheduleCreationRolloutPercent(t *testing.T) {
 	opts := append(scheduleCommonOpts(t),
 		// V1 worker is needed because at 50% rollout some schedules land on V1.
-		testcore.WithWorkerService(),
+		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
 		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerCreationRolloutPercent, 50),
 	)

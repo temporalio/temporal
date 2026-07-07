@@ -480,10 +480,14 @@ build-tests:
 	@printf $(COLOR) "Build tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
-unit-test: clean-test-output
+unit-test: clean-test-output unit-test-testcore
 	@printf $(COLOR) "Run unit tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@$(MAKE) verify-test-log
+
+unit-test-testcore: clean-test-output
+	@printf $(COLOR) "Run testcore unit tests..."
+	@CGO_ENABLED=$(CGO_ENABLED) go test ./tests/testcore/ -run "TestClusterPool" $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 
 integration-test: clean-test-output
 	@printf $(COLOR) "Run integration tests..."

@@ -36,7 +36,7 @@ func TestPollerScalingFunctionalSuite(t *testing.T) {
 
 func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
-		testcore.WithWorkerService(),
+		testcore.WithWorkerService("poller scaling test uses worker deployment system workflows"),
 
 		// Force one partition so we can reliably see the backlog
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),

@@ -67,7 +67,7 @@ func newTaskQueueStatsContext(
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
 	opts := []testcore.TestOption{
-		testcore.WithWorkerService(),
+		testcore.WithWorkerService("task queue stats tests use worker deployment system workflows"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),

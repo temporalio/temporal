@@ -114,17 +114,6 @@ func WithDedicatedCluster() TestOption {
 	}
 }
 
-// ForLeakChecker marks the test as intentionally using a dedicated cluster for
-// leak measurement purposes, satisfying the [WithDedicatedCluster] guard without
-// requiring an actual cluster-global side effect.
-//
-// NOTE: This option should NEVER be use anywhere outside of the object leak checker.
-func ForLeakChecker() TestOption {
-	return func(o *testOptions) {
-		o.dedicatedReason = "leak checker"
-	}
-}
-
 // WithDisableTestloggerFailure disables the test logger's behavior of failing
 // the test when an error log matches a registered expectation (e.g. soft-assert
 // errors tagged with tag.FailedAssertion). Use for tests that intentionally
@@ -168,7 +157,8 @@ func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOp
 // If this is not coupled with any option that requires a dedicated cluster,
 // we will create a cluster that will be recycled by other tests that also
 // need the system worker service.
-func WithWorkerService() TestOption {
+// The string parameter serves as documentation regarding the usage of the worker service.
+func WithWorkerService(_ string) TestOption {
 	return func(o *testOptions) {
 		o.needWorkerService = true
 	}
@@ -291,7 +281,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, options.needWorkerService, startupConfig, options.clusterOptions)
+	base := testClusterRouter.get(t, clusterRequest{
+		dedicated:         options.dedicatedCluster,
+		needWorkerService: options.needWorkerService,
+		dynamicConfig:     startupConfig,
+		clusterOpts:       options.clusterOptions,
+	})
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.

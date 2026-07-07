@@ -30,8 +30,7 @@ func init() {
 	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
 	applyPoolSizeOverride(&sharedSize, "TEMPORAL_TEST_SHARED_CLUSTERS")
 
-	// System workers require significantly more memory, so default to a smaller pool.
-	sharedWorkerSize := max(1, runtime.GOMAXPROCS(0)/4)
+	sharedWorkerSize := max(1, runtime.GOMAXPROCS(0)/2)
 	applyPoolSizeOverride(&sharedWorkerSize, "TEMPORAL_TEST_SHARED_WORKER_CLUSTERS")
 
 	dedicatedSize := runtime.GOMAXPROCS(0)
@@ -42,7 +41,7 @@ func init() {
 		sharedWithWorker: newClusterPool(sharedWorkerSize, false, 0),
 		dedicated:        newClusterPool(dedicatedSize, true, 0),
 	}
-	r.clusterCreatorFn = r.createCluster
+	r.createClusterFn = createCluster
 	testClusterRouter = r
 }
 
@@ -164,6 +163,21 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	s.leaseCount = 0
 }
 
+// clusterRequest carries all the parameters needed to create a test cluster
+// in the correct pool.
+type clusterRequest struct {
+	dedicated         bool
+	needWorkerService bool
+	dynamicConfig     map[dynamicconfig.Key]any
+	clusterOpts       []TestClusterOption
+}
+
+// mustBeFresh returns true if the request requires a freshly created cluster, rather than an
+// existing one in one of the cluster pools.
+func (r clusterRequest) mustBeFresh() bool { return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0 }
+
+func (r clusterRequest) needsDedicated() bool { return r.dedicated || r.mustBeFresh() }
+
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
 	shared           *clusterPool
@@ -171,9 +185,9 @@ type clusterRouter struct {
 	dedicated        *clusterPool
 	suiteScoped      sync.Map
 
-	// clusterCreatorFn is the function used to create new clusters. This allows us to inject a mock
+	// createClusterFn is the function used to create new clusters. This allows us to inject a mock
 	// creation function in unit tests of this module to avoid spinning up clusters.
-	clusterCreatorFn func(*testing.T, map[dynamicconfig.Key]any, bool, []TestClusterOption) *FunctionalTestBase
+	createClusterFn func(*testing.T, map[dynamicconfig.Key]any, bool, []TestClusterOption) *FunctionalTestBase
 }
 
 // suiteScopedCluster owns one lazily created legacy suite cluster.
@@ -209,29 +223,29 @@ func UseSuiteScopedCluster(t *testing.T) {
 	})
 }
 
-func (p *clusterRouter) get(t *testing.T, dedicated bool, needWorkerService bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) (tb *FunctionalTestBase) {
+func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
 	defer func() {
 		if tb != nil {
 			tb.RegisterTest(t)
 		}
 	}()
-	if dedicated || len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
-		return p.getDedicated(t, needWorkerService, dynamicConfig, clusterOpts)
+	if req.needsDedicated() {
+		return p.getDedicated(t, req)
 	}
 	if cluster := p.getSuiteScoped(t); cluster != nil {
 		return cluster
 	}
-	return p.getShared(t, needWorkerService)
+	return p.getShared(t, req.needWorkerService)
 }
 
 func (p *clusterRouter) getShared(t *testing.T, needWorkerService bool) *FunctionalTestBase {
 	if needWorkerService {
 		return p.sharedWithWorker.get(t, func() *FunctionalTestBase {
-			return p.clusterCreatorFn(t, nil, true, []TestClusterOption{withWorkerService(true)})
+			return p.createClusterFn(t, nil, true, []TestClusterOption{withWorkerService(true)})
 		})
 	}
 	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.clusterCreatorFn(t, nil, true, nil)
+		return p.createClusterFn(t, nil, true, nil)
 	})
 }
 
@@ -253,20 +267,20 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
 		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
 		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.clusterCreatorFn(t, nil, true, []TestClusterOption{withWorkerService(true)})
+		suiteCluster.cluster = p.createClusterFn(t, nil, true, []TestClusterOption{withWorkerService(true)})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
 }
 
-func (p *clusterRouter) getDedicated(t *testing.T, needWorkerService bool, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
-	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 || needWorkerService {
+func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
+	if req.mustBeFresh() || req.needWorkerService {
 		// Always create a new cluster in the following cases:
 		// - custom configs are set, since they can't be shared across tests
 		// - worker service is needed, since goroutines (system workers, matching partition managers) don't clean up between
 		//   tests and would accumulate in a long-lived pooled cluster.
 		p.dedicated.reserveSlot(t)
-		cluster := p.clusterCreatorFn(t, dynamicConfig, false, append(clusterOpts, withWorkerService(needWorkerService)))
+		cluster := p.createClusterFn(t, req.dynamicConfig, false, append(req.clusterOpts, withWorkerService(req.needWorkerService)))
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
@@ -280,11 +294,11 @@ func (p *clusterRouter) getDedicated(t *testing.T, needWorkerService bool, dynam
 
 	// If no custom config or worker service is needed, reuse an existing cluster.
 	return p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.clusterCreatorFn(t, nil, false, nil)
+		return p.createClusterFn(t, nil, false, nil)
 	})
 }
 
-func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
+func createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 

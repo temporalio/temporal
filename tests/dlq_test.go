@@ -252,7 +252,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 // DLQ, this test then purges the DLQ and verifies that the task was deleted.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestPurgeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService())
+	env := s.newTestEnv(testcore.WithWorkerService("dlq purge workflow"))
 
 	_, dlqMessageID := s.executeDoomedWorkflow(env)
 
@@ -281,7 +281,7 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 // above test is more for testing specific CLI flags when reading from the DLQ.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestMergeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService())
+	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
 
 	// Verify that we can execute a normal workflow.
 	run := s.executeWorkflow(env, "dlq-test-ok-workflow-id")
@@ -324,7 +324,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
-	env := s.newTestEnv(testcore.WithWorkerService())
+	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
 	env.deleteBlockCh = make(chan any)
 
 	// Execute several doomed workflows.

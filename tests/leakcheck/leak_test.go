@@ -150,8 +150,9 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
 			testcore.WithDedicatedCluster(),
-			testcore.WithWorkerService(),
-			testcore.ForLeakChecker())
+			testcore.WithWorkerService("leak checker needs worker service to exercise full server path"),
+			testcore.WithMTLS(), // Using a global option (MTLS) to satisfy the dedicated cluster guard
+		)
 
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(

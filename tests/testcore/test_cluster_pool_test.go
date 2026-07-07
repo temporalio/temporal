@@ -24,7 +24,7 @@ func newMockClusterPoolRouter(t *testing.T) (*clusterRouter, *[]clusterCreateFnA
 
 	var calls []clusterCreateFnArgs
 	mockClusterCreationFn := func(t *testing.T, dc map[dynamicconfig.Key]any, shared bool, opts []TestClusterOption) *FunctionalTestBase {
-		// Keep the worker service off unless explicitly enabled via WithWorkerService (this mirrors the actual createClusterFn implementation).
+		// Keep the worker service off unless explicitly enabled via WithWorkerService (this mirrors the actual createCluster implementation).
 		baseOpts := []TestClusterOption{withWorkerService(false)}
 		params := ApplyTestClusterOptions(append(baseOpts, opts...))
 		calls = append(calls, clusterCreateFnArgs{shared: shared, workerEnabled: params.EnableWorkerService})
@@ -35,7 +35,7 @@ func newMockClusterPoolRouter(t *testing.T) (*clusterRouter, *[]clusterCreateFnA
 		shared:           newClusterPool(2, false, 0),
 		sharedWithWorker: newClusterPool(1, false, 0), // small pool to force reuse of the same cluster for multiple tests
 		dedicated:        newClusterPool(2, true, 0),
-		clusterCreatorFn: mockClusterCreationFn,
+		createClusterFn:  mockClusterCreationFn,
 	}
 	return r, &calls
 }
@@ -63,13 +63,13 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createClusterFn := func() *FunctionalTestBase {
 		created++
 		return &FunctionalTestBase{}
 	}
 
 	t.Run("uses cluster", func(t *testing.T) {
-		cluster := p.get(t, createCluster)
+		cluster := p.get(t, createClusterFn)
 		require.Same(t, cluster, slot.cluster)
 		require.Equal(t, 1, slot.activeLeases)
 		require.Equal(t, 1, slot.leaseCount)
@@ -83,7 +83,7 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 
 	// Lease-limit recycling happens on the next acquire after the prior lease releases.
 	t.Run("recreates cluster", func(t *testing.T) {
-		cluster := p.get(t, createCluster)
+		cluster := p.get(t, createClusterFn)
 		require.Same(t, cluster, slot.cluster)
 		require.NotSame(t, firstCluster, cluster)
 		require.Equal(t, 2, created)
@@ -95,13 +95,13 @@ func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createClusterFn := func() *FunctionalTestBase {
 		created++
 		return &FunctionalTestBase{}
 	}
 
-	activeCluster := p.get(t, createCluster)
-	concurrentCluster := p.get(t, createCluster)
+	activeCluster := p.get(t, createClusterFn)
+	concurrentCluster := p.get(t, createClusterFn)
 
 	// Concurrent leases share the current cluster even after usage crosses maxLeases.
 	require.Same(t, activeCluster, concurrentCluster)
@@ -116,18 +116,18 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	p := newClusterPool(1, false, 1)
 	slot := p.allSlots[0]
 	var created int
-	createCluster := func() *FunctionalTestBase {
+	createClusterFn := func() *FunctionalTestBase {
 		created++
 		return &FunctionalTestBase{
 			t: &sharedClusterT{name: t.Name()},
 		}
 	}
 
-	poisonedCluster := p.get(t, createCluster)
+	poisonedCluster := p.get(t, createClusterFn)
 	poisonedCluster.t.failed.Store(true)
 
 	// Poison swaps the slot immediately, but the old active lease still has to release.
-	replacementCluster := p.get(t, createCluster)
+	replacementCluster := p.get(t, createClusterFn)
 
 	require.NotSame(t, poisonedCluster, replacementCluster)
 	require.Same(t, replacementCluster, slot.cluster)
@@ -143,7 +143,7 @@ func TestClusterPool_SharedWorkerServiceRouting(t *testing.T) {
 		var first, second *FunctionalTestBase
 
 		t.Run("first call creates cluster", func(t *testing.T) {
-			first = router.get(t, false /* dedicated */, true /* workerService */, nil, nil)
+			first = router.get(t, clusterRequest{needWorkerService: true})
 		})
 		require.Equal(t, 1, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker should have one lease")
 		require.Equal(t, 0, router.shared.allSlots[0].leaseCount, "shared pool should be unused")
@@ -151,7 +151,7 @@ func TestClusterPool_SharedWorkerServiceRouting(t *testing.T) {
 		require.Equal(t, clusterCreateFnArgs{shared: true, workerEnabled: true}, (*calls)[0])
 
 		t.Run("second call reuses cluster", func(t *testing.T) {
-			second = router.get(t, false /* dedicated */, true /* workerService */, nil, nil)
+			second = router.get(t, clusterRequest{needWorkerService: true})
 		})
 		require.Same(t, first, second, "second call should return the same cluster, not allocate a new one")
 		require.Len(t, *calls, 1, "no new cluster should have been created")
@@ -163,7 +163,7 @@ func TestClusterPool_SharedWorkerServiceRouting(t *testing.T) {
 	t.Run("worker service with dedicated uses dedicated pool", func(t *testing.T) {
 		router, calls := newMockClusterPoolRouter(t)
 
-		router.get(t, true /* dedicated */, true /* workerService */, nil, nil)
+		router.get(t, clusterRequest{dedicated: true, needWorkerService: true})
 		require.Equal(t, 0, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker pool should be unused")
 		require.Len(t, *calls, 1)
 		require.Equal(t, clusterCreateFnArgs{shared: false, workerEnabled: true}, (*calls)[0])
@@ -172,7 +172,7 @@ func TestClusterPool_SharedWorkerServiceRouting(t *testing.T) {
 	t.Run("no worker service uses plain shared pool", func(t *testing.T) {
 		router, calls := newMockClusterPoolRouter(t)
 
-		router.get(t, false /* dedicated */, false /* workerService */, nil, nil)
+		router.get(t, clusterRequest{})
 		require.Equal(t, 1, router.shared.allSlots[0].leaseCount, "shared pool should have one lease")
 		require.Equal(t, 0, router.sharedWithWorker.allSlots[0].leaseCount, "sharedWithWorker pool should be unused")
 		require.Len(t, *calls, 1)

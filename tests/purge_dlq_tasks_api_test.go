@@ -40,7 +40,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 	}{
 		{
 			name:       "HappyPath",
-			envOptions: []testcore.TestOption{testcore.WithWorkerService()},
+			envOptions: []testcore.TestOption{testcore.WithWorkerService("purge DLQ workflow")},
 		},
 		{
 			name: "MissingSourceCluster",
@@ -58,7 +58,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 		},
 		{
 			name:       "QueueDoesNotExist",
-			envOptions: []testcore.TestOption{testcore.WithWorkerService()},
+			envOptions: []testcore.TestOption{testcore.WithWorkerService("purge DLQ workflow")},
 			mutateRequest: func(request *adminservice.PurgeDLQTasksRequest) {
 				request.DlqKey.TargetCluster = "does-not-exist"
 			},
@@ -67,7 +67,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 		{
 			name: "DeleteTasksUnavailableError",
 			envOptions: []testcore.TestOption{
-				testcore.WithWorkerService(),
+				testcore.WithWorkerService("purge DLQ workflow"),
 				testcore.WithPersistenceFaultInjection(&config.FaultInjection{
 					Injector: func(target config.FaultInjectionTarget) error {
 						if target.Store == config.QueueV2Name &&
