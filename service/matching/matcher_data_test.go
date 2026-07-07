@@ -256,6 +256,28 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited_TracksEvent() {
 	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
 }
 
+func (s *MatcherDataSuite) TestBacklogRateLimited_TracksEvent() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	// Enqueue a backlog task.
+	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 0, nil))
+
+	// Poller arrives — findAndWakeMatches should hit the rate limiter.
+	poller := &waitingPoller{startTime: s.now()}
+	s.md.MatchPollerImmediately(poller)
+
+	// Advance time so the tracker can compute a nonzero rate.
+	s.ts.Advance(time.Second)
+	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
