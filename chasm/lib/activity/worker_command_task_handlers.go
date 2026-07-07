@@ -45,7 +45,7 @@ func (h *cancelCommandDispatchTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
-	// Invalid if the cancel command was already dispatched (replicated from the active cluster).
+	// Invalid if the cancel command was already dispatched.
 	if activity.GetCancelCommandDispatched() {
 		return false, nil
 	}
@@ -106,8 +106,7 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 	}
 
 	// Record that the cancel command was dispatched. This state is replicated to standby
-	// clusters, allowing them to invalidate the task via Validate() instead of waiting
-	// for the discard delay.
+	// clusters so they can discard the task.
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		activityRef,

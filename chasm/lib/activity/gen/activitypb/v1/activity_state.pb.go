@@ -186,9 +186,8 @@ type ActivityState struct {
 	// Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
 	// has a retry policy, retry attempts will not have start delay applied.
 	StartDelay *durationpb.Duration `protobuf:"bytes,13,opt,name=start_delay,json=startDelay,proto3" json:"start_delay,omitempty"`
-	// Set to true after the cancel command has been successfully dispatched to the worker
-	// via the Nexus control queue. Used by standby clusters to determine whether the
-	// dispatch task can be safely discarded.
+	// Set to true after the cancel command has been successfully dispatched to the worker.
+	// Used by standby clusters to determine whether the dispatch task can be safely discarded.
 	CancelCommandDispatched bool `protobuf:"varint,14,opt,name=cancel_command_dispatched,json=cancelCommandDispatched,proto3" json:"cancel_command_dispatched,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache

@@ -95,9 +95,8 @@ message ActivityState {
   // has a retry policy, retry attempts will not have start delay applied.
   google.protobuf.Duration start_delay = 13;
 
-  // Set to true after the cancel command has been successfully dispatched to the worker
-  // via the Nexus control queue. Used by standby clusters to determine whether the
-  // dispatch task can be safely discarded.
+  // Set to true after the cancel command has been successfully dispatched to the worker.
+  // Used by standby clusters to determine whether the dispatch task can be safely discarded.
   bool cancel_command_dispatched = 14;
 }
 
