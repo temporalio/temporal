@@ -1,11 +1,12 @@
 package chasm
 
 const (
-	testLibraryName        = "TestLibrary"
-	testComponentName      = "test_component"
-	testSubComponent1Name  = "test_sub_component_1"
-	testSubComponent11Name = "test_sub_component_11"
-	testSubComponent2Name  = "test_sub_component_2"
+	testLibraryName               = "TestLibrary"
+	testComponentName             = "test_component"
+	testTimeSkippingComponentName = "test_timeskipping_component"
+	testSubComponent1Name         = "test_sub_component_1"
+	testSubComponent11Name        = "test_sub_component_11"
+	testSubComponent2Name         = "test_sub_component_2"
 
 	testSideEffectTaskName            = "test_side_effect_task"
 	testDiscardableSideEffectTaskName = "test_discardable_side_effect_task"
