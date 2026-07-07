@@ -100,7 +100,10 @@ require (
 	github.com/go-openapi/swag/stringutils v0.26.0 // indirect
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
+	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
+	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/microsoft/go-mssqldb v1.10.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
 )
 
