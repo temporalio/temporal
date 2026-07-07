@@ -3690,7 +3690,8 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 }
 
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
-	if !softassert.That(n.logger, n.parent == nil, "closeTransactionHandleTimeSkipping must run on the root node") {
+	if n.parent != nil {
+		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil
 	}
 	if n.ArchetypeID() == WorkflowArchetypeID {
@@ -3765,8 +3766,8 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 }
 
 // defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
-// as the target time for time skipping, and conditionally adjust the target time with the fast-forward time if set
-// this method doesn't validate tasks and assumes to be called after invalidate tasks are deleted
+// as the target time for time skipping, and conditionally adjusts the target time with the fast-forward time if set.
+// this method doesn't validate tasks and is assumed to be called after invalidate tasks are deleted
 func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 	transition := NewTimeSkippingTransition(n.Now(nil))
 	now := transition.CurrentTime
