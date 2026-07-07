@@ -207,6 +207,7 @@ type matcherData struct {
 	timeSource       clock.TimeSource
 	canForward       bool
 	rateLimitManager *rateLimitManager
+	tasksRateLimited *taskTracker
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
@@ -223,13 +224,14 @@ type matcherData struct {
 	stopped bool // if true, reject new tasks
 }
 
-func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
+func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager, tasksRateLimited *taskTracker) matcherData {
 	return matcherData{
 		config:           config,
 		logger:           logger,
 		timeSource:       timeSource,
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
+		tasksRateLimited: tasksRateLimited,
 		tasks:            newTaskBTree(),
 	}
 }
@@ -525,6 +527,7 @@ func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 		if task == nil || poller == nil {
 			if minDelay > 0 {
 				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
+				d.tasksRateLimited.inc(1)
 				return true
 			}
 			// no more current matches, stop rate limit timer if was running

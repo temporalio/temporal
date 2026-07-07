@@ -49,7 +49,7 @@ func (s *MatcherDataSuite) SetupTest() {
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, newTaskTracker(s.ts, 5*time.Second, 30*time.Second))
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -225,6 +225,35 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 	// Sync match should fail due to rate limiting, not lack of poller.
 	t := s.newSyncTask(nil)
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+}
+
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited_TracksEvent() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	// Tracker should start at zero.
+	s.Equal(float32(0), s.md.tasksRateLimited.rate())
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should be rate limited and tracker should record it.
+	t := s.newSyncTask(nil)
+	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+
+	// Advance time so the tracker can compute a nonzero rate.
+	s.ts.Advance(time.Second)
+	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
 }
 
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
@@ -1046,7 +1075,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, newTaskTracker(ts, 5*time.Second, 30*time.Second))
 
 		next := func() int {
 			if len(tape) == 0 {

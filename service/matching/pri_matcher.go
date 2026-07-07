@@ -97,11 +97,12 @@ func newPriTaskMatcher(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	rateLimitManager *rateLimitManager,
+	tasksRateLimited *taskTracker,
 	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:                    config,
-		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
+		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager, tasksRateLimited),
 		tqCtx:                     tqCtx,
 		logger:                    logger,
 		metricsHandler:            metricsHandler,

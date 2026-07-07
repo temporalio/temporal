@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -77,6 +78,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		rateLimitManager,
+		newTaskTracker(clock.NewRealTimeSource(), 5*time.Second, 30*time.Second),
 		func() {},
 	)
 
@@ -170,6 +172,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 			s.logger,
 			metrics.NoopMetricsHandler,
 			rateLimitManager,
+			newTaskTracker(clock.NewRealTimeSource(), 5*time.Second, 30*time.Second),
 			func() {},
 		)
 
@@ -236,6 +239,7 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 				s.logger,
 				metrics.NoopMetricsHandler,
 				rateLimitManager,
+				newTaskTracker(clock.NewRealTimeSource(), 5*time.Second, 30*time.Second),
 				func() {},
 			)
 			tm.Start()

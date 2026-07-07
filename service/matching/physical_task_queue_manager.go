@@ -217,6 +217,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
+			pqMgr.tasksRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -256,6 +257,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
+			pqMgr.tasksRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -723,11 +725,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	}
 
 	if c.priMatcher != nil {
-		outcome, err := c.priMatcher.Offer(ctx, task)
-		if outcome == syncMatchRateLimited {
-			c.tasksRateLimited.inc(1)
-		}
-		return outcome, err
+		return c.priMatcher.Offer(ctx, task)
 	}
 
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
