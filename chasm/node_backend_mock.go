@@ -39,6 +39,7 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
+	HandleNow                         func() time.Time
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -251,4 +252,13 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 		count += len(ts)
 	}
 	return count
+}
+
+func (m *MockNodeBackend) Now() time.Time {
+	if m.HandleNow != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.HandleNow()
+	}
+	return time.Now()
 }

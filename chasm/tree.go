@@ -234,6 +234,7 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+		Now() time.Time
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -1643,7 +1644,7 @@ func (n *Node) Now(
 	_ Component,
 ) time.Time {
 	// TODO: Now() could be different for components after we support Pause for CHASM components.
-	return n.timeSource.Now()
+	return n.backend.Now()
 }
 
 // AddTask implements the CHASM MutableContext interface
