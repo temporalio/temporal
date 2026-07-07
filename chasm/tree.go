@@ -232,8 +232,9 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
-		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 		Now() time.Time
+		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -1730,6 +1731,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionHandleTimeSkipping(immutableContext); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -3744,4 +3749,114 @@ func makeValidationFn(
 // serializer while preserving deterministic proto3 bytes for byte comparisons.
 func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
+}
+
+func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+	if !softassert.That(n.logger, n.parent == nil, "closeTransactionHandleTimeSkipping must run on the root node") {
+		return nil
+	}
+	if n.ArchetypeID() == WorkflowArchetypeID {
+		return nil
+	}
+
+	// conf check
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
+	if !tsi.GetConfig().GetEnabled() {
+		return nil
+	}
+
+	// todo@feiyang: how to check that the current cluster is active cluster
+	// and this closeTransaction state change logic should only happen in active cluster
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
+	if !ok {
+		n.logger.Error(
+			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
+			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
+		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+	}
+
+	// runtime check
+	if !tsRoot.IsExecutionSkippable(immutableContext) {
+		return nil
+	}
+	transition := n.defaultFindNextTargetTime()
+	if !transition.IsValid() {
+		return nil
+	}
+
+	// state change
+	n.backend.RecordTimeSkippingTransition(transition)
+	return n.regenerateTimerTasksForTimeSkipping()
+}
+
+func (n *Node) regenerateTimerTasksForTimeSkipping() error {
+	archetypeID := n.ArchetypeID()
+	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
+	var firstPureTaskNode *Node
+
+	for nodePath, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
+			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
+				continue
+			}
+			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
+			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
+		}
+
+		for _, pureTask := range componentAttr.GetPureTasks() {
+			// Pure tasks are represented by a single physical task, so we only need to
+			// regenerate that one. Time conversion for task regeneration is handled by
+			// backend.AddTask, so no time changes are needed here.
+			pureTask.PhysicalTaskStatus = physicalTaskStatusNone
+			if firstPureTask == nil || comparePureTasks(pureTask, firstPureTask) < 0 {
+				firstPureTask = pureTask
+				firstPureTaskNode = node
+			}
+		}
+	}
+	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
+}
+
+// defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
+// as the target time for time skipping, and conditionally adjust the target time with the fast-forward time if set
+// this method doesn't validate tasks and assumes to be called after invalidate tasks are deleted
+func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
+	transition := NewTimeSkippingTransition(n.Now(nil))
+	now := transition.CurrentTime
+	for _, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		for _, taskList := range [][]*persistencespb.ChasmComponentAttributes_Task{
+			componentAttr.GetPureTasks(),
+			componentAttr.GetSideEffectTasks(),
+		} {
+			for _, task := range taskList {
+				if taskCategory(task) != tasks.CategoryTimer {
+					continue
+				}
+				scheduledTime := task.GetScheduledTime().AsTime()
+				if !scheduledTime.After(now) {
+					continue
+				}
+				transition.TrackEarliestFutureTime(scheduledTime)
+			}
+		}
+	}
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
+	ff := tsi.GetFastForwardInfo()
+	if ff != nil && !ff.HasReached {
+		transition.GateByFastForward(ff)
+	}
+	return transition
 }

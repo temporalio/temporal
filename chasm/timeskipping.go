@@ -93,3 +93,10 @@ func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 	t.TrackEarliestFutureTime(ffTargetTime)
 	t.DisabledAfterFastForward = true
 }
+
+func (t *TimeSkippingTransition) GetSkippedDuration() time.Duration {
+	if t == nil || t.CurrentTime.IsZero() || t.TargetTime.IsZero() {
+		return 0
+	}
+	return t.TargetTime.Sub(t.CurrentTime)
+}
