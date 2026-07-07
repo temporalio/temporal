@@ -188,6 +188,35 @@ func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ err
 	return done
 }
 
+var _ RetryPolicy = (*ConditionalRetryPolicy)(nil)
+
+// ConditionalRetryPolicy chooses between two underlying retry policies based on
+// a predicate evaluated against the error from the last attempt. The numAttempts
+// counter is shared across both branches, so a sequence that mixes error types
+// can hit the more conservative branch's cap on a later attempt.
+type ConditionalRetryPolicy struct {
+	predicate func(err error) bool
+	whenTrue  RetryPolicy
+	whenFalse RetryPolicy
+}
+
+// NewConditionalRetryPolicy returns a policy that delegates to whenTrue when
+// predicate(err) is true, and whenFalse otherwise.
+func NewConditionalRetryPolicy(predicate func(err error) bool, whenTrue, whenFalse RetryPolicy) *ConditionalRetryPolicy {
+	return &ConditionalRetryPolicy{
+		predicate: predicate,
+		whenTrue:  whenTrue,
+		whenFalse: whenFalse,
+	}
+}
+
+func (p *ConditionalRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int, err error) time.Duration {
+	if p.predicate(err) {
+		return p.whenTrue.ComputeNextDelay(elapsedTime, numAttempts, err)
+	}
+	return p.whenFalse.ComputeNextDelay(elapsedTime, numAttempts, err)
+}
+
 // Reset will set the Retrier into initial state
 func (r *retrierImpl) Reset() {
 	r.startTime = r.timeSource.Now()

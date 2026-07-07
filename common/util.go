@@ -169,17 +169,41 @@ func CreateFrontendClientRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(frontendClientRetryMaxAttempts)
 }
 
-// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service
-func CreateHistoryClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(historyClientRetryInitialInterval).
-		WithMaximumAttempts(historyClientRetryMaxAttempts)
-
+// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the historyClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateHistoryClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(historyClientRetryInitialInterval, historyClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
 }
 
-// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service
-func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval).
-		WithMaximumAttempts(matchingClientRetryMaxAttempts)
+// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the matchingClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateMatchingClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(matchingClientRetryInitialInterval, matchingClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
+}
+
+func newClientRetryPolicy(initialInterval time.Duration, maxAttempts int, retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	capped := backoff.NewExponentialRetryPolicy(initialInterval).
+		WithMaximumAttempts(maxAttempts)
+	// No max-attempts cap; bounded by the default 1-minute expiration interval
+	// and the caller's context.
+	extended := backoff.NewExponentialRetryPolicy(initialInterval)
+	predicate := func(err error) bool {
+		return retryUnboundedOnSystemResourceExhausted() && isSystemResourceExhausted(err)
+	}
+	return backoff.NewConditionalRetryPolicy(predicate, extended, capped)
+}
+
+func isSystemResourceExhausted(err error) bool {
+	if re, ok := err.(*serviceerror.ResourceExhausted); ok {
+		return re.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
+	}
+	return false
 }
 
 // CreateMatchingClientLongPollRetryPolicy creates a retry policy for poll calls to matching service
@@ -314,16 +338,17 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err := err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
-	case *serviceerrors.ShardOwnershipLost:
+	if isSystemResourceExhausted(err) {
 		return true
-	case *serviceerrors.StalePartitionCounts:
-		return true
-	default:
-		return false
 	}
+
+	switch err.(type) {
+	case *serviceerrors.ShardOwnershipLost,
+		*serviceerrors.StalePartitionCounts:
+		return true
+	}
+
+	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
