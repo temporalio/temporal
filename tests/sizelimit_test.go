@@ -303,21 +303,16 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	// Wait for workflow to fail.
 	var historyEvents []*historypb.HistoryEvent
-	for range 10 {
+	s.Await(func(s *SizeLimitSuite) {
 		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
-		lastEvent := historyEvents[len(historyEvents)-1]
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
-			break
-		}
-		time.Sleep(time.Second) //nolint:forbidigo
-	}
-	s.EqualHistoryEvents(`
+		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionSignaled
   6 WorkflowExecutionTerminated`, historyEvents)
+	}, 10*time.Second, time.Second)
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
