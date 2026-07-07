@@ -532,6 +532,43 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	})
 }
 
+// TestSetTimeSkippingConfig verifies the dispatcher: a nil TimeSkippingInfo routes to the
+// init path (creating it), while an existing TimeSkippingInfo routes to the update path.
+func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
+	s.Run("InitsWhenTimeSkippingInfoNil", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(cfg)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi, "nil TimeSkippingInfo must be initialized")
+		s.True(proto.Equal(cfg, tsi.GetConfig()))
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("UpdatesWhenTimeSkippingInfoExists", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		newCfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(newCfg)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(newCfg, tsi.GetConfig()), "config must be replaced in place")
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(),
+			"update must preserve accumulated skipped duration")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+}
+
 // TestWrapExecutionTimes covers the three invariants of wrapExecutionTimes:
 // a nil/zero skipped duration is a no-op; a non-zero duration shifts every *set*
 // execution timestamp forward by exactly that duration; unset timestamps stay unset.
