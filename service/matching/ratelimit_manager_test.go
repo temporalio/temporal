@@ -226,5 +226,3 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 	s.InDelta(0.0, rps, 0.0)
 	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
 }
-
-
