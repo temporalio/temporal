@@ -5229,6 +5229,87 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersistence() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
+	var lastUpdateTime *timestamppb.Timestamp
+	if mutableState.executionInfo.LastUpdateTime != nil {
+		lastUpdateTime = proto.Clone(mutableState.executionInfo.LastUpdateTime).(*timestamppb.Timestamp)
+	}
+	var checksum *persistencespb.Checksum
+	if mutableState.checksum != nil {
+		checksum = proto.Clone(mutableState.checksum).(*persistencespb.Checksum)
+	}
+	dbRecordVersion := mutableState.dbRecordVersion
+
+	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Nil(mutation)
+	s.Empty(eventsSeq)
+	s.False(mutableState.IsDirty())
+	s.Equal(stateTransitionCount, mutableState.executionInfo.StateTransitionCount)
+	if lastUpdateTime == nil {
+		s.Nil(mutableState.executionInfo.LastUpdateTime)
+	} else {
+		protorequire.ProtoEqual(s.T(), lastUpdateTime, mutableState.executionInfo.LastUpdateTime)
+	}
+	if checksum == nil {
+		s.Nil(mutableState.checksum)
+	} else {
+		protorequire.ProtoEqual(s.T(), checksum, mutableState.checksum)
+	}
+	s.Equal(dbRecordVersion, mutableState.dbRecordVersion)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoesNotSkipPersistence() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.NotNil(mutation)
+	s.Equal(stateTransitionCount+1, mutableState.executionInfo.StateTransitionCount)
+}
+
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
@@ -5272,7 +5353,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
+	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5310,7 +5392,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
+	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
