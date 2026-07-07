@@ -73,11 +73,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MetadataSystemNexusEndpoint marks a Nexus response Payload, produced for an
-// operation dispatched through the system (__temporal_system) Nexus endpoint,
-// whose Data bytes hide a further, not-yet-codec-processed nested Payload.
-const MetadataSystemNexusEndpoint = "systemNexusEndpoint"
-
 type (
 
 	// Handler - gRPC handler interface for historyservice
@@ -2558,7 +2553,7 @@ func (h *Handler) StartNexusOperation(
 			if payload.Metadata == nil {
 				payload.Metadata = make(map[string][]byte, 1)
 			}
-			payload.Metadata[MetadataSystemNexusEndpoint] = []byte("true")
+			payload.Metadata[commonnexus.SystemEndpointPayloadMetadataKey] = []byte("true")
 		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{

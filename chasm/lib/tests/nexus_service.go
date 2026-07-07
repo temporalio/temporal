@@ -14,8 +14,8 @@ var TestOperation = nexus.NewSyncOperation("TestOperation", func(ctx context.Con
 })
 
 // TestOperationWithPayload is identical to TestOperation, except its response embeds a
-// nested *commonpb.Payload. It exists to exercise the systemNexusEndpoint payload
-// metadata flag set in service/history/handler.go's StartNexusOperation.
+// nested *commonpb.Payload. It exists to exercise the commonnexus.SystemEndpointPayloadMetadataKey
+// flag set in service/history/handler.go's StartNexusOperation.
 var TestOperationWithPayload = nexus.NewSyncOperation("TestOperationWithPayload", func(ctx context.Context, input string, options nexus.StartOperationOptions) (*commonpb.Payloads, error) {
 	return &commonpb.Payloads{Payloads: []*commonpb.Payload{payload.EncodeString("Hello, " + input)}}, nil
 })

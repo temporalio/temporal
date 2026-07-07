@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -111,12 +112,12 @@ func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T
 			result := resp.GetResponse().GetSyncSuccess().GetPayload()
 			require.NotNil(t, result)
 
-			value, ok := result.GetMetadata()[MetadataSystemNexusEndpoint]
+			value, ok := result.GetMetadata()[commonnexus.SystemEndpointPayloadMetadataKey]
 			if tc.expectFlag {
-				assert.True(t, ok, "expected %s metadata flag to be set", MetadataSystemNexusEndpoint)
-				assert.Equal(t, "true", string(value))
+				require.True(t, ok, "expected %s metadata flag to be set", commonnexus.SystemEndpointPayloadMetadataKey)
+				require.Equal(t, "true", string(value))
 			} else {
-				assert.False(t, ok, "expected %s metadata flag to be absent", MetadataSystemNexusEndpoint)
+				require.False(t, ok, "expected %s metadata flag to be absent", commonnexus.SystemEndpointPayloadMetadataKey)
 			}
 		})
 	}
