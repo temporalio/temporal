@@ -231,9 +231,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 	}
 	// Override Nexus callback URL. This is parameterized on the frontend's HTTP address,
 	// so it can't be overriden in the loop above.
-	if len(params.HostsByProtocolByService) > 0 {
-		impl.setNexusCallbackURL()
-	}
+	impl.setNexusCallbackURL()
 	// Per-test overrides: cleaned up when the creating test finishes.
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfigForTest(t, k, v)
