@@ -198,8 +198,6 @@ var TransitionCompleted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
 	func(a *Activity, ctx chasm.MutableContext, event completeEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-			a.ResetHeartbeats = false
-
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
@@ -236,7 +234,6 @@ var TransitionFailed = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, event failedEvent) error {
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetFailedRequest()
-			a.ResetHeartbeats = false
 
 			if details := req.GetLastHeartbeatDetails(); details != nil {
 				heartbeat := a.getOrCreateLastHeartbeat(ctx)
@@ -279,7 +276,6 @@ var TransitionTerminated = chasm.NewTransition(
 			a.TerminateState = &activitypb.ActivityTerminateState{
 				RequestId: event.request.RequestID,
 			}
-			a.ResetHeartbeats = false
 			outcome := a.Outcome.Get(ctx)
 			failure := &failurepb.Failure{
 				Message: event.request.Reason,
@@ -354,7 +350,6 @@ var TransitionCanceled = chasm.NewTransition(
 					Failure: failure,
 				},
 			}
-			a.ResetHeartbeats = false
 
 			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
 
@@ -401,8 +396,6 @@ var TransitionTimedOut = chasm.NewTransition(
 			if err != nil {
 				return err
 			}
-
-			a.ResetHeartbeats = false
 
 			a.emitOnTimedOutMetrics(ctx, event.metricsHandler, timeoutType, event.fromStatus)
 
@@ -491,7 +484,6 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 )
 
 type resetEvent struct {
-	req       *workflowservice.ResetActivityExecutionRequest
 	resetTime time.Time
 	handler   metrics.Handler
 }
@@ -545,10 +537,7 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		attempt := a.LastAttempt.Get(ctx)
 		a.ResetKeepPaused = false
 		a.applyDeferredOptionRestore(ctx)
-		if a.ResetHeartbeats {
-			a.ResetHeartbeats = false
-			a.clearHeartbeat(ctx)
-		}
+		a.clearHeartbeat(ctx)
 		attempt.Count = 1
 		attempt.Stamp++
 		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
@@ -577,10 +566,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 
 		a.ResetKeepPaused = false
 		a.applyDeferredOptionRestore(ctx)
-		if a.ResetHeartbeats {
-			a.ResetHeartbeats = false
-			a.clearHeartbeat(ctx)
-		}
+		a.clearHeartbeat(ctx)
 
 		attempt.Count = 1
 		attempt.Stamp++
