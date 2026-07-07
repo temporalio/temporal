@@ -45,9 +45,16 @@ const (
 	// A poller was available but whole-queue rate limiting blocked the match.
 	syncMatchRateLimited
 	// A poller was available but per-fairness-key rate limiting blocked the match.
-	// This is distinct from syncMatchRateLimited because WCI should still scale
-	// up workers when only per-key limits are hit.
-	syncMatchPerKeyRateLimited
+	syncMatchFairnessKeyRateLimited
+)
+
+// rateLimitKind distinguishes which rate limiter blocked a match in findMatch.
+type rateLimitKind int
+
+const (
+	rateLimitNone         rateLimitKind = iota
+	rateLimitWholeQueue                         // whole-queue rate limit is blocking
+	rateLimitFairnessKey                        // per-fairness-key rate limit is blocking
 )
 
 type taskForwarderType int32
@@ -369,10 +376,12 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) syncMatchOutcome 
 		return syncMatchSuccess
 	}
 	d.tasks.Remove(task)
-	if outcome == syncMatchRateLimited || outcome == syncMatchPerKeyRateLimited {
+	switch outcome {
+	case syncMatchRateLimited, syncMatchFairnessKeyRateLimited:
 		return outcome
+	default:
+		return syncMatchNoPoller
 	}
-	return syncMatchNoPoller
 }
 
 func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
@@ -412,7 +421,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
 // nolint:revive // will improve later
-func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration, wholeQueueLimited bool) {
+func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration, rateLimitedBy rateLimitKind) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
 	// tree.Iter() cursor escapes to the heap.
@@ -426,7 +435,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
 	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
 		if delay := wholeQueueReady.delay(now); delay > 0 {
-			return nil, nil, delay, true
+			return nil, nil, delay, rateLimitWholeQueue
 		}
 	}
 
@@ -474,6 +483,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 				if minDelay == 0 || delay < minDelay {
 					minDelay = delay
 				}
+				rateLimitedBy = rateLimitFairnessKey
 				return true
 			}
 		}
@@ -525,14 +535,18 @@ func (d *matcherData) findAndWakeMatches() (outcome syncMatchOutcome) {
 
 	for {
 		// search for highest-priority ready match; skip per-key rate-limited tasks
-		task, poller, minDelay, wholeQueueLimited := d.findMatch(allowForwarding, now)
+		task, poller, minDelay, rateLimitedBy := d.findMatch(allowForwarding, now)
 		if task == nil || poller == nil {
 			if minDelay > 0 {
 				d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, minDelay)
-				if wholeQueueLimited {
+				switch rateLimitedBy {
+				case rateLimitWholeQueue:
 					return syncMatchRateLimited
+				case rateLimitFairnessKey:
+					return syncMatchFairnessKeyRateLimited
+				default:
+					return syncMatchUnspecified
 				}
-				return syncMatchPerKeyRateLimited
 			}
 			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()

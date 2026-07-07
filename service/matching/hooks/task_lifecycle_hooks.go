@@ -19,8 +19,10 @@ const (
 	SyncMatchOutcomeNotMatched
 	// The task was sync-matched successfully.
 	SyncMatchOutcomeSuccess
-	// A poller was available but rate limiting blocked the match.
+	// A poller was available but whole-queue rate limiting blocked the match.
 	SyncMatchOutcomeRateLimited
+	// A poller was available but per-fairness-key rate limiting blocked the match.
+	SyncMatchOutcomeFairnessKeyRateLimited
 )
 
 type (

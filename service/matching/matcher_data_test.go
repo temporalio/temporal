@@ -227,7 +227,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 }
 
-func (s *MatcherDataSuite) TestMatchTaskImmediatelyPerKeyRateLimited() {
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyFairnessKeyRateLimited() {
 	// Set per-key rate limit with a low RPS and zero burst so consuming one token
 	// puts the key well into the future.
 	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
@@ -252,7 +252,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyPerKeyRateLimited() {
 		CreateTime: timestamppb.New(s.now()),
 		Priority:   &commonpb.Priority{FairnessKey: "key1"},
 	}, nil, 0, nil)
-	s.Equal(syncMatchPerKeyRateLimited, s.md.MatchTaskImmediately(syncTask))
+	s.Equal(syncMatchFairnessKeyRateLimited, s.md.MatchTaskImmediately(syncTask))
 }
 
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
