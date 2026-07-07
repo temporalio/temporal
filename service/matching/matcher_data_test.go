@@ -154,7 +154,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -181,7 +181,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -227,7 +227,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 }
 
-func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited_TracksEvent() {
+func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
 	// Set a rate limit and consume a token so the limiter is blocking.
 	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
 	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
@@ -256,7 +256,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited_TracksEvent() {
 	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
 }
 
-func (s *MatcherDataSuite) TestBacklogRateLimited_TracksEvent() {
+func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
 	// Set a rate limit and consume a token so the limiter is blocking.
 	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
 	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
@@ -315,7 +315,8 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	resp := <-respC
 	s.True(resp.forwarded)
 	s.NoError(resp.forwardErr)
-	s.NotEqual(resp.forwardRes, nil) // typed nil
+	//nolint:testifylint // NotEqual is intentional: interface is non-nil but holds typed nil *QueryWorkflowResponse
+	s.NotEqual(resp.forwardRes, nil)
 	s.Nil(resp.forwardRes.(*matchingservice.QueryWorkflowResponse))
 }
 
@@ -606,7 +607,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 
 	s.Len(removed, 25)
 	for _, t := range removed {
-		s.Equal(t.event.TaskId%4, 0)
+		s.Equal(int64(0), t.event.TaskId%4)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -616,7 +617,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.NotEqual(t.event.TaskId%4, 0)
+		s.NotEqual(int64(0), t.event.TaskId%4)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}
