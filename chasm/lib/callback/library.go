@@ -14,9 +14,11 @@ type (
 	}
 )
 
-// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
-// like tdbg where no task execution is needed.
-func NewNilLibrary() chasm.Library { return &Library{} }
+// NewNilLibrary creates a Library with all nil handlers. Useful for
+// registration-only contexts like tdbg where no task execution is needed.
+func NewNilLibrary() *Library {
+	return &Library{}
+}
 
 func newLibrary(
 	InvocationTaskHandler *invocationTaskHandler,

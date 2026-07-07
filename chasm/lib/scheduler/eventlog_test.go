@@ -69,7 +69,7 @@ func TestEventLog_DropsEarliestWhenFull(t *testing.T) {
 
 // TestEventLog_NoConfigFallsBackToDefaults checks that LogEvent applies the
 // default retention limits instead of panicking when no config is reachable via
-// the context, as in tdbg's decoding setup.
+// the context, as in tdbg's registration-only setup.
 func TestEventLog_NoConfigFallsBackToDefaults(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	eventLog := scheduler.NewEventLog(ctx)

@@ -18,6 +18,7 @@ type (
 		// NexusServiceProcessors returns a list of NexusServiceProcessor instances to register with the __temporal_system
 		// Nexus endpoint.
 		NexusServiceProcessors() []*NexusServiceProcessor
+
 		mustEmbedUnimplementedLibrary()
 	}
 

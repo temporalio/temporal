@@ -13,8 +13,8 @@ import (
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
 var ErrDuplicateRegistration = errors.New("duplicate registration")
 
-// Plugin is an interface for registering command handlers and event definitions with a [Registry].
-type Plugin interface {
+// Library is an interface for registering command handlers and event definitions with a [Registry].
+type Library interface {
 	CommandHandlers() map[enumspb.CommandType]CommandHandler
 	EventDefinitions() []EventDefinition
 }
@@ -37,10 +37,10 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register registers all command handlers and event definitions from a [Plugin].
+// Register registers all command handlers and event definitions from a [Library].
 // Returns an [ErrDuplicateRegistration] if a handler or definition is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) Register(lib Plugin) error {
+func (r *Registry) Register(lib Library) error {
 	for t, handler := range lib.CommandHandlers() {
 		if existing, ok := r.commandHandlers[t]; ok {
 			return fmt.Errorf("%w: command handler for %v: %v", ErrDuplicateRegistration, t, existing)

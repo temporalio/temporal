@@ -373,15 +373,6 @@ func (r *Registry) registerNexusService(svc *nexus.Service) error {
 	return nil
 }
 
-// LibraryNames returns the names of all registered libraries.
-func (r *Registry) LibraryNames() []string {
-	names := make([]string, 0, len(r.libraries))
-	for name := range r.libraries {
-		names = append(names, name)
-	}
-	return names
-}
-
 // NexusServices returns all registered Nexus services.
 func (r *Registry) NexusServices() map[string]*nexus.Service {
 	// Return a copy to prevent external modification
