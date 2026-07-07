@@ -127,10 +127,13 @@ type (
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
 
-		// subtreeIsDirty is true if this node or any of its descendants was mutated in the
-		// current transaction (valueState >= valueStateNeedSerialize), or if ExecutePureTask
-		// ran on this node. It is propagated upward to ancestors during CloseTransaction so
-		// that task cleanup can be skipped for nodes whose entire lineage is clean.
+		// subtreeIsDirty is true if this node, any ancestor, or any descendant was mutated
+		// in the current transaction (valueState >= valueStateNeedSerialize), or if
+		// ExecutePureTask ran on this node or any such relative.
+		//
+		// markSubtreeDirty propagates the flag both upward (to ancestors) and downward (to
+		// all descendants) at mutation time, so CloseTransaction can skip task validation
+		// for nodes whose entire lineage is clean with a single O(1) flag check.
 		//
 		// This is a per-node field (not in nodeBase) and is reset after each transaction.
 		subtreeIsDirty bool
@@ -417,9 +420,16 @@ func (n *Node) setValueState(state valueState) {
 // markSubtreeDirty sets subtreeIsDirty on this node and propagates upward to all ancestors.
 // This ensures that ancestor nodes know their subtree contains a dirty node, which is used
 // during CloseTransaction to skip task validation for completely unrelated subtrees.
+// markSubtreeDirty marks this node and its entire lineage (ancestors and descendants)
+// as dirty so that CloseTransaction knows to validate their tasks.
 func (n *Node) markSubtreeDirty() {
+	// Propagate upward to ancestors.
 	for cur := n; cur != nil && !cur.subtreeIsDirty; cur = cur.parent {
 		cur.subtreeIsDirty = true
+	}
+	// Propagate downward to descendants.
+	for _, desc := range n.andAllChildren() {
+		desc.subtreeIsDirty = true
 	}
 }
 
@@ -1926,10 +1936,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	var firstPureTaskNode *Node
 
 	for nodePath, node := range n.andAllChildren() {
-		if node.parent != nil && node.parent.subtreeIsDirty {
-			node.subtreeIsDirty = true
-		}
-
 		// no-op if node is not a component
 		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
 		if componentAttr == nil {
@@ -1942,8 +1948,8 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// - child component state update
 		// - parent component closing (access rule)
 		// - a pointer field pointing to an updated component (pointers are ancestors-only)
-		// We skip validation only for nodes whose entire lineage (ancestors and descendants) is clean,
-		// since none of the above causes can apply to a completely unrelated subtree.
+		// markSubtreeDirty propagates to both ancestors and descendants at mutation time,
+		// so we skip validation only for nodes with no dirty node anywhere in their lineage.
 		if node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
