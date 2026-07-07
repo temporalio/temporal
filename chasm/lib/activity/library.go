@@ -50,10 +50,6 @@ func newComponentOnlyLibrary(
 	}
 }
 
-// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
-// like tdbg where no task execution is needed.
-func NewNilLibrary() chasm.Library { return &componentOnlyLibrary{} }
-
 func (l *componentOnlyLibrary) Name() string {
 	return libraryName
 }
@@ -75,6 +71,14 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 				},
 			}),
 		),
+	}
+}
+
+// NewNilLibrary creates a Library with all nil handlers. Useful for
+// registration-only contexts like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library {
+	return &library{
+		componentOnlyLibrary: *newComponentOnlyLibrary(nil, nil),
 	}
 }
 
