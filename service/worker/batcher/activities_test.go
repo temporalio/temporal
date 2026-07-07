@@ -402,6 +402,67 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			expectedResult: "A=B",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
 		},
+		{
+			name:           "Terminate workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		},
+		{
+			name:           "Cancel workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		},
+		{
+			name:           "Signal workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		},
+		{
+			name:           "Update workflow execution options variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+		},
+		{
+			// Reset applies regardless of execution status (matches the legacy
+			// BATCH_OPERATION_TYPE_RESET, which is also excluded), so no filter is added.
+			name:           "Reset workflow variant is not filtered",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		},
+		{
+			// Delete applies regardless of execution status (matches the legacy
+			// BATCH_OPERATION_TYPE_DELETE, which is also excluded), so no filter is added.
+			name:           "Delete workflow variant is not filtered",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		},
+		{
+			// A caller must be able to terminate/cancel only running activities via
+			// query; the server adds the filter so the caller doesn't have to.
+			name:           "Terminate activity is filtered to running",
+			query:          "ActivityType='foo'",
+			expectedResult: fmt.Sprintf("(ActivityType='foo') AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		},
+		{
+			name:           "Cancel activity is filtered to running",
+			query:          "ActivityType='foo'",
+			expectedResult: fmt.Sprintf("(ActivityType='foo') AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		},
+		{
+			// Delete applies regardless of execution status, so no filter is added.
+			name:           "Delete activity is not filtered",
+			query:          "ActivityType='foo'",
+			expectedResult: "ActivityType='foo'",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+		},
 	}
 	for _, testRun := range tests {
 		s.Run(testRun.name, func() {
