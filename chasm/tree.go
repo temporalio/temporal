@@ -168,17 +168,6 @@ type (
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
 
-		// isActiveStateDirty is true if any user data is mutated.
-		// NOTE: this only captures active cluster's user data mutation.
-		// Replication logic (ApplySnapshot/Mutation) will not set this field.
-		//
-		// This flag in a CHASM tree level, while valueState is on node level.
-		// Tracking this flag on tree level avoids traversing the whole tree every time
-		// we want to know if something is updated.
-		//
-		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
-		isActiveStateDirty bool
-
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
@@ -421,7 +410,6 @@ func (n *Node) setValue(value any) {
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
 	if state >= valueStateNeedSerialize {
-		n.isActiveStateDirty = true
 		n.markSubtreeDirty()
 	}
 }
@@ -1673,7 +1661,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if n.isActiveStateDirty {
+	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1956,7 +1944,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// - a pointer field pointing to an updated component (pointers are ancestors-only)
 		// We skip validation only for nodes whose entire lineage (ancestors and descendants) is clean,
 		// since none of the above causes can apply to a completely unrelated subtree.
-		if n.isActiveStateDirty && node.subtreeIsDirty {
+		if node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
 				return err
@@ -2394,7 +2382,6 @@ func (n *Node) cleanupTransaction() {
 		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	}
 
-	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
@@ -2832,7 +2819,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	return n.isActiveStateDirty ||
+	return n.subtreeIsDirty ||
 		len(n.mutation.UpdatedNodes) > 0 ||
 		len(n.mutation.DeletedNodes) > 0
 }
@@ -3270,11 +3257,8 @@ func (n *Node) ExecutePureTask(
 ) (_ bool, retErr error) {
 	defer func() {
 		if retErr == nil {
-			// Mark the tree state to dirty so it will force the transaction to clean up
-			// invalid tasks (including the current one).
-			n.isActiveStateDirty = true
-			// Also mark this specific node's subtree dirty so that task cleanup is not
-			// skipped even when the task handler makes no state mutations.
+			// Mark this node dirty so CloseTransaction cleans up invalid tasks,
+			// including the current one, even if the handler made no state mutations.
 			n.markSubtreeDirty()
 		}
 	}()

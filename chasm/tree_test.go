@@ -3519,7 +3519,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.NoError(err)
 	s.False(executed)
 	s.Equal(valueStateSynced, root.valueState)
-	s.True(root.isActiveStateDirty)
+	s.True(root.subtreeIsDirty)
 
 	// Error during task validation (no execution occurs).
 	root.setValueState(valueStateSynced)
