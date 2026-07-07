@@ -154,7 +154,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -181,7 +181,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -238,7 +238,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited_TracksEvent() {
 	s.md.rateLimitManager.mu.Unlock()
 
 	// Tracker should start at zero.
-	s.Equal(float32(0), s.md.tasksRateLimited.rate())
+	s.InDelta(0, s.md.tasksRateLimited.rate(), 0.001)
 
 	// Add a waiting poller.
 	go func() {
@@ -267,7 +267,7 @@ func (s *MatcherDataSuite) TestBacklogRateLimited_TracksEvent() {
 	s.md.rateLimitManager.mu.Unlock()
 
 	// Enqueue a backlog task.
-	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 0, nil))
+	_ = s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 0, nil))
 
 	// Poller arrives — findAndWakeMatches should hit the rate limiter.
 	poller := &waitingPoller{startTime: s.now()}
@@ -315,7 +315,7 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	resp := <-respC
 	s.True(resp.forwarded)
 	s.NoError(resp.forwardErr)
-	s.True(resp.forwardRes != nil) // typed nil
+	s.NotEqual(resp.forwardRes, nil) // typed nil
 	s.Nil(resp.forwardRes.(*matchingservice.QueryWorkflowResponse))
 }
 
@@ -604,9 +604,9 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 		return t.event.TaskId%4 == 0
 	})
 
-	s.Equal(25, len(removed))
+	s.Len(removed, 25)
 	for _, t := range removed {
-		s.True(t.event.TaskId%4 == 0)
+		s.Equal(t.event.TaskId%4, 0)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -616,7 +616,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.False(t.event.TaskId%4 == 0)
+		s.NotEqual(t.event.TaskId%4, 0)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}
@@ -1051,7 +1051,7 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 		1e-8, // 1 per 1000+ days
 	} {
 		pLow := makeSimpleLimiterParams(lowRate, time.Second)
-		require.True(t, pLow.never() == (lowRate == 0))
+		require.Equal(t, pLow.never(), (lowRate == 0))
 
 		now := time.Now().UnixNano()
 		var ready simpleLimiter
