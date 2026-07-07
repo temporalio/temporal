@@ -1147,7 +1147,7 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 		request *workflowservice.StartBatchOperationRequest
 	}{
 		{
-			enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+			enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 			&workflowservice.StartBatchOperationRequest{
 				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 					TerminationOperation: &batchpb.BatchOperationTermination{},
@@ -1155,7 +1155,7 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 			},
 		},
 		{
-			enumspb.BATCH_OPERATION_TYPE_SIGNAL,
+			enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 			&workflowservice.StartBatchOperationRequest{
 				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 					SignalOperation: &batchpb.BatchOperationSignal{Signal: "my-signal"},
@@ -1163,7 +1163,7 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 			},
 		},
 		{
-			enumspb.BATCH_OPERATION_TYPE_CANCEL,
+			enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
 			&workflowservice.StartBatchOperationRequest{
 				Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
 					CancellationOperation: &batchpb.BatchOperationCancellation{},

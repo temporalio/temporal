@@ -2830,6 +2830,14 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			s.Equal(identity, request.StartRequest.Identity)
 			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignalWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			// Started via Executions (no VisibilityQuery), so the query memo must be
+			// absent and the executions memo must carry the target executions.
+			s.NotContains(request.StartRequest.Memo.Fields, batcher.BatchOperationVisibilityQueryMemo)
+			var gotExecutions []*commonpb.Execution
+			s.NoError(payload.Decode(request.StartRequest.Memo.Fields[batcher.BatchOperationExecutionsMemo], &gotExecutions))
+			s.Equal([]*commonpb.Execution{
+				{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: executions[0].WorkflowId, RunId: executions[0].RunId},
+			}, gotExecutions)
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
@@ -3275,7 +3283,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 		s.Equal(jobID, resp.GetJobId())
 		s.Equal(now, resp.GetStartTime())
 		s.Equal(now, resp.GetCloseTime())
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
 		s.Equal(int64(3), resp.GetTotalOperationCount())
 		s.Equal(int64(2), resp.GetCompleteOperationCount())
@@ -3337,7 +3345,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
 	s.Assert().Equal(int64(5), resp.TotalOperationCount)
 	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
@@ -3388,7 +3396,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
 }
 
@@ -4112,15 +4120,30 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 		{"update activity options", enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, batcher.BatchTypeUpdateActivitiesOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS},
 		// The disambiguated _WORKFLOW enum variants assigned by StartBatchOperation
 		// are written with the workflow-suffixed memo string and read back as the
-		// canonical workflow operation type.
-		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE},
-		{"cancel workflows", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL},
-		{"signal workflows", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL},
-		{"delete workflows", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE},
-		{"reset workflows", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET},
-		{"update workflow options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS},
-		// Legacy enum values map to the same workflow-suffixed memo string.
-		{"terminate (legacy enum)", enumspb.BATCH_OPERATION_TYPE_TERMINATE, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE},
+		// same non-deprecated *_WORKFLOW operation type.
+		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		{"cancel workflows", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		{"signal workflows", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		{"delete workflows", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		{"reset workflows", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		{"update workflow options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
+		// The legacy (non-suffixed) enum values are deprecated but still accepted as
+		// input to snakeCaseBatchType: a caller on an older SDK/CLI that hasn't picked
+		// up the new *_WORKFLOW enum values yet may still populate BatchOperationInput
+		// with the legacy value. They map to the same memo string as their *_WORKFLOW
+		// counterpart, and round-trip to the non-deprecated *_WORKFLOW operation type.
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"terminate (legacy enum)", enumspb.BATCH_OPERATION_TYPE_TERMINATE, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"cancel (legacy enum)", enumspb.BATCH_OPERATION_TYPE_CANCEL, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"signal (legacy enum)", enumspb.BATCH_OPERATION_TYPE_SIGNAL, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"delete (legacy enum)", enumspb.BATCH_OPERATION_TYPE_DELETE, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"reset (legacy enum)", enumspb.BATCH_OPERATION_TYPE_RESET, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"update options (legacy enum)", enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -4131,14 +4154,15 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 	}
 
 	// Legacy memo strings (written before the workflow/activity suffix split) must
-	// still resolve for backwards compatibility with in-flight/old batch operations.
+	// still resolve for backwards compatibility with in-flight/old batch operations,
+	// reported as the non-deprecated *_WORKFLOW operation type.
 	legacy := map[string]enumspb.BatchOperationType{
-		"terminate":      enumspb.BATCH_OPERATION_TYPE_TERMINATE,
-		"cancel":         enumspb.BATCH_OPERATION_TYPE_CANCEL,
-		"signal":         enumspb.BATCH_OPERATION_TYPE_SIGNAL,
-		"delete":         enumspb.BATCH_OPERATION_TYPE_DELETE,
-		"reset":          enumspb.BATCH_OPERATION_TYPE_RESET,
-		"update_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
+		"terminate":      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel":         enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal":         enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete":         enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset":          enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
 	}
 	for memo, expected := range legacy {
 		t.Run("legacy "+memo, func(t *testing.T) {

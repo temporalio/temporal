@@ -5725,6 +5725,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		if !wh.config.EnableBatchActivityOperators(request.Namespace) || !wh.IsStandaloneActivityEnabled(request.Namespace) {
 			return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported for this namespace", op)
 		}
+	default:
+		// Other operation types are not gated by the standalone-activity batch operators check.
 	}
 
 	if err := batcher.ValidateBatchOperation(request); err != nil {
@@ -5807,7 +5809,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 		if err := wh.validateTimeSkippingConfig(
 			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
@@ -5844,10 +5846,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo:            payload.EncodeString(snakeCaseBatchType(input.BatchType)),
-			batcher.BatchReasonMemo:                   payload.EncodeString(request.GetReason()),
-			batcher.BatchOperationVisibilityQueryMemo: payload.EncodeString(visibilityQuery),
+			batcher.BatchOperationTypeMemo: payload.EncodeString(snakeCaseBatchType(input.BatchType)),
+			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
+	}
+	if len(visibilityQuery) > 0 {
+		memo.Fields[batcher.BatchOperationVisibilityQueryMemo] = payload.EncodeString(visibilityQuery)
 	}
 	if executions := batchOperationExecutionsFromRequest(request); len(executions) > 0 {
 		executionsPayload, err := payload.Encode(executions)
@@ -5899,22 +5903,26 @@ func (wh *WorkflowHandler) StartBatchOperation(
 // snakeCaseBatchType maps a batch operation type enum to the canonical string
 // stored in the batcher workflow memo (see batcher.BatchType* constants). The
 // stored string is execution-type explicit (e.g. "terminate_workflows" vs
-// "terminate_activities"). Both the original enum values (e.g.
-// BATCH_OPERATION_TYPE_TERMINATE) and their newer disambiguated workflow variants
-// (e.g. BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW) map to the same workflow string.
+// "terminate_activities"). Both the current *_WORKFLOW enum variants and their
+// legacy (non-suffixed) counterparts map to the same workflow string: a caller
+// on an older SDK/CLI that hasn't picked up the new *_WORKFLOW enum values yet
+// may still populate BatchOperationInput with the legacy value, and both must
+// be accepted so the resulting memo (and therefore Describe/ListBatchOperations
+// output) is consistent regardless of caller version.
 func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
+	//nolint:staticcheck // SA1019: legacy (non-*_WORKFLOW) enum values are deprecated but still valid input
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_TERMINATE:
 		return batcher.BatchTypeTerminateWorkflows
-	case enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_CANCEL:
 		return batcher.BatchTypeCancelWorkflows
-	case enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_SIGNAL:
 		return batcher.BatchTypeSignalWorkflows
-	case enumspb.BATCH_OPERATION_TYPE_DELETE, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_DELETE:
 		return batcher.BatchTypeDeleteWorkflows
-	case enumspb.BATCH_OPERATION_TYPE_RESET, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_RESET:
 		return batcher.BatchTypeResetWorkflows
-	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS:
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS:
 		return batcher.BatchTypeUpdateWorkflowOptions
 	case enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY:
 		return batcher.BatchTypeUnpauseActivities
@@ -6931,33 +6939,35 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 func batchOperationTypeFromString(operationTypeString string) enumspb.BatchOperationType {
 	//nolint:revive // Keep legacy memo case separate from new, for readability
 	switch operationTypeString {
-	// Workflow batch operations (current, execution-type-explicit strings).
+	// Workflow batch operations (current, execution-type-explicit strings) map to
+	// the non-deprecated *_WORKFLOW enum variants.
 	case batcher.BatchTypeTerminateWorkflows:
-		return enumspb.BATCH_OPERATION_TYPE_TERMINATE
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW
 	case batcher.BatchTypeCancelWorkflows:
-		return enumspb.BATCH_OPERATION_TYPE_CANCEL
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW
 	case batcher.BatchTypeSignalWorkflows:
-		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
+		return enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW
 	case batcher.BatchTypeDeleteWorkflows:
-		return enumspb.BATCH_OPERATION_TYPE_DELETE
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW
 	case batcher.BatchTypeResetWorkflows:
-		return enumspb.BATCH_OPERATION_TYPE_RESET
+		return enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW
 	case batcher.BatchTypeUpdateWorkflowOptions:
-		return enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+		return enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS
 	// Legacy workflow memo strings written before the workflow/activity suffix
-	// split; still read for backwards compatibility with in-flight/old batches.
+	// split; still read for backwards compatibility with in-flight/old batches,
+	// but reported as the non-deprecated *_WORKFLOW enum variant.
 	case "terminate":
-		return enumspb.BATCH_OPERATION_TYPE_TERMINATE
+		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW
 	case "cancel":
-		return enumspb.BATCH_OPERATION_TYPE_CANCEL
+		return enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW
 	case "signal":
-		return enumspb.BATCH_OPERATION_TYPE_SIGNAL
+		return enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW
 	case "delete":
-		return enumspb.BATCH_OPERATION_TYPE_DELETE
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW
 	case "reset":
-		return enumspb.BATCH_OPERATION_TYPE_RESET
+		return enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW
 	case "update_options":
-		return enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
+		return enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS
 	// Activity batch operations.
 	case batcher.BatchTypeUpdateActivitiesOptions:
 		return enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS

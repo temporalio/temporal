@@ -112,7 +112,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 
 	// Start three standalone activities of the same (per-test, unique) type.
 	activities := make([]startedActivity, 0, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		activityID := testcore.RandomizeStr(fmt.Sprintf("%s-%d", t.Name(), i))
 		startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
 		activities = append(activities, startedActivity{activityID: activityID, runID: startResp.RunId})
