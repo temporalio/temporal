@@ -5,20 +5,24 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -401,6 +405,52 @@ func TestActivityMutationHandlers_MarkActivityIDInContextMetadata(t *testing.T) 
 			err := tc.invoke(ctx, h)
 			require.ErrorIs(t, err, shardLookupErr)
 			require.ElementsMatch(t, tc.want, contextutil.ContextMetadataGetMarkedActivityIDs(ctx))
+		})
+	}
+}
+
+func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T) {
+	registry := nexus.NewServiceRegistry()
+	registry.MustRegister(chasmtests.NewTestServiceNexusService())
+	nexusHandler, err := registry.NewHandler()
+	require.NoError(t, err)
+
+	h := Handler{
+		logger:       log.NewNoopLogger(),
+		nexusHandler: nexusHandler,
+	}
+
+	testCases := []struct {
+		name       string
+		operation  string
+		expectFlag bool
+	}{
+		{name: "response with no nested payload", operation: "TestOperation", expectFlag: false},
+		{name: "response with nested payload", operation: "TestOperationWithPayload", expectFlag: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := h.StartNexusOperation(context.Background(), &historyservice.StartNexusOperationRequest{
+				Request: &nexuspb.StartOperationRequest{
+					Service:   "TestService",
+					Operation: tc.operation,
+					RequestId: "test-request-id",
+					Payload:   payload.EncodeString("Temporal"),
+				},
+			})
+			require.NoError(t, err)
+
+			result := resp.GetResponse().GetSyncSuccess().GetPayload()
+			require.NotNil(t, result)
+
+			value, ok := result.GetMetadata()[MetadataSystemNexusEndpoint]
+			if tc.expectFlag {
+				assert.True(t, ok, "expected %s metadata flag to be set", MetadataSystemNexusEndpoint)
+				assert.Equal(t, "true", string(value))
+			} else {
+				assert.False(t, ok, "expected %s metadata flag to be absent", MetadataSystemNexusEndpoint)
+			}
 		})
 	}
 }
