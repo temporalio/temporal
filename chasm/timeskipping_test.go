@@ -23,7 +23,6 @@ func TestTimeSkippingTransition(t *testing.T) {
 		require.False(t, tr.DisabledAfterFastForward)
 		require.False(t, tr.IsValid(), "a transition with no target and no disable signal is invalid")
 	})
-
 	// Invariant 1: every method is nil-safe — on a nil receiver, and (for GateByFastForward)
 	// on a nil/absent fast-forward argument.
 	t.Run("nil safe", func(t *testing.T) {
