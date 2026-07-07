@@ -43,8 +43,11 @@ type TimeSkippingRuntimeGate interface {
 // =============================================================================
 
 type TimeSkippingTransition struct {
-	CurrentTime              time.Time
-	TargetTime               time.Time
+	CurrentTime time.Time
+	// targetTime is intentionally private: it may only be written through TrackEarliestFutureTime
+	// and GateByFastForward, both of which reject any candidate before CurrentTime. That guarantee
+	// is what keeps GetSkippedDuration from ever going negative. Read it via GetTargetTime.
+	targetTime               time.Time
 	DisabledAfterFastForward bool
 }
 
@@ -60,15 +63,25 @@ func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 // signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
 // derived relative to the current time, so without it there is nothing to apply.
 func (t *TimeSkippingTransition) IsValid() bool {
-	return t != nil && !t.CurrentTime.IsZero() && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
+	return t != nil && !t.CurrentTime.IsZero() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
+}
+
+// GetTargetTime returns the earliest tracked skip target, or the zero time when none has been set.
+// Nil-safe. This is the only way to read the target: it is written exclusively through
+// TrackEarliestFutureTime and GateByFastForward, which never accept a time before CurrentTime.
+func (t *TimeSkippingTransition) GetTargetTime() time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.targetTime
 }
 
 func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
 		return
 	}
-	if t.TargetTime.IsZero() || candidate.Before(t.TargetTime) {
-		t.TargetTime = candidate
+	if t.targetTime.IsZero() || candidate.Before(t.targetTime) {
+		t.targetTime = candidate
 	}
 }
 
@@ -83,7 +96,7 @@ func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 	ffTargetTime := ff.GetTargetTime().AsTime()
 	// If a real candidate is scheduled strictly before the fast-forward target, we skip to
 	// that and the fast-forward budget is not yet exhausted — leave time skipping enabled.
-	if !t.TargetTime.IsZero() && t.TargetTime.Before(ffTargetTime) {
+	if !t.targetTime.IsZero() && t.targetTime.Before(ffTargetTime) {
 		return
 	}
 	// Otherwise the fast-forward target is the earliest target: skip to it (clamped to the
@@ -95,8 +108,8 @@ func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 }
 
 func (t *TimeSkippingTransition) GetSkippedDuration() time.Duration {
-	if t == nil || t.CurrentTime.IsZero() || t.TargetTime.IsZero() {
+	if t == nil || t.CurrentTime.IsZero() || t.targetTime.IsZero() {
 		return 0
 	}
-	return t.TargetTime.Sub(t.CurrentTime)
+	return t.targetTime.Sub(t.CurrentTime)
 }

@@ -4719,7 +4719,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
 		s.Equal(baseTime, tr.CurrentTime)
-		s.True(tr.TargetTime.IsZero())
+		s.True(tr.GetTargetTime().IsZero())
 		s.False(tr.IsValid())
 	})
 
@@ -4731,7 +4731,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
 		s.True(tr.IsValid())
-		s.Equal(baseTime.Add(time.Hour), tr.TargetTime, "the earliest future timer across all task lists wins")
+		s.Equal(baseTime.Add(time.Hour), tr.GetTargetTime(), "the earliest future timer across all task lists wins")
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -4742,7 +4742,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		)
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(3*time.Hour), tr.TargetTime,
+		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(),
 			"past timers and non-timer (transfer) tasks must not be skip targets")
 	})
 
@@ -4760,7 +4760,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		}
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
-		s.True(baseTime.Add(time.Hour).Equal(tr.TargetTime),
+		s.True(baseTime.Add(time.Hour).Equal(tr.GetTargetTime()),
 			"an earlier fast-forward caps the skip below the later timer")
 		s.True(tr.DisabledAfterFastForward, "reaching the fast-forward target disables time skipping")
 	})
@@ -4779,7 +4779,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		}
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(3*time.Hour), tr.TargetTime, "an already-reached fast-forward must not gate the skip")
+		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(), "an already-reached fast-forward must not gate the skip")
 		s.False(tr.DisabledAfterFastForward)
 	})
 }

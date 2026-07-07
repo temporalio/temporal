@@ -19,7 +19,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 	t.Run("New sets only the current time", func(t *testing.T) {
 		tr := NewTimeSkippingTransition(base)
 		require.Equal(t, base, tr.CurrentTime)
-		require.True(t, tr.TargetTime.IsZero())
+		require.True(t, tr.GetTargetTime().IsZero())
 		require.False(t, tr.DisabledAfterFastForward)
 		require.False(t, tr.IsValid(), "a transition with no target and no disable signal is invalid")
 	})
@@ -39,11 +39,11 @@ func TestTimeSkippingTransition(t *testing.T) {
 		tr := NewTimeSkippingTransition(base)
 		require.NotPanics(t, func() { tr.GateByFastForward(nil) })
 		tr.GateByFastForward(nil)
-		require.True(t, tr.TargetTime.IsZero())
+		require.True(t, tr.GetTargetTime().IsZero())
 		require.False(t, tr.DisabledAfterFastForward)
 
 		tr.GateByFastForward(&persistencespb.FastForwardInfo{}) // non-nil ff, nil target time
-		require.True(t, tr.TargetTime.IsZero())
+		require.True(t, tr.GetTargetTime().IsZero())
 		require.False(t, tr.DisabledAfterFastForward)
 		require.False(t, tr.IsValid())
 	})
@@ -55,25 +55,25 @@ func TestTimeSkippingTransition(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(time.Time{})          // zero candidate
 			tr.TrackEarliestFutureTime(base.Add(-time.Hour)) // past candidate
-			require.True(t, tr.TargetTime.IsZero())
+			require.True(t, tr.GetTargetTime().IsZero())
 		})
 
 		t.Run("keeps the earliest of several future candidates", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
-			require.Equal(t, base.Add(3*time.Hour), tr.TargetTime)
+			require.Equal(t, base.Add(3*time.Hour), tr.GetTargetTime())
 
 			tr.TrackEarliestFutureTime(base.Add(time.Hour)) // earlier wins
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+			require.Equal(t, base.Add(time.Hour), tr.GetTargetTime())
 
 			tr.TrackEarliestFutureTime(base.Add(2 * time.Hour)) // later is ignored
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+			require.Equal(t, base.Add(time.Hour), tr.GetTargetTime())
 		})
 
 		t.Run("accepts a candidate equal to the current time", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base)
-			require.Equal(t, base, tr.TargetTime)
+			require.Equal(t, base, tr.GetTargetTime())
 		})
 	})
 
@@ -85,7 +85,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 		t.Run("taken as the target and disables when nothing earlier exists", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
+			require.True(t, base.Add(time.Hour).Equal(tr.GetTargetTime()))
 			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
@@ -94,7 +94,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(time.Hour))
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(3 * time.Hour))})
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
+			require.Equal(t, base.Add(time.Hour), tr.GetTargetTime())
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
@@ -102,7 +102,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
+			require.True(t, base.Add(time.Hour).Equal(tr.GetTargetTime()))
 			require.True(t, tr.DisabledAfterFastForward)
 		})
 
@@ -112,21 +112,21 @@ func TestTimeSkippingTransition(t *testing.T) {
 				HasReached: true,
 				TargetTime: timestamppb.New(base.Add(time.Hour)),
 			})
-			require.True(t, tr.TargetTime.IsZero())
+			require.True(t, tr.GetTargetTime().IsZero())
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
 		t.Run("ignores a zero-valued target time", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(time.Time{})})
-			require.True(t, tr.TargetTime.IsZero())
+			require.True(t, tr.GetTargetTime().IsZero())
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
 		t.Run("target equal to current disables and sets the target", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base)})
-			require.True(t, base.Equal(tr.TargetTime))
+			require.True(t, base.Equal(tr.GetTargetTime()))
 			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
@@ -134,7 +134,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 		t.Run("past target disables as a bare signal", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(-time.Hour))})
-			require.True(t, tr.TargetTime.IsZero(), "a past target is not a future skip target")
+			require.True(t, tr.GetTargetTime().IsZero(), "a past target is not a future skip target")
 			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
@@ -144,7 +144,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 	// make it valid — every field is relative to the current time.
 	t.Run("no current time always invalid", func(t *testing.T) {
 		t.Run("a directly-set target is still invalid", func(t *testing.T) {
-			tr := &TimeSkippingTransition{TargetTime: base.Add(time.Hour)}
+			tr := &TimeSkippingTransition{targetTime: base.Add(time.Hour)}
 			require.False(t, tr.IsValid())
 		})
 
@@ -157,9 +157,49 @@ func TestTimeSkippingTransition(t *testing.T) {
 			tr := &TimeSkippingTransition{}
 			tr.TrackEarliestFutureTime(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, tr.TargetTime.IsZero())
+			require.True(t, tr.GetTargetTime().IsZero())
 			require.False(t, tr.DisabledAfterFastForward)
 			require.False(t, tr.IsValid())
+		})
+	})
+
+	// Invariant 5: GetSkippedDuration is the gap from current to target time, and is zero whenever
+	// there is nothing to skip — a nil receiver, no current time, or no target time.
+	t.Run("skipped duration", func(t *testing.T) {
+		t.Run("nil receiver is zero", func(t *testing.T) {
+			var nilTr *TimeSkippingTransition
+			require.Zero(t, nilTr.GetSkippedDuration())
+		})
+
+		t.Run("no current time is zero", func(t *testing.T) {
+			tr := &TimeSkippingTransition{targetTime: base.Add(time.Hour)}
+			require.Zero(t, tr.GetSkippedDuration())
+		})
+
+		t.Run("no target time is zero", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			require.Zero(t, tr.GetSkippedDuration())
+		})
+
+		t.Run("target after current is the gap", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(90 * time.Minute))
+			require.Equal(t, 90*time.Minute, tr.GetSkippedDuration())
+		})
+
+		t.Run("target equal to current is zero", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base)
+			require.Zero(t, tr.GetSkippedDuration())
+		})
+
+		t.Run("a past candidate leaves no target and is zero", func(t *testing.T) {
+			// TrackEarliestFutureTime rejects a past candidate, so the target stays unset and
+			// there is nothing to skip — the duration is zero, never negative.
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(-time.Hour))
+			require.True(t, tr.GetTargetTime().IsZero())
+			require.Zero(t, tr.GetSkippedDuration())
 		})
 	})
 }

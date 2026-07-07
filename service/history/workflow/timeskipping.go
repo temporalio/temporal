@@ -362,7 +362,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		}
 		// 3. state change
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
+			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
 		if err != nil {
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
