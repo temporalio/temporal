@@ -29,6 +29,6 @@ func TestRegistryBuildCatalogIndexesByName(t *testing.T) {
 
 func TestNewEventDefRegistersGlobally(t *testing.T) {
 	before := len(globalRegistry.definitions)
-	_ = NewEventDef("test_event_unique_name", WithField("f", FieldString))
+	_ = NewEventDef("test_event_unique_name")
 	require.Len(t, globalRegistry.definitions, before+1)
 }

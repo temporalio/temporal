@@ -76,7 +76,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, commonevents.ReplTaskSyncVersionedTransition, int32(e.Attempt()))
 	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())

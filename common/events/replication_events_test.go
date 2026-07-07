@@ -60,21 +60,22 @@ func TestReplicationLifecycleEncodeSent(t *testing.T) {
 
 func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 	p := ReplicationLifecyclePayload{
-		Phase:                ReplicationApplied,
-		TaskType:             ReplTaskSyncVersionedTransition,
-		Shard:                1,
-		NamespaceID:          "ns-id",
-		WorkflowID:           "wf-id",
-		RunID:                "run-id",
-		State:                "Running",
-		Status:               "Unspecified",
-		AppliedNextEventID:   10,
-		TransitionHistoryLen: 2,
-		LastEventID:          9,
-		Outcome:              "applied",
-		NewExecutionRunID:    "new-run",
-		SignalCount:          6,
-		UpdateCount:          2,
+		Phase:              ReplicationApplied,
+		TaskType:           ReplTaskSyncVersionedTransition,
+		Shard:              1,
+		NamespaceID:        "ns-id",
+		WorkflowID:         "wf-id",
+		RunID:              "run-id",
+		State:              "Running",
+		Status:             "Unspecified",
+		AppliedNextEventID: 10,
+		TransitionHistory:  []VersionedTransitionEntry{{FailoverVersion: 5, TransitionCount: 7}},
+		LastEventID:        9,
+		LastEventVersion:   5,
+		Outcome:            "applied",
+		NewExecutionRunID:  "new-run",
+		SignalCount:        6,
+		UpdateCount:        2,
 	}
 	enc := newCaptureEncoder()
 	p.Encode(enc)
@@ -90,8 +91,9 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 	require.Equal(t, "Running", enc.fields["state"])
 	require.Equal(t, "Unspecified", enc.fields["status"])
 	require.Equal(t, int64(10), enc.fields["applied_next_event_id"])
-	require.Equal(t, int64(2), enc.fields["transition_history_len"])
+	require.Equal(t, []VersionedTransitionEntry{{FailoverVersion: 5, TransitionCount: 7}}, enc.fields["transition_history"])
 	require.Equal(t, int64(9), enc.fields["last_event_id"])
+	require.Equal(t, int64(5), enc.fields["last_event_version"])
 	// sent-only fields must be absent.
 	_, ok = enc.fields["is_force_replication"]
 	require.False(t, ok)
@@ -108,38 +110,40 @@ func TestEmitReplicationLifecycleNilSafe(t *testing.T) {
 // phase, so callers must union the results across all phases to see the full field set.
 func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePayload {
 	return ReplicationLifecyclePayload{
-		Phase:                phase,
-		TaskType:             ReplTaskSyncVersionedTransition,
-		Shard:                1,
-		Namespace:            "ns",
-		NamespaceID:          "ns-id",
-		WorkflowID:           "wf-id",
-		RunID:                "run-id",
-		FailoverVersion:      5,
-		TransitionCount:      7,
-		ParentWorkflowID:     "p-wf",
-		ParentRunID:          "p-run",
-		ParentInitiatedID:    3,
-		Details:              map[string]any{"k": "v"},
-		NewRunID:             "new-run",
-		IsFirstSync:          true,
-		FirstEventID:         1,
-		NextEventID:          8,
-		Attempt:              2,
-		State:                "Running",
-		Status:               "Unspecified",
-		AppliedNextEventID:   10,
-		TransitionHistoryLen: 2,
-		LastEventID:          9,
-		Outcome:              "applied",
-		Error:                "boom",
-		NewExecutionRunID:    "ne-run",
-		ResetRunID:           "reset-run",
-		SignalCount:          6,
-		ActivityCount:        4,
-		UserTimerCount:       3,
-		ChildExecutionCount:  2,
-		UpdateCount:          1,
+		Phase:               phase,
+		TaskType:            ReplTaskSyncVersionedTransition,
+		Shard:               1,
+		Namespace:           "ns",
+		NamespaceID:         "ns-id",
+		WorkflowID:          "wf-id",
+		RunID:               "run-id",
+		FailoverVersion:     5,
+		TransitionCount:     7,
+		ParentWorkflowID:    "p-wf",
+		ParentRunID:         "p-run",
+		ParentInitiatedID:   3,
+		Details:             map[string]any{"k": "v"},
+		NewRunID:            "new-run",
+		IsFirstSync:         true,
+		FirstEventID:        1,
+		NextEventID:         8,
+		Attempt:             2,
+		EventVersionHistory: []VersionHistoryEntry{{EventID: 9, Version: 5}},
+		State:               "Running",
+		Status:              "Unspecified",
+		AppliedNextEventID:  10,
+		TransitionHistory:   []VersionedTransitionEntry{{FailoverVersion: 5, TransitionCount: 7}},
+		LastEventID:         9,
+		LastEventVersion:    5,
+		Outcome:             "applied",
+		Error:               "boom",
+		NewExecutionRunID:   "ne-run",
+		ResetRunID:          "reset-run",
+		SignalCount:         6,
+		ActivityCount:       4,
+		UserTimerCount:      3,
+		ChildExecutionCount: 2,
+		UpdateCount:         1,
 	}
 }
 
@@ -155,8 +159,9 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		"details",
 		"new_run_id", "is_first_sync", "first_event_id", "next_event_id",
 		"attempt",
+		"event_version_history",
 		"outcome", "error", "state", "status", "applied_next_event_id",
-		"transition_history_len", "last_event_id",
+		"transition_history", "last_event_id", "last_event_version",
 		"new_execution_run_id", "reset_run_id",
 		"signal_count", "activity_count", "user_timer_count", "child_execution_count", "update_count",
 	}

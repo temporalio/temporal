@@ -45,21 +45,38 @@ type ReplicationLifecyclePayload struct {
 	NextEventID  int64
 	// received-only
 	Attempt int32
+	// event_version_history is the (event_id, version) branch. It is emitted on executing (from the
+	// task) and applied (from the resulting mutable state); the version disambiguates which history
+	// branch the events are on.
+	EventVersionHistory []VersionHistoryEntry
 	// applied-only: post-apply mutable-state SUMMARY (no blob)
-	State                string
-	Status               string
-	AppliedNextEventID   int64
-	TransitionHistoryLen int32
-	LastEventID          int64
-	Outcome              string
-	Error                string
-	NewExecutionRunID    string
-	ResetRunID           string
-	SignalCount          int64
-	ActivityCount        int64
-	UserTimerCount       int64
-	ChildExecutionCount  int64
-	UpdateCount          int64
+	State               string
+	Status              string
+	AppliedNextEventID  int64
+	TransitionHistory   []VersionedTransitionEntry
+	LastEventID         int64
+	LastEventVersion    int64
+	Outcome             string
+	Error               string
+	NewExecutionRunID   string
+	ResetRunID          string
+	SignalCount         int64
+	ActivityCount       int64
+	UserTimerCount      int64
+	ChildExecutionCount int64
+	UpdateCount         int64
+}
+
+// VersionedTransitionEntry is one entry of a workflow's transition history.
+type VersionedTransitionEntry struct {
+	FailoverVersion int64 `json:"failover_version"`
+	TransitionCount int64 `json:"transition_count"`
+}
+
+// VersionHistoryEntry is one (event_id, version) point of an event version history branch.
+type VersionHistoryEntry struct {
+	EventID int64 `json:"event_id"`
+	Version int64 `json:"version"`
 }
 
 func (p ReplicationLifecyclePayload) Encode(enc Encoder) {
@@ -86,6 +103,9 @@ func (p ReplicationLifecyclePayload) Encode(enc Encoder) {
 	}
 	if len(p.Details) > 0 {
 		enc.Any("details", p.Details)
+	}
+	if len(p.EventVersionHistory) > 0 {
+		enc.Any("event_version_history", p.EventVersionHistory)
 	}
 	switch p.Phase {
 	case ReplicationSent:
@@ -122,8 +142,13 @@ func (p ReplicationLifecyclePayload) encodeApplied(enc Encoder) {
 	enc.String("state", p.State)
 	enc.String("status", p.Status)
 	enc.Int64("applied_next_event_id", p.AppliedNextEventID)
-	enc.Int64("transition_history_len", int64(p.TransitionHistoryLen))
+	if len(p.TransitionHistory) > 0 {
+		enc.Any("transition_history", p.TransitionHistory)
+	}
 	enc.Int64("last_event_id", p.LastEventID)
+	if p.LastEventVersion != 0 {
+		enc.Int64("last_event_version", p.LastEventVersion)
+	}
 	if p.NewExecutionRunID != "" {
 		enc.String("new_execution_run_id", p.NewExecutionRunID)
 	}

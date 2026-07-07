@@ -83,7 +83,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
 	}
 
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
@@ -214,82 +214,6 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 		lastItem.Version,
 		e.taskAttr.NewRunId,
 	)
-}
-
-// emitReplicationVerifyApplied emits a best-effort "applied" ReplicationLifecycle event for a
-// verify task. Outcome is "verified" when verification passed (no error) and "resend_needed" when
-// the task requested a state resend; any other error is reported with its message. ms may be nil
-// (e.g. the workflow was not found) in which case only identity fields are populated.
-func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
-	ms *persistencespb.WorkflowMutableState,
-	retErr error,
-) {
-	if !e.Config.EmitReplicationLifecycleEvents() {
-		return
-	}
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
-	if err != nil {
-		return
-	}
-	handler := shardContext.GetEventHandler()
-	if handler == nil {
-		return
-	}
-
-	outcome := "verified"
-	errStr := ""
-	if retErr != nil {
-		var syncStateErr *serviceerrors.SyncState
-		if errors.As(retErr, &syncStateErr) {
-			outcome = "resend_needed"
-		} else {
-			outcome = "error"
-			errStr = retErr.Error()
-		}
-	}
-
-	var nsName string
-	if name, nsErr := e.NamespaceCache.GetNamespaceName(namespace.ID(e.NamespaceID)); nsErr == nil {
-		nsName = name.String()
-	}
-
-	payload := commonevents.ReplicationLifecyclePayload{
-		Phase:       commonevents.ReplicationApplied,
-		TaskType:    commonevents.ReplTaskVerifyVersionedTransition,
-		Shard:       shardContext.GetShardID(),
-		Namespace:   nsName,
-		NamespaceID: e.NamespaceID,
-		WorkflowID:  e.WorkflowID,
-		RunID:       e.RunID,
-		Outcome:     outcome,
-		Error:       errStr,
-	}
-	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {
-		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
-		payload.TransitionCount = vt.GetTransitionCount()
-	}
-	if ms != nil {
-		info := ms.GetExecutionInfo()
-		state := ms.GetExecutionState()
-		payload.State = state.GetState().String()
-		payload.Status = state.GetStatus().String()
-		payload.TransitionHistoryLen = int32(len(info.GetTransitionHistory()))
-		if currentHistory, vhErr := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); vhErr == nil {
-			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
-				payload.LastEventID = lastItem.GetEventId()
-			}
-		}
-		payload.NewExecutionRunID = info.GetNewExecutionRunId()
-		payload.ResetRunID = info.GetResetRunId()
-		payload.SignalCount = info.GetSignalCount()
-		payload.ActivityCount = info.GetActivityCount()
-		payload.UserTimerCount = info.GetUserTimerCount()
-		payload.ChildExecutionCount = info.GetChildExecutionCount()
-		payload.UpdateCount = info.GetUpdateCount()
-		payload.PopulateParentInfo(info)
-	}
-
-	commonevents.EmitReplicationLifecycle(handler, payload)
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.Context) error {

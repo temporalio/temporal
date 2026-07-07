@@ -396,11 +396,30 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.State = state.GetState().String()
 		payload.Status = state.GetStatus().String()
 		payload.AppliedNextEventID = ms.GetNextEventID()
-		payload.TransitionHistoryLen = int32(len(info.GetTransitionHistory()))
+		if th := info.GetTransitionHistory(); len(th) > 0 {
+			entries := make([]commonevents.VersionedTransitionEntry, 0, len(th))
+			for _, vt := range th {
+				entries = append(entries, commonevents.VersionedTransitionEntry{
+					FailoverVersion: vt.GetNamespaceFailoverVersion(),
+					TransitionCount: vt.GetTransitionCount(),
+				})
+			}
+			payload.TransitionHistory = entries
+		}
 		if currentHistory, err := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); err == nil {
 			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
 				payload.LastEventID = lastItem.GetEventId()
+				payload.LastEventVersion = lastItem.GetVersion()
 			}
+			items := currentHistory.GetItems()
+			history := make([]commonevents.VersionHistoryEntry, 0, len(items))
+			for _, item := range items {
+				history = append(history, commonevents.VersionHistoryEntry{
+					EventID: item.GetEventId(),
+					Version: item.GetVersion(),
+				})
+			}
+			payload.EventVersionHistory = history
 		}
 		populateAppliedExecutionSummary(&payload, info)
 		payload.PopulateParentInfo(info)

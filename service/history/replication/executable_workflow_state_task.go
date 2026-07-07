@@ -83,7 +83,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.WorkflowKey, commonevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, commonevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
 	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
