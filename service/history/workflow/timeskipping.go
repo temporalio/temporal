@@ -437,3 +437,28 @@ func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkippi
 		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
 }
+
+func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
+	if ms.IsWorkflow() {
+		// CHASM-based executions only, and workflows use events
+		return
+	}
+	if !transition.IsValid() {
+		return
+	}
+	ms.applyTransitionToTimeSkippingInfo(transition)
+	// todo@timeskipping: delete time skipping timer or add regeneration for chasm
+}
+
+func (ms *MutableStateImpl) applyTransitionToTimeSkippingInfo(transition *chasm.TimeSkippingTransition) {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	tsi.AccumulatedSkippedDuration = durationpb.New(
+		tsi.GetAccumulatedSkippedDuration().AsDuration() + transition.GetSkippedDuration())
+
+	if transition.DisabledAfterFastForward {
+		tsi.Config.Enabled = false
+		tsi.FastForwardInfo.HasReached = true
+	}
+	// update flag
+	ms.timeSkippingInfoUpdated = true
+}
