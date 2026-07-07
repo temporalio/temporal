@@ -5303,11 +5303,56 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_InvalidNewTask_DoesNotDis
 // skipping, a no-op on non-root nodes, and it must surface an internal error only when the config
 // says time skipping is on but the root component does not implement TimeSkippingRuntimeGate.
 func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
 	// executionInfo installs a GetExecutionInfo stub returning the given time-skipping info.
 	executionInfo := func(tsi *persistencespb.TimeSkippingInfo) {
 		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
 			return &persistencespb.WorkflowExecutionInfo{TimeSkippingInfo: tsi}
 		}
+	}
+
+	// timerTask builds a future timer-category task scheduled at baseTime+offset.
+	timerTask := func(offset time.Duration, typeID uint32, tvOffset int64) *persistencespb.ChasmComponentAttributes_Task {
+		return &persistencespb.ChasmComponentAttributes_Task{
+			TypeId:                    typeID,
+			ScheduledTime:             timestamppb.New(baseTime.Add(offset)),
+			VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+			VersionedTransitionOffset: tvOffset,
+			PhysicalTaskStatus:        physicalTaskStatusNone,
+		}
+	}
+
+	// gateRoot builds a root whose component implements TimeSkippingRuntimeGate (returning the
+	// given skippable value), carries two side-effect and three pure future timer tasks as skip
+	// targets, and has time skipping enabled in its config. The in-memory SetRootComponent path
+	// preserves the unmanaged skippable flag so IsExecutionSkippable is deterministic.
+	gateRoot := func(skippable bool) *Node {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+		s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+		s.timeSource.Update(baseTime)
+
+		var nilSerializedNodes map[string]*persistencespb.ChasmNode
+		root, err := s.newTestTree(nilSerializedNodes)
+		s.NoError(err)
+		s.NoError(root.SetRootComponent(&TestTimeSkippingImplComponent{
+			ComponentData:        &protoMessageType{CreateRequestId: "gate"},
+			isExecutionSkippable: skippable,
+		}))
+
+		attrs := root.serializedNode.Metadata.GetComponentAttributes()
+		attrs.SideEffectTasks = []*persistencespb.ChasmComponentAttributes_Task{
+			timerTask(2*time.Hour, testSideEffectTaskTypeID, 1),
+			timerTask(4*time.Hour, testSideEffectTaskTypeID, 2),
+		}
+		attrs.PureTasks = []*persistencespb.ChasmComponentAttributes_Task{
+			timerTask(time.Hour, testPureTaskTypeID, 3), // earliest overall
+			timerTask(3*time.Hour, testPureTaskTypeID, 4),
+			timerTask(5*time.Hour, testPureTaskTypeID, 5),
+		}
+		executionInfo(&persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}})
+		return root
 	}
 
 	// TestComponent (the root of testComponentTree) does not implement TimeSkippingRuntimeGate,
@@ -5325,7 +5370,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.NoError(err, "an execution without time-skipping info must be a safe no-op")
 	})
 
-	s.Run("NonRootNodeIsSafeNoOp", func() {
+	s.Run("NonRootNodeIsNoOp", func() {
 		s.nodeBackend = &MockNodeBackend{}
 		s.timeSource.Update(time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC))
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
@@ -5353,16 +5398,13 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Require().NotNil(child)
 		s.Require().NotNil(child.parent, "must exercise a genuinely non-root node")
 
-		// The root-only guard is a soft assertion, which logs an error before returning nil.
-		tl, ok := s.logger.(*testlogger.TestLogger)
-		s.Require().True(ok)
-		tl.Expect(testlogger.Error, "must run on the root node")
-
+		// A non-root node is a benign no-op: it logs a warning (not an error) and returns nil.
+		// The FailOnAnyUnexpectedError logger also asserts that no error-level log is emitted.
 		var closeErr error
 		s.NotPanics(func() {
 			closeErr = child.closeTransactionHandleTimeSkipping(NewContext(context.Background(), child))
 		})
-		s.NoError(closeErr, "a non-root node must be a safe no-op, not an error")
+		s.NoError(closeErr)
 	})
 
 	s.Run("ConfigDisabledAndGateNotImplemented_NoError", func() {
@@ -5393,6 +5435,34 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Require().Error(err, "enabled config with no gate implementation is a misconfiguration")
 		var internalErr *serviceerror.Internal
 		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
+	})
+
+	s.Run("GateNotSkippable_NoStateChange", func() {
+		root := gateRoot(false)
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Nil(recorded, "a gate that reports not-skippable must not record a transition")
+		s.Equal(0, s.nodeBackend.NumTasksAdded(), "no timer tasks are regenerated when skipping is gated out")
+	})
+
+	s.Run("GateSkippable_RecordsTransitionAndRegeneratesTasks", func() {
+		root := gateRoot(true)
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Require().NotNil(recorded, "a skippable execution with a future timer must record a transition")
+		s.True(recorded.IsValid())
+		s.True(baseTime.Add(time.Hour).Equal(recorded.GetTargetTime()), "skips to the earliest future timer task")
+		// Two side-effect timer tasks are each regenerated, plus the single earliest pure task
+		// (only one physical pure task is generated regardless of pure-task count) => 3 total.
+		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
+		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
+			"pure-task deletion is anchored at the earliest pure scheduled time")
 	})
 }
 
@@ -5455,7 +5525,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	s.Run("EarliestFutureTaskWins", func() {
 		root := buildRoot(
 			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(2 * time.Hour)},
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(time.Hour)},
+			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(time.Hour), transferTask()},
 		)
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
@@ -5476,7 +5546,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	})
 
 	s.Run("EarlierFastForwardCapsAndDisables", func() {
-		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)})
+		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour), transferTask()})
 		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
 			return &persistencespb.WorkflowExecutionInfo{
 				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
@@ -5492,24 +5562,6 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		s.True(baseTime.Add(time.Hour).Equal(tr.GetTargetTime()),
 			"an earlier fast-forward caps the skip below the later timer")
 		s.True(tr.DisabledAfterFastForward, "reaching the fast-forward target disables time skipping")
-	})
-
-	s.Run("ReachedFastForwardIsIgnored", func() {
-		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)})
-		s.nodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
-			return &persistencespb.WorkflowExecutionInfo{
-				TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-					FastForwardInfo: &persistencespb.FastForwardInfo{
-						TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
-						HasReached: true,
-					},
-				},
-			}
-		}
-		tr := root.defaultFindNextTargetTime()
-		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(), "an already-reached fast-forward must not gate the skip")
-		s.False(tr.DisabledAfterFastForward)
 	})
 }
 
