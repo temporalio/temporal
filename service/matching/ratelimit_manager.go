@@ -380,7 +380,6 @@ func (r *rateLimitManager) GetFairnessWeightOverrides() fairnessWeightOverrides 
 	return r.perKeyOverrides
 }
 
-
 func (r *rateLimitManager) Stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
