@@ -91,9 +91,10 @@ type (
 		deploymentRegistrationCh chan struct{}
 		pollerScalingRateLimiter quotas.RateLimiter
 
-		taskTrackerLock sync.RWMutex
-		tasksAdded      map[priorityKey]*taskTracker
-		tasksDispatched map[priorityKey]*taskTracker
+		taskTrackerLock  sync.RWMutex
+		tasksAdded       map[priorityKey]*taskTracker
+		tasksDispatched  map[priorityKey]*taskTracker
+		rateLimitTracker *taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -159,6 +160,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:           taggedMetricsHandler,
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
+		rateLimitTracker:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
 	}
@@ -689,7 +691,7 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		}
 		c.taskTrackerLock.RUnlock()
 
-		rateLimitingActive := c.partitionMgr.rateLimitManager.IsRateLimitingActive()
+		rateLimitingActive := c.rateLimitTracker.rate() > 0
 		for _, s := range stats {
 			s.RateLimitingActive = rateLimitingActive
 		}
@@ -721,7 +723,11 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	}
 
 	if c.priMatcher != nil {
-		return c.priMatcher.Offer(ctx, task)
+		outcome, err := c.priMatcher.Offer(ctx, task)
+		if outcome == syncMatchRateLimited {
+			c.rateLimitTracker.inc(1)
+		}
+		return outcome, err
 	}
 
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)

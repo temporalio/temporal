@@ -227,40 +227,4 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 	s.Equal(enumspb.RATE_LIMIT_SOURCE_API, source)
 }
 
-func (s *RateLimitManagerSuite) TestIsRateLimitingActive() {
-	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewNoopCollection()), "test-ns",
-	)
-	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	defer rlm.Stop()
 
-	// No rate limit configured — should not be active.
-	s.False(rlm.IsRateLimitingActive())
-
-	// Set a whole-queue rate limit and consume a token to push ready time into the future.
-	rlm.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
-	rlm.UpdateSimpleRateLimitWithBurstForTesting(0)
-	now := rlm.timeSource.Now().UnixNano()
-	rlm.mu.Lock()
-	rlm.wholeQueueReady = rlm.wholeQueueReady.consume(rlm.wholeQueueLimit, now, 1)
-	rlm.mu.Unlock()
-
-	// Should now be active since ready time is in the future.
-	s.True(rlm.IsRateLimitingActive())
-}
-
-func (s *RateLimitManagerSuite) TestIsRateLimitingActive_PerKeyOnly() {
-	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewNoopCollection()), "test-ns",
-	)
-	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	defer rlm.Stop()
-
-	// Set only per-key rate limit — whole-queue should NOT be reported as active.
-	rlm.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
-	rlm.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
-
-	s.False(rlm.IsRateLimitingActive())
-}

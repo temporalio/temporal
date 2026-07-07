@@ -380,14 +380,7 @@ func (r *rateLimitManager) GetFairnessWeightOverrides() fairnessWeightOverrides 
 	return r.perKeyOverrides
 }
 
-// IsRateLimitingActive returns true when the rate limiter is blocking dispatches.
-// When true, adding more workers will not increase throughput.
-func (r *rateLimitManager) IsRateLimitingActive() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := r.timeSource.Now().UnixNano()
-	return r.wholeQueueReady.delay(now) > 0
-}
+
 
 func (r *rateLimitManager) Stop() {
 	r.mu.Lock()
