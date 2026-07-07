@@ -52,9 +52,9 @@ const (
 type rateLimitKind int
 
 const (
-	rateLimitNone         rateLimitKind = iota
-	rateLimitWholeQueue                         // whole-queue rate limit is blocking
-	rateLimitFairnessKey                        // per-fairness-key rate limit is blocking
+	rateLimitNone        rateLimitKind = iota
+	rateLimitWholeQueue                // whole-queue rate limit is blocking
+	rateLimitFairnessKey               // per-fairness-key rate limit is blocking
 )
 
 type taskForwarderType int32
