@@ -938,6 +938,94 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	mockSdk.AssertExpectations(s.T())
 }
 
+// TestProcessWorkflowsWithProactiveFetching_InitialArchetypeExecutions verifies
+// that config.initialArchetypeExecutions builds tasks with the field the batch
+// type's processor actually reads: executionInfo for workflow batch types,
+// archetypeExecution for activity batch types. Regression test for a panic
+// where a workflow-targeted ArchetypeExecutions batch always populated
+// archetypeExecution (leaving executionInfo nil), causing a nil pointer
+// dereference in the workflow-op processors (e.g. TerminationOperation).
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArchetypeExecutions() {
+	tests := []struct {
+		name              string
+		batchType         enumspb.BatchOperationType
+		wantExecutionInfo bool
+	}{
+		{
+			name:              "workflow batch type uses executionInfo",
+			batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			wantExecutionInfo: true,
+		},
+		{
+			name:              "activity batch type uses archetypeExecution",
+			batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			wantExecutionInfo: false,
+		},
+	}
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			archetypeExecutions := []*commonpb.Execution{
+				{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: "wf-1", RunId: "run-1"},
+			}
+
+			var gotExecutionInfo, gotArchetypeExecution bool
+			fakeWorker := func(
+				ctx context.Context,
+				taskCh chan task,
+				respCh chan taskResponse,
+				_ quotas.RequestRateLimiter,
+				_ sdkclient.Client,
+				_ workflowservice.WorkflowServiceClient,
+				_ metrics.Handler,
+				_ log.Logger,
+			) {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case t := <-taskCh:
+						if t.executionInfo == nil && t.archetypeExecution == nil {
+							continue
+						}
+						gotExecutionInfo = t.executionInfo != nil
+						gotArchetypeExecution = t.archetypeExecution != nil
+						select {
+						case respCh <- taskResponse{err: nil, page: t.page}:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}
+			}
+
+			a := &activities{}
+			config := batchProcessorConfig{
+				batchType:                  tt.batchType,
+				concurrency:                1,
+				initialArchetypeExecutions: archetypeExecutions,
+			}
+			limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+			env := s.NewTestActivityEnvironment()
+			runner := func(ctx context.Context) (HeartBeatDetails, error) {
+				return a.processWorkflowsWithProactiveFetching(
+					ctx, config, fakeWorker, limiter, nil, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+				)
+			}
+			env.RegisterActivity(runner)
+
+			encoded, err := env.ExecuteActivity(runner)
+			s.NoError(err)
+
+			var hbd HeartBeatDetails
+			s.NoError(encoded.Get(&hbd))
+			s.Equal(1, hbd.SuccessCount)
+			s.Equal(tt.wantExecutionInfo, gotExecutionInfo)
+			s.Equal(!tt.wantExecutionInfo, gotArchetypeExecution)
+		})
+	}
+}
+
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {
 	ctx := context.Background()
 

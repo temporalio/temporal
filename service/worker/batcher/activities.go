@@ -256,10 +256,30 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	// Initialize the first p from initial executions or fetch from query
 	var p *page
 	if len(config.initialArchetypeExecutions) > 0 {
-		p = &page{
-			archetypeExecutionInfo: config.initialArchetypeExecutions,
-			nextPageToken:          config.initialPageToken,
-			pageNumber:             hbd.CurrentPage,
+		if isActivityBatchType(config.batchType) {
+			p = &page{
+				archetypeExecutionInfo: config.initialArchetypeExecutions,
+				nextPageToken:          config.initialPageToken,
+				pageNumber:             hbd.CurrentPage,
+			}
+		} else {
+			// Workflow batch types process tasks via executionInfo, not
+			// archetypeExecutionInfo; convert the archetype executions
+			// (business_id/run_id) into WorkflowExecutionInfo.
+			executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialArchetypeExecutions))
+			for _, exec := range config.initialArchetypeExecutions {
+				executionInfos = append(executionInfos, &workflowpb.WorkflowExecutionInfo{
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: exec.GetBusinessId(),
+						RunId:      exec.GetRunId(),
+					},
+				})
+			}
+			p = &page{
+				executionInfos: executionInfos,
+				nextPageToken:  config.initialPageToken,
+				pageNumber:     hbd.CurrentPage,
+			}
 		}
 	} else if len(config.initialExecutions) > 0 {
 		// Use initial executions - convert WorkflowExecution to WorkflowExecutionInfo
