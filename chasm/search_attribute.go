@@ -9,6 +9,9 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
+// Make a copy of predefined search attributes for CHASM internal usage.
+var predefinedSearchAttributes = sadefs.Predefined()
+
 // CHASM Search Attribute User Guide:
 //
 // This contains CHASM search attribute field constants. These predefined fields correspond to the exact column name in Visibility storage.

@@ -1120,6 +1120,10 @@ func (ms *MutableStateImpl) GetExecutionState() *persistencespb.WorkflowExecutio
 	return ms.executionState
 }
 
+func (ms *MutableStateImpl) ExecutionStateUpdated() bool {
+	return ms.stateInDB != ms.executionState.GetState()
+}
+
 func (ms *MutableStateImpl) FlushBufferedEvents() {
 	if ms.HasStartedWorkflowTask() {
 		return
