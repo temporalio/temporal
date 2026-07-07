@@ -35,6 +35,19 @@ services:
       POSTGRES_PASSWORD: temporal
     networks:
       - temporal-dev-network
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: temporal-dev-mssql
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Temporal123!"
+      # Developer edition includes Full-Text Search, which the
+      # mssql visibility schema requires.
+      MSSQL_PID: Developer
+    networks:
+      - temporal-dev-network
   elasticsearch:
     image: elasticsearch:7.10.1
     container_name: temporal-dev-elasticsearch

@@ -142,6 +142,9 @@ COVERPKG_FLAG 		    = -coverpkg=./...
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
+# SQL Server (matches develop/docker-compose MSSQL_SA_PASSWORD)
+MSSQL_USER ?= sa
+MSSQL_PASSWORD ?= Temporal123!
 
 # Only prints output if the exit code is non-zero
 define silent_exec
@@ -614,6 +617,19 @@ install-schema-postgresql12: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
+
+install-schema-mssql: install-schema-mssql2019
+
+install-schema-mssql2019: temporal-sql-tool
+	@printf $(COLOR) "Install SQL Server schema..."
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(TEMPORAL_DB) update-schema -d ./schema/mssql/v2019/temporal/versioned
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(MSSQL_USER) --pw $(MSSQL_PASSWORD) -p 1433 --pl mssql2019 --db $(VISIBILITY_DB) update-schema -d ./schema/mssql/v2019/visibility/versioned
 
 install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
