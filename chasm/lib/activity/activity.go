@@ -226,9 +226,8 @@ func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef ch
 
 	token := tasktoken.NewStandaloneActivityTaskToken(
 		key.NamespaceID,
-		key.BusinessID, // workflowID — for standalone activities, BusinessID is the ActivityId
+		key.BusinessID, // activityID
 		key.RunID,
-		key.BusinessID, // activityId
 		a.GetActivityType().GetName(),
 		attempt.GetCount(),
 		attempt.GetStartedComponentRef(),

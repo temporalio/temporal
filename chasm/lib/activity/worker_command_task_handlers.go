@@ -22,7 +22,11 @@ import (
 // time out if the worker doesn't respond.
 type cancelCommandDispatchTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*activitypb.CancelCommandDispatchTask]
-	opts cancelCommandDispatchTaskHandlerOptions
+	matchingClient    resource.MatchingClient
+	namespaceRegistry namespace.Registry
+	config            *configs.Config
+	metricsHandler    metrics.Handler
+	logger            log.Logger
 }
 
 type cancelCommandDispatchTaskHandlerOptions struct {
@@ -36,7 +40,13 @@ type cancelCommandDispatchTaskHandlerOptions struct {
 }
 
 func newCancelCommandDispatchTaskHandler(opts cancelCommandDispatchTaskHandlerOptions) *cancelCommandDispatchTaskHandler {
-	return &cancelCommandDispatchTaskHandler{opts: opts}
+	return &cancelCommandDispatchTaskHandler{
+		matchingClient:    opts.MatchingClient,
+		namespaceRegistry: opts.NamespaceRegistry,
+		config:            opts.Config,
+		metricsHandler:    opts.MetricsHandler,
+		logger:            opts.Logger,
+	}
 }
 
 func (h *cancelCommandDispatchTaskHandler) Validate(
@@ -72,7 +82,7 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		return err
 	}
 
-	nsEntry, err := h.opts.NamespaceRegistry.GetNamespaceByID(namespace.ID(activityRef.NamespaceID))
+	nsEntry, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(activityRef.NamespaceID))
 	if err != nil {
 		return err
 	}
@@ -92,10 +102,10 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 	}
 
 	dispatcher := workercommands.NewDispatcher(
-		h.opts.MatchingClient,
-		h.opts.Config,
-		h.opts.MetricsHandler,
-		h.opts.Logger,
+		h.matchingClient,
+		h.config,
+		h.metricsHandler,
+		h.logger,
 	)
 
 	// TODO: CHASM's SideEffectTaskHandler interface doesn't expose an attempt count. The
