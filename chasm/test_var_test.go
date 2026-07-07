@@ -47,7 +47,5 @@ var (
 	testPureTaskTypeID                  = GenerateTypeID(testPureTaskFQN)
 
 	testSingletonReplaceSideEffectTaskTypeID = GenerateTypeID(testSingletonReplaceSideEffectTaskFQN)
-	testSingletonIgnoreSideEffectTaskTypeID  = GenerateTypeID(testSingletonIgnoreSideEffectTaskFQN)
 	testSingletonReplacePureTaskTypeID       = GenerateTypeID(testSingletonReplacePureTaskFQN)
-	testSingletonIgnorePureTaskTypeID        = GenerateTypeID(testSingletonIgnorePureTaskFQN)
 )
