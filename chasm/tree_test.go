@@ -72,6 +72,7 @@ func (s *nodeSuite) SetupTest() {
 	s.NoError(err)
 
 	s.timeSource = clock.NewEventTimeSource()
+	s.nodeBackend.HandleNow = s.timeSource.Now
 	s.nodePathEncoder = &testNodePathEncoder{}
 }
 
@@ -223,7 +224,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 }
 
 func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.Equal(WorkflowArchetypeID, rootNode.ArchetypeID())
 	rootComponent := &TestComponent{
 		MSPointer: NewMSPointer(s.nodeBackend),
@@ -3286,7 +3287,6 @@ func (e *testNodePathEncoder) Decode(
 func (s *nodeSuite) nodeBase() *nodeBase {
 	return &nodeBase{
 		registry:    s.registry,
-		timeSource:  s.timeSource,
 		backend:     s.nodeBackend,
 		pathEncoder: s.nodePathEncoder,
 
@@ -4181,9 +4181,9 @@ func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
+		return NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
-	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	return NewTreeFromDB(serializedNodes, s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 }
 
 func (s *nodeSuite) emptyDataBlob() *commonpb.DataBlob {

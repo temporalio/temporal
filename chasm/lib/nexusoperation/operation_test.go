@@ -361,7 +361,7 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 			return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
 		},
 	}
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 
 	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})
