@@ -552,7 +552,7 @@ func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
 }
 
-// onRateLimited records a rate-limit event. Passed as a callback to matcherData.
+// onRateLimited records a rate-limit event.
 func (c *physicalTaskQueueManagerImpl) onRateLimited() {
 	c.taskTrackerLock.Lock()
 	c.tasksRateLimited.inc(1)
