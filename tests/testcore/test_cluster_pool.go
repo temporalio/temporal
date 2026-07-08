@@ -267,8 +267,9 @@ func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamiccon
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// Keep the worker service off unless explicitly enabled via WithWorkerService.
-	opts := []TestClusterOption{withWorkerService(false)}
+	// EXPERIMENT: enable the worker service by default for all pooled clusters to
+	// measure the system worker's memory impact via the CI mem monitor.
+	opts := []TestClusterOption{withWorkerService(true)}
 	if shared {
 		opts = append(opts, WithSharedCluster())
 	}
