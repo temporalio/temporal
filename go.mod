@@ -64,7 +64,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.63.0
+	go.temporal.io/api v1.63.2
 	go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0
@@ -233,5 +233,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace go.temporal.io/api => github.com/temporalio/api-go v0.0.0-20260707222132-402c1422f165
