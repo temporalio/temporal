@@ -2,8 +2,8 @@ package nsrepl
 
 import (
 	"context"
-	"errors"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
@@ -28,12 +28,17 @@ func newHandler(logger log.Logger) *handler {
 // namespace and waits for the local apply (ApplyLocalTask) to complete. Peer
 // fan-out continues asynchronously after this returns.
 //
+// Each mutation gets its own unique-per-invocation BusinessID
+// (`namespace_id:mutation_uuid`), so concurrent calls to the same namespace
+// each create their own component. Serialization happens at the metadata
+// store's version-CAS (matching legacy behavior); a CAS conflict surfaces to
+// the caller as FailedPrecondition, and the caller re-issues UpdateNamespace
+// with fresh state.
+//
 // Returns:
 //   - On local-apply success: the new notification_version.
 //   - On local-apply failure (CAS conflict, store unavailable, etc.): a gRPC
 //     error mapped from the underlying cause.
-//   - If a component is already running for this namespace
-//     (BusinessIDConflictPolicyFail): AlreadyExists.
 func (h *handler) TriggerNamespaceMutation(
 	ctx context.Context,
 	req *nsreplpb.TriggerNamespaceMutationRequest,
@@ -51,16 +56,19 @@ func (h *handler) TriggerNamespaceMutation(
 		return nil, serviceerror.NewInvalidArgument("mutation.namespace_detail is required")
 	}
 
+	// BusinessID is unique per mutation invocation. Every UpdateNamespace call
+	// results in its own component regardless of any prior in-flight mutation
+	// for the same namespace. This avoids the "fail-fast if a component is
+	// already running" behavior that would deviate from legacy semantics.
+	// Concurrent same-namespace mutations serialize through the metadata store
+	// CAS in ApplyLocalTask, matching how legacy UpdateNamespace serializes.
+	businessID := namespaceID + ":" + uuid.NewString()
 	key := chasm.ExecutionKey{
 		NamespaceID: primitives.SystemNamespaceID,
-		BusinessID:  namespaceID,
+		BusinessID:  businessID,
 	}
 
-	// Start the component. BusinessIDConflictPolicyFail means concurrent calls
-	// to the same namespace surface as AlreadyExists; AllowDuplicate means we
-	// can create a new component after the previous one for this namespace
-	// completed (ephemeral, short retention).
-	_, startErr := chasm.StartExecution[*NamespaceMutationComponent, *nsreplpb.NamespaceMutation](
+	if _, startErr := chasm.StartExecution[*NamespaceMutationComponent, *nsreplpb.NamespaceMutation](
 		ctx,
 		key,
 		func(mctx chasm.MutableContext, m *nsreplpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
@@ -79,18 +87,7 @@ func (h *handler) TriggerNamespaceMutation(
 			return c, nil
 		},
 		req.GetMutation(),
-		chasm.WithBusinessIDPolicy(
-			chasm.BusinessIDReusePolicyAllowDuplicate,
-			chasm.BusinessIDConflictPolicyFail,
-		),
-	)
-	if startErr != nil {
-		if alreadyStarted, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](startErr); ok {
-			return nil, serviceerror.NewAlreadyExistsf(
-				"namespace mutation already in flight for namespace %q (run_id=%s)",
-				namespaceID, alreadyStarted.CurrentRunID,
-			)
-		}
+	); startErr != nil {
 		return nil, startErr
 	}
 

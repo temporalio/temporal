@@ -72,8 +72,13 @@ func (h *applyLocalTaskHandler) Validate(
 	return true, nil
 }
 
-// Execute writes to the local metadata store with version-CAS, then transitions
-// the component to COMMITTED (and schedules peer fan-out) or FAILED.
+// Execute writes to the local metadata store with strict version-CAS, then
+// transitions the component to COMMITTED (and schedules peer fan-out) or
+// FAILED. CAS conflicts are treated as terminal — the caller is expected to
+// re-issue the mutation with fresh state (matching legacy behavior). Retrying
+// internally with the same mutation payload but a refreshed NotificationVersion
+// is unsafe for general UpdateNamespace, because a loser could overwrite a
+// winner's fields on unrelated attributes.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -109,8 +114,9 @@ func (h *applyLocalTaskHandler) Execute(
 		return fmt.Errorf("failed to read chasm component details: %w", err)
 	}
 
-	// Apply to the local metadata store. CAS conflict, validation, and store-unavailable
-	// errors are all surfaced here; CAS conflict is treated as terminal (true conflict).
+	// Apply to the local metadata store. Any error (CAS conflict, validation,
+	// store unavailable) is surfaced as a terminal component failure; the caller
+	// retries by re-issuing UpdateNamespace with fresh state.
 	switch loaded.Operation {
 	case nsreplpb.NAMESPACE_OPERATION_CREATE:
 		if _, applyErr := h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
@@ -131,15 +137,15 @@ func (h *applyLocalTaskHandler) Execute(
 		return h.recordLocalFailure(ctx, ref, fmt.Errorf("unsupported namespace operation: %v", loaded.Operation))
 	}
 
-	// Read back the post-write notification_version from the metadata store. The
-	// CAS write itself doesn't return the new version (Create returns ID; Update
-	// returns only error), so we query after to get the truth. Used as the
-	// component's NewVersion and surfaced in the gRPC response.
+	// Read back the post-write notification_version. The CAS write doesn't return
+	// the new version (Create returns ID; Update returns only error), so we query
+	// after to get the truth. Used as the component's NewVersion in the gRPC
+	// response.
 	meta, metaErr := h.metadataManager.GetMetadata(ctx)
 	if metaErr != nil {
-		// We've already committed locally; failing to read back the version is a
-		// rare degenerate case. Record local failure so the caller sees the error
-		// rather than getting a misleadingly-wrong version.
+		// Rare degenerate case: we committed locally but can't read back the new
+		// version. Treat as terminal so the caller sees the error rather than a
+		// misleading zero version.
 		return h.recordLocalFailure(ctx, ref, fmt.Errorf("read post-write notification_version: %w", metaErr))
 	}
 	newVersion := meta.NotificationVersion
