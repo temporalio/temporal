@@ -112,6 +112,7 @@ func ThrottleRetryContextWithReturn[T any](
 	isRetryable IsRetryable,
 ) (T, error) {
 	var zero T
+	var result T
 	var err error
 	var next time.Duration
 
@@ -125,7 +126,7 @@ func ThrottleRetryContextWithReturn[T any](
 	r := NewRetrier(policy, timeSrc)
 	t := NewRetrier(throttleRetryPolicy, timeSrc)
 	for ctx.Err() == nil {
-		result, err := fn(ctx)
+		result, err = fn(ctx)
 		if err == nil {
 			return result, nil
 		}
