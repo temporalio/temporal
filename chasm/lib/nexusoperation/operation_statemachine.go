@@ -190,8 +190,9 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 
 		o.emitOnSucceededMetrics(ctx, closeTime)
-		// Terminal state - no tasks to emit.
-		return nil
+
+		// Terminal state: schedule any attached completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 
@@ -218,7 +219,12 @@ var TransitionFailed = chasm.NewTransition(
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated failures.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
 		o.emitOnFailedMetrics(ctx, closeTime)
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
+		if err := o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt); err != nil {
+			return err
+		}
+
+		// Terminal state: schedule any attached completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 
@@ -245,7 +251,12 @@ var TransitionCanceled = chasm.NewTransition(
 		o.emitOnCanceledMetrics(ctx, closeTime)
 		// Attempts only execute in SCHEDULED, so that status identifies attempt-originated cancels.
 		fromAttempt := o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt)
+		if err := o.resolveUnsuccessfully(ctx, event.Failure, closeTime, fromAttempt); err != nil {
+			return err
+		}
+
+		// Terminal state: schedule any attached completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 
@@ -276,7 +287,12 @@ var TransitionTerminated = chasm.NewTransition(
 			},
 		}
 		o.emitOnTerminatedMetrics(ctx, closeTime)
-		return o.resolveUnsuccessfully(ctx, failure, closeTime, false)
+		if err := o.resolveUnsuccessfully(ctx, failure, closeTime, false); err != nil {
+			return err
+		}
+
+		// Terminal state: schedule any attached completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 
@@ -298,6 +314,11 @@ var TransitionTimedOut = chasm.NewTransition(
 		closeTime := ctx.Now(o)
 		timeoutType := event.Failure.GetTimeoutFailureInfo().GetTimeoutType().String()
 		o.emitOnTimedOutMetrics(ctx, closeTime, timeoutType)
-		return o.resolveUnsuccessfully(ctx, event.Failure, closeTime, event.FromAttempt)
+		if err := o.resolveUnsuccessfully(ctx, event.Failure, closeTime, event.FromAttempt); err != nil {
+			return err
+		}
+
+		// Terminal state: schedule any attached completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
