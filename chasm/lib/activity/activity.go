@@ -897,6 +897,8 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 		if err := TransitionUnpausedWhilePauseRequested.Apply(a, ctx, event); err != nil {
 			return nil, err
 		}
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		a.ResetKeepPaused = false
 	default:
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-unpausable state %v", a.GetStatus())
 	}
@@ -911,6 +913,8 @@ func (a *Activity) isPaused() bool {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		return a.GetResetKeepPaused()
 	default:
 		return false
 	}
