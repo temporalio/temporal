@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.15",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalPriorityKey and TemporalFairnessKey builtin search attributes",
+  "SchemaUpdateCqlFiles": [
+    "add_priority_and_fairness_key_search_attributes.sql"
+  ]
+}
