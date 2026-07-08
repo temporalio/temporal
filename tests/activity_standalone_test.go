@@ -12184,6 +12184,58 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
+	// ResetActivityExecution with keep_paused=true can arrive while a worker still owns
+	// the current attempt. The reset itself must remain deferred until that worker
+	// reports back, but a later unpause should clear the request to keep the reset
+	// attempt paused.
+	t.Run("UnpauseClearsKeepPausedButKeepsDeferredReset", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		startResp, pollResp1, taskQueue := startAndPollActivity(ctx, t, activityID, &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 1.0,
+		})
+		require.EqualValues(t, 1, pollResp1.Attempt)
+
+		pauseActivity(ctx, t, activityID, startResp.GetRunId())
+		waitForState(ctx, t, activityID, startResp.GetRunId(), enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED)
+
+		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			KeepPaused: true,
+		})
+		require.NoError(t, err)
+
+		unpauseActivity(ctx, t, activityID, startResp.GetRunId())
+
+		heartbeatResp, err := env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp1.TaskToken,
+		})
+		require.NoError(t, err)
+		require.True(t, heartbeatResp.GetActivityReset(), "reset should remain pending after unpause")
+		require.False(t, heartbeatResp.GetActivityPaused(), "unpause should clear the pending keep-paused reset intent")
+
+		failAttemptRetryably(ctx, t, pollResp1.TaskToken, 0)
+
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err, "activity should dispatch after the worker failure applies the pending reset")
+		require.Equal(t, activityID, pollResp2.GetActivityId())
+		require.EqualValues(t, 1, pollResp2.Attempt, "attempt should be reset to 1 after deferred reset")
+
+		completeAttempt(ctx, t, pollResp2.TaskToken)
+	})
+
 	// startAttemptWithTimeouts starts a SAA with the given per-attempt timeouts and retry policy and
 	// polls it to STARTED, returning the start response, the in-flight task token, and the task queue.
 	startAttemptWithTimeouts := func(ctx context.Context, t *testing.T, activityID string, startToClose, heartbeat time.Duration) (
