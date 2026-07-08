@@ -2012,6 +2012,14 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	s.Equal("v1", out)
 }
 
+// TestChildWorkflowExplicitPinnedOverrideTakesPrecedence verifies that an
+// explicit pinned override on StartChildWorkflowExecution wins over the parent's
+// inherited pinned version.
+// Flow:
+// 1. Start a parent pinned on v1.
+// 2. Move current routing to v2.
+// 3. Parent starts a child with an explicit pinned override to child v2.
+// 4. Assert the child starts on v2 and records that override.
 func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedence() {
 	env := s.setupEnv()
 
@@ -2091,6 +2099,14 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 	s.verifyWorkflowVersioning(env, tvChildV2, vbPinned, tvChildV2.Deployment(), childOverride, nil)
 }
 
+// TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrecedence verifies that an
+// explicit AutoUpgrade override on StartChildWorkflowExecution wins over parent
+// inheritance.
+// Flow:
+// 1. Start a parent pinned on v1.
+// 2. Move current routing to v2.
+// 3. Parent starts a child with an explicit AutoUpgrade override.
+// 4. Assert the child follows current-version routing instead of inheriting v1.
 func (s *Versioning3Suite) TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrecedence() {
 	env := s.setupEnv()
 
@@ -2171,6 +2187,13 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrec
 	s.verifyWorkflowVersioning(env, tvChildV2, vbUnpinned, tvChildV2.Deployment(), childOverride, nil)
 }
 
+// TestChildWorkflowExplicitOneTimeOverrideRoutesToTargetAndClears verifies the
+// child-start path for one-time overrides.
+// Flow:
+// 1. Parent starts on v1.
+// 2. Parent starts a child with a one-time override to child v2.
+// 3. Assert the child's first WFT routes to v2 while the override is pending.
+// 4. Complete that WFT on v2 and assert the one-time override is cleared.
 func (s *Versioning3Suite) TestChildWorkflowExplicitOneTimeOverrideRoutesToTargetAndClears() {
 	env := s.setupEnv()
 
@@ -2233,6 +2256,13 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitOneTimeOverrideRoutesToTarge
 	s.verifyWorkflowVersioning(env, tvChildV2, vbPinned, tvChildV2.Deployment(), nil, nil)
 }
 
+// TestChildWorkflowInvalidPinnedOverrideRecordsFailedEvent verifies that a
+// structurally valid child override with an unusable target fails child start.
+// Flow:
+//  1. Parent starts a child with a pinned override to an unregistered version.
+//  2. Assert no child execution is created.
+//  3. Assert the parent receives StartChildWorkflowExecutionFailed with
+//     InvalidVersioningOverride.
 func (s *Versioning3Suite) TestChildWorkflowInvalidPinnedOverrideRecordsFailedEvent() {
 	env := s.setupEnv()
 
@@ -2302,6 +2332,13 @@ func (s *Versioning3Suite) TestChildWorkflowInvalidPinnedOverrideRecordsFailedEv
 	s.ErrorAs(err, &notFound)
 }
 
+// TestChildWorkflowMalformedPinnedOverrideFailsWorkflowTask verifies that a
+// malformed child override rejects the parent WFT completion.
+// Flow:
+//  1. Parent responds to a WFT with a child-start command containing an invalid
+//     pinned override shape.
+//  2. Assert RespondWorkflowTaskCompleted fails with InvalidArgument.
+//  3. Assert no child-workflow initiated event is written.
 func (s *Versioning3Suite) TestChildWorkflowMalformedPinnedOverrideFailsWorkflowTask() {
 	env := s.setupEnv()
 
