@@ -94,10 +94,6 @@ message ActivityState {
   // Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
   // has a retry policy, retry attempts will not have start delay applied.
   google.protobuf.Duration start_delay = 13;
-
-  // Set to true after the cancel command has been successfully dispatched to the worker.
-  // Used by standby clusters to determine whether the dispatch task can be safely discarded.
-  bool cancel_command_dispatched = 14;
 }
 
 message ActivityCancelState {

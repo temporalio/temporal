@@ -55,10 +55,6 @@ func (h *cancelCommandDispatchTaskHandler) Validate(
 	_ chasm.TaskAttributes,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
-	// Invalid if the cancel command was already dispatched.
-	if activity.GetCancelCommandDispatched() {
-		return false, nil
-	}
 	// Valid if the activity is in a state where it has been requested to cancel or terminated
 	// (meaning it was running on a worker when the cancel/terminate was issued).
 	return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
@@ -111,23 +107,5 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 	// TODO: CHASM's SideEffectTaskHandler interface doesn't expose an attempt count. The
 	// dispatcher's max attempts check is effectively bypassed here. We need to either expose
 	// attempt count in the CHASM task interface or handle retry limiting differently.
-	if err := dispatcher.Execute(ctx, task, 1, nsEntry.Name().String()); err != nil {
-		return err
-	}
-
-	// Record that the cancel command was dispatched. This state is replicated to standby
-	// clusters so they can discard the task.
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		activityRef,
-		(*Activity).recordCancelCommandDispatched,
-		nil,
-	)
-	return err
-}
-
-// recordCancelCommandDispatched marks that the cancel command has been dispatched.
-func (a *Activity) recordCancelCommandDispatched(_ chasm.MutableContext, _ any) (any, error) {
-	a.CancelCommandDispatched = true
-	return nil, nil
+	return dispatcher.Execute(ctx, task, 1, nsEntry.Name().String())
 }

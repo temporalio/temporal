@@ -185,12 +185,9 @@ type ActivityState struct {
 	TerminateState *ActivityTerminateState `protobuf:"bytes,12,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
 	// Amount of time to wait before dispatching the activity task to the task queue for the first time. If the activity
 	// has a retry policy, retry attempts will not have start delay applied.
-	StartDelay *durationpb.Duration `protobuf:"bytes,13,opt,name=start_delay,json=startDelay,proto3" json:"start_delay,omitempty"`
-	// Set to true after the cancel command has been successfully dispatched to the worker.
-	// Used by standby clusters to determine whether the dispatch task can be safely discarded.
-	CancelCommandDispatched bool `protobuf:"varint,14,opt,name=cancel_command_dispatched,json=cancelCommandDispatched,proto3" json:"cancel_command_dispatched,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	StartDelay    *durationpb.Duration `protobuf:"bytes,13,opt,name=start_delay,json=startDelay,proto3" json:"start_delay,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityState) Reset() {
@@ -312,13 +309,6 @@ func (x *ActivityState) GetStartDelay() *durationpb.Duration {
 		return x.StartDelay
 	}
 	return nil
-}
-
-func (x *ActivityState) GetCancelCommandDispatched() bool {
-	if x != nil {
-		return x.CancelCommandDispatched
-	}
-	return false
 }
 
 type ActivityCancelState struct {
@@ -964,7 +954,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xd3\b\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\x97\b\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -981,8 +971,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\fcancel_state\x18\v \x01(\v2@.temporal.server.chasm.lib.activity.proto.v1.ActivityCancelStateR\vcancelState\x12l\n" +
 	"\x0fterminate_state\x18\f \x01(\v2C.temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateStateR\x0eterminateState\x12:\n" +
 	"\vstart_delay\x18\r \x01(\v2\x19.google.protobuf.DurationR\n" +
-	"startDelay\x12:\n" +
-	"\x19cancel_command_dispatched\x18\x0e \x01(\bR\x17cancelCommandDispatched\"\xa7\x01\n" +
+	"startDelay\"\xa7\x01\n" +
 	"\x13ActivityCancelState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12=\n" +
