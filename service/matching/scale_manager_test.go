@@ -40,6 +40,9 @@ type ScaleManagerSuite struct {
 
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
+
+	// newTarget counts "new target" logs, which are also used for test synchronization
+	newTarget *testlogger.Expectation
 }
 
 func TestScaleManagerSuite(t *testing.T) {
@@ -80,7 +83,7 @@ func (s *ScaleManagerSuite) TearDownTest() {
 // startManager builds and starts the scaleManager. Call this after configuring
 // EXPECTs and tweaking s.settings. Pass initial=nil to start with no prior state.
 func (s *ScaleManagerSuite) startManager(writePartitions int, initial *persistencespb.PartitionScaleState) {
-	s.startManagerWithLogger(log.NewTestLogger(), writePartitions, initial)
+	s.startManagerWithLogger(testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly), writePartitions, initial)
 }
 
 func (s *ScaleManagerSuite) startManagerWithLogger(
@@ -88,6 +91,9 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 	writePartitions int,
 	initial *persistencespb.PartitionScaleState,
 ) {
+	if tl, ok := logger.(*testlogger.TestLogger); ok {
+		s.newTarget = tl.Expect(testlogger.Info, "new target")
+	}
 	s.sm = newScaleManager(
 		context.Background(),
 		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
@@ -112,6 +118,14 @@ func (s *ScaleManagerSuite) fireBackgroundTimer() {
 		"worker never registered a periodic timer")
 	// BackgroundInterval has up to 5% jitter; advance comfortably past it.
 	s.timeSource.Advance(s.settings.BackgroundInterval*2 + time.Millisecond)
+}
+
+// awaitDecisionApplied blocks until the worker has fully applied n decisions.
+// This uses the "new target" log that's emitted at the end of callScaler, so we know that
+// an update has been fully applied.
+func (s *ScaleManagerSuite) awaitDecisionApplied(n int64) {
+	s.T().Helper()
+	waitLogMatches(s, s.newTarget, n, "decision not fully applied before clock advance")
 }
 
 // waitRecv blocks until ch yields a value, failing the test on timeout.
@@ -334,6 +348,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 	s.Equal(0, in1.CurrentTarget)
 	s.Nil(in1.PrivateState)
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
@@ -648,6 +663,7 @@ func (s *ScaleManagerSuite) TestCooldown() {
 
 	// Advance fake time past cooldown. Trigger another wakeup; the scaler
 	// should now be called with the accumulated 8 tasks.
+	s.awaitDecisionApplied(1) // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond)
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second decision never delivered")
@@ -688,6 +704,7 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 	s.Nil(in1.PrivateState, "first call should have no private state")
 	waitRecv(s, dbWrites, "first db write missing")
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second call missing")
