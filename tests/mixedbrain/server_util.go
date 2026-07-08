@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -22,12 +23,13 @@ import (
 )
 
 type serverProcess struct {
-	name    string
-	cmd     *exec.Cmd
-	cancel  context.CancelFunc
-	logFile *os.File
-	logPath string
-	done    chan error
+	name     string
+	cmd      *exec.Cmd
+	cancel   context.CancelFunc
+	logFile  *os.File
+	logPath  string
+	done     chan error
+	stopOnce sync.Once
 }
 
 func startServerProcess(t *testing.T, name, binary, configDir, logPath string) *serverProcess {
@@ -65,10 +67,13 @@ func startServerProcess(t *testing.T, name, binary, configDir, logPath string) *
 	}
 }
 
+// stop is idempotent: it may be called explicitly and again via t.Cleanup.
 func (p *serverProcess) stop() {
-	p.cancel()
-	<-p.done
-	_ = p.logFile.Close()
+	p.stopOnce.Do(func() {
+		p.cancel()
+		<-p.done
+		_ = p.logFile.Close()
+	})
 }
 
 func (p *serverProcess) requireAlive(t *testing.T) {
@@ -81,14 +86,14 @@ func (p *serverProcess) requireAlive(t *testing.T) {
 	}
 }
 
-func registerDefaultNamespace(t *testing.T, conn *grpc.ClientConn) {
+func registerNamespace(t *testing.T, conn *grpc.ClientConn, namespace string) {
 	t.Helper()
 
 	client := workflowservice.NewWorkflowServiceClient(conn)
 
 	require.Eventually(t, func() bool {
 		_, err := client.RegisterNamespace(t.Context(), &workflowservice.RegisterNamespaceRequest{
-			Namespace:                        "default",
+			Namespace:                        namespace,
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 		})
 		if err == nil {
@@ -96,7 +101,7 @@ func registerDefaultNamespace(t *testing.T, conn *grpc.ClientConn) {
 		}
 		st, ok := status.FromError(err)
 		return ok && st.Code() == codes.AlreadyExists
-	}, retryTimeout, time.Second, "failed to register default namespace")
+	}, retryTimeout, time.Second, "failed to register namespace %s", namespace)
 }
 
 func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, namespace, taskQueue string) {

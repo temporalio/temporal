@@ -38,9 +38,41 @@ func logDir(t *testing.T) string {
 	return dir
 }
 
+// nexusEndpoint is created in the throughput_stress namespace before Omes runs.
+const nexusEndpoint = "mixed-brain-nexus"
+
+// omesScenario describes a single Omes scenario invocation for the mixed brain test.
+type omesScenario struct {
+	name      string
+	namespace string
+	// options are extra "key=value" pairs passed as --option flags.
+	options []string
+}
+
+// scenarios are the Omes scenarios run concurrently against the mixed cluster,
+// each in its own namespace (and, at runtime, its own run ID / task queue) so
+// their load stays isolated while both exercise the mixed-version cluster.
+var scenarios = []omesScenario{
+	{
+		name:      "throughput_stress",
+		namespace: "throughput-stress",
+		options: []string{
+			"internal-iterations=10",
+			"nexus-endpoint=" + nexusEndpoint,
+		},
+	},
+	{
+		// scheduler_stress needs no Nexus endpoint or search attributes;
+		// chasm-scheduler is left at its scenario default (on).
+		name:      "scheduler_stress",
+		namespace: "scheduler-stress",
+	},
+}
+
 // TestMixedBrain starts two servers in parallel, one using the current branch's binary
-// and the other using the latest release binary. It then runs Omes throughput_stress
-// to ensure that the mixed brain works correctly.
+// and the other using the latest release binary. It then runs the Omes
+// throughput_stress and scheduler_stress scenarios to ensure that the mixed
+// brain works correctly.
 // Uses SQLite locally; and a dedicated database in CI for better concurrency.
 func TestMixedBrain(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -49,6 +81,9 @@ func TestMixedBrain(t *testing.T) {
 	currentBinary := filepath.Join(tmpDir, "temporal-server-current")
 	releaseBinary := filepath.Join(tmpDir, "temporal-server-release")
 	omesBinary := filepath.Join(tmpDir, "omes-bin")
+
+	currentLog := filepath.Join(logRoot, "mixedbrain_process-current.log")
+	releaseLog := filepath.Join(logRoot, "mixedbrain_process-release.log")
 
 	t.Run("setup", func(t *testing.T) {
 		t.Run("build current server", func(t *testing.T) {
@@ -84,18 +119,21 @@ func TestMixedBrain(t *testing.T) {
 	var conn *grpc.ClientConn
 	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
-	nexusEndpoint := "mixed-brain-nexus"
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
-		procCurrent = startServerProcess(t, "current", currentBinary, configCurrent, filepath.Join(logRoot, "mixedbrain_process-current.log"))
+		procCurrent = startServerProcess(t, "current", currentBinary, configCurrent, currentLog)
 
 		var err error
 		conn, err = grpc.NewClient(portsCurrent.frontendAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		require.NoError(st, err)
 
-		// This ensures the current server is fully booted before starting the release server.
-		registerDefaultNamespace(st, conn)
+		// This ensures the current server is fully booted before starting the release
+		// server. Registering every scenario's namespace here gives them the full
+		// cluster-formation window to propagate to all services before Omes connects.
+		for _, s := range scenarios {
+			registerNamespace(st, conn, s.namespace)
+		}
 	})
 	if t.Failed() {
 		return
@@ -104,7 +142,7 @@ func TestMixedBrain(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	t.Run("start release server", func(_ *testing.T) {
-		procRelease = startServerProcess(t, "release", releaseBinary, configRelease, filepath.Join(logRoot, "mixedbrain_process-release.log"))
+		procRelease = startServerProcess(t, "release", releaseBinary, configRelease, releaseLog)
 	})
 	if t.Failed() {
 		return
@@ -119,11 +157,20 @@ func TestMixedBrain(t *testing.T) {
 	}
 
 	t.Run("run omes", func(st *testing.T) {
-		createNexusEndpoint(st, conn, nexusEndpoint, "default", "omes-"+runID)
+		// The scenario's run ID determines its task queue (omes-<run ID>).
+		// throughput_stress owns the Nexus endpoint, so target its task queue.
+		throughput := scenarios[0]
+		createNexusEndpoint(st, conn, nexusEndpoint, throughput.namespace, "omes-"+runID+"-"+throughput.name)
 
 		proxy = startFrontendProxy(st, portsCurrent.frontendAddr(), portsRelease.frontendAddr())
 
-		runOmes(st, omesBinary, proxy.addr(), filepath.Join(logRoot, "mixedbrain_omes.log"), testDuration(), runID, nexusEndpoint)
+		for _, scenario := range scenarios {
+			st.Run(scenario.name, func(sst *testing.T) {
+				sst.Parallel()
+				logPath := filepath.Join(logRoot, "mixedbrain_omes_"+scenario.name+".log")
+				runOmes(sst, omesBinary, proxy.addr(), logPath, testDuration(), scenario, runID+"-"+scenario.name)
+			})
+		}
 	})
 	if t.Failed() {
 		return
@@ -140,14 +187,29 @@ func TestMixedBrain(t *testing.T) {
 			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
 		}
 	})
+
+	// Stop the servers so their logs are fully flushed, then scan them for
+	// panics, soft-assertion failures, and other problems that don't surface as
+	// a process exit. Runs regardless of whether "verify" failed, since a crashed
+	// server's log is exactly what we want to inspect.
+	procCurrent.stop()
+	procRelease.stop()
+
+	t.Run("scan server logs", func(st *testing.T) {
+		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
+		require.NoError(st, err)
+		for _, p := range problems {
+			st.Error(p)
+		}
+	})
 }
 
-// runOmes runs Omes throughput stress scenario.
+// runOmes runs the given Omes scenario against serverAddr under the given run ID.
 // Retries if Omes fails due to search attribute not being ready yet.
 // Deducts elapsed time from duration on retry so total wall time stays bounded.
-func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Duration, runID, nexusEndpoint string) {
+func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Duration, scenario omesScenario, runID string) {
 	t.Helper()
-	t.Logf("Running Omes throughput_stress for %v against %s", duration, serverAddr)
+	t.Logf("Running Omes %s for %v against %s", scenario.name, duration, serverAddr)
 
 	started := time.Now()
 	for {
@@ -157,19 +219,23 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		require.NoError(t, err)
 
-		var buf bytes.Buffer
-		cmd := exec.CommandContext(t.Context(), binary,
+		args := []string{
 			"run-scenario-with-worker",
-			"--scenario", "throughput_stress",
+			"--scenario", scenario.name,
 			"--language", "go",
 			"--server-address", serverAddr,
+			"--namespace", scenario.namespace,
 			"--duration", remaining.String(),
 			"--timeout", (remaining + 2*time.Minute).String(), // with grace period to complete
 			"--run-id", runID,
 			"--max-concurrent", "5",
-			"--option", "internal-iterations=10",
-			"--option", "nexus-endpoint="+nexusEndpoint,
-		)
+		}
+		for _, opt := range scenario.options {
+			args = append(args, "--option", opt)
+		}
+
+		var buf bytes.Buffer
+		cmd := exec.CommandContext(t.Context(), binary, args...)
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
