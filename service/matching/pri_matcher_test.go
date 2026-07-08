@@ -77,8 +77,8 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		rateLimitManager,
-		func() {},
-		func() {},
+		func() {}, // onRateLimited
+		func() {}, // markAlive
 	)
 
 	// start the matcher
