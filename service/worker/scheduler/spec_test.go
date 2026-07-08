@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -110,7 +111,6 @@ func (s *specSuite) TestCanonicalize() {
 		{DayOfWeek: []*schedulepb.Range{{Start: 7}}},
 		{DayOfWeek: []*schedulepb.Range{{Start: 6, End: 7}}},
 		{Year: []*schedulepb.Range{{Start: 1999}}},
-		{Year: []*schedulepb.Range{{Start: 2112}}},
 	} {
 		_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{scs},
@@ -492,5 +492,57 @@ func (s *specSuite) TestSpecJitterSeed() {
 		spec,
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 24, 0, 39, 16, 922000000, time.UTC),
+	)
+}
+
+func (s *specSuite) TestSpecFarFutureYear() {
+	s.checkSequenceFull(
+		"",
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
+				{Hour: "12", Minute: "0", DayOfMonth: "1", Month: "1", Year: fmt.Sprintf("%d", MaxCalendarYear+50)},
+			},
+		},
+		time.Date(MaxCalendarYear-1, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Time{}, // beyond MaxCalendarYear
+	)
+}
+
+func (s *specSuite) TestSpecMaxSpecYearBoundary() {
+	// Year 9999 (maxSpecYear) should be accepted.
+	_, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 9999}}},
+		},
+	})
+	s.Require().NoError(err)
+
+	// Year 10000 (beyond maxSpecYear) should be rejected.
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 10000}}},
+		},
+	})
+	s.Error(err)
+}
+
+func (s *specSuite) TestSpecFullYearRange() {
+	_, err := canonicalizeSpec(&schedulepb.ScheduleSpec{
+		StructuredCalendar: []*schedulepb.StructuredCalendarSpec{
+			{Year: []*schedulepb.Range{{Start: 2000, End: 9999}}},
+		},
+	})
+	s.Require().NoError(err)
+
+	s.checkSequenceFull(
+		"",
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
+				{Hour: "0", Minute: "0", DayOfMonth: "1", Month: "1", Year: "2000-9999"},
+			},
+		},
+		time.Date(MaxCalendarYear-1, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(MaxCalendarYear, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Time{}, // stops at MaxCalendarYear
 	)
 }
