@@ -208,7 +208,6 @@ type matcherData struct {
 	canForward       bool
 	rateLimitManager *rateLimitManager
 	// onRateLimited is called when a dispatch is blocked by the rate limiter.
-	// Called under lock.
 	onRateLimited func()
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
@@ -227,8 +226,7 @@ type matcherData struct {
 }
 
 // newMatcherData creates a new matcherData. onRateLimited is called each time a dispatch
-// is blocked by the rate limiter (whole-queue or per-key), allowing the caller to record
-// the event (e.g. increment a sliding-window counter for stats reporting).
+// is blocked by the rate limiter (whole-queue or per-key).
 func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager, onRateLimited func()) matcherData {
 	return matcherData{
 		config:           config,
