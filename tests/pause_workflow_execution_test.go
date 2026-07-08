@@ -266,12 +266,12 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 // created - the workflow was stuck forever, with no dispatchable task.
 //
 // Test sequence:
-// 1. Start a workflow on a task queue with no active pollers, so its first workflow
-//    task remains pending and undelivered.
-// 2. Pause the workflow while that task is still pending.
-// 3. Unpause the workflow.
-// 4. Only now start a worker for the task queue, and assert the workflow actually
-//    receives a workflow task and completes.
+//  1. Start a workflow on a task queue with no active pollers, so its first workflow
+//     task remains pending and undelivered.
+//  2. Pause the workflow while that task is still pending.
+//  3. Unpause the workflow.
+//  4. Only now start a worker for the task queue, and assert the workflow actually
+//     receives a workflow task and completes.
 func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime() {
 	env := s.newTestEnv()
 
