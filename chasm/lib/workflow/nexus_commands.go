@@ -233,11 +233,6 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 	cmd *commandpb.Command,
 	opts CommandHandlerOptions,
 ) error {
-	nsName := ctx.NamespaceEntry().Name().String()
-	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
-		return ErrCommandNotSupported
-	}
-
 	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
 	if attrs == nil {
 		return FailWorkflowTaskError{
@@ -251,11 +246,12 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	}
 
+	// Route by the tree that owns the operation instead of the enableChasmWorkflowOperations flag: an operation's tree
+	// is fixed when it is scheduled and does not move when the flag is later flipped. The operation belongs to the
+	// CHASM tree if it is still present, or if a terminal event for it is buffered in this workflow. Otherwise, return
+	// ErrCommandTargetNotFound so the dispatcher falls back to the HSM command handler.
 	if !operationFound && !hasBufferedEvent() {
-		return FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
-		}
+		return ErrCommandTargetNotFound
 	}
 
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
