@@ -111,7 +111,8 @@ type Config struct {
 	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// VisibilityArchival system protection
-	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
+	VisibilityArchivalQueryMaxPageSize     dynamicconfig.IntPropertyFn
+	VisibilityArchivalQueryDefaultPageSize dynamicconfig.IntPropertyFn
 
 	// DEPRECATED
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -334,6 +335,7 @@ func NewConfig(
 		SearchAttributesSizeOfValueLimit:         dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
 		SearchAttributesTotalSizeLimit:           dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),
 		VisibilityArchivalQueryMaxPageSize:       dynamicconfig.VisibilityArchivalQueryMaxPageSize.Get(dc),
+		VisibilityArchivalQueryDefaultPageSize:   dynamicconfig.VisibilityArchivalQueryDefaultPageSize.Get(dc),
 		DisallowQuery:                            dynamicconfig.DisallowQuery.Get(dc),
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		DefaultWorkflowRetryPolicy:               dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),

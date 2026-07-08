@@ -2758,8 +2758,9 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	maxPageSize := int32(wh.config.VisibilityArchivalQueryMaxPageSize())
+	defaultPageSize := int32(wh.config.VisibilityArchivalQueryDefaultPageSize())
 	if request.GetPageSize() <= 0 {
-		request.PageSize = maxPageSize
+		request.PageSize = defaultPageSize
 	} else if request.GetPageSize() > maxPageSize {
 		return nil, serviceerror.NewInvalidArgumentf(errPageSizeTooBigMessage, maxPageSize)
 	}
