@@ -53,6 +53,8 @@ CREATE TABLE executions_visibility (
   TemporalUsedWorkerDeploymentVersions JSON GENERATED ALWAYS AS (search_attributes->'$.TemporalUsedWorkerDeploymentVersions'),
   TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadSizeBytes"),
   TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount"),
+  TemporalPriorityKey BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalPriorityKey"),
+  TemporalFairnessKey VARCHAR(255) GENERATED ALWAYS AS (search_attributes->>"$.TemporalFairnessKey"),
   PRIMARY KEY (namespace_id, run_id)
 );
 
@@ -87,7 +89,9 @@ CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespac
 CREATE INDEX by_temporal_schedule_paused      ON executions_visibility (namespace_id, TemporalSchedulePaused,     (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_namespace_division   ON executions_visibility (namespace_id, TemporalNamespaceDivision,  (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_external_payload_size_bytes ON executions_visibility (namespace_id, TemporalExternalPayloadSizeBytes, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
-CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id); 
+CREATE INDEX by_temporal_external_payload_count ON executions_visibility (namespace_id, TemporalExternalPayloadCount, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+-- TemporalFairnessKey is intentionally not indexed: fairness keys are high cardinality.
+CREATE INDEX by_temporal_priority_key ON executions_visibility (namespace_id, TemporalPriorityKey, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 
 CREATE TABLE custom_search_attributes (
   namespace_id      CHAR(64)  NOT NULL,
