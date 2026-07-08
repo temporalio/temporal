@@ -91,9 +91,9 @@ type (
 		deploymentRegistrationCh chan struct{}
 		pollerScalingRateLimiter quotas.RateLimiter
 
-		taskTrackerLock  sync.Mutex
-		tasksAdded       map[priorityKey]*taskTracker
-		tasksDispatched  map[priorityKey]*taskTracker
+		taskTrackerLock sync.Mutex
+		tasksAdded      map[priorityKey]*taskTracker
+		tasksDispatched map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
