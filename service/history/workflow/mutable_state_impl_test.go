@@ -2075,6 +2075,12 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.False(s.mutableState.HasPendingWorkflowTask())
 	s.Nil(s.mutableState.GetPendingWorkflowTask())
 
+	err = ScheduleWorkflowTask(s.mutableState)
+	s.NoError(err)
+	currentWFT := s.mutableState.GetPendingWorkflowTask()
+	s.NotNil(currentWFT)
+	s.Greater(currentWFT.ScheduledEventID, pendingWFT.ScheduledEventID)
+
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
 	s.True(unpausedEvent.GetWorkerMayIgnore())
 }

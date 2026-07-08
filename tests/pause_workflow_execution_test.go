@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
@@ -255,6 +256,89 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.GetStatus(), "workflow is not completed. Status: %s", info.GetStatus())
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime is a regression
+// test for a bug where pausing a workflow that already had a pending (undelivered)
+// workflow task left that stale task in place across unpause. Since the unpause API
+// only schedules a fresh workflow task when none is already pending, the stale,
+// pause-invalidated task silently blocked any new workflow task from ever being
+// created - the workflow was stuck forever, with no dispatchable task.
+//
+// Test sequence:
+// 1. Start a workflow on a task queue with no active pollers, so its first workflow
+//    task remains pending and undelivered.
+// 2. Pause the workflow while that task is still pending.
+// 3. Unpause the workflow.
+// 4. Only now start a worker for the task queue, and assert the workflow actually
+//    receives a workflow task and completes.
+func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime() {
+	env := s.newTestEnv()
+
+	// A dedicated, unpolled task queue keeps the first workflow task pending until
+	// we deliberately start a worker for it below.
+	taskQueue := testcore.RandomizeStr("pause-pending-wft-tq")
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		return "done", nil
+	}
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-pending-wft-wf-" + s.T().Name()),
+		TaskQueue: taskQueue,
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	// Confirm the first workflow task is pending and undelivered before pausing.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		require.NoError(t, err)
+		require.NotNil(t, desc.GetPendingWorkflowTask(), "expected an undelivered workflow task before pausing")
+	}, 5*time.Second, 100*time.Millisecond)
+
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	unpauseResp, err := env.FrontendClient().UnpauseWorkflowExecution(s.Context(), unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	// Only now start a worker for the task queue. Without the fix, the stale
+	// pre-pause task blocks a fresh one from ever being scheduled, and the
+	// workflow never completes.
+	worker := sdkworker.New(env.SdkClient(), taskQueue, sdkworker.Options{})
+	worker.RegisterWorkflow(workflowFn)
+	s.NoError(worker.Start())
+	defer worker.Stop()
+
+	ctx, cancel := context.WithTimeout(s.Context(), 15*time.Second)
+	defer cancel()
+	var result string
+	s.NoError(workflowRun.Get(ctx, &result), "workflow did not complete after unpause; a fresh workflow task was likely never scheduled")
+	s.Equal("done", result)
 }
 
 // TestListWorkflowExecutionsPausedHasNoCloseTime verifies that a paused workflow,
