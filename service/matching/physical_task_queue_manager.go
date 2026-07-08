@@ -91,7 +91,7 @@ type (
 		deploymentRegistrationCh chan struct{}
 		pollerScalingRateLimiter quotas.RateLimiter
 
-		taskTrackerLock sync.RWMutex
+		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
 		tasksDispatched map[priorityKey]*taskTracker
 	}
@@ -529,7 +529,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
-			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
+			c.incTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey()), 1)
 		}
 		return task, nil
 	}
@@ -604,7 +604,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
+		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
@@ -614,7 +614,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	task *internalTask,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).inc(1) // Nexus has no priorities
+		c.incTaskTracker(c.tasksAdded, priorityKey(0), 1) // Nexus has no priorities
 	}
 	return c.matcher.OfferNexusTask(ctx, task)
 }
@@ -680,14 +680,14 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 	}
 
 	if includeRates {
-		c.taskTrackerLock.RLock()
+		c.taskTrackerLock.Lock()
 		for pri, tt := range c.tasksAdded {
 			util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
 		}
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
-		c.taskTrackerLock.RUnlock()
+		c.taskTrackerLock.Unlock()
 	}
 
 	return stats
@@ -709,7 +709,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).inc(1)
+		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
 			return syncMatchNoPoller, nil
 		}
@@ -930,10 +930,11 @@ func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs rem
 	}
 }
 
-func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
+func (c *physicalTaskQueueManagerImpl) incTaskTracker(
 	intervals map[priorityKey]*taskTracker,
 	priorityKey priorityKey,
-) *taskTracker {
+	n int,
+) {
 	// priorityKey could be zero here if we're tracking dispatched tasks (i.e. called from PollTask)
 	// and the poll was forwarded so we have a "started" task. We don't return the priority with the
 	// started task info so it's not available here. Use the default priority to avoid confusion
@@ -944,26 +945,17 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 		priorityKey = c.config.DefaultPriorityKey
 	}
 
-	// First try with read lock for the common case where tracker already exists.
-	c.taskTrackerLock.RLock()
-	if tracker, ok := intervals[priorityKey]; ok {
-		c.taskTrackerLock.RUnlock()
-		return tracker
-	}
-	c.taskTrackerLock.RUnlock()
-
-	// Otherwise, we need to maybe create a new tracker with the write lock.
 	c.taskTrackerLock.Lock()
 	defer c.taskTrackerLock.Unlock()
-	if tracker, ok := intervals[priorityKey]; ok {
-		return tracker // tracker was created while we were waiting for the lock
+
+	tracker, ok := intervals[priorityKey]
+	if !ok {
+		// Initialize all task trackers together; or the timeframes won't line up.
+		c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		tracker = intervals[priorityKey]
 	}
-
-	// Initalize all task trackers together; or the timeframes won't line up.
-	c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
-	c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
-
-	return intervals[priorityKey]
+	tracker.inc(n)
 }
 
 func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
