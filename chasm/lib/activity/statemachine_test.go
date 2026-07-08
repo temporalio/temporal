@@ -750,8 +750,8 @@ func TestTransitionResetClearsHeartbeat(t *testing.T) {
 
 	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, handler: metrics.NoopMetricsHandler})
 	require.NoError(t, err)
-	require.Nil(t, heartbeatState.GetDetails())
-	require.Nil(t, heartbeatState.GetRecordedTime())
+	require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+	require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
 }
 
 func TestDeferredResetClearsHeartbeat(t *testing.T) {
@@ -765,14 +765,16 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 		{
 			name:              "scheduled",
 			transition:        TransitionResetAttemptFailedToScheduled,
+			resetKeepPaused:   false,
 			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 			expectedTaskCount: 1,
 		},
 		{
-			name:            "paused",
-			transition:      TransitionResetAttemptFailedToPaused,
-			resetKeepPaused: true,
-			expectedStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+			name:              "paused",
+			transition:        TransitionResetAttemptFailedToPaused,
+			resetKeepPaused:   true,
+			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+			expectedTaskCount: 0,
 		},
 	}
 
@@ -812,8 +814,8 @@ func TestDeferredResetClearsHeartbeat(t *testing.T) {
 			require.Equal(t, tc.expectedStatus, act.Status)
 			require.Equal(t, int32(1), attemptState.Count)
 			require.Nil(t, attemptState.GetCurrentRetryInterval())
-			require.Nil(t, heartbeatState.GetDetails())
-			require.Nil(t, heartbeatState.GetRecordedTime())
+			require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+			require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
 			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
 		})
 	}
