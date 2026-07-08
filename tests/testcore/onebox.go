@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -500,7 +501,7 @@ func (c *TemporalImpl) startHistory() {
 			),
 			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
-			fx.Provide(func() commonevents.Handler { return commonevents.NoopHandler() }),
+			fx.Provide(func() otellog.Logger { return commonevents.NoopLogger() }),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),

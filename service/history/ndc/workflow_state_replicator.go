@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -75,7 +76,7 @@ type (
 		persistenceRateLimiter       quotas.RequestRateLimiter
 		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		logger                       log.Logger
-		eventHandler                 commonevents.Handler
+		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
 	}
 )
@@ -87,7 +88,7 @@ func NewWorkflowStateReplicator(
 	eventSerializer serialization.Serializer,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
-	eventHandler commonevents.Handler,
+	eventLogger otellog.Logger,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -102,7 +103,7 @@ func NewWorkflowStateReplicator(
 		persistenceRateLimiter:       persistenceRateLimiter,
 		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
 		logger:                       logger,
-		eventHandler:                 eventHandler,
+		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
 	}
 }
@@ -367,8 +368,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	runID string,
 	ms historyi.MutableState,
 ) {
-	handler := r.eventHandler
-	if handler == nil {
+	logger := r.eventLogger
+	if logger == nil {
 		return
 	}
 	if !r.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
@@ -425,7 +426,7 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.PopulateParentInfo(info)
 	}
 
-	commonevents.EmitReplicationLifecycle(handler, payload)
+	commonevents.Emit(logger, payload)
 }
 
 // populateAppliedExecutionSummary fills the post-apply mutable-state summary fields shared across

@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
+	lognoop "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/propagation"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -126,7 +128,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
-		EventHandler          events.Handler
+		EventLoggerProvider   otellog.LoggerProvider
 	}
 )
 
@@ -206,15 +208,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
-	// EventHandler: validate the global event catalog (fail fast on duplicate names),
-	// then select the handler — custom if injected, else the no-op handler. The default discards
-	// events; a deployment opts in by injecting a handler via WithCustomEventHandler.
-	if _, err = events.BuildCatalog(); err != nil {
-		return serverOptionsProvider{}, fmt.Errorf("invalid event catalog: %w", err)
-	}
-	eventHandler := so.eventHandler
-	if eventHandler == nil {
-		eventHandler = events.NoopHandler()
+	// EventLoggerProvider backs structured ("wide") events. Select the custom OTEL LoggerProvider
+	// if injected, else a no-op provider that discards events. A deployment opts in by injecting a
+	// provider via WithCustomEventLoggerProvider.
+	eventLoggerProvider := so.eventLoggerProvider
+	if eventLoggerProvider == nil {
+		eventLoggerProvider = lognoop.NewLoggerProvider()
 	}
 
 	// DynamicConfigClient
@@ -327,7 +326,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
-		EventHandler:          eventHandler,
+		EventLoggerProvider:   eventLoggerProvider,
 	}, nil
 }
 
@@ -373,7 +372,7 @@ type (
 		NamespaceLogger                 resource.NamespaceLogger
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
-		EventHandler                    events.Handler
+		EventLoggerProvider             otellog.LoggerProvider
 		EsClient                        esclient.Client
 		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
@@ -467,8 +466,8 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},
-			func() events.Handler {
-				return params.EventHandler.WithTags(events.Tag{Key: "service_name", Value: string(serviceName)})
+			func() otellog.Logger {
+				return events.NewLogger(params.EventLoggerProvider, string(serviceName))
 			},
 			func() esclient.Client {
 				return params.EsClient

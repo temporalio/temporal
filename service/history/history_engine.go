@@ -280,7 +280,7 @@ func NewEngineWithShardContext(
 			serializer,
 			persistenceRateLimiter,
 			logger,
-			shard.GetEventHandler(),
+			shard.GetEventLogger(),
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
 			shard,

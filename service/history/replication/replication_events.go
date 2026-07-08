@@ -17,11 +17,11 @@ import (
 
 // emitReplicationExecuting emits a best-effort "executing" ReplicationLifecycle event when an
 // executable replication task is picked up to execute on the target cluster. It never affects
-// control flow: a nil handler / unresolved shard is a no-op and namespace resolution failures
+// control flow: a nil logger / unresolved shard is a no-op and namespace resolution failures
 // fall back to "".
 //
-// The event handler and shard id are taken from the target shard (resolved by namespace+workflow),
-// because the replication ProcessToolBox does not carry the event handler in all wirings.
+// The event logger and shard id are taken from the target shard (resolved by namespace+workflow),
+// because the replication ProcessToolBox does not carry the event logger in all wirings.
 func emitReplicationExecuting(
 	toolBox ProcessToolBox,
 	task *replicationspb.ReplicationTask,
@@ -36,8 +36,8 @@ func emitReplicationExecuting(
 	if err != nil {
 		return
 	}
-	handler := shardContext.GetEventHandler()
-	if handler == nil {
+	logger := shardContext.GetEventLogger()
+	if logger == nil {
 		return
 	}
 
@@ -68,7 +68,7 @@ func emitReplicationExecuting(
 			payload.EventVersionHistory = versionHistoryEntries(items)
 		}
 	}
-	commonevents.EmitReplicationLifecycle(handler, payload)
+	commonevents.Emit(logger, payload)
 }
 
 // emitReplicationSent emits a best-effort "sent" ReplicationLifecycle event for the supported
@@ -80,8 +80,8 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	if !s.config.EmitReplicationLifecycleEvents() {
 		return
 	}
-	handler := s.shardContext.GetEventHandler()
-	if handler == nil {
+	logger := s.shardContext.GetEventLogger()
+	if logger == nil {
 		return
 	}
 
@@ -138,7 +138,7 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	// only). The verify task ships no mutable state, so it contributes no parent info here.
 	populateSentParentInfo(&payload, task)
 
-	commonevents.EmitReplicationLifecycle(handler, payload)
+	commonevents.Emit(logger, payload)
 }
 
 // populateSentParentInfo records the child->parent identity from the mutable state carried in the
@@ -182,8 +182,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	if err != nil {
 		return
 	}
-	handler := shardContext.GetEventHandler()
-	if handler == nil {
+	logger := shardContext.GetEventLogger()
+	if logger == nil {
 		return
 	}
 
@@ -230,7 +230,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	}
 	payload.Details = details
 
-	commonevents.EmitReplicationLifecycle(handler, payload)
+	commonevents.Emit(logger, payload)
 }
 
 // verifyExpected describes what the verify task requires the passive to have: the target versioned

@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNamespaceLifecycleRegisteredName(t *testing.T) {
-	require.Equal(t, "namespace_lifecycle", NamespaceLifecycle.Name())
+func TestNamespaceLifecycleEventName(t *testing.T) {
+	require.Equal(t, "namespace_lifecycle", NamespaceLifecyclePayload{}.EventName())
 }
 
 // TestNamespaceLifecycleFieldSetLocked pins the complete set of field names NamespaceLifecycle can
@@ -17,17 +17,16 @@ func TestNamespaceLifecycleRegisteredName(t *testing.T) {
 func TestNamespaceLifecycleFieldSetLocked(t *testing.T) {
 	want := []string{"phase", "namespace", "namespace_id", "details"}
 
-	enc := newCaptureEncoder()
-	NamespaceLifecyclePayload{
+	attrs := NamespaceLifecyclePayload{
 		Phase:       "route_computed",
 		Namespace:   "ns",
 		NamespaceID: "ns-id",
 		Details:     map[string]any{"k": "v"},
-	}.Encode(enc)
+	}.Attributes()
 
-	gotKeys := make([]string, 0, len(enc.fields))
-	for k := range enc.fields {
-		gotKeys = append(gotKeys, k)
+	gotKeys := make([]string, 0, len(attrs))
+	for _, kv := range attrs {
+		gotKeys = append(gotKeys, kv.Key)
 	}
 
 	require.ElementsMatch(t, want, gotKeys,
