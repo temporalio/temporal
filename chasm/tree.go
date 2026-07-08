@@ -2563,6 +2563,10 @@ type ClusterLocalStateMergeResult struct {
 // only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
 // match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
 // stale-data) merge and escalate the suspicious direction.
+//
+// The merge performs no version/ordering checks; callers must apply it only against a final local
+// tree (e.g. defer until the execution is completed and its close version has caught up to the
+// source), so a length mismatch signals real divergence rather than normal replication lag.
 func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
 	var result ClusterLocalStateMergeResult
 	for path, nodeState := range state.GetNodes() {
