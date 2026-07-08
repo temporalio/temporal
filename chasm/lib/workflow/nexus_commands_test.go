@@ -650,31 +650,19 @@ func TestHandleCancelCommand(t *testing.T) {
 	})
 
 	t.Run("operation not in chasm tree defers to hsm", func(t *testing.T) {
-		// The operation is not in the CHASM tree (it lives in HSM, or does not exist). The handler must defer to the
-		// HSM command handler via ErrCommandNotSupported rather than failing the workflow task, so cancelation follows
-		// the tree that owns the operation.
-		for _, cfg := range []struct {
-			name   string
-			config *nexusoperation.Config
-		}{
-			{name: "flag on", config: defaultConfig},
-			{name: "flag off", config: &nexusoperation.Config{
-				EnableChasmNexusWorkflowOperations: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-			}},
-		} {
-			t.Run(cfg.name, func(t *testing.T) {
-				tcx := newTestContext(t, cfg.config)
-				err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
-					Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-						RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-							ScheduledEventId: 5,
-						},
-					},
-				}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-				require.ErrorIs(t, err, ErrCommandNotSupported)
-				require.Empty(t, tcx.history.Events)
-			})
-		}
+		// The operation is not in the CHASM tree (it lives in HSM, or does not exist) and no terminal event is
+		// buffered for it. The handler must defer to the HSM command handler via ErrCommandTargetNotFound rather than
+		// failing the workflow task, so cancelation follows the tree that owns the operation.
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
+			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+					ScheduledEventId: 5,
+				},
+			},
+		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, ErrCommandTargetNotFound)
+		require.Empty(t, tcx.history.Events)
 	})
 
 	t.Run("operation already completed", func(t *testing.T) {
@@ -697,7 +685,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		tcx.wf.removeNexusOperation(event.EventId)
 
 		// The operation is no longer in the CHASM tree, so the handler defers to the HSM command handler
-		// via ErrCommandNotSupported.
+		// via ErrCommandTargetNotFound.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
@@ -705,7 +693,7 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 		}, CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		require.ErrorIs(t, err, ErrCommandNotSupported)
+		require.ErrorIs(t, err, ErrCommandTargetNotFound)
 		require.Len(t, tcx.history.Events, 1) // Only scheduled event should be recorded.
 	})
 

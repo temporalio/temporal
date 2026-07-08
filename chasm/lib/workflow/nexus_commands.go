@@ -249,9 +249,9 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 	// Route by the tree that owns the operation instead of the enableChasmWorkflowOperations flag: an operation's tree
 	// is fixed when it is scheduled and does not move when the flag is later flipped. The operation belongs to the
 	// CHASM tree if it is still present, or if a terminal event for it is buffered in this workflow. Otherwise, return
-	// ErrCommandNotSupported so the dispatcher falls back to the HSM command handler.
+	// ErrCommandTargetNotFound so the dispatcher falls back to the HSM command handler.
 	if !operationFound && !hasBufferedEvent() {
-		return ErrCommandNotSupported
+		return ErrCommandTargetNotFound
 	}
 
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
