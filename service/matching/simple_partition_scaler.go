@@ -164,9 +164,9 @@ func updateBacklogTarget(
 	for i, v := range counts {
 		count := int32(number.DecodeCompact8(v))
 		if count > cfg.BacklogBase {
-			bs.set(int32(i))
+			*bs = bs.set(int32(i))
 		} else if count < cfg.BacklogReset {
-			bs.clear(int32(i))
+			*bs = bs.clear(int32(i))
 		}
 
 		if bs.get(int32(i)) {
