@@ -63,6 +63,7 @@ type (
 			*deploymentpb.Deployment,
 			*taskqueuespb.BuildIdRedirectInfo,
 			string, // workerControlTaskQueue
+			*clockspb.VectorClock, // startedClock
 		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
@@ -340,6 +341,7 @@ type (
 		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
+		// It returns a nil mutation for CHASM executions when the transaction has no durable changes to persist.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
@@ -376,8 +378,8 @@ type (
 		// GetEffectiveDeployment returns the effective deployment in the following order:
 		//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 		//     new deployment
-		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+		//     pending one-time move, either at wf start time or later via UpdateWorkflowExecutionOptions.
 		//  3. Deployment: this is returned when there is no transition and no override (the most
 		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -387,8 +389,8 @@ type (
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
 		//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-		//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+		//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 		//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior

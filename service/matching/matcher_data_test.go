@@ -422,6 +422,34 @@ func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	s.Less(elapsed, 20*time.Second)
 }
 
+// TestPerKeyRateLimitDoesNotBlockOtherKeys verifies that a rate-limited task for key1 does not
+// prevent a ready task for key2 from being dispatched, even when key2's task has lower priority.
+func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
+	// Set per-key limit low (1 RPS) so consuming one token puts key1 well into the future.
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
+
+	key1 := &commonpb.Priority{PriorityKey: 1, FairnessKey: "key1"}
+	key2 := &commonpb.Priority{PriorityKey: 2, FairnessKey: "key2"}
+
+	// Consume one token for key1 so it is rate-limited.
+	task1a := s.newBacklogTaskWithPriority(1, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
+	res := s.pollFakeTime(time.Second)
+	s.Equal(task1a, res.task)
+	res.task.finish(taskFinishResult{consumedToken: true})
+
+	// Now key1 is limited; add another key1 task (high priority) and a key2 task (lower priority).
+	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
+	task2 := s.newBacklogTaskWithPriority(3, 0, nil, key2)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1b))
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task2))
+
+	// key2 task should be dispatched even though key1 task has higher priority.
+	res = s.pollFakeTime(time.Second)
+	s.Equal(task2, res.task, "key2 task should dispatch; key1 is rate-limited")
+}
+
 func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
@@ -859,7 +887,8 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 			// Call findMatch
 			s.md.lock.Lock()
-			foundTask, foundPoller := s.md.findMatch(tc.allowForwarding)
+			now := s.ts.Now().UnixNano()
+			foundTask, foundPoller, _ := s.md.findMatch(tc.allowForwarding, now)
 			s.md.lock.Unlock()
 
 			if tc.shouldMatch {

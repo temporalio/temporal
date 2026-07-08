@@ -155,6 +155,15 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
 	)
+	RetryUnboundedOnSystemResourceExhausted = NewGlobalBoolSetting(
+		"system.retryUnboundedOnSystemResourceExhausted",
+		false,
+		`RetryUnboundedOnSystemResourceExhausted controls retry behavior of inter-service
+calls (frontend, CHASM, etc.) to history and matching on system-scoped ResourceExhausted
+errors. When false (the default), these calls follow the standard 2-attempt cap. When
+true, they ignore the attempt cap and keep retrying for up to the policy's expiration
+interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
@@ -1567,12 +1576,13 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
-			MaxRate:            0.33,
-			ShrinkRatio:        0.1,
-			ShrinkDelta:        8,
-			BatchSize:          100,
-			BackgroundInterval: 23 * time.Second,
-			DrainBufferTime:    15 * time.Second,
+			MaxRate:               0.33,
+			ShrinkRatio:           0.1,
+			ShrinkDelta:           8,
+			BatchSize:             100,
+			BackgroundInterval:    23 * time.Second,
+			DrainBufferTime:       15 * time.Second,
+			ShadowModeLogInterval: 0,
 		},
 		`Settings for partition scale manager.`,
 	)
@@ -1940,6 +1950,12 @@ unlimited. When the predicate size is surpassed for a given scope, the predicate
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
+	)
+	QueueShrinkPredicateMaxPendingKeys = NewGlobalIntSetting(
+		"history.queueShrinkPredicateMaxPendingKeys",
+		10,
+		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
+keys.`,
 	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",

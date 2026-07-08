@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -224,6 +225,20 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			}
 
 			d.setStateChanged()
+		})
+	}
+
+	// Version gate for sync-validation-status signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "sync-validation-status-signal", workflow.DefaultVersion, 0) >= 0 {
+		syncValidationStatusChannel := workflow.GetSignalChannel(ctx, worker_versioning.SignalSyncValidationStatus)
+		d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			var vs wciiface.ValidationStatus
+			c.Receive(ctx, &vs)
+			d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
+			d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
 		})
 	}
 
@@ -1056,6 +1071,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 		ComputeConfig:        s.ComputeConfig,
+		ComputeStatus:        s.ComputeStatus,
 	}
 }
 

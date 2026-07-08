@@ -589,6 +589,11 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	buildId := handler.mutableState.GetAssignedBuildId()
 	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
 
+	shardClock, err := handler.shard.NewVectorClock()
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
@@ -598,6 +603,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		nil,
 		nil,
 		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
+		shardClock,
 	); err != nil {
 		return nil, err
 	}
@@ -605,11 +611,6 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	runID := handler.mutableState.GetExecutionState().RunId
-
-	shardClock, err := handler.shard.NewVectorClock()
-	if err != nil {
-		return nil, err
-	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),

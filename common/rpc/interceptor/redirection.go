@@ -24,9 +24,10 @@ import (
 // Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
 // If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
-	DCRedirectionContextHeaderName = "xdc-redirection"
-	DCRedirectionApiHeaderName     = "xdc-redirection-api"
-	dcRedirectionMetricsPrefix     = "DCRedirection"
+	DCRedirectionContextHeaderName    = "xdc-redirection"
+	DCRedirectionAPIHeaderName        = "xdc-redirection-api"
+	DCRedirectionSourceCellHeaderName = "xdc-redirection-source-cell"
+	dcRedirectionMetricsPrefix        = "DCRedirection"
 )
 
 var (
@@ -290,7 +291,8 @@ func (i *Redirection) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
-			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionApiHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionAPIHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionSourceCellHeaderName, i.currentClusterName)
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err

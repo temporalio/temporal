@@ -317,10 +317,10 @@ func HistoryRawClientProvider(clientBean client.Bean) HistoryRawClient {
 	return clientBean.GetHistoryClient()
 }
 
-func HistoryClientProvider(historyRawClient HistoryRawClient) HistoryClient {
+func HistoryClientProvider(historyRawClient HistoryRawClient, dc *dynamicconfig.Collection) HistoryClient {
 	return history.NewRetryableClient(
 		historyRawClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 		common.IsServiceClientTransientError,
 	)
 }
@@ -332,10 +332,10 @@ func MatchingRawClientProvider(
 	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 }
 
-func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient {
+func MatchingClientProvider(matchingRawClient MatchingRawClient, dc *dynamicconfig.Collection) MatchingClient {
 	return matching.NewRetryableClient(
 		matchingRawClient,
-		common.CreateMatchingClientRetryPolicy(),
+		common.CreateMatchingClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
 		common.CreateMatchingClientLongPollRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)

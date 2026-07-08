@@ -31,6 +31,7 @@ var (
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		// Test reactivation cache for all versioning tests.
 		dynamicconfig.EnableVersionReactivationSignals.Key():                    true,
+		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key():                    1000000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,

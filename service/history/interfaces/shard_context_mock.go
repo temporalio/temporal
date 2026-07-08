@@ -440,6 +440,20 @@ func (mr *MockShardContextMockRecorder) GetHistoryTasks(ctx, request any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockShardContext)(nil).GetHistoryTasks), ctx, request)
 }
 
+// GetLifecycleContext mocks base method.
+func (m *MockShardContext) GetLifecycleContext() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLifecycleContext")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// GetLifecycleContext indicates an expected call of GetLifecycleContext.
+func (mr *MockShardContextMockRecorder) GetLifecycleContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLifecycleContext", reflect.TypeOf((*MockShardContext)(nil).GetLifecycleContext))
+}
+
 // GetLogger mocks base method.
 func (m *MockShardContext) GetLogger() log.Logger {
 	m.ctrl.T.Helper()
@@ -1255,6 +1269,20 @@ func (m *MockControllableContext) GetHistoryTasks(ctx context.Context, request *
 func (mr *MockControllableContextMockRecorder) GetHistoryTasks(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryTasks), ctx, request)
+}
+
+// GetLifecycleContext mocks base method.
+func (m *MockControllableContext) GetLifecycleContext() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLifecycleContext")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// GetLifecycleContext indicates an expected call of GetLifecycleContext.
+func (mr *MockControllableContextMockRecorder) GetLifecycleContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLifecycleContext", reflect.TypeOf((*MockControllableContext)(nil).GetLifecycleContext))
 }
 
 // GetLogger mocks base method.

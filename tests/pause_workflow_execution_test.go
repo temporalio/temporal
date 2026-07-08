@@ -257,6 +257,69 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+// TestListWorkflowExecutionsPausedHasNoCloseTime verifies that a paused workflow,
+// which is still an open execution, is returned by ListWorkflowExecutions without a
+// CloseTime (i.e. nil "End" time), just like a running workflow. A paused workflow
+// must not be reported with the Go zero time as its CloseTime.
+func (s *PauseWorkflowExecutionSuite) TestListWorkflowExecutionsPausedHasNoCloseTime() {
+	env := s.newTestEnv()
+
+	workflowID := testcore.RandomizeStr("pause-wf-list-" + s.T().Name())
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	runID := workflowRun.GetRunID()
+
+	// Wait for the workflow to be running with a scheduled activity, so that the
+	// subsequent pause request is applied to a fully initialized workflow.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		info := desc.GetWorkflowExecutionInfo()
+		s.NotNil(info)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		s.NotEmpty(desc.PendingActivities)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// List the workflow via visibility and assert that the paused execution is
+	// reported as open: paused status but no CloseTime / ExecutionDuration.
+	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  10,
+			Query:     query,
+		})
+		s.NoError(err)
+		s.NotNil(listResp)
+		s.Len(listResp.GetExecutions(), 1)
+
+		execution := listResp.GetExecutions()[0]
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, execution.GetStatus())
+		s.Nil(execution.GetCloseTime())
+		s.Nil(execution.GetExecutionDuration())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 // TestPauseWorkflowAndActivity tests the coexistence of workflow and activity pause entries in TemporalPauseInfo.
 // 1. Start a workflow with a failing activity
 // 2. Pause the activity

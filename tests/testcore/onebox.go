@@ -17,9 +17,11 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
+	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -67,8 +69,6 @@ type (
 		clients
 		fxApps []*fx.App
 
-		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
-		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
 
@@ -108,9 +108,10 @@ type (
 		chasmEngine               chasm.Engine
 		chasmVisibilityMgr        chasm.VisibilityManager
 		replicationStreamRecorder *ReplicationStreamRecorder
-		taskQueueRecorder         *TaskQueueRecorder
+		historyTaskRecorder       *HistoryTaskRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		tokenProvider             auth.TokenProvider
+		enableHistoryTaskRecorder bool
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -164,11 +165,12 @@ type (
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
-		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
-		TaskCategoryRegistry     tasks.TaskCategoryRegistry
-		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
-		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
-		TokenProvider            auth.TokenProvider
+		ServiceFxOptions          map[primitives.ServiceName][]fx.Option
+		TaskCategoryRegistry      tasks.TaskCategoryRegistry
+		HostsByProtocolByService  map[transferProtocol]map[primitives.ServiceName]static.Hosts
+		SpanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider             auth.TokenProvider
+		EnableHistoryTaskRecorder bool
 	}
 
 	listenHostPort string
@@ -212,6 +214,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
 		tokenProvider:                    params.TokenProvider,
+		enableHistoryTaskRecorder:        params.EnableHistoryTaskRecorder,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -222,6 +225,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.logger,
 		impl.hostsByProtocolByService[grpcProtocol],
 		impl.tlsConfigProvider,
+		impl.newMatchingClient,
 	)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
@@ -236,6 +240,59 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
 	return impl
+}
+
+func (c *TemporalImpl) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
+	var tlsConfigProvider encryption.TLSConfigProvider
+	var frontendTLSConfig *tls.Config
+	if c.tlsConfigProvider != nil {
+		var err error
+		tlsConfigProvider = c.tlsConfigProvider
+		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
+		}
+	}
+
+	monitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
+	monitor.Start()
+	rpcFactory := rpc.NewFactory(
+		&config.Config{},
+		primitives.FrontendService,
+		c.logger,
+		c.GetMetricsHandler(),
+		tlsConfigProvider,
+		c.frontendMembershipAddress,
+		c.frontendMembershipAddress,
+		0,
+		frontendTLSConfig,
+		nil,
+		nil,
+		monitor,
+		c.tokenProvider,
+	)
+	clientFactory := client.NewFactoryProvider().NewFactory(
+		rpcFactory,
+		monitor,
+		c.GetMetricsHandler(),
+		dynamicconfig.NewCollection(c.dcClient, c.logger),
+		c.testHooks,
+		c.historyConfig.NumHistoryShards,
+		c.logger,
+		c.logger,
+	)
+	namespaceIDToName := func(id namespace.ID) (namespace.Name, error) {
+		resp, err := c.metadataMgr.GetNamespace(NewContext(), &persistence.GetNamespaceRequest{ID: id.String()})
+		if err != nil {
+			return "", err
+		}
+		return namespace.Name(resp.Namespace.Info.Name), nil
+	}
+	return clientFactory.NewMatchingClientWithTimeout(
+		namespaceIDToName,
+		matchingclient.DefaultTimeout,
+		matchingclient.DefaultLongPollTimeout,
+	)
 }
 
 func (c *TemporalImpl) Start() error {
@@ -298,10 +355,6 @@ func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
 
-func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
-	return c.namespaceRegistries
-}
-
 func (c *TemporalImpl) ChasmContext(ctx context.Context) (context.Context, error) {
 	if numHistoryHosts := len(c.hostsByProtocolByService[grpcProtocol][primitives.HistoryService].All); numHistoryHosts != 1 {
 		return nil, fmt.Errorf("expected exactly one history host for chasm context, got %d", numHistoryHosts)
@@ -329,12 +382,10 @@ func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
-	var matchingRawClient resource.MatchingRawClient
 	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
-		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -391,7 +442,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &grpcResolver, &matchingRawClient),
+			fx.Populate(&grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasm.Module,
@@ -402,9 +453,6 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
-		// TODO: create matching client without reaching into fx graph
-		c.matching.client = matchingRawClient
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -427,6 +475,19 @@ func (c *TemporalImpl) startHistory() {
 		c.chasmVisibilityMgr = chasmVisibilityManager
 	}).Apply(c.testHooks, testhooks.GlobalScope)
 
+	persistenceFactoryProvider := persistenceClient.FactoryProvider
+	if c.enableHistoryTaskRecorder {
+		persistenceFactoryProvider = func(params persistenceClient.NewFactoryParams) persistenceClient.Factory {
+			return &historyTaskRecordingPersistenceFactory{
+				Factory: persistenceClient.FactoryProvider(params),
+				logger:  params.Logger,
+				setRecorder: func(recorder *HistoryTaskRecorder) {
+					c.historyTaskRecorder = recorder
+				},
+			}
+		}
+	}
+
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
@@ -444,12 +505,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
-			fx.Decorate(func(base persistence.ExecutionManager, logger log.Logger) persistence.ExecutionManager {
-				// Wrap ExecutionManager with recorder to capture task writes
-				// This wraps the FINAL ExecutionManager after all FX processing (metrics, retries, etc.)
-				c.taskQueueRecorder = NewTaskQueueRecorder(base, logger)
-				return c.taskQueueRecorder
-			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
 				if c.replicationStreamRecorder != nil {
 					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
@@ -474,7 +529,7 @@ func (c *TemporalImpl) startHistory() {
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
-			fx.Provide(persistenceClient.FactoryProvider),
+			fx.Provide(persistenceFactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
@@ -498,7 +553,6 @@ func (c *TemporalImpl) startHistory() {
 			logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
@@ -554,7 +608,6 @@ func (c *TemporalImpl) startMatching() {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
@@ -621,7 +674,6 @@ func (c *TemporalImpl) startWorker() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
@@ -640,19 +692,8 @@ func (c *TemporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
-	if c.taskQueueRecorder != nil {
-		return c.taskQueueRecorder
-	}
-	return c.executionManager
-}
-
-func (c *TemporalImpl) GetTaskQueueRecorder() *TaskQueueRecorder {
-	return c.taskQueueRecorder
-}
-
-func (c *TemporalImpl) SetTaskQueueRecorder(recorder *TaskQueueRecorder) {
-	c.taskQueueRecorder = recorder
+func (c *TemporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
+	return c.historyTaskRecorder
 }
 
 func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
