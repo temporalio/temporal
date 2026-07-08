@@ -27,8 +27,14 @@ var goleakOpts = []goleak.Option{
 
 	// TODO: gRPC connection goroutines leaked because history/matching
 	// connection pools are not closed on cluster shutdown.
+	//
+	// IgnoreAnyFunction (rather than IgnoreTopFunction) for addrConn's
+	// reconnect loop: a goroutine caught mid-reconnect can have any of
+	// several functions (fmt/channelz logging, context.Err, ...) at the
+	// top of the stack depending on exactly when it was snapshotted, but
+	// resetTransportAndUnlock is always present as a caller.
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
-	goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
+	goleak.IgnoreAnyFunction("google.golang.org/grpc.(*addrConn).resetTransportAndUnlock"),
 	goleak.IgnoreTopFunction("google.golang.org/grpc/internal/balancer/gracefulswitch.(*Balancer).updateSubConnState"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/client/history.watchMembershipForClose[...]"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/client/matching.(*partitionCache).Start.func1"),
@@ -36,7 +42,6 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*grpcResolver).listen"),
 
 	// TODO: worker-service and persistence goroutine leaks.
-	goleak.IgnoreTopFunction("go.temporal.io/server/common/persistence.(*healthSignalAggregatorImpl).emitMetricsLoop"),
 	goleak.IgnoreTopFunction("go.temporal.io/server/common/quotas.(*MapRequestRateLimiterImpl[...]).cleanupLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
 	goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
@@ -47,6 +52,8 @@ var goleakOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*localActivityTunnel).getTask"),
 	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal.(*sharedNamespaceWorker).run"),
 	goleak.IgnoreTopFunction("go.temporal.io/sdk/internal/common/backoff.(*ConcurrentRetrier).throttleInternal"),
+	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll"),
+	goleak.IgnoreAnyFunction("go.temporal.io/sdk/internal.(*basePoller).doPoll.func1"),
 }
 
 var objectLeakOpts = []objectleak.Option{
@@ -54,7 +61,6 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExpected("FunctionalTestBase"),
 	objectleak.WithExpected("FunctionalTestBase.Logger*"),
 	objectleak.WithExpected("FunctionalTestBase.Suite*"),
-	objectleak.WithExpected("FunctionalTestBase.testCluster.archiverBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.host*"),
 	objectleak.WithExpected("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExpected("FunctionalTestBase.testClusterConfig"),

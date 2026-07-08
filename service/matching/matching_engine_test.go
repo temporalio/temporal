@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -244,7 +245,8 @@ func newMatchingEngine(
 		taskManager:     taskMgr,
 		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
-		partitions:      make(map[tqid.PartitionKey]taskQueuePartitionManager),
+
+		partitions: make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -528,10 +530,28 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		}
 	})
 
-	partitionReady := func() bool {
-		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
+	// Wait until the poller is actually blocked in the matcher, ready for a sync match.
+	pollerReady := func() bool {
+		for _, p := range s.matchingEngine.getTaskQueuePartitions(10) {
+			pm, ok := p.(*taskQueuePartitionManagerImpl)
+			if !ok {
+				continue
+			}
+			pq, err := pm.defaultQueueFuture.GetIfReady()
+			if err != nil || pq == nil {
+				continue
+			}
+			pqImpl, ok := pq.(*physicalTaskQueueManagerImpl)
+			if !ok {
+				continue
+			}
+			if pqImpl.matcher.HasWaitingPoller() {
+				return true
+			}
+		}
+		return false
 	}
-	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+	await.RequireTrue(s.T(), pollerReady, 5*time.Second, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,

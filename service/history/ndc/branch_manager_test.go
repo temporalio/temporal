@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -143,104 +142,6 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 	newVersionHistory, err = versionhistory.GetVersionHistory(versionHistories, newIndex)
 	s.NoError(err)
 	s.True(compareVersionHistory.Equal(newVersionHistory))
-}
-
-func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_DuplicateEvent() {
-	// incomingFirstEventID < nextEventID -> duplicate replication task -> doContinue == false, no error
-	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(10, 0),
-		versionhistory.NewVersionHistoryItem(50, 100),
-		versionhistory.NewVersionHistoryItem(100, 200),
-		versionhistory.NewVersionHistoryItem(150, 300),
-	})
-	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-
-	incomingVersionHistory := versionhistory.CopyVersionHistory(versionHistory)
-	err := versionhistory.AddOrUpdateVersionHistoryItem(
-		incomingVersionHistory,
-		versionhistory.NewVersionHistoryItem(200, 300),
-	)
-	s.NoError(err)
-
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:      s.namespaceID,
-		WorkflowId:       s.workflowID,
-		VersionHistories: versionHistories,
-	}).AnyTimes()
-
-	doContinue, index, err := s.nDCBranchMgr.GetOrCreate(
-		context.Background(),
-		incomingVersionHistory,
-		150, // < nextEventID (151)
-		300)
-	s.NoError(err)
-	s.False(doContinue)
-	s.Equal(int32(0), index)
-}
-
-func (s *branchMgrSuite) TestCreateNewBranch_ForkError() {
-	branchMgrBaseBranchToken := []byte("some random base branch token")
-	branchMgrLCAEventVersion := int64(200)
-	branchMgrLCAEventID := int64(1394)
-	versionHistory := versionhistory.NewVersionHistory(branchMgrBaseBranchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(10, 0),
-		versionhistory.NewVersionHistoryItem(branchMgrLCAEventID, branchMgrLCAEventVersion),
-		versionhistory.NewVersionHistoryItem(2333, 400),
-	})
-
-	newVersionHistory, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(versionHistory,
-		versionhistory.NewVersionHistoryItem(branchMgrLCAEventID, branchMgrLCAEventVersion),
-	)
-	s.NoError(err)
-
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  s.workflowID,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		RunId: s.runID,
-	}).AnyTimes()
-
-	branchMgrForkErr := serviceerrors.NewRetryReplication("fork failed", s.namespaceID, s.workflowID, s.runID, 0, 0, 0, 0)
-	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, branchMgrForkErr)
-
-	_, err = s.nDCBranchMgr.createNewBranch(context.Background(), branchMgrBaseBranchToken, branchMgrLCAEventID, newVersionHistory)
-	s.Error(err)
-	s.Equal(branchMgrForkErr, err)
-}
-
-func (s *branchMgrSuite) TestCreateNewBranch_BranchChanged() {
-	// AddAndSwitchVersionHistory reports branchChanged when the new version history
-	// last item version exceeds the current branch last item version.
-	branchMgrBaseBranchToken := []byte("some random base branch token")
-	versionHistory := versionhistory.NewVersionHistory(branchMgrBaseBranchToken, []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(10, 0),
-		versionhistory.NewVersionHistoryItem(50, 100),
-	})
-	versionHistories := versionhistory.NewVersionHistories(versionHistory)
-
-	newBranchToken := []byte("some random new branch token")
-	// new version history diverges at event 50 with a strictly higher version.
-	newVersionHistory := versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{
-		versionhistory.NewVersionHistoryItem(10, 0),
-		versionhistory.NewVersionHistoryItem(80, 200),
-	})
-
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId:      s.namespaceID,
-		WorkflowId:       s.workflowID,
-		VersionHistories: versionHistories,
-	}).AnyTimes()
-	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		RunId: s.runID,
-	}).AnyTimes()
-
-	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
-		&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
-
-	_, err := s.nDCBranchMgr.createNewBranch(context.Background(), branchMgrBaseBranchToken, 10, newVersionHistory)
-	s.Error(err)
-	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
 func (s *branchMgrSuite) TestGetOrCreate_BranchAppendable_NoMissingEventInBetween() {

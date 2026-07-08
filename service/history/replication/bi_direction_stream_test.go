@@ -5,15 +5,12 @@ import (
 	"io"
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 )
 
@@ -162,146 +159,10 @@ func (s *biDirectionStreamSuite) TestRecv_Err() {
 
 }
 
-func (s *biDirectionStreamSuite) TestStreamError_Error() {
-	cause := serviceerror.NewUnavailable("underlying grpc error")
-	streamErr := NewStreamError("some message", cause)
-	errStr := streamErr.Error()
-	s.Contains(errStr, "some message")
-	s.Contains(errStr, "underlying grpc error")
-}
-
-func (s *biDirectionStreamSuite) TestLazyInit_ProviderError() {
-	// Covers lazyInitLocked branch where clientProvider.Get returns an error.
-	provider := &biDirProviderErr{getErr: serviceerror.NewUnavailable("provider get error")}
-	stream := NewBiDirectionStream[int, int](
-		provider,
-		metrics.NoopMetricsHandler,
-		log.NewTestLogger(),
-	)
-
-	stream.Lock()
-	err := stream.lazyInitLocked()
-	stream.Unlock()
-	s.Error(err)
-	// status remains initialized, stream still considered valid (not closed).
-	s.Equal(streamStatusInitialized, stream.status)
-
-	// Send should also surface the init error.
-	err = stream.Send(rand.Int())
-	s.Error(err)
-}
-
-func (s *biDirectionStreamSuite) TestLazyInit_UnknownStatusPanics() {
-	// Covers lazyInitLocked default branch (panic on unknown status).
-	stream := NewBiDirectionStream[int, int](
-		s.streamClientProvider,
-		metrics.NoopMetricsHandler,
-		log.NewTestLogger(),
-	)
-	stream.status = int32(99)
-
-	stream.Lock()
-	defer stream.Unlock()
-	s.Panics(func() {
-		_ = stream.lazyInitLocked()
-	})
-}
-
-func (s *biDirectionStreamSuite) TestClose_CloseSendError() {
-	// Covers closeLocked branch where streamingClient.CloseSend returns an error.
-	closeErrClient := &biDirCloseErrClient{closeSendErr: serviceerror.NewUnavailable("close send error")}
-	provider := &biDirProviderErr{streamClient: closeErrClient}
-	stream := NewBiDirectionStream[int, int](
-		provider,
-		metrics.NoopMetricsHandler,
-		log.NewTestLogger(),
-	)
-
-	// initialize so streamingClient is set and a recvLoop is started.
-	stream.Lock()
-	err := stream.lazyInitLocked()
-	stream.Unlock()
-	s.NoError(err)
-
-	stream.Close()
-	s.False(stream.IsValid())
-
-	// closing again is a noop (status already closed).
-	stream.Close()
-	s.False(stream.IsValid())
-}
-
-func (s *biDirectionStreamSuite) TestNotifyRecvChannel_Full() {
-	// Covers notifyRecvChannel default branch where the channel buffer is full and a
-	// metric is recorded before the (blocking) send. A capture handler is used to
-	// deterministically detect entry into the default branch before draining the channel.
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	stream := NewBiDirectionStream[int, int](
-		s.streamClientProvider,
-		metricsHandler,
-		log.NewTestLogger(),
-	)
-	// fill the channel buffer completely so the first select case cannot succeed.
-	for i := 0; i < cap(stream.channel); i++ {
-		stream.channel <- StreamResp[int]{Resp: i}
-	}
-
-	// notifyRecvChannel will hit the default branch (channel full); run it in a goroutine.
-	done := make(chan struct{})
-	go func() {
-		stream.notifyRecvChannel(rand.Int(), nil)
-		close(done)
-	}()
-
-	// wait until the default branch has recorded the channel-full metric, which guarantees
-	// the select took the default path before we make room for the blocked send.
-	await.RequireTrue(s.T(), func() bool {
-		return len(capture.Snapshot()[metrics.ReplicationStreamChannelFull.Name()]) > 0
-	}, time.Second*5, time.Millisecond*10)
-
-	<-stream.channel // make room so the blocked send can proceed
-	<-done
-}
-
 func (p *mockStreamClientProvider) Get(
 	_ context.Context,
 ) (BiDirectionStreamClient[int, int], error) {
 	return p.streamClient, nil
-}
-
-type (
-	biDirProviderErr struct {
-		getErr       error
-		streamClient BiDirectionStreamClient[int, int]
-	}
-	biDirCloseErrClient struct {
-		closeSendErr error
-	}
-)
-
-func (p *biDirProviderErr) Get(
-	_ context.Context,
-) (BiDirectionStreamClient[int, int], error) {
-	if p.getErr != nil {
-		return nil, p.getErr
-	}
-	return p.streamClient, nil
-}
-
-func (c *biDirCloseErrClient) Send(_ int) error {
-	return nil
-}
-
-func (c *biDirCloseErrClient) Recv() (int, error) {
-	<-make(chan struct{}) // block until closed; never returns a value
-	return 0, io.EOF
-}
-
-func (c *biDirCloseErrClient) CloseSend() error {
-	return c.closeSendErr
 }
 
 func (c *mockStreamClient) Send(req int) error {

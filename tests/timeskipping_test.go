@@ -15,6 +15,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
@@ -688,8 +689,11 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 //     (no cron, attempt == 1).
 //  4. The latest task's VisibilityTimestamp is ≈ wallStart, not wallStart + 1h.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+	)
 	tv := testvars.New(s.T())
 
 	const (
@@ -723,7 +727,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	elapsed := time.Since(wallStart)
 	s.Less(elapsed, shiftTol, "skip should have shifted the 1h start delay into near-now wall-clock; took %v", elapsed)
 
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),
@@ -887,8 +891,11 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_CanceledTimerNotUsedAsSkipTarge
 // If any of the four principles regresses, at least one of assertions 4–8 will
 // fail.
 func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
-	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithHistoryTaskRecorder(),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+	)
 	tv := testvars.New(s.T())
 
 	const (
@@ -1049,7 +1056,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	)
 
 	// ── Assertion 5: WorkflowRunTimeoutTask regenerated with shifted timestamp. ─
-	recorder := env.GetTestCluster().GetTaskQueueRecorder()
+	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
 	recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
 		NamespaceID: env.NamespaceID().String(),
@@ -1193,4 +1200,116 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 		"activity-2 ActivityTimeoutTask VisibilityTimestamp %v is later than expected ~wallAtSchedule+5min %v; this would happen if the virtual ScheduledTime leaked into VisibilityTimestamp (would show ≈ wallAtSchedule + 1h + 5min)",
 		activity2TimeoutTask.VisibilityTimestamp, activity2TimerExpected,
 	)
+}
+
+func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeoutTimesOutIdleWorkflow() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	ctx := testcore.NewContext()
+
+	const executionTimeout = 5 * time.Minute
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool { return false })
+	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
+
+	startWall := time.Now()
+	workflowID := uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		TimeSkippingConfig:       &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// The workflow is idle (blocked on Await) with the execution timeout as its only skip
+	// target, so it skips straight to the timeout and times out — without waiting out 5 min
+	// of real time.
+	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
+	err = run.Get(ctx, nil)
+	var timeoutErr *sdktemporal.TimeoutError
+	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+
+	s.Less(time.Since(startWall), executionTimeout,
+		"time skipping must reach the execution timeout in far less than the 5 min real timeout")
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
+	transitions := s.findTransitionedEvents(hist)
+	s.Len(transitions, 1, "exactly one transition: skip to the execution timeout")
+	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+		"timing out at the execution timeout is not a fast-forward disable")
+	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOptionsUpdated() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	// Start WITHOUT time skipping.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: schedule a user timer. Time skipping is off, so the workflow just goes idle with a
+	// pending timer (no skip yet).
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Enable time skipping. The workflow is idle with a pending timer, so this update's close-tx
+	// emits a transition skipping to the timer — in the same transaction as OPTIONS_UPDATED.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+
+	// The transition and the OPTIONS_UPDATED that triggered it must both be present, and the
+	// OPTIONS_UPDATED must come first (the transition is the last event of the transaction).
+	optionsUpdatedIdx, transitionIdx := -1, -1
+	for i, e := range hist {
+		switch e.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			optionsUpdatedIdx = i
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			transitionIdx = i
+		default:
+			// other event types are irrelevant to this ordering check
+		}
+	}
+	s.NotEqual(-1, optionsUpdatedIdx, "expected an OPTIONS_UPDATED event")
+	s.NotEqual(-1, transitionIdx, "expected a TIME_SKIPPING_TRANSITIONED event")
+	s.Less(optionsUpdatedIdx, transitionIdx,
+		"OPTIONS_UPDATED (event %d) must precede the transition it triggered (event %d)",
+		hist[optionsUpdatedIdx].GetEventId(), hist[transitionIdx].GetEventId())
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
 }

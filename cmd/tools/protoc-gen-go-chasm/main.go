@@ -232,7 +232,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("metricsHandler: metricsHandler,")
 	w.println("redirector:     redirector,")
 	w.println("numShards:      config.NumHistoryShards,")
-	w.println("retryPolicy:    common.CreateHistoryClientRetryPolicy(),")
+	w.println("retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),")
 	w.unindent() // close struct literal
 	w.println("}, nil")
 	w.unindent() // close ctor body

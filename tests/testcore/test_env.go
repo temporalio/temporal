@@ -95,6 +95,7 @@ type testOptions struct {
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
+	historyTaskRecorder      bool
 }
 
 type dynamicConfigOverride struct {
@@ -224,6 +225,15 @@ func WithHistoryShardCount(n int32) TestOption {
 	}
 }
 
+func WithHistoryTaskRecorder() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterHistoryTaskRecorder())
+		o.dedicatedReason = "task queue recorder used"
+		o.historyTaskRecorder = true
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
@@ -328,6 +338,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
+	}
+	if options.historyTaskRecorder {
+		recorder := cluster.GetHistoryTaskRecorder()
+		require.NotNil(t, recorder)
 	}
 
 	return env

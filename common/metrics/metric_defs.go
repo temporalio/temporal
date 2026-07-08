@@ -932,12 +932,17 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueActionCounter        = NewCounterDef("queue_actions")
-	ActivityE2ELatency        = NewTimerDef(
+	TaskSchedulerThrottled       = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueuePredicateResolutionLoss = NewCounterDef(
+		"queue_predicate_resolution_loss",
+		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
+			"or falling back to the universal predicate, causing extra tasks to be reprocessed. Tagged by reason."),
+	)
+	ActivityE2ELatency = NewTimerDef(
 		"activity_end_to_end_latency",
 		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
 	)
@@ -1091,6 +1096,9 @@ var (
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
+	// ReplicationBackfillEventsLatency measures the latency of bringing local events up to the
+	// source cluster's current branch (backfilling history events) during workflow state replication.
+	ReplicationBackfillEventsLatency = NewTimerDef("replication_backfill_events_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag                             = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1543,6 +1551,10 @@ var (
 	ScheduleCallbackLatency = NewTimerDef(
 		"schedule_callback_latency",
 		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
+	)
+	ScheduleCallbackIgnored = NewCounterDef(
+		"schedule_callback_ignored",
+		WithDescription("Scheduler received a completion callback unassociated with any known running actions"),
 	)
 
 	// Worker Versioning

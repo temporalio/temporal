@@ -488,8 +488,10 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 		}
 	}
 
-	// for close records
-	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// for close records. Running and paused workflows are still open executions and
+	// must not have a CloseTime; only truly closed workflows have one.
+	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+		internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
 		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
