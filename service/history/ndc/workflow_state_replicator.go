@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -381,9 +381,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		nsName = name.String()
 	}
 
-	payload := commonevents.ReplicationLifecyclePayload{
-		Phase:       commonevents.ReplicationApplied,
-		TaskType:    commonevents.ReplTaskSyncVersionedTransition,
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:       wideevents.ReplicationApplied,
+		TaskType:    wideevents.ReplTaskSyncVersionedTransition,
 		Shard:       r.shardContext.GetShardID(),
 		Namespace:   nsName,
 		NamespaceID: namespaceID.String(),
@@ -398,9 +398,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.Status = state.GetStatus().String()
 		payload.AppliedNextEventID = ms.GetNextEventID()
 		if th := info.GetTransitionHistory(); len(th) > 0 {
-			entries := make([]commonevents.VersionedTransitionEntry, 0, len(th))
+			entries := make([]wideevents.VersionedTransitionEntry, 0, len(th))
 			for _, vt := range th {
-				entries = append(entries, commonevents.VersionedTransitionEntry{
+				entries = append(entries, wideevents.VersionedTransitionEntry{
 					FailoverVersion: vt.GetNamespaceFailoverVersion(),
 					TransitionCount: vt.GetTransitionCount(),
 				})
@@ -413,9 +413,9 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 				payload.LastEventVersion = lastItem.GetVersion()
 			}
 			items := currentHistory.GetItems()
-			history := make([]commonevents.VersionHistoryEntry, 0, len(items))
+			history := make([]wideevents.VersionHistoryEntry, 0, len(items))
 			for _, item := range items {
-				history = append(history, commonevents.VersionHistoryEntry{
+				history = append(history, wideevents.VersionHistoryEntry{
 					EventID: item.GetEventId(),
 					Version: item.GetVersion(),
 				})
@@ -426,13 +426,13 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.PopulateParentInfo(info)
 	}
 
-	commonevents.Emit(logger, payload)
+	wideevents.Emit(logger, payload)
 }
 
 // populateAppliedExecutionSummary fills the post-apply mutable-state summary fields shared across
 // applied lifecycle hooks. It is best-effort and nil-safe.
 func populateAppliedExecutionSummary(
-	payload *commonevents.ReplicationLifecyclePayload,
+	payload *wideevents.ReplicationLifecyclePayload,
 	info *persistencespb.WorkflowExecutionInfo,
 ) {
 	payload.NewExecutionRunID = info.GetNewExecutionRunId()

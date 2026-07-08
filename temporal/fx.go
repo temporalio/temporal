@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -467,7 +467,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},
 			func() otellog.Logger {
-				return events.NewLogger(params.EventLoggerProvider, string(serviceName))
+				return wideevents.NewLogger(params.EventLoggerProvider, string(serviceName))
 			},
 			func() esclient.Client {
 				return params.EsClient

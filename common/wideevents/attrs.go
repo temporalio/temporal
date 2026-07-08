@@ -1,4 +1,4 @@
-package events
+package wideevents
 
 import (
 	"encoding/json"

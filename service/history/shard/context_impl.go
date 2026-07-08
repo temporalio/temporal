@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -2202,7 +2202,7 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 
 func (s *ContextImpl) GetEventLogger() otellog.Logger {
 	if s.eventLogger == nil {
-		return commonevents.NoopLogger()
+		return wideevents.NoopLogger()
 	}
 	return s.eventLogger
 }

@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/chasm"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -25,6 +24,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -83,7 +83,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, commonevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
 	}
 
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the

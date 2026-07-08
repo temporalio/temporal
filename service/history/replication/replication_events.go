@@ -8,10 +8,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -46,8 +46,8 @@ func emitReplicationExecuting(
 		nsName = name.String()
 	}
 
-	payload := commonevents.ReplicationLifecyclePayload{
-		Phase:       commonevents.ReplicationExecuting,
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:       wideevents.ReplicationExecuting,
 		TaskType:    taskType,
 		Shard:       shardContext.GetShardID(),
 		Namespace:   nsName,
@@ -68,7 +68,7 @@ func emitReplicationExecuting(
 			payload.EventVersionHistory = versionHistoryEntries(items)
 		}
 	}
-	commonevents.Emit(logger, payload)
+	wideevents.Emit(logger, payload)
 }
 
 // emitReplicationSent emits a best-effort "sent" ReplicationLifecycle event for the supported
@@ -88,11 +88,11 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	var taskType string
 	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		taskType = commonevents.ReplTaskSyncWorkflowState
+		taskType = wideevents.ReplTaskSyncWorkflowState
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
-		taskType = commonevents.ReplTaskSyncVersionedTransition
+		taskType = wideevents.ReplTaskSyncVersionedTransition
 	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
-		taskType = commonevents.ReplTaskVerifyVersionedTransition
+		taskType = wideevents.ReplTaskVerifyVersionedTransition
 	default:
 		return
 	}
@@ -103,8 +103,8 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		nsName = namespace.EmptyName
 	}
 
-	payload := commonevents.ReplicationLifecyclePayload{
-		Phase:       commonevents.ReplicationSent,
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:       wideevents.ReplicationSent,
 		TaskType:    taskType,
 		Shard:       s.serverShardKey.ShardID,
 		Namespace:   nsName.String(),
@@ -138,12 +138,12 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	// only). The verify task ships no mutable state, so it contributes no parent info here.
 	populateSentParentInfo(&payload, task)
 
-	commonevents.Emit(logger, payload)
+	wideevents.Emit(logger, payload)
 }
 
 // populateSentParentInfo records the child->parent identity from the mutable state carried in the
 // task payload, when present. Task types that ship no mutable state (e.g. verify) are a no-op.
-func populateSentParentInfo(payload *commonevents.ReplicationLifecyclePayload, task *replicationspb.ReplicationTask) {
+func populateSentParentInfo(payload *wideevents.ReplicationLifecyclePayload, task *replicationspb.ReplicationTask) {
 	switch task.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		if ms := task.GetSyncWorkflowStateTaskAttributes().GetWorkflowState(); ms != nil {
@@ -204,9 +204,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 		nsName = name.String()
 	}
 
-	payload := commonevents.ReplicationLifecyclePayload{
-		Phase:       commonevents.ReplicationApplied,
-		TaskType:    commonevents.ReplTaskVerifyVersionedTransition,
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:       wideevents.ReplicationApplied,
+		TaskType:    wideevents.ReplTaskVerifyVersionedTransition,
 		Shard:       shardContext.GetShardID(),
 		Namespace:   nsName,
 		NamespaceID: e.NamespaceID,
@@ -230,7 +230,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	}
 	payload.Details = details
 
-	commonevents.Emit(logger, payload)
+	wideevents.Emit(logger, payload)
 }
 
 // verifyExpected describes what the verify task requires the passive to have: the target versioned
@@ -259,17 +259,17 @@ func verifyActual(ms *persistencespb.WorkflowMutableState) map[string]any {
 	return actual
 }
 
-func versionedTransitionEntry(vt *persistencespb.VersionedTransition) commonevents.VersionedTransitionEntry {
-	return commonevents.VersionedTransitionEntry{
+func versionedTransitionEntry(vt *persistencespb.VersionedTransition) wideevents.VersionedTransitionEntry {
+	return wideevents.VersionedTransitionEntry{
 		FailoverVersion: vt.GetNamespaceFailoverVersion(),
 		TransitionCount: vt.GetTransitionCount(),
 	}
 }
 
-func versionHistoryEntries(items []*historyspb.VersionHistoryItem) []commonevents.VersionHistoryEntry {
-	out := make([]commonevents.VersionHistoryEntry, 0, len(items))
+func versionHistoryEntries(items []*historyspb.VersionHistoryItem) []wideevents.VersionHistoryEntry {
+	out := make([]wideevents.VersionHistoryEntry, 0, len(items))
 	for _, item := range items {
-		out = append(out, commonevents.VersionHistoryEntry{EventID: item.GetEventId(), Version: item.GetVersion()})
+		out = append(out, wideevents.VersionHistoryEntry{EventID: item.GetEventId(), Version: item.GetVersion()})
 	}
 	return out
 }

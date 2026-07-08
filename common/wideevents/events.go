@@ -1,4 +1,4 @@
-package events
+package wideevents
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 // instrumentationName is the OTEL instrumentation scope for events emitted by this package.
-const instrumentationName = "go.temporal.io/server/common/events"
+const instrumentationName = "go.temporal.io/server/common/wideevents"
 
 // Payload is the data of one wide event. Each event type implements it by supplying its stable
 // event name and contributing its fields as OTEL log attributes.
