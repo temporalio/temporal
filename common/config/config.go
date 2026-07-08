@@ -445,7 +445,10 @@ type (
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
-		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
+		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url.
+		// For the postgres12_pgx plugin, "require_auth" restricts which authentication methods the client
+		// accepts from the server (e.g. "scram-sha-256", or "!none" to negate), hardening against auth
+		// downgrade. Unset means all methods are accepted.
 		ConnectAttributes map[string]string `yaml:"connectAttributes"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`

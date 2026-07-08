@@ -609,6 +609,71 @@ func TestFlushWorkerCommandsTasks(t *testing.T) {
 	})
 }
 
+func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+
+	activityID := "test-activity-1"
+	scheduledEventID := int64(5)
+
+	ai := &persistencespb.ActivityInfo{
+		ScheduledEventId: scheduledEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
+		Version:          1,
+		StartVersion:     1,
+		TaskQueue:        "test-queue",
+		ActivityType:     &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
+	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: "test-namespace-id",
+		WorkflowId:  "test-workflow-id",
+	})
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: "test-run-id",
+	})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow"})
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+
+	shardCtx.EXPECT().NewVectorClock().Return(expectedClock, nil)
+
+	dcClient := dynamicconfig.StaticClient(nil)
+	col := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+	config := configs.NewConfig(col, 1)
+
+	handler := &workflowTaskCompletedHandler{
+		identity:               "test-identity",
+		workerControlTaskQueue: "/_sys/worker-commands/test-ns/key1",
+		mutableState:           ms,
+		shard:                  shardCtx,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		logger:                 log.NewNoopLogger(),
+		metricsHandler:         metrics.NoopMetricsHandler,
+		config:                 config,
+	}
+
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   activityID,
+		ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
+	require.NoError(t, err)
+	require.NotNil(t, mutation)
+}
+
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 	t.Parallel()
 

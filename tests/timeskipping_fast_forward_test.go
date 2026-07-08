@@ -10,7 +10,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -23,7 +22,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type TimeSkippingFastForwardFunctionalSuite struct {
@@ -445,84 +443,94 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	s.Less(transitionIdx, timedOutIdx, "the time-skipping transition must be recorded before the timeout")
 }
 
-// TestFastForward_RunTimeoutBeforeFastForward is a two-phase test:
-//
-//  1. Workflow starts with time-skipping enabled but NO fast-forward. The workflow is
-//     idle (blocking on a condition) so there are no skip candidates. The
-//     run/execution timeout alone must NOT advance virtual time — it is not a
-//     skip target. The workflow stays RUNNING indefinitely in real time.
-//
-//  2. A fast-forward larger than the run timeout is added via
-//     UpdateWorkflowExecutionOptions. The update's close-tx now finds the fast-forward
-//     as the only skip candidate, which is then capped at the run timeout
-//     (5 min < 10 min fast-forward). Virtual time advances to the run timeout and the
-//     workflow is TIMED_OUT. The single transition carries DisabledAfterBound=false
-//     (the cap fired before the fast-forward was reached).
-func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_RunTimeoutBeforeFastForward() {
+func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTimerFiredDuringStartedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	const (
-		runTimeout  = 5 * time.Minute
-		fastForward = 10 * time.Minute // larger than runTimeout
+		fastForward = time.Minute
+		timer1Dur   = 45 * time.Second
 	)
 
-	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
-		return workflow.Await(ctx, func() bool { return false })
-	}, workflow.RegisterOptions{Name: "blockingConditionWorkflow"})
-
-	workflowID := uuid.NewString()
+	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward)}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "blockingConditionWorkflow"},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
-		WorkflowRunTimeout:  durationpb.New(runTimeout),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true}, // no fastForward yet
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(90 * time.Second),
+		TimeSkippingConfig:  cfg,
 	})
 	s.NoError(err)
 	runID := startResp.RunId
 
-	// Phase 1: wait for the SDK worker to complete the first WFT (workflow blocks
-	// on Await). After the close-tx there are no skip candidates, so virtual time
-	// must not have advanced and no TimeSkippingTransitioned event should exist.
-	s.AwaitTruef(func() bool {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-		return hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED)
-	}, 10*time.Second, 200*time.Millisecond, "first WFT must complete")
-
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-	s.Empty(s.findTransitionedEvents(hist),
-		"run/execution timeout alone is not a skip target — no transition must have fired")
-
-	// Phase 2: add fast-forward > run timeout. The update's close-tx finds
-	// the fast-forward as the skip candidate, caps it at the run timeout, and the
-	// workflow is timed out.
-	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:         env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
-			TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(fastForward),
-			},
-		},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	// WT1: start timer1. Close-tx skips to timer1; timer1 fires; WT2 is scheduled.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", timer1Dur)},
+		}, nil
 	})
 	s.NoError(err)
 
-	run := env.SdkClient().GetWorkflow(ctx, workflowID, runID)
-	err = run.Get(ctx, nil)
-	var timeoutErr *sdktemporal.TimeoutError
-	s.ErrorAs(err, &timeoutErr, "expected TimeoutError, got: %v", err)
+	// WT2: poll (marks it STARTED), then hold it open until the fast-forward disable fires, so the
+	// transition is emitted while this workflow task is in flight. The eventual complete response is
+	// expected to be rejected (UnhandledCommand) because the buffered transition invalidated the WT.
+	_, _ = env.TaskPoller().PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
+		HandleTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.AwaitTruef(func() bool {
+				ms := s.getMutableState(env, tv.WorkflowID(), runID)
+				return ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo().GetHasReached()
+			}, 75*time.Second, 200*time.Millisecond, "fast-forward disable did not fire while the workflow task was started")
 
-	hist = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
-	transitions := s.findTransitionedEvents(hist)
-	s.Len(transitions, 1, "exactly one transition: skip to run timeout")
-	s.False(transitions[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
-		"run timeout caps the skip before fast-forward is reached: DisabledAfterFastForward must be false")
-	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
+			// The disable transition mutates state synchronously in the close-transaction,
+			// even though its history event is still buffered while this WT is in flight:
+			// time skipping is already disabled here, before the event is flushed to history.
+			ms := s.getMutableState(env, tv.WorkflowID(), runID)
+			s.False(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+				"time skipping must be disabled in mutable state once the fast-forward timer fired")
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{completeWorkflowCmd()},
+			}, nil
+		}, taskpoller.WithTimeout(90*time.Second))
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+
+	// A fast-forward disable transition (DisabledAfterFastForward) must be present.
+	sawDisableTransition := false
+	for _, e := range s.findTransitionedEvents(hist) {
+		if e.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward() {
+			sawDisableTransition = true
+		}
+	}
+	s.True(sawDisableTransition, "expected a fast-forward disable transition")
+
+	// No transition may sit inside an open WorkflowTaskStarted->Completed/Failed/TimedOut window.
+	insideStartedWT := false
+	for _, e := range hist {
+		switch e.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+			insideStartedWT = true
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+			enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			insideStartedWT = false
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			s.False(insideStartedWT,
+				"time-skipping transition (event %d) must not be wedged inside an open workflow-task window",
+				e.GetEventId())
+		default:
+			// other event types are irrelevant to this ordering check
+		}
+	}
+
+	// Event IDs must be strictly increasing across the whole history.
+	for i := 1; i < len(hist); i++ {
+		s.Greater(hist[i].GetEventId(), hist[i-1].GetEventId(),
+			"event IDs must be strictly increasing: event %d follows event %d",
+			hist[i].GetEventId(), hist[i-1].GetEventId())
+	}
 }

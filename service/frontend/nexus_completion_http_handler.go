@@ -381,7 +381,8 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	rCtx.originalHeaders.Set(interceptor.DCRedirectionApiHeaderName, "true")
+	rCtx.originalHeaders.Set(interceptor.DCRedirectionAPIHeaderName, "true")
+	rCtx.originalHeaders.Set(interceptor.DCRedirectionSourceCellHeaderName, h.ClusterMetadata.GetCurrentClusterName())
 	cc := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		HTTPCaller: (&forwardingHTTPHeaderWrapper{
 			client:                 client,

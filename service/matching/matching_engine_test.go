@@ -245,7 +245,8 @@ func newMatchingEngine(
 		taskManager:     taskMgr,
 		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
-		partitions:      make(map[tqid.PartitionKey]taskQueuePartitionManager),
+
+		partitions: make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
