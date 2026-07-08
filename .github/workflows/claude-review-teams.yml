@@ -159,7 +159,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          track_progress: true
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
           prompt: |
             Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
             Please review this pull request.
