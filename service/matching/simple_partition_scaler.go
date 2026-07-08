@@ -148,6 +148,9 @@ func (s *simplePartitionScaler) updateAddTarget(
 		)
 	}
 
+	// always keep min of 1 even if we have no Ups/Downs
+	target = max(target, 1)
+
 	return target, true
 }
 
