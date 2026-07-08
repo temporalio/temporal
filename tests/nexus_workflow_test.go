@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -265,6 +266,232 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	})
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED)
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
+}
+
+// TestNexusOperationCancellationCrossTree verifies that a RequestCancelNexusOperation command is routed to the tree
+// that actually holds the operation, not to the tree implied by the current enableChasmWorkflowOperations flag.
+// An operation's tree is fixed when it is scheduled, so flipping the flag (a downgrade or an upgrade) must not cause
+// the cancellation to fail the workflow task.
+func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationCrossTree(chasmEnabled bool) {
+	// This test drives the creation-policy flag itself, so run it once (not per-suite-mode).
+	if chasmEnabled {
+		s.T().Skip("cross-tree cancel test controls the flag explicitly; run once via the HSM suite")
+	}
+
+	testCases := []struct {
+		name string
+		// enableChasmWorkflowOperations value at schedule time, which selects the tree the op is created in
+		// (true -> CHASM, false -> HSM). The flag is flipped to the opposite value to simulate a cancellation after a
+		// downgrade or an upgrade.
+		enableChasmAtSchedule bool
+	}{
+		{name: "ChasmOpCanceledAfterDowngrade", enableChasmAtSchedule: true},
+		{name: "HsmOpCanceledAfterUpgrade", enableChasmAtSchedule: false},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *NexusWorkflowTestSuite) {
+			env := s.newTestEnv(true)
+			ctx := env.Context()
+			taskQueue := testcore.RandomizeStr(s.T().Name())
+
+			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, tc.enableChasmAtSchedule)
+
+			h := nexustest.Handler{
+				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+				},
+				OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+					return nil
+				},
+			}
+			endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+			// The caller schedules an async operation and waits for it to start. Once started flag is flipped and then
+			// the workflow is signaled to proceed with operation cancellation which runs against the opposite tree.
+			const awaitStartedUpdate = "await-started"
+			callerWF := func(ctx workflow.Context) error {
+				started := false
+				if err := workflow.SetUpdateHandler(ctx, awaitStartedUpdate, func(ctx workflow.Context) error {
+					return workflow.Await(ctx, func() bool { return started })
+				}); err != nil {
+					return err
+				}
+
+				c := workflow.NewNexusClient(endpointName, "service")
+				opCtx, cancelOperation := workflow.WithCancel(ctx)
+				fut := c.ExecuteOperation(opCtx, "operation", "input", workflow.NexusOperationOptions{})
+				var exec workflow.NexusOperationExecution
+				if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+					return err
+				}
+				started = true
+
+				workflow.GetSignalChannel(ctx, "cancel").Receive(ctx, nil)
+				// cancels the operation's context, which is how the SDK emits a RequestCancelNexusOperation command.
+				cancelOperation()
+				return nil
+			}
+
+			w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+			w.RegisterWorkflow(callerWF)
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+				TaskQueue: taskQueue,
+			}, callerWF)
+			s.NoError(err)
+
+			// Block until the nexus operation has started.
+			startedHandle, err := env.SdkClient().UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
+				WorkflowID:   run.GetID(),
+				RunID:        run.GetRunID(),
+				UpdateName:   awaitStartedUpdate,
+				WaitForStage: client.WorkflowUpdateStageCompleted,
+			})
+			s.NoError(err)
+			s.NoError(startedHandle.Get(ctx, nil))
+
+			// Verify the operation was actually created in the tree implied by the schedule-time flag.
+			s.assertNexusOperationTree(ctx, env, run.GetID(), !tc.enableChasmAtSchedule)
+
+			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
+			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
+			s.NoError(run.Get(ctx, nil))
+			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+			s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
+			s.RequireNoHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+		})
+	}
+}
+
+// TestNexusOperationCancellationBufferedCrossTree verifies that when an operation living in the HSM tree reaches a
+// terminal state whose completion event is buffered while a workflow task requesting cancellation is in flight, the
+// CHASM cancel handler records a no-op CancelRequested rather than failing the workflow task.
+func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationBufferedCrossTree(chasmEnabled bool) {
+	// This test drives the creation-policy flag itself, so run it once (not per-suite-mode).
+	if chasmEnabled {
+		s.T().Skip("cross-tree cancel test controls the flag explicitly; run once via the HSM suite")
+	}
+
+	env := s.newTestEnv(true)
+	ctx := env.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	// Schedule the operation in the HSM tree.
+	env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, false)
+
+	var callbackToken, publicCallbackURL string
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	// deliverCompletion is a local activity that delivers the async completion. Running it inside the cancellation
+	// workflow task keeps that task in flight while the completion is delivered, so the terminal event is buffered and
+	// not yet applied when the cancel command is processed.
+	deliverCompletion := func(ctx context.Context) error {
+		return s.sendNexusCompletionRequest(ctx, publicCallbackURL, nexusrpc.CompleteOperationOptions{
+			Result: testcore.MustToPayload(s.T(), "result"),
+			Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+		})
+	}
+
+	// The caller starts an async operation and waits for it to start. When signaled, it buffers the operation's
+	//	completion and requests cancellation within the same workflow task.
+	const awaitStartedUpdate = "await-started"
+	callerWF := func(ctx workflow.Context) error {
+		started := false
+		if err := workflow.SetUpdateHandler(ctx, awaitStartedUpdate, func(ctx workflow.Context) error {
+			return workflow.Await(ctx, func() bool { return started })
+		}); err != nil {
+			return err
+		}
+
+		c := workflow.NewNexusClient(endpointName, "service")
+		opCtx, cancelOperation := workflow.WithCancel(ctx)
+		fut := c.ExecuteOperation(opCtx, "operation", "input", workflow.NexusOperationOptions{})
+		var exec workflow.NexusOperationExecution
+		if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+			return err
+		}
+		started = true
+
+		workflow.GetSignalChannel(ctx, "cancel").Receive(ctx, nil)
+
+		laCtx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{ScheduleToCloseTimeout: 10 * time.Second})
+		if err := workflow.ExecuteLocalActivity(laCtx, deliverCompletion).Get(ctx, nil); err != nil {
+			return err
+		}
+		cancelOperation()
+
+		_ = fut.Get(ctx, nil)
+		return nil
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	w.RegisterActivity(deliverCompletion)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWF)
+	s.NoError(err)
+
+	// Block until the nexus operation has started.
+	startedHandle, err := env.SdkClient().UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
+		WorkflowID:   run.GetID(),
+		RunID:        run.GetRunID(),
+		UpdateName:   awaitStartedUpdate,
+		WaitForStage: client.WorkflowUpdateStageCompleted,
+	})
+	s.NoError(err)
+	s.NoError(startedHandle.Get(ctx, nil))
+
+	// The operation was scheduled with the flag off, so it must live in the HSM tree.
+	s.assertNexusOperationTree(ctx, env, run.GetID(), true)
+
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
+
+	s.NoError(run.Get(ctx, nil))
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED)
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	// The no-op cross-tree cancellation did not fail the workflow task.
+	s.RequireNoHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
+}
+
+// assertNexusOperationTree asserts which tree the workflow's Nexus operation lives in, keyed by the operation's
+// scheduled event ID.
+func (s *NexusWorkflowTestSuite) assertNexusOperationTree(ctx context.Context, env *NexusTestEnv, workflowID string, expectHSM bool) {
+	s.T().Helper()
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID})
+	scheduledEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	opID := strconv.FormatInt(scheduledEvent.EventId, 10)
+
+	desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	_, inHSM := desc.DatabaseMutableState.GetExecutionInfo().
+		GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById()[opID]
+	_, inCHASM := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+opID]
+
+	if expectHSM {
+		s.True(inHSM, "operation %s scheduled with the flag off should be an HSM sub-state-machine", opID)
+		s.False(inCHASM, "operation %s scheduled with the flag off should not be a CHASM node", opID)
+	} else {
+		s.True(inCHASM, "operation %s scheduled with the flag on should be a CHASM node", opID)
+		s.False(inHSM, "operation %s scheduled with the flag on should not be an HSM sub-state-machine", opID)
+	}
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled bool) {
