@@ -3281,8 +3281,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 		ms.executionInfo.PauseInfo = nil
 	}
 
-	// Reschedule any pending activities
 	// Note: workflow task is scheduled in the unpause API. So no need to schedule it here.
+	// Pause invalidates a pending workflow task by bumping its stamp, so clear it before the API schedules a fresh one.
+	if ms.HasPendingWorkflowTask() {
+		ms.workflowTaskManager.deleteWorkflowTask()
+	}
+
+	// Reschedule any pending activities
 	for _, ai := range ms.GetPendingActivityInfos() {
 		// Bump activity stamp to force replication so that the passive cluster can recreate the activity task.
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {

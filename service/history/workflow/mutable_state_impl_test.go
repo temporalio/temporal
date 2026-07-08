@@ -2056,7 +2056,8 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	pausedActivityStamp := pausedActivityInfo.Stamp
 	pausedWFT := s.mutableState.GetPendingWorkflowTask()
 	s.NotNil(pausedWFT)
-	pausedWFTStamp := pausedWFT.Stamp
+	s.Equal(pendingWFT.ScheduledEventID, pausedWFT.ScheduledEventID)
+	s.Greater(pausedWFT.Stamp, pendingWFT.Stamp)
 
 	// Unpause and verify.
 	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", uuid.NewString())
@@ -2071,15 +2072,11 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.True(ok)
 	s.Greater(updatedActivityInfo.Stamp, pausedActivityStamp)
 
-	currentWFT := s.mutableState.GetPendingWorkflowTask()
-	s.NotNil(currentWFT)
-	s.Equal(currentWFT.Stamp, pausedWFTStamp) // workflow task stamp should not change between pause and unpause.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
 
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
 	s.True(unpausedEvent.GetWorkerMayIgnore())
-
-	// Ensure the pending workflow task we created earlier still exists (no unexpected removal).
-	s.Equal(pendingWFT.ScheduledEventID, currentWFT.ScheduledEventID)
 }
 
 func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
