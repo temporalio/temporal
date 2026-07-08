@@ -1103,8 +1103,8 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            tv.WorkerIdentity(),
 	})
-	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	s.NoError(err0)
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// start workflow task, but do not respond to it
 	res, err := env.FrontendClient().PollWorkflowTaskQueue(testContext, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1546,11 +1546,9 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 		s.NoError(err)
 		backoff := time.Duration(0)
 		if i > 1 {
-			backoff = time.Duration(initialInterval.Seconds()*math.Pow(backoffCoefficient, float64(i-2))) * time.Second
-			// retry backoff cannot larger than MaximumIntervalInSeconds
-			if backoff > time.Second {
-				backoff = time.Second
-			}
+			backoff = min(
+				// retry backoff cannot larger than MaximumIntervalInSeconds
+				time.Duration(initialInterval.Seconds()*math.Pow(backoffCoefficient, float64(i-2)))*time.Second, time.Second)
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().AsTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
@@ -1560,21 +1558,22 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	// Check run id links
 	for i := range maximumAttempts {
 		events := env.GetHistory(env.Namespace().String(), executions[i])
-		if i == 0 {
+		switch i {
+		case 0:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":""}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionFailed {"NewExecutionRunId":"%s"}`, executions[i+1].RunId), events)
-		} else if i == maximumAttempts-1 {
+		case maximumAttempts - 1:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionCompleted {"NewExecutionRunId":""}`, executions[i-1].RunId), events)
-		} else {
+		default:
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s"}
   2 WorkflowTaskScheduled

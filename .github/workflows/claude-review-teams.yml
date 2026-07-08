@@ -1,0 +1,173 @@
+# Reviews PRs from opted-in team members with Claude.
+#
+# Uses `pull_request_target` so the workflow has access to secrets even when
+# a PR is opened from a fork. This is safe ONLY because the
+# `check-review-eligibility` job gates the review job behind trusted eligibility
+# checks.
+name: Claude review for opted-in team PRs
+
+on:
+  # Auto-trigger on PR open/reopen/ready is disabled while we validate the
+  # workflow end-to-end via workflow_dispatch. Re-enable once we've confirmed
+  # the membership check and review behave as expected on real PRs.
+  # pull_request_target:
+  #   types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review (manual test trigger)
+        required: true
+        type: string
+
+env:
+  # Space- or newline-separated list of temporalio team slugs whose
+  # members' PRs should receive an automated Claude review.
+  REVIEW_TEAMS: |
+    nexus
+  REVIEW_OPT_OUT_LABEL: opt-out
+
+jobs:
+  check-review-eligibility:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 2
+    permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
+    outputs:
+      should_review: ${{ steps.decision.outputs.should_review }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+    steps:
+      - name: Generate app token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          # Least-privilege: members:read for team-membership lookups,
+          # pull-requests:read for the workflow_dispatch PR lookup, and
+          # issues:read for PR label lookups.
+          permission-members: read
+          permission-pull-requests: read
+          permission-issues: read
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            pr_json=$(gh api -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/pulls/${INPUT_PR_NUMBER}")
+            author=$(echo "$pr_json" | jq -r '.user.login')
+            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+            pr_number="$INPUT_PR_NUMBER"
+          else
+            author="$PR_AUTHOR"
+            head_sha="$PR_HEAD_SHA"
+            pr_number="$EVENT_PR_NUMBER"
+          fi
+
+          echo "Resolved PR #${pr_number}: author=${author}, head_sha=${head_sha}"
+          {
+            echo "pr_number=${pr_number}"
+            echo "author=${author}"
+            echo "head_sha=${head_sha}"
+          } >> "$GITHUB_OUTPUT"
+      - id: decision
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          AUTHOR: ${{ steps.resolve.outputs.author }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          set_review_decision() {
+            echo "should_review=$1" >> "$GITHUB_OUTPUT"
+          }
+
+          echo "Checking PR #${PR_NUMBER} for opt-out label '${REVIEW_OPT_OUT_LABEL}'"
+          labels=$(gh api -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/issues/${PR_NUMBER}" --jq '.labels[].name')
+          if [ -z "$labels" ]; then
+            echo "PR #${PR_NUMBER} has no labels"
+          else
+            echo "PR #${PR_NUMBER} labels:"
+            printf '%s\n' "$labels" | sed 's/^/- /'
+          fi
+
+          opt_out_label=$(printf '%s\n' "$labels" | awk -v label="$REVIEW_OPT_OUT_LABEL" 'tolower($0) == tolower(label) { print; exit }')
+          if [ -n "$opt_out_label" ]; then
+            echo "Skipping Claude review for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
+            set_review_decision false
+            exit 0
+          fi
+
+          echo "No opt-out label '${REVIEW_OPT_OUT_LABEL}' found on PR #${PR_NUMBER}"
+          echo "Checking team membership for ${AUTHOR}"
+          is_member=false
+          for team in $REVIEW_TEAMS; do
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/teams/${team}/memberships/${AUTHOR}" 2>&1); then
+              if [ "$(echo "$response" | jq -r '.state')" = "active" ]; then
+                echo "${AUTHOR} is an active member of temporalio/${team}"
+                is_member=true
+                break
+              fi
+            elif echo "$response" | grep -q "HTTP 404"; then
+              : # author is not a member of this team; try the next one
+            else
+              echo "Unexpected error checking temporalio/${team} membership: ${response}" >&2
+              exit 1
+            fi
+          done
+
+          if [ "$is_member" = "false" ]; then
+            echo "Skipping Claude review for PR #${PR_NUMBER}: author is not in an opted-in team"
+            set_review_decision false
+            exit 0
+          fi
+
+          echo "Claude review enabled for PR #${PR_NUMBER}: author is in an opted-in team and no opt-out label is present"
+          set_review_decision true
+
+  review:
+    needs: check-review-eligibility
+    if: needs.check-review-eligibility.outputs.should_review == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # pull_request_target defaults to the base ref; explicitly check out
+          # the PR head so the review sees the proposed changes. Safe here
+          # because the team-membership gate above limits this to trusted authors.
+          ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
+          prompt: |
+            Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
+            Please review this pull request.
+            The PR branch is already checked out in the current working directory.
+            Prefer inline comments for all actionable findings.
+            Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
+            Only use `gh pr comment` for a brief summary if there are no inline findings or if a finding cannot be attached to a specific changed line.
+            Do not duplicate inline findings in a top-level comment.
+            Only post GitHub comments - don't submit review text as messages.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

@@ -185,4 +185,38 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
+	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
+	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
+	// is evaluated and logged at that cadence but decisions are not applied. If the partition
+	// scaler is disabled, shadow mode does not log.
+	ShadowModeLogInterval time.Duration
+}
+
+type SimplePartitionScalerSettings struct {
+	// If Enabled is false, scaler will remove dynamic scale state and fall back to dynamic
+	// config. If Enabled is true but Ups and Downs are empty, dynamic scale state will be
+	// preserved and used as-is without changes.
+	Enabled bool
+
+	// If non-zero, Fixed will be used as the scaling decision (overrides everything else).
+	Fixed int32
+
+	// Ups and Downs control scaling based on add rate: The TargetRate measured over the
+	// Interval is used to calculate a target number of partitions. Ups may move the actual
+	// partition target higher, Downs may move it lower. Ups take priority.
+	//
+	// Note the TargetRate for Downs should be lower than for Ups to leave a deadband in the
+	// middle for hysteresis (avoid changing when the rate fluctuates above and below a
+	// threshold).
+	Downs []SimplePartitionScalerThreshold
+	Ups   []SimplePartitionScalerThreshold
+
+	// Overall bounds (0 means don't enforce).
+	Min int32
+	Max int32
+}
+
+type SimplePartitionScalerThreshold struct {
+	Window     time.Duration // window to measure add rate over
+	TargetRate int           // target tasks/second per partition
 }

@@ -492,9 +492,9 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	var expectedErr *serviceerrors.RetryReplication
 	s.ErrorAs(err, &expectedErr)
-	s.Equal(namespaceID, expectedErr.NamespaceId)
-	s.Equal(s.workflowID, expectedErr.WorkflowId)
-	s.Equal(s.runID, expectedErr.RunId)
+	s.Equal(expectedErr.NamespaceId, namespaceID)
+	s.Equal(expectedErr.WorkflowId, s.workflowID)
+	s.Equal(expectedErr.RunId, s.runID)
 	s.Equal(int64(1), expectedErr.StartEventId)
 	s.Equal(int64(1), expectedErr.StartEventVersion)
 }
@@ -1039,7 +1039,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	}).AnyTimes()
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 type historyEventMatcher struct {
@@ -1155,6 +1155,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -1318,6 +1319,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -1506,6 +1508,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -2030,6 +2033,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GenerateTaskID().Return(taskID, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	mockEventsCache := events.NewMockCache(s.controller)
 	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()

@@ -700,7 +700,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 }
 
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
-	tsc *workflowpb.TimeSkippingConfig,
+	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
 	if tsc == nil {
@@ -715,15 +715,13 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	}
 
 	if !tsc.GetEnabled() {
-		if tsc.GetBound() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set bound when enabled is false")
+		if tsc.GetFastForward() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 		}
 		return nil
 	}
-	if b, ok := tsc.GetBound().(*workflowpb.TimeSkippingConfig_MaxElapsedDuration); ok {
-		if b.MaxElapsedDuration.AsDuration() < 0 {
-			return serviceerror.NewInvalidArgument("time_skipping_config: max_elapsed_duration must be positive")
-		}
+	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
+		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
 	}
 
 	return nil
@@ -3096,10 +3094,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	var failedPartitions atomic.Int32
 
 	for _, taskType := range taskTypes {
-		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
-		if numPartitions < 1 {
-			numPartitions = 1
-		}
+		numPartitions := max(wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType), 1)
 
 		tq := tqFamily.TaskQueue(taskType)
 		// Skip partitions that route to an already-visited matching host.
@@ -5744,8 +5739,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
 			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
-			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			input.Request.VisibilityQuery = visibilityQuery
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
@@ -6315,10 +6309,11 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	)
 
 	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
-		return serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-			fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
-		)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
+		}
 	}
 	return nil
 }

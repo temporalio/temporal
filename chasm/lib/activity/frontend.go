@@ -421,6 +421,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		return nil, err
 	}
 
+	if err := validateOnConflictOptions(req); err != nil {
+		return nil, err
+	}
+
 	return req, nil
 }
 

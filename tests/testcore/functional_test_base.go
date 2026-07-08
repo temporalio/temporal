@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -47,7 +46,6 @@ import (
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.uber.org/fx"
 )
 
 type (
@@ -93,7 +91,6 @@ type (
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions                  map[primitives.ServiceName][]fx.Option
 		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
@@ -103,6 +100,7 @@ type (
 		NumHistoryShards                int32
 		Logger                          log.Logger
 		SharedCluster                   bool
+		EnableHistoryTaskRecorder       bool
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 	}
@@ -114,25 +112,6 @@ func init() {
 	// But given the size of the test binary, that has a significant performance impact (100 ms or more).
 	// By specifying a checksum here, we can avoid that overhead.
 	sdkworker.SetBinaryChecksum("oss-server-test")
-}
-
-// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
-// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
-// obtain the shard controller for the history service, you can do this:
-//
-//	var shardController shard.Controller
-//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
-//	// now you can use shardController during your test
-//
-// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
-// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
-// each one.
-//
-// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
-	}
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
@@ -186,6 +165,12 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 func WithClusterLogger(logger log.Logger) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.Logger = logger
+	}
+}
+
+func WithClusterHistoryTaskRecorder() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.EnableHistoryTaskRecorder = true
 	}
 }
 
@@ -317,10 +302,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		},
 		DCRedirectionPolicy:             params.DCRedirectionPolicy,
 		DynamicConfigOverrides:          params.DynamicConfigOverrides,
-		ServiceFxOptions:                params.ServiceOptions,
 		EnableMetricsCapture:            true,
 		EnableArchival:                  params.ArchivalEnabled,
 		EnableMTLS:                      params.EnableMTLS,
+		EnableHistoryTaskRecorder:       params.EnableHistoryTaskRecorder,
 		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
 		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
@@ -403,7 +388,6 @@ func (s *FunctionalTestBase) checkTestShard() {
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
-		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
 		EnableWorkerService: true,
 	}
 	for _, opt := range options {

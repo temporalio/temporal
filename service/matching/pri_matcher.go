@@ -97,11 +97,12 @@ func newPriTaskMatcher(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	rateLimitManager *rateLimitManager,
+	onRateLimited func(),
 	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:                    config,
-		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
+		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager, onRateLimited),
 		tqCtx:                     tqCtx,
 		logger:                    logger,
 		metricsHandler:            metricsHandler,
@@ -209,11 +210,11 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 		// to the head of the backlog, which is what taskValidator expects.
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
-			task.finish(nil, false)
 			var invalidTaskTag = getInvalidTaskTag(task)
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -268,9 +269,9 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
-			task.finish(nil, false)
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -278,7 +279,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
-			task.finish(errReprocessTask, true)
+			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 			// retrier's max interval is backlogTaskForwardTimeout, so for just valid tasks,
 			// this loop will essentially be limited to that interval.
 			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
@@ -559,7 +560,7 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	// ReprocessTasks will have woken sync tasks, but for backlog we also need to call finish.
 	for _, task := range tasks {
 		if !task.isSyncMatchTask() {
-			task.finish(errReprocessTask, true)
+			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 		}
 	}
 }
@@ -576,7 +577,7 @@ func (tm *priTaskMatcher) ReprocessRedirectedTasksAfterStop() {
 			for _, task := range tasks {
 				// these should all be from backlog (not sync-match) but check again to be sure
 				if !task.isSyncMatchTask() {
-					task.finish(errReprocessTask, true)
+					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 				}
 			}
 		}()
@@ -696,13 +697,6 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
-}
-
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
 }
 
 func (p *waitingPoller) minPriority() priorityKey {

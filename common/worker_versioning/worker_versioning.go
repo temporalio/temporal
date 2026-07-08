@@ -59,6 +59,11 @@ const (
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionDelimiter) // 39
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
+
+	// SignalSyncValidationStatus is sent by the WCI workflow to the version workflow
+	// when ValidationStatus changes, so the deployment workflow can maintain an
+	// up-to-date connectivity summary in its memo.
+	SignalSyncValidationStatus = "sync-validation-status"
 )
 
 // FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
@@ -657,10 +662,31 @@ func GetOverridePinnedVersion(override *workflowpb.VersioningOverride) *deployme
 	}
 	return nil
 }
+
+func GetOverrideOneTimeTargetVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	return override.GetOneTime().GetTargetDeploymentVersion()
+}
+
+func GetOverrideTargetDeploymentVersion(override *workflowpb.VersioningOverride) *deploymentpb.WorkerDeploymentVersion {
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
+		return GetOverridePinnedVersion(override)
+	case *workflowpb.VersioningOverride_OneTime:
+		return o.OneTime.GetTargetDeploymentVersion()
+	case *workflowpb.VersioningOverride_AutoUpgrade:
+		// Auto-upgrade has no stored target version; the version is chosen by matching at task dispatch time
+		return nil
+	default:
+		// Deprecated v0.30/v0.31 pinned override fields.
+		return GetOverridePinnedVersion(override)
+	}
+}
+
 func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverride) enumspb.VersioningBehavior {
 	if override.GetAutoUpgrade() {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	} else if override.GetPinned() != nil {
+	} else if override.GetPinned() != nil || override.GetOneTime() != nil {
+		// A pending one-time override routes like pinned; unlike pinned, it clears after a WFT completes on its target.
 		return enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
@@ -737,6 +763,11 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 			return false, 0, serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
 		return validateVersionAndGetReactivationEligibility(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	} else if oneTime := override.GetOneTime(); oneTime != nil {
+		if oneTime.GetTargetDeploymentVersion() == nil {
+			return false, 0, serviceerror.NewInvalidArgument("must provide target deployment version if override is one-time.")
+		}
+		return validateVersionAndGetReactivationEligibility(ctx, oneTime.GetTargetDeploymentVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31

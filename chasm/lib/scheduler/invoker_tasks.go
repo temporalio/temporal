@@ -209,7 +209,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(h.metricsHandler, scheduler)
-	metricsHandler.Counter(metrics.ScheduleInvokerExecuteTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired))
+	metricsHandler.Counter(metrics.ScheduleInvokerExecuteTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
@@ -433,9 +433,9 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 	scheduler := invoker.Scheduler.Get(ctx)
 	newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleInvokerProcessBufferTask.Name()).
-		Record(1, metrics.OutcomeTag(outcomeFired))
+		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
-	invoker.EventLog.Get(ctx).LogEvent(ctx, "processBufferTask executed")
+	invoker.getOrCreateEventLog(ctx).LogEvent(ctx, "processBufferTask executed")
 
 	// Make sure we have something to start.
 	executionInfo := scheduler.Schedule.GetAction().GetStartWorkflow()
@@ -648,7 +648,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	// completion is matched by a request ID that rides in the callback header and survives
 	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
 	// new run.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
 	if err != nil {
 		return err
 	}

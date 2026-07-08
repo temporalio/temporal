@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -53,11 +54,11 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
-	scheduler.EventLog.Get(ctx).LogEvent(ctx, "schedule closed from idle timer")
+	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
 		Counter(metrics.ScheduleIdleTask.Name()).
-		Record(1, metrics.OutcomeTag(outcomeFired))
+		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 	return nil
 }
 
@@ -214,7 +215,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 
-			s.EventLog.Get(ctx).LogEvent(ctx,
+			s.getOrCreateEventLog(ctx).LogEvent(ctx,
 				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
 			// Now that running workflow state has been refreshed, scheduler tasks can be
@@ -287,7 +288,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 
 	// Pack this start's request ID into the callback token so completions are matched from the token
 	// (which survives continue-as-new) rather than the started workflow's callback state.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId)
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, r.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
 	if err != nil {
 		return nil, err
 	}
@@ -332,10 +333,8 @@ func (r *SchedulerCallbacksTaskHandler) Validate(
 	task *schedulerpb.SchedulerCallbacksTask,
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)
-	for _, start := range invoker.BufferedStarts {
-		if needsCallback(start) {
-			return true, nil
-		}
+	if slices.ContainsFunc(invoker.BufferedStarts, needsCallback) {
+		return true, nil
 	}
 	return false, nil
 }
