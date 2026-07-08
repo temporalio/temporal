@@ -3240,11 +3240,32 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		}
 	}
 
-	// Invalidate pending workflow task by incrementing the persisted stamp.
-	// This ensures subsequent task dispatch detects the change.
 	if ms.HasPendingWorkflowTask() {
-		ms.executionInfo.WorkflowTaskStamp += 1
-		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+		if !ms.HasStartedWorkflowTask() {
+			// The task was scheduled but never delivered to a worker. Fail it
+			// explicitly, in the same transaction as the paused event, so it
+			// resolves cleanly in history instead of being left scheduled
+			// forever. A fresh workflow task is created automatically when
+			// the workflow is unpaused.
+			// TODO: use a dedicated cause once WORKFLOW_TASK_FAILED_CAUSE_PAUSED is available upstream.
+			if _, err := failWorkflowTask(
+				ms,
+				ms.GetPendingWorkflowTask(),
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED,
+			); err != nil {
+				return err
+			}
+			// The task failure above increments the attempt count for retry
+			// backoff purposes; reset it so the workflow task created on
+			// unpause is a normal, immediately-visible task rather than a
+			// transient retry attempt.
+			ms.executionInfo.WorkflowTaskAttempt = 1
+		} else {
+			// The task is already started (in flight with a worker). Invalidate
+			// it by bumping its stamp so a stale completion attempt is rejected.
+			ms.executionInfo.WorkflowTaskStamp += 1
+			ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+		}
 	}
 
 	return ms.updatePauseInfoSearchAttribute()
@@ -3281,13 +3302,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 		ms.executionInfo.PauseInfo = nil
 	}
 
-	// Note: workflow task is scheduled in the unpause API. So no need to schedule it here.
-	// Pause invalidates a pending workflow task by bumping its stamp, so clear it before the API schedules a fresh one.
-	if ms.HasPendingWorkflowTask() {
-		ms.workflowTaskManager.deleteWorkflowTask()
-	}
-
 	// Reschedule any pending activities
+	// Note: workflow task is scheduled in the unpause API. So no need to schedule it here.
 	for _, ai := range ms.GetPendingActivityInfos() {
 		// Bump activity stamp to force replication so that the passive cluster can recreate the activity task.
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {

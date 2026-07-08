@@ -1980,12 +1980,11 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.NoError(err)
 	prevActivityStamp := activityInfo.Stamp
 
-	// Create a pending workflow task.
-	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	// Create a pending workflow task, but don't start it.
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	prevWFTStamp := pendingWFT.Stamp
 
-	// Pause and assert stamps incremented.
+	// Pause and assert activity stamps incremented.
 	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
 	s.NoError(err)
 
@@ -1993,11 +1992,55 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.True(ok)
 	s.Greater(updatedActivityInfo.Stamp, prevActivityStamp)
 
-	wftInfo := s.mutableState.GetPendingWorkflowTask()
-	s.NotNil(wftInfo)
-	s.Greater(wftInfo.Stamp, prevWFTStamp)
+	// The pending workflow task was scheduled but never started, so pausing
+	// must fail it outright rather than merely invalidating it, and reset the
+	// attempt counter so a subsequently scheduled task is a fresh, non-transient one.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
+	s.True(pausedEvent.GetWorkerMayIgnore())
+}
+
+// TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskInvalidated verifies
+// that pausing while a workflow task is already started (in flight with a
+// worker) invalidates it by bumping its stamp, rather than failing it - that
+// task is left for the worker's (now stale) completion attempt to be rejected.
+func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskInvalidated() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	// Create and start a workflow task, but don't complete it.
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampFromBuildId("b1"),
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+	prevWFTStamp := wft.Stamp
+
+	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
+	s.NoError(err)
+
+	wftInfo := s.mutableState.GetPendingWorkflowTask()
+	s.NotNil(wftInfo)
+	s.Equal(wft.ScheduledEventID, wftInfo.ScheduledEventID)
+	s.Greater(wftInfo.Stamp, prevWFTStamp)
+
 	s.True(pausedEvent.GetWorkerMayIgnore())
 }
 
@@ -2046,18 +2089,25 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 
+	s.Equal(pendingWFT.ScheduledEventID, s.mutableState.GetPendingWorkflowTask().ScheduledEventID)
+
 	// Pause first to simulate paused workflow state.
 	_, err = s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
 	s.NoError(err)
 
-	// Capture stamps after pause.
+	// Capture activity stamp after pause.
 	pausedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	pausedActivityStamp := pausedActivityInfo.Stamp
-	pausedWFT := s.mutableState.GetPendingWorkflowTask()
-	s.NotNil(pausedWFT)
-	s.Equal(pendingWFT.ScheduledEventID, pausedWFT.ScheduledEventID)
-	s.Greater(pausedWFT.Stamp, pendingWFT.Stamp)
+
+	// The pending workflow task was scheduled but never started, so pausing
+	// must fail it outright (in the same transaction as the paused event)
+	// rather than merely invalidating it, and reset the attempt counter so
+	// the task created on unpause is a fresh, non-transient one.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// Unpause and verify.
 	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", uuid.NewString())
@@ -2072,6 +2122,9 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.True(ok)
 	s.Greater(updatedActivityInfo.Stamp, pausedActivityStamp)
 
+	// The task failed at pause time stays cleared through unpause; the
+	// unpause API (not ApplyWorkflowExecutionUnpausedEvent) is responsible
+	// for scheduling the fresh one.
 	s.False(s.mutableState.HasPendingWorkflowTask())
 	s.Nil(s.mutableState.GetPendingWorkflowTask())
 

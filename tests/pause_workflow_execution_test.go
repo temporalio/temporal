@@ -261,9 +261,13 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 // TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime is a regression
 // test for a bug where pausing a workflow that already had a pending (undelivered)
 // workflow task left that stale task in place across unpause. Since the unpause API
-// only schedules a fresh workflow task when none is already pending, the stale,
-// pause-invalidated task silently blocked any new workflow task from ever being
-// created - the workflow was stuck forever, with no dispatchable task.
+// only schedules a fresh workflow task when none is already pending, the stale task
+// silently blocked any new workflow task from ever being created - the workflow was
+// stuck forever, with no dispatchable task.
+//
+// The fix fails the pending-but-not-started workflow task outright (in the same
+// transaction as the paused event) instead of just invalidating it, so it resolves
+// cleanly in history and no longer blocks the unpause API from scheduling a fresh one.
 //
 // Test sequence:
 //  1. Start a workflow on a task queue with no active pollers, so its first workflow
@@ -292,10 +296,10 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 	runID := workflowRun.GetRunID()
 
 	// Confirm the first workflow task is pending and undelivered before pausing.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
-		require.NoError(t, err)
-		require.NotNil(t, desc.GetPendingWorkflowTask(), "expected an undelivered workflow task before pausing")
+		s.NoError(err)
+		s.NotNil(desc.GetPendingWorkflowTask(), "expected an undelivered workflow task before pausing")
 	}, 5*time.Second, 100*time.Millisecond)
 
 	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
@@ -325,6 +329,27 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 	unpauseResp, err := env.FrontendClient().UnpauseWorkflowExecution(s.Context(), unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
+
+	// The first workflow task was never delivered, so pausing must fail it
+	// outright (in the same transaction as the paused event), followed by
+	// unpause and a freshly scheduled workflow task. If the stale pre-pause
+	// task were left dangling instead of explicitly failed, no second
+	// WorkflowTaskScheduled event would appear here. The failure itself must
+	// point back at the first task (ScheduledEventId 2) and be attributed to
+	// the history service, not a worker.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		})
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskFailed {"Cause":39,"ScheduledEventId":2,"Identity":"history-service"}
+  4 WorkflowExecutionPaused
+  5 WorkflowExecutionUnpaused
+  6 WorkflowTaskScheduled`, events)
+	}, 5*time.Second, 200*time.Millisecond)
 
 	// Only now start a worker for the task queue. Without the fix, the stale
 	// pre-pause task blocks a fresh one from ever being scheduled, and the
