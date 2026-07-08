@@ -364,7 +364,6 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -374,7 +373,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "NoChange decision should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "NoChange decision should not log")
 }
 
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
@@ -383,7 +382,6 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 4)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -404,7 +402,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "first shadow log missing")
+	waitLogMatches(s, s.newTarget, 1, "first shadow log missing")
 
 	s.sm.AddedTasks(1)
 	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
@@ -412,23 +410,22 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "shadow log repeated before cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "shadow log repeated before cadence")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "fourth shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "second shadow log missing")
+	waitLogMatches(s, s.newTarget, 2, "second shadow log missing")
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -441,7 +438,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "disabled scaler should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "disabled scaler should not log")
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
@@ -549,7 +546,6 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 3)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -571,17 +567,17 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "shadow target 3 not logged")
+	waitLogMatches(s, s.newTarget, 1, "shadow target 3 not logged")
 
 	s.timeSource.Advance(time.Minute) // past cooldown and cadence
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "shadow target 2 not logged")
+	waitLogMatches(s, s.newTarget, 2, "shadow target 2 not logged")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	waitLogMatches(s, shadowLog, 3, "shadow target 3 after oscillation not logged")
+	waitLogMatches(s, s.newTarget, 3, "shadow target 3 after oscillation not logged")
 }
 
 // TestNoChangeDecisionSkipsWrite covers two skip paths: explicit NoChange, and
