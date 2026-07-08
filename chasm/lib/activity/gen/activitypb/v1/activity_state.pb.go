@@ -476,12 +476,11 @@ type ActivityAttemptState struct {
 	// The worker's control task queue for sending commands (e.g. cancel) via Nexus.
 	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
 	WorkerControlTaskQueue string `protobuf:"bytes,12,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
-	// The serialized ComponentRef captured when the task was started. Used to construct
-	// the task token for cancel commands. The token must match what was sent to the
-	// worker in the poll response.
-	StartedComponentRef []byte `protobuf:"bytes,13,opt,name=started_component_ref,json=startedComponentRef,proto3" json:"started_component_ref,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The serialized ComponentRef captured when the attempt was scheduled. Used to
+	// construct the task token for both dispatch to matching and cancel commands.
+	ComponentRef  []byte `protobuf:"bytes,13,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -598,9 +597,9 @@ func (x *ActivityAttemptState) GetWorkerControlTaskQueue() string {
 	return ""
 }
 
-func (x *ActivityAttemptState) GetStartedComponentRef() []byte {
+func (x *ActivityAttemptState) GetComponentRef() []byte {
 	if x != nil {
-		return x.StartedComponentRef
+		return x.ComponentRef
 	}
 	return nil
 }
@@ -992,7 +991,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
 	"\x16ActivityTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\x93\a\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\x84\a\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -1007,8 +1006,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	" \x01(\tR\asdkName\x12\x1f\n" +
 	"\vsdk_version\x18\v \x01(\tR\n" +
 	"sdkVersion\x129\n" +
-	"\x19worker_control_task_queue\x18\f \x01(\tR\x16workerControlTaskQueue\x122\n" +
-	"\x15started_component_ref\x18\r \x01(\fR\x13startedComponentRef\x1a\x80\x01\n" +
+	"\x19worker_control_task_queue\x18\f \x01(\tR\x16workerControlTaskQueue\x12#\n" +
+	"\rcomponent_ref\x18\r \x01(\fR\fcomponentRef\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +

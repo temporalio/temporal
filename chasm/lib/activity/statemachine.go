@@ -145,14 +145,11 @@ var TransitionStarted = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
 
-		// Capture the ComponentRef at start time. Used to construct the task token
-		// for cancel commands. The token must match what was sent to the worker in
-		// the poll response.
-		startedRef, err := ctx.Ref(a)
-		if err != nil {
-			return err
-		}
-		attempt.StartedComponentRef = startedRef
+		// Store the ComponentRef that matching used to build the poll token. This is
+		// the ref from the dispatch task data, which matching also embeds in the task
+		// token sent to the worker. Using this ref (rather than ctx.Ref) guarantees
+		// the cancel command token matches the poll token.
+		attempt.ComponentRef = request.GetComponentRef()
 
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
 		attempt.StartRequestId = request.GetRequestId()

@@ -196,7 +196,6 @@ func NewEmbeddedActivity(
 }
 
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
-	// Get latest component ref and unmarshal into proto ref
 	componentRef, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
@@ -230,7 +229,7 @@ func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef ch
 		key.RunID,
 		a.GetActivityType().GetName(),
 		attempt.GetCount(),
-		attempt.GetStartedComponentRef(),
+		attempt.GetComponentRef(),
 	)
 
 	return token.Marshal()

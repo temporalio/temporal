@@ -173,10 +173,9 @@ message ActivityAttemptState {
   // Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
   string worker_control_task_queue = 12;
 
-  // The serialized ComponentRef captured when the task was started. Used to construct
-  // the task token for cancel commands. The token must match what was sent to the
-  // worker in the poll response.
-  bytes started_component_ref = 13;
+  // The serialized ComponentRef captured when the attempt was scheduled. Used to
+  // construct the task token for both dispatch to matching and cancel commands.
+  bytes component_ref = 13;
 }
 
 message ActivityHeartbeatState {
