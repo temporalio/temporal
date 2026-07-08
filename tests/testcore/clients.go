@@ -57,7 +57,8 @@ type historyClients struct {
 }
 
 type matchingClient struct {
-	get func() matchingservice.MatchingServiceClient
+	once   sync.Once
+	client matchingservice.MatchingServiceClient
 
 	clientConnsLock sync.Mutex
 	clientConns     []*grpc.ClientConn
@@ -70,8 +71,8 @@ func newClients(
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
-) *clients {
-	c := &clients{
+) clients {
+	return clients{
 		logger:            logger,
 		hostsByService:    hostsByService,
 		tlsConfigProvider: tlsConfigProvider,
@@ -79,14 +80,6 @@ func newClients(
 		testHooks:         testHooks,
 		metricsHandler:    metricsHandler,
 	}
-	c.matching.get = sync.OnceValue(func() matchingservice.MatchingServiceClient {
-		client, err := c.newMatchingClient()
-		if err != nil {
-			c.logger.Fatal("unable to create matching test client", tag.Error(err))
-		}
-		return client
-	})
-	return c
 }
 
 func (c *clients) AdminClient() adminservice.AdminServiceClient {
@@ -140,7 +133,18 @@ func (c *clients) ensureHistory() {
 }
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
-	return c.matching.get()
+	c.ensureMatching()
+	return c.matching.client
+}
+
+func (c *clients) ensureMatching() {
+	c.matching.once.Do(func() {
+		client, err := c.newMatchingClient()
+		if err != nil {
+			c.logger.Fatal("unable to create matching test client", tag.Error(err))
+		}
+		c.matching.client = client
+	})
 }
 
 func (c *clients) close() []error {

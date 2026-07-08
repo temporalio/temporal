@@ -64,7 +64,7 @@ import (
 
 type (
 	TemporalImpl struct {
-		*clients
+		clients
 		fxApps []*fx.App
 
 		// Address for SDK to connect to, using membership grpc resolver.
