@@ -17,11 +17,9 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client"
-	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -66,7 +64,7 @@ import (
 
 type (
 	TemporalImpl struct {
-		clients
+		*clients
 		fxApps []*fx.App
 
 		// Address for SDK to connect to, using membership grpc resolver.
@@ -225,7 +223,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.logger,
 		impl.hostsByProtocolByService[grpcProtocol],
 		impl.tlsConfigProvider,
-		impl.newMatchingClient,
+		dynamicconfig.NewCollection(impl.dcClient, impl.logger),
+		impl.testHooks,
+		impl.GetMetricsHandler(),
 	)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
@@ -240,59 +240,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		impl.overrideDynamicConfigForTest(t, k, v)
 	}
 	return impl
-}
-
-func (c *TemporalImpl) newMatchingClient() (matchingservice.MatchingServiceClient, error) {
-	var tlsConfigProvider encryption.TLSConfigProvider
-	var frontendTLSConfig *tls.Config
-	if c.tlsConfigProvider != nil {
-		var err error
-		tlsConfigProvider = c.tlsConfigProvider
-		frontendTLSConfig, err = c.tlsConfigProvider.GetFrontendClientConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
-		}
-	}
-
-	monitor := static.NewMonitor(c.hostsByProtocolByService[grpcProtocol])
-	monitor.Start()
-	rpcFactory := rpc.NewFactory(
-		&config.Config{},
-		primitives.FrontendService,
-		c.logger,
-		c.GetMetricsHandler(),
-		tlsConfigProvider,
-		c.frontendMembershipAddress,
-		c.frontendMembershipAddress,
-		0,
-		frontendTLSConfig,
-		nil,
-		nil,
-		monitor,
-		c.tokenProvider,
-	)
-	clientFactory := client.NewFactoryProvider().NewFactory(
-		rpcFactory,
-		monitor,
-		c.GetMetricsHandler(),
-		dynamicconfig.NewCollection(c.dcClient, c.logger),
-		c.testHooks,
-		c.historyConfig.NumHistoryShards,
-		c.logger,
-		c.logger,
-	)
-	namespaceIDToName := func(id namespace.ID) (namespace.Name, error) {
-		resp, err := c.metadataMgr.GetNamespace(NewContext(), &persistence.GetNamespaceRequest{ID: id.String()})
-		if err != nil {
-			return "", err
-		}
-		return namespace.Name(resp.Namespace.Info.Name), nil
-	}
-	return clientFactory.NewMatchingClientWithTimeout(
-		namespaceIDToName,
-		matchingclient.DefaultTimeout,
-		matchingclient.DefaultLongPollTimeout,
-	)
 }
 
 func (c *TemporalImpl) Start() error {
