@@ -192,7 +192,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		numTargetSelectors == 0 {
-		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType/Reason/Namespace/Query/Executions/ArchetypeExecutions")
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType,Reason,Namespace, AND one of (Query OR Executions OR ArchetypeExecutions)")
 	}
 
 	if len(params.GetJobId()) == 0 {
