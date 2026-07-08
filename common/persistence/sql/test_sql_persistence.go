@@ -83,6 +83,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	}
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
 	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.sql"))
+	s.loadSchemaVersion()
 }
 
 // Config returns the persistence config for connecting to this test cluster
@@ -111,26 +112,9 @@ func (s *TestCluster) CreateDatabase() {
 		cfg2.DatabaseName = ""
 	}
 
-	var db sqlplugin.AdminDB
-	var err error
-	err = backoff.ThrottleRetry(
-		func() error {
-			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
-			return err
-		},
-		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
-		nil,
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	err = db.CreateDatabase(s.cfg.DatabaseName)
+	db := s.newAdminDB(sqlplugin.DbKindUnknown, &cfg2)
+	defer s.closeAdminDB(db)
+	err := db.CreateDatabase(s.cfg.DatabaseName)
 	if err != nil {
 		panic(err)
 	}
@@ -154,18 +138,9 @@ func (s *TestCluster) DropDatabase() {
 
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	err = db.DropDatabase(s.cfg.DatabaseName)
-	if err != nil {
+	db := s.newAdminDB(sqlplugin.DbKindUnknown, &cfg2)
+	defer s.closeAdminDB(db)
+	if err := db.DropDatabase(s.cfg.DatabaseName); err != nil {
 		panic(err)
 	}
 	s.logger.Info("dropped database", tag.String("database", s.cfg.DatabaseName))
@@ -183,24 +158,8 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		)
 	}
 
-	var db sqlplugin.AdminDB
-	err = backoff.ThrottleRetry(
-		func() error {
-			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
-			return err
-		},
-		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
-		nil,
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
+	db := s.newAdminDB(sqlplugin.DbKindUnknown, &s.cfg)
+	defer s.closeAdminDB(db)
 
 	if rewriter, ok := db.(sqlplugin.SchemaStatementRewriter); ok {
 		statements = rewriter.RewriteSchemaStatements(statements)
@@ -219,4 +178,44 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}
 	s.logger.Info("loaded schema")
+}
+
+func (s *TestCluster) loadSchemaVersion() {
+	db := s.newAdminDB(sqlplugin.DbKindMain, &s.cfg)
+	defer s.closeAdminDB(db)
+
+	expectedVersion := db.ExpectedVersion()
+	if err := db.CreateSchemaVersionTables(); err != nil {
+		s.logger.Fatal("CreateSchemaVersionTables", tag.Error(err))
+	}
+	if err := db.UpdateSchemaVersion(s.cfg.DatabaseName, expectedVersion, expectedVersion); err != nil {
+		s.logger.Fatal("UpdateSchemaVersion", tag.Error(err))
+	}
+	if err := db.WriteSchemaUpdateLog("0", expectedVersion, "", "initial version"); err != nil {
+		s.logger.Fatal("WriteSchemaUpdateLog", tag.Error(err))
+	}
+	s.logger.Info("loaded schema version", tag.String("version", expectedVersion))
+}
+
+func (s *TestCluster) newAdminDB(kind sqlplugin.DbKind, cfg *config.SQL) sqlplugin.AdminDB {
+	var db sqlplugin.AdminDB
+	var err error
+	err = backoff.ThrottleRetry(
+		func() error {
+			db, err = NewSQLAdminDB(kind, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			return err
+		},
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
+	if err != nil {
+		s.logger.Fatal("NewSQLAdminDB", tag.Error(err))
+	}
+	return db
+}
+
+func (s *TestCluster) closeAdminDB(db sqlplugin.AdminDB) {
+	if err := db.Close(); err != nil {
+		s.logger.Fatal("Close schema DB", tag.Error(err))
+	}
 }
