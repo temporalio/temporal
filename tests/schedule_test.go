@@ -182,6 +182,9 @@ func calendarSpec(at time.Time) *schedulepb.CalendarSpec {
 
 // registerCountingWorkflow registers a workflow that records each execution in
 // runs (via SideEffect, so replays don't double-count) and returns immediately.
+//
+// Each registered counting workflow should be associated with a distinct `runs`
+// atomic.
 func registerCountingWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32) {
 	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		_ = workflow.SideEffect(ctx, func(workflow.Context) any { runs.Add(1); return 0 })
@@ -520,6 +523,24 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 	await.RequireTruef(t, func() bool { return runs.Load() == 2 },
 		awaitTimeout, pollInterval,
 		"deferred start must fire after the running workflow completes - regression for the Attempt=-1 -> 0 re-enable path")
+
+	// The fire is specifically the tick buffered directly behind the first start,
+	// not a fresh action generated after completion. RecentActions lists the
+	// completed first tick and the now-running deferred start; with no jitter their
+	// nominal times are exactly one interval apart.
+	await.RequireTruef(t, func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if descErr != nil {
+			return false
+		}
+		recent := desc.GetInfo().GetRecentActions()
+		return len(recent) == 2 &&
+			recent[1].GetScheduleTime().AsTime().Sub(recent[0].GetScheduleTime().AsTime()) == fastInterval
+	}, awaitTimeout, pollInterval,
+		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
 }
 
 func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {

@@ -557,6 +557,8 @@ func TestExecuteTask_Validate(t *testing.T) {
 			expectedValid: true,
 		},
 		{
+			// When the RunID is set, the start's already been kicked off, so we don't need
+			// an execute task.
 			name: "running start (RunId set) is invalid",
 			setup: func() {
 				invoker.LastProcessedTime = timestamppb.New(now)
@@ -569,6 +571,7 @@ func TestExecuteTask_Validate(t *testing.T) {
 			expectedValid: false,
 		},
 		{
+			// A retry is pending, but we're still in exponential backoff time.
 			name: "backing-off start is invalid",
 			setup: func() {
 				invoker.LastProcessedTime = timestamppb.New(now)
