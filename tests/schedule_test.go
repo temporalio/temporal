@@ -526,8 +526,8 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 
 	// The fire is specifically the tick buffered directly behind the first start,
 	// not a fresh action generated after completion. RecentActions lists the
-	// completed first tick and the now-running deferred start; with no jitter their
-	// nominal times are exactly one interval apart.
+	// completed first tick and the still-running deferred start; with no jitter the
+	// deferred start's nominal time is exactly one interval after the first tick's.
 	await.RequireTruef(t, func() bool {
 		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
@@ -536,9 +536,16 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 		if descErr != nil {
 			return false
 		}
-		recent := desc.GetInfo().GetRecentActions()
-		return len(recent) == 2 &&
-			recent[1].GetScheduleTime().AsTime().Sub(recent[0].GetScheduleTime().AsTime()) == fastInterval
+		var first, deferred *schedulepb.ScheduleActionResult
+		for _, r := range desc.GetInfo().GetRecentActions() {
+			if r.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				deferred = r
+			} else {
+				first = r
+			}
+		}
+		return first != nil && deferred != nil &&
+			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()) == fastInterval
 	}, awaitTimeout, pollInterval,
 		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
 }
