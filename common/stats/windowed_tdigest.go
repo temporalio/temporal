@@ -122,7 +122,6 @@ func (w *timeWindowedTDigest) TrimmedMean(lowerQuantile, upperQuantile float64) 
 	return merged.TrimmedMean(lowerQuantile, upperQuantile)
 }
 
-// TODO: this is expensive, maybe cache everything but the latest window so we can skip N merges?
 func (w *timeWindowedTDigest) getMergedWindows() *tdigest.TDigest {
 	w.mu.Lock()
 	defer w.mu.Unlock()
