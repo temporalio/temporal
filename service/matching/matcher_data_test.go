@@ -30,8 +30,9 @@ import (
 
 type MatcherDataSuite struct {
 	suite.Suite
-	ts *clock.EventTimeSource
-	md matcherData
+	ts              *clock.EventTimeSource
+	md              matcherData
+	rateLimitedCount atomic.Int32
 }
 
 func TestMatcherDataSuite(t *testing.T) {
@@ -49,7 +50,8 @@ func (s *MatcherDataSuite) SetupTest() {
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, newTaskTracker(s.ts, 5*time.Second, 30*time.Second))
+	s.rateLimitedCount.Store(0)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, func() { s.rateLimitedCount.Add(1) })
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -237,8 +239,7 @@ func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
 		s.md.rateLimitManager.wholeQueueLimit, now, 1)
 	s.md.rateLimitManager.mu.Unlock()
 
-	// Tracker should start at zero.
-	s.InDelta(0, s.md.tasksRateLimited.rate(), 0.001)
+	s.Equal(int32(0), s.rateLimitedCount.Load())
 
 	// Add a waiting poller.
 	go func() {
@@ -247,13 +248,11 @@ func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
 	}()
 	s.waitForPollers(1)
 
-	// Sync match should be rate limited and tracker should record it.
+	// Sync match should be rate limited and callback should fire.
 	t := s.newSyncTask(nil)
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 
-	// Advance time so the tracker can compute a nonzero rate.
-	s.ts.Advance(time.Second)
-	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
+	s.Greater(s.rateLimitedCount.Load(), int32(0))
 }
 
 func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
@@ -273,9 +272,7 @@ func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
 	poller := &waitingPoller{startTime: s.now()}
 	s.md.MatchPollerImmediately(poller)
 
-	// Advance time so the tracker can compute a nonzero rate.
-	s.ts.Advance(time.Second)
-	s.Greater(s.md.tasksRateLimited.rate(), float32(0))
+	s.Greater(s.rateLimitedCount.Load(), int32(0))
 }
 
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
@@ -1098,7 +1095,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, newTaskTracker(ts, 5*time.Second, 30*time.Second))
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, func() {})
 
 		next := func() int {
 			if len(tape) == 0 {

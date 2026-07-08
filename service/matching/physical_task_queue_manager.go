@@ -217,7 +217,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
-			pqMgr.tasksRateLimited,
+			func() { pqMgr.tasksRateLimited.inc(1) },
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -257,7 +257,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
-			pqMgr.tasksRateLimited,
+			func() { pqMgr.tasksRateLimited.inc(1) },
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
