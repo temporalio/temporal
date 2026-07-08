@@ -220,7 +220,6 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplic
 	}
 }
 
-// Check if remote cluster has caught up on all shards on replication tasks
 // classifyShardReplicationStatus determines a shard's catchup readiness, guarding an
 // uninitialized ack watermark (returned as not-ready with zero lag) from reading as infinite lag.
 func classifyShardReplicationStatus(
@@ -256,6 +255,7 @@ func classifyShardReplicationStatus(
 	}
 }
 
+// checkReplicationOnce checks whether the remote cluster has caught up on all shards.
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
@@ -306,12 +306,13 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 		notReadyShardCount    int
 		noWatermarkShardCount int
 
-		maxLaggingTasksShardID int32
-		maxLaggingTasks        int64
-
-		maxTimeLagShardID int32
-		maxTimeLag        time.Duration
+		maxLaggingTasks int64
+		maxTimeLag      time.Duration
 	)
+	// -1 (not a valid shard id) means no shard had genuine lag, e.g. when the not-ready
+	// shards are all no-watermark and thus carry zero lag.
+	maxLaggingTasksShardID := int32(-1)
+	maxTimeLagShardID := int32(-1)
 
 	for _, status := range shardStatuses {
 		if status.isReady {
