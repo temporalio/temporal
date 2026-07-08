@@ -94,6 +94,8 @@ type (
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
 		tasksDispatched map[priorityKey]*taskTracker
+		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
+		tasksRateLimited *taskTracker
 	}
 
 	// TODO(pri): old matcher cleanup
@@ -159,6 +161,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:           taggedMetricsHandler,
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
+		tasksRateLimited:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
 	}
@@ -215,6 +218,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
+			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -254,6 +258,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
+			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -547,6 +552,13 @@ func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
 }
 
+// onRateLimited records a rate-limit event.
+func (c *physicalTaskQueueManagerImpl) onRateLimited() {
+	c.taskTrackerLock.Lock()
+	c.tasksRateLimited.inc(1)
+	c.taskTrackerLock.Unlock()
+}
+
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
@@ -687,7 +699,12 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
+		rateLimitingActive := c.tasksRateLimited.rate() > 0
 		c.taskTrackerLock.Unlock()
+
+		for _, s := range stats {
+			s.RateLimitingActive = rateLimitingActive
+		}
 	}
 
 	return stats
