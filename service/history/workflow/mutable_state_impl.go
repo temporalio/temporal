@@ -3247,7 +3247,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 			// resolves cleanly in history instead of being left scheduled
 			// forever. A fresh workflow task is created automatically when
 			// the workflow is unpaused.
-			// TODO: use a dedicated cause once WORKFLOW_TASK_FAILED_CAUSE_PAUSED is available upstream.
 			if _, err := failWorkflowTask(
 				ms,
 				ms.GetPendingWorkflowTask(),
