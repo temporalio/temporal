@@ -9,6 +9,7 @@ import (
 )
 
 func TestSubstringValidator(t *testing.T) {
+	t.Parallel()
 	v := substringValidator{
 		name:    "panic",
 		include: "panic",
@@ -21,6 +22,7 @@ func TestSubstringValidator(t *testing.T) {
 }
 
 func TestScanServerLogs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.log")
 	content := `{"level":"info","msg":"starting"}

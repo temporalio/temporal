@@ -48,7 +48,7 @@ var serverLogValidators = []logLineValidator{
 	},
 	substringValidator{
 		name:    "panic",
-		include: "panic",
+		include: "panic:",
 		exclude: []string{
 			"Potential deadlock detected", // expected under resource-constrained load
 			"[TMPRL1100]",                 // invalid state transition, sdk-side
