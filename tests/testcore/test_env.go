@@ -26,13 +26,11 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.uber.org/fx"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -137,17 +135,6 @@ func WithSdkWorker() TestOption {
 func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 	return func(o *testOptions) {
 		o.testVars = fn
-	}
-}
-
-// WithFxOptions appends fx options to a specific service's fx graph. This
-// implies a dedicated cluster because custom fx options cannot be shared
-// across tests.
-func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
-		o.dedicatedReason = "custom fx options used"
 	}
 }
 
