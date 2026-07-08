@@ -94,6 +94,7 @@ type (
 		taskTrackerLock  sync.Mutex
 		tasksAdded       map[priorityKey]*taskTracker
 		tasksDispatched  map[priorityKey]*taskTracker
+		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
 
@@ -551,6 +552,7 @@ func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
 }
 
+// onRateLimited records a rate-limit event. Passed as a callback to matcherData.
 func (c *physicalTaskQueueManagerImpl) onRateLimited() {
 	c.taskTrackerLock.Lock()
 	c.tasksRateLimited.inc(1)
