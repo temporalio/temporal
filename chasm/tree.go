@@ -127,6 +127,17 @@ type (
 		// terminated as part of a delete operation. Like terminated, this is in-memory only
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
+
+		// subtreeIsDirty is true if this node, any ancestor, or any descendant was mutated
+		// in the current transaction (valueState >= valueStateNeedSerialize), or if
+		// ExecutePureTask ran on this node or any such relative.
+		//
+		// markSubtreeDirty propagates the flag both upward (to ancestors) and downward (to
+		// all descendants) at mutation time, so CloseTransaction can skip task validation
+		// for nodes whose entire lineage is clean with a single O(1) flag check.
+		//
+		// This is a per-node field (not in nodeBase) and is reset after each transaction.
+		subtreeIsDirty bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -160,17 +171,6 @@ type (
 		valueToNode map[any]*Node
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
-
-		// isActiveStateDirty is true if any user data is mutated.
-		// NOTE: this only captures active cluster's user data mutation.
-		// Replication logic (ApplySnapshot/Mutation) will not set this field.
-		//
-		// This flag in a CHASM tree level, while valueState is on node level.
-		// Tracking this flag on tree level avoids traversing the whole tree every time
-		// we want to know if something is updated.
-		//
-		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
-		isActiveStateDirty bool
 
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
@@ -252,6 +252,11 @@ type (
 		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
+
+// IsEmpty reports whether the mutation contains no node updates or deletions.
+func (m NodesMutation) IsEmpty() bool {
+	return len(m.UpdatedNodes) == 0 && len(m.DeletedNodes) == 0
+}
 
 // NewTreeFromDB creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 // This method should only be used when loading an existing CHASM tree from database.
@@ -414,7 +419,23 @@ func (n *Node) setValue(value any) {
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
 	if state >= valueStateNeedSerialize {
-		n.isActiveStateDirty = true
+		n.markSubtreeDirty()
+	}
+}
+
+// markSubtreeDirty sets subtreeIsDirty on this node and propagates upward to all ancestors.
+// This ensures that ancestor nodes know their subtree contains a dirty node, which is used
+// during CloseTransaction to skip task validation for completely unrelated subtrees.
+// markSubtreeDirty marks this node and its entire lineage (ancestors and descendants)
+// as dirty so that CloseTransaction knows to validate their tasks.
+func (n *Node) markSubtreeDirty() {
+	// Propagate upward to ancestors.
+	for cur := n; cur != nil && !cur.subtreeIsDirty; cur = cur.parent {
+		cur.subtreeIsDirty = true
+	}
+	// Propagate downward to descendants.
+	for _, desc := range n.andAllChildren() {
+		desc.subtreeIsDirty = true
 	}
 }
 
@@ -1698,7 +1719,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if n.isActiveStateDirty {
+	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1996,9 +2017,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
 		// - child component state update
 		// - parent component closing (access rule)
-		// - a pointer field pointing to an updated component
-		// As a result, we need to validate existing tasks for all components if we are in active cluster.
-		if n.isActiveStateDirty {
+		// - a pointer field pointing to an updated component (pointers are ancestors-only)
+		// markSubtreeDirty propagates to both ancestors and descendants at mutation time,
+		// so we skip validation only for nodes with no dirty node anywhere in their lineage.
+		if node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
 				return err
@@ -2183,6 +2205,36 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	return cleanedUp, nil
 }
 
+// applySingletonMode enforces singleton semantics for tasks registered with [WithSingletonTask].
+// It is called after task validation, so only valid new tasks reach this point.
+// Returns true if the new task should be skipped (SingletonTaskModeIgnore with existing task).
+func (n *Node) applySingletonMode(
+	rt *RegistrableTask,
+	taskList *[]*persistencespb.ChasmComponentAttributes_Task,
+) (skip bool) {
+	if rt.singletonMode == 0 {
+		return false
+	}
+
+	idx := slices.IndexFunc(*taskList, func(t *persistencespb.ChasmComponentAttributes_Task) bool {
+		return t.TypeId == rt.taskTypeID
+	})
+	if idx == -1 {
+		return false
+	}
+
+	switch rt.singletonMode {
+	case SingletonTaskModeReplace:
+		delete(n.taskValueCache, (*taskList)[idx].Data)
+		*taskList = slices.Delete(*taskList, idx, idx+1)
+		return false
+	case SingletonTaskModeIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) closeTransactionHandleNewTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 	validateContext Context,
@@ -2240,9 +2292,15 @@ func (n *Node) closeTransactionHandleNewTasks(
 		}
 
 		if registrableTask.isPureTask {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.PureTasks); skip {
+				continue
+			}
 			componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
 			sortPureTasks = true
 		} else {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.SideEffectTasks); skip {
+				continue
+			}
 			componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
 		}
 
@@ -2436,8 +2494,12 @@ func (n *Node) cleanupTransaction() {
 		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	}
 
-	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
+
+	// Reset per-node subtreeIsDirty on all nodes in the tree.
+	for _, node := range n.andAllChildren() {
+		node.subtreeIsDirty = false
+	}
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -2989,7 +3051,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	return n.isActiveStateDirty ||
+	return n.subtreeIsDirty ||
 		len(n.mutation.UpdatedNodes) > 0 ||
 		len(n.mutation.DeletedNodes) > 0
 }
@@ -3427,9 +3489,9 @@ func (n *Node) ExecutePureTask(
 ) (_ bool, retErr error) {
 	defer func() {
 		if retErr == nil {
-			// Mark the tree state to dirty so it will force the transaction to clean up
-			// invalid tasks (including the current one).
-			n.isActiveStateDirty = true
+			// Mark this node dirty so CloseTransaction cleans up invalid tasks,
+			// including the current one, even if the handler made no state mutations.
+			n.markSubtreeDirty()
 		}
 	}()
 
