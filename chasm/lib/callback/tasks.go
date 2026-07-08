@@ -79,6 +79,9 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	// MatchingClient is used by the NexusWorker callback variant to dispatch the completion Nexus task
+	// directly to the waiting worker's task queue via MatchingService.DispatchNexusTask.
+	MatchingClient resource.MatchingClient
 }
 
 type invocationTaskHandler struct {
@@ -90,6 +93,7 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	matchingClient     resource.MatchingClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -101,6 +105,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		matchingClient:     opts.MatchingClient,
 	}
 }
 

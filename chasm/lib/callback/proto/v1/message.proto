@@ -61,9 +61,21 @@ message Callback {
     map<string, string> header = 2;
   }
 
+  // Duplicated from commonpb.Callback::NexusWorker, with comments stripped.
+  message NexusWorker {
+    string taskqueue_name = 1;
+
+    reserved 2;
+    reserved 3;
+    reserved 4;
+
+    temporal.api.common.v1.Payloads source_context = 5;
+  }
+
   reserved 1; // For a generic callback mechanism to be added later.
   oneof variant {
     Nexus nexus = 2;
+    NexusWorker nexus_worker = 3;
   }
 
   repeated temporal.api.common.v1.Link links = 100;

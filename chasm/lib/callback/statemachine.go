@@ -20,6 +20,10 @@ var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
+		// BUG: This only handles the Nexus (outbound HTTP) variant. For a NexusWorker callback,
+		// GetNexus() is nil so GetUrl() is "" and the destination resolves to a bogus "://", which
+		// misroutes outbound-queue task grouping and circuit-breaker isolation. The destination for a
+		// NexusWorker callback should be derived from its TaskqueueName instead.
 		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
 		if err != nil {
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
@@ -37,7 +41,11 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		// BUG: This only handles the Nexus (outbound HTTP) variant. For a NexusWorker callback,
+		// GetNexus() is nil so GetUrl() is "" and the destination resolves to a bogus "://", which
+		// misroutes outbound-queue task grouping and circuit-breaker isolation. The destination for a
+		// NexusWorker callback should be derived from its TaskqueueName instead.
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
 		if err != nil {
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
 		}
