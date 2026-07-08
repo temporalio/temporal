@@ -30,8 +30,8 @@ import (
 
 type MatcherDataSuite struct {
 	suite.Suite
-	ts              *clock.EventTimeSource
-	md              matcherData
+	ts               *clock.EventTimeSource
+	md               matcherData
 	rateLimitedCount atomic.Int32
 }
 
@@ -252,7 +252,7 @@ func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
 	t := s.newSyncTask(nil)
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 
-	s.Greater(s.rateLimitedCount.Load(), int32(0))
+	s.Positive(s.rateLimitedCount.Load())
 }
 
 func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
@@ -272,7 +272,7 @@ func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
 	poller := &waitingPoller{startTime: s.now()}
 	s.md.MatchPollerImmediately(poller)
 
-	s.Greater(s.rateLimitedCount.Load(), int32(0))
+	s.Positive(s.rateLimitedCount.Load())
 }
 
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
