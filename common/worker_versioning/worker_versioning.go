@@ -825,15 +825,12 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
-	switch override.GetBehavior() {
-	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+	if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if override.GetDeployment() != nil {
 			return false, 0, nil
 		} else if override.GetPinnedVersion() != "" {
 			return validateVersionAndGetReactivationEligibility(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionCache, tq, tqType, namespaceID)
 		}
-	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-	default:
 	}
 	return false, 0, nil
 }
