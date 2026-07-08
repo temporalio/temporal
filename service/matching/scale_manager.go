@@ -211,7 +211,6 @@ func (sm *scaleManager) callScaler() {
 	newState.Target = target
 	newState.MaxTarget = max(newState.MaxTarget, target)
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
-	newState.BacklogCounts = scaleState.GetBacklogCounts()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
 
@@ -433,6 +432,15 @@ func partitionIsFullyDrained(
 		}
 	}
 	return true
+}
+
+func totalBacklogFromDescribeResponse(res *matchingservice.DescribeTaskQueuePartitionResponse) (total int64) {
+	for _, v := range res.GetVersionsInfoInternal() {
+		for _, q := range v.GetPhysicalTaskQueueInfo().GetInternalTaskQueueStatus() {
+			total += q.GetApproximateBacklogCount()
+		}
+	}
+	return
 }
 
 func scaleStateToReadCount(scaleState *persistencespb.PartitionScaleState) int32 {
