@@ -217,11 +217,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
-			func() {
-				pqMgr.taskTrackerLock.Lock()
-				pqMgr.tasksRateLimited.inc(1)
-				pqMgr.taskTrackerLock.Unlock()
-			},
+			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -261,11 +257,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
-			func() {
-				pqMgr.taskTrackerLock.Lock()
-				pqMgr.tasksRateLimited.inc(1)
-				pqMgr.taskTrackerLock.Unlock()
-			},
+			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
@@ -557,6 +549,12 @@ func (c *physicalTaskQueueManagerImpl) backlogCountHint() int64 {
 
 func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
+}
+
+func (c *physicalTaskQueueManagerImpl) onRateLimited() {
+	c.taskTrackerLock.Lock()
+	c.tasksRateLimited.inc(1)
+	c.taskTrackerLock.Unlock()
 }
 
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
