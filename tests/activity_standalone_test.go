@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -9722,15 +9723,123 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Honor backoff: the activity must stay SCHEDULED well past the unpause
-		require.Never(t, func() bool {
-			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		// Honor backoff: the task must not be pollable before the retry deadline.
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		poll2Resp, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		if err != nil {
+			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
+		} else {
+			require.Empty(
+				t,
+				poll2Resp.GetActivityId(),
+				"unpause must honor the remaining retry backoff; activity task should not be pollable",
+			)
+		}
+	})
+
+	// After unpause, force dispatch reissue with an options update. The retry backoff should still
+	// be preserved, so no activity task should be pollable before the original retry deadline.
+	t.Run("PauseWhileRetryBackoffSurvivesOptionsUpdateAfterUnpause", func(t *testing.T) {
+		ctx := testcore.NewContext()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().RequestID(),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts:    10,
+				InitialInterval:    durationpb.New(30 * time.Second),
+				BackoffCoefficient: 1.0,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		await.Require(ctx, t, func(c *await.T) {
+			dr, dErr := env.FrontendClient().DescribeActivityExecution(
+				c.Context(),
+				&workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+			require.NoError(c, dErr)
+			require.EqualValues(c, 2, dr.GetInfo().GetAttempt())
+		}, 10*time.Second, 200*time.Millisecond)
+
+		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   "test-identity",
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(
+			ctx,
+			&workflowservice.UpdateActivityExecutionOptionsRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+				ActivityOptions: &activitypb.ActivityOptions{
+					HeartbeatTimeout: durationpb.New(time.Second),
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 			})
-			return dErr != nil || dr.GetInfo().GetRunState() != enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-		}, 5*time.Second, 100*time.Millisecond,
-			"unpause must honor the remaining retry backoff; activity should remain SCHEDULED")
+		require.NoError(t, err)
+
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		poll2Resp, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		if err != nil {
+			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
+		} else {
+			require.Empty(t, poll2Resp.GetActivityId(), "options update after unpause must not lose the pending retry backoff")
+		}
 	})
 
 	// PauseWhileCancelRequested: pausing a CANCEL_REQUESTED activity must be rejected with
@@ -10754,7 +10863,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
 			ActivityType:        env.Tv().ActivityType(),
@@ -10765,7 +10874,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			RequestId:           env.Tv().RequestID(),
 			RetryPolicy: &commonpb.RetryPolicy{
 				MaximumAttempts:    10,
-				InitialInterval:    durationpb.New(1 * time.Second),
+				InitialInterval:    durationpb.New(30 * time.Second),
 				BackoffCoefficient: 1.0,
 			},
 		})
@@ -10821,8 +10930,25 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Poll — attempt count should be reset to 1.
-		poll2Resp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		// Force dispatch reissue before polling. ResetAttempts must clear the old retry backoff,
+		// otherwise this update would re-delay the reset attempt.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(
+			ctx,
+			&workflowservice.UpdateActivityExecutionOptionsRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+				ActivityOptions: &activitypb.ActivityOptions{
+					HeartbeatTimeout: durationpb.New(time.Second),
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+			})
+		require.NoError(t, err)
+
+		// Poll: attempt count should be reset to 1 without waiting for the old 30s retry backoff.
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		poll2Resp, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  env.Tv().WorkerIdentity(),
