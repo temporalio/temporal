@@ -29,9 +29,6 @@ func emitReplicationExecuting(
 	taskType string,
 	attempt int32,
 ) {
-	if !toolBox.Config.EmitReplicationLifecycleEvents() {
-		return
-	}
 	shardContext, err := toolBox.ShardController.GetShardByNamespaceWorkflow(namespace.ID(key.NamespaceID), key.WorkflowID)
 	if err != nil {
 		return
