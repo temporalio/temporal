@@ -9,9 +9,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
@@ -1197,4 +1199,39 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 		)
 		s.Equal(fixedBase.Add(skipped), event.GetEventTime().AsTime())
 	})
+}
+
+// TestChasmContextNowReflectsAccumulatedSkippedDuration verifies the end-to-end delegation with a
+// real mutable state: once it has accumulated skipped duration its Now() returns virtual time, and
+// a CHASM Context built over that mutable state (as its NodeBackend) reflects the same virtual time
+// via Context.Now -> Node.Now -> backend.Now.
+func (s *mutableStateSuite) TestChasmContextNowReflectsAccumulatedSkippedDuration() {
+	const accumulatedSkip = 3 * time.Hour
+	baseTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+
+	ts := clock.NewEventTimeSource()
+	ts.Update(baseTime)
+	s.mutableState.timeSource = ts
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+		AccumulatedSkippedDuration: durationpb.New(accumulatedSkip),
+	}
+	s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+	s.Require().Equal(baseTime.Add(accumulatedSkip), s.mutableState.Now(),
+		"sanity: the real mutable state reports virtual time")
+
+	// Build a CHASM tree backed by the real mutable state, then a CHASM context over it.
+	// Context.Now delegates through Node.Now -> backend.Now (== mutableState.Now).
+	node := chasm.NewEmptyTree(
+		chasm.NewRegistry(s.logger),
+		s.mutableState,
+		chasm.DefaultPathEncoder,
+		s.logger,
+		metrics.NoopMetricsHandler,
+	)
+	ctx := chasm.NewMutableContext(context.Background(), node)
+
+	s.Equal(baseTime.Add(accumulatedSkip), ctx.Now(nil),
+		"CHASM Context.Now must reflect the mutable state's virtual time")
 }

@@ -41,6 +41,7 @@ type MockNodeBackend struct {
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
 	HandleSetTimeSkippingConfig       func(config *commonpb.TimeSkippingConfig)
+	HandleNow                         func() time.Time
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -256,7 +257,18 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 }
 
 func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.HandleSetTimeSkippingConfig(config)
+	if m.HandleSetTimeSkippingConfig != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.HandleSetTimeSkippingConfig(config)
+	}
+}
+
+func (m *MockNodeBackend) Now() time.Time {
+	if m.HandleNow != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.HandleNow()
+	}
+	return time.Now()
 }

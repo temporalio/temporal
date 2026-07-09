@@ -23,18 +23,15 @@ import (
 )
 
 type (
-	EngineOption func(*Engine)
-
 	// Engine is a lightweight in memory CHASM engine for unit tests. It implements
 	// [chasm.Engine] and supports the full set of conflict and reuse policies, as
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
 	// of the production engine as closely as possible without persistence or shard logic.
 	Engine struct {
-		t          *testing.T
-		registry   *chasm.Registry
-		logger     log.Logger
-		metrics    metrics.Handler
-		timeSource clock.TimeSource
+		t        *testing.T
+		registry *chasm.Registry
+		logger   log.Logger
+		metrics  metrics.Handler
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
@@ -48,6 +45,11 @@ type (
 		backend   *chasm.MockNodeBackend
 		root      chasm.RootComponent
 		requestID string
+		// timeSource is this execution's clock, owned by its mutable-state stand-in
+		// (backend). Context.Now routes through backend.Now, so each execution reads
+		// its own time — mirroring production, where every MutableState owns its
+		// (time-skipping-aware) time source rather than sharing an engine-wide clock.
+		timeSource *clock.EventTimeSource
 	}
 
 	businessKey struct {
@@ -62,17 +64,6 @@ type (
 	}
 )
 
-// WithTimeSource overrides the engine's default time source.
-// The default is a [clock.EventTimeSource] initialized to [time.Now] at engine creation,
-// which gives deterministic, frozen time suitable for most unit tests.
-// Pass a *clock.EventTimeSource when tests need to advance time explicitly;
-// the caller holds the reference and calls ts.Update(...) directly.
-func WithTimeSource(ts clock.TimeSource) EngineOption {
-	return func(e *Engine) {
-		e.timeSource = ts
-	}
-}
-
 var defaultTransitionOptions = chasm.TransitionOptions{
 	ReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
 	ConflictPolicy: chasm.BusinessIDConflictPolicyFail,
@@ -83,28 +74,18 @@ var _ chasm.Engine = (*Engine)(nil)
 func NewEngine(
 	t *testing.T,
 	registry *chasm.Registry,
-	opts ...EngineOption,
 ) *Engine {
 	t.Helper()
 
-	ts := clock.NewEventTimeSource()
-	ts.Update(time.Now())
-	e := &Engine{
+	return &Engine{
 		t:                 t,
 		registry:          registry,
 		logger:            testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly),
 		metrics:           metrics.NoopMetricsHandler,
-		timeSource:        ts,
 		currentExecutions: make(map[businessKey]*execution),
 		allExecutions:     make(map[runKey]*execution),
 		notifier:          newExecutionNotifier(),
 	}
-
-	for _, opt := range opts {
-		opt(e)
-	}
-
-	return e
 }
 
 // Tasks returns all physical tasks scheduled for the execution identified by ref, grouped by category.
@@ -120,6 +101,18 @@ func (e *Engine) Tasks(ref chasm.ComponentRef) (map[tasks.Category][]tasks.Task,
 	result := make(map[tasks.Category][]tasks.Task, len(exec.backend.TasksByCategory))
 	maps.Copy(result, exec.backend.TasksByCategory)
 	return result, nil
+}
+
+// TimeSource returns the clock for the execution identified by ref. Each execution's
+// mutable-state stand-in (backend) owns its clock and Context.Now routes through it,
+// so tests advance a specific execution's time via ts.Update(...). Defaults to a
+// frozen time.Now captured when the execution was created.
+func (e *Engine) TimeSource(ref chasm.ComponentRef) (*clock.EventTimeSource, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.timeSource, nil
 }
 
 func (e *Engine) StartExecution(
@@ -514,7 +507,16 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		}
 	)
 
+	// Each execution owns its clock, as its mutable-state stand-in (backend). Defaults
+	// to a frozen time.Now; a test can advance it via the execution's timeSource.
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+
 	backend := &chasm.MockNodeBackend{
+		// Now sources the framework clock from this execution's time source, so that
+		// Context.Now (which routes through the backend) reflects the execution's own
+		// clock rather than a shared engine-wide one.
+		HandleNow: timeSource.Now,
 		// NextTransitionCount increments on every CloseTransaction call, matching
 		// the real engine's per transition monotonic counter.
 		HandleNextTransitionCount: func() int64 {
@@ -559,11 +561,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		},
 	}
 	return &execution{
-		key:     key,
-		backend: backend,
+		key:        key,
+		backend:    backend,
+		timeSource: timeSource,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,

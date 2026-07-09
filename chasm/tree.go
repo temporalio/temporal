@@ -20,7 +20,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -143,7 +142,6 @@ type (
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
 	nodeBase struct {
 		registry       *Registry
-		timeSource     clock.TimeSource
 		backend        NodeBackend
 		pathEncoder    NodePathEncoder
 		logger         log.Logger
@@ -235,6 +233,7 @@ type (
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		Now() time.Time
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -265,20 +264,19 @@ func (m NodesMutation) IsEmpty() bool {
 func NewTreeFromDB(
 	serializedNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+		root := NewEmptyTree(registry, backend, pathEncoder, logger, metricsHandler)
 		// NewEmptyTree initializes the serializedNode to an empty component node,
 		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 		return root, nil
 	}
 
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, backend, pathEncoder, logger, metricsHandler)
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -296,13 +294,12 @@ func NewTreeFromDB(
 // NewEmptyTree creates a new empty in-memory CHASM tree.
 func NewEmptyTree(
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *Node {
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, backend, pathEncoder, logger, metricsHandler)
 
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
@@ -318,7 +315,6 @@ func NewEmptyTree(
 
 func newTreeHelper(
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
@@ -326,7 +322,6 @@ func newTreeHelper(
 ) *Node {
 	base := &nodeBase{
 		registry:       registry,
-		timeSource:     timeSource,
 		backend:        backend,
 		pathEncoder:    pathEncoder,
 		logger:         logger,
@@ -1665,7 +1660,7 @@ func (n *Node) Now(
 	_ Component,
 ) time.Time {
 	// TODO: Now() could be different for components after we support Pause for CHASM components.
-	return n.timeSource.Now()
+	return n.backend.Now()
 }
 
 // AddTask implements the CHASM MutableContext interface
