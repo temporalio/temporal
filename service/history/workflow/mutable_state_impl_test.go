@@ -1998,7 +1998,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.False(s.mutableState.HasPendingWorkflowTask())
 	s.Nil(s.mutableState.GetPendingWorkflowTask())
 	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
 	s.True(pausedEvent.GetWorkerMayIgnore())
@@ -2107,7 +2107,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.False(s.mutableState.HasPendingWorkflowTask())
 	s.Nil(s.mutableState.GetPendingWorkflowTask())
 	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
-	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// Unpause and verify.
 	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", uuid.NewString())
