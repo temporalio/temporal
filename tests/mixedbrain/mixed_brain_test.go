@@ -116,17 +116,12 @@ func TestMixedBrain(t *testing.T) {
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
-		currentLogger, f := serverLogger(st, "current", currentLog)
-		currentLogFile = f
-		var err error
-		currentSrv, err = devserver.Start(t.Context(), devserver.Options{
+		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
 			SourceDir:   sourceRoot(),
 			Persistence: persistence,
-			Output:      currentLogFile,
-			Logger:      currentLogger,
 		})
-		require.NoError(st, err, "start current server")
 
+		var err error
 		conn, err = grpc.NewClient(currentSrv.FrontendHostPort(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		require.NoError(st, err)
 
@@ -140,30 +135,20 @@ func TestMixedBrain(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	t.Cleanup(func() { _ = currentSrv.Stop() })
-	t.Cleanup(func() { _ = currentLogFile.Close() })
 	defer func() { _ = conn.Close() }()
 
-	t.Run("start release server", func(st *testing.T) {
-		releaseLogger, f := serverLogger(st, "release", releaseLog)
-		releaseLogFile = f
-		var err error
-		releaseSrv, err = devserver.Start(t.Context(), devserver.Options{
+	t.Run("start release server", func(_ *testing.T) {
+		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
 			Ref:         releaseTag,
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
-			Output: releaseLogFile,
-			Logger: releaseLogger,
 		})
-		require.NoError(st, err, "start release server")
 	})
 	if t.Failed() {
 		return
 	}
-	t.Cleanup(func() { _ = releaseSrv.Stop() })
-	t.Cleanup(func() { _ = releaseLogFile.Close() })
 
 	t.Run("form cluster", func(st *testing.T) {
 		waitForClusterFormation(st, conn, 90*time.Second, currentSrv.Ports(), releaseSrv.Ports())

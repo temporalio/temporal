@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -67,34 +66,25 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 	}, retryTimeout, time.Second, "failed to create nexus endpoint %s", endpointName)
 }
 
-func serverLogger(t *testing.T, name, logPath string) (*zap.SugaredLogger, *os.File) {
+func startDevServer(t *testing.T, name, logPath string, opts devserver.Options) (*devserver.Server, *os.File) {
 	t.Helper()
+
 	f, err := os.Create(logPath)
 	require.NoError(t, err)
-	return zap.NewNop().Sugar().With("server", name), f
-}
 
-func requireServerAlive(t *testing.T, name, address string) {
-	t.Helper()
+	var srv *devserver.Server
+	t.Cleanup(func() {
+		if srv != nil {
+			_ = srv.Stop()
+		}
+	})
+	t.Cleanup(func() { _ = f.Close() })
 
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err)
-	defer func() { _ = conn.Close() }()
+	opts.Output = f
+	srv, err = devserver.Start(t.Context(), opts)
+	require.NoError(t, err, "start %s server", name)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-
-	_, err = adminservice.NewAdminServiceClient(conn).DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
-	require.NoError(t, err, "%s server is not reachable", name)
-}
-
-func membershipPorts(p devserver.Ports) []int {
-	return []int{
-		p.FrontendMembership,
-		p.HistoryMembership,
-		p.MatchingMembership,
-		p.WorkerMembership,
-	}
+	return srv, f
 }
 
 // waitForClusterFormation waits until the server's reachable members include
@@ -129,7 +119,12 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 		}
 
 		for _, server := range servers {
-			for _, port := range membershipPorts(server) {
+			for _, port := range []int{
+				server.FrontendMembership,
+				server.HistoryMembership,
+				server.MatchingMembership,
+				server.WorkerMembership,
+			} {
 				if !seen[port] {
 					t.Logf("Waiting for cluster formation: port %d not yet visible", port)
 					return false
@@ -138,4 +133,18 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 		}
 		return true
 	}, timeout, time.Second, "cluster did not form within %v", timeout)
+}
+
+func requireServerAlive(t *testing.T, name, address string) {
+	t.Helper()
+
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err = adminservice.NewAdminServiceClient(conn).DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	require.NoError(t, err, "%s server is not reachable", name)
 }
