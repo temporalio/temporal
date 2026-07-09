@@ -218,6 +218,8 @@ func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 // WithCustomEventLoggerProvider sets a custom OTEL LoggerProvider used to emit structured
 // ("wide") events. Each service builds an events.Handler from it (see events.NewHandler). When
 // unset, events are discarded via a no-op provider.
+//
+// NOTE: this option is experimental and may be changed or removed in future release.
 func WithCustomEventLoggerProvider(loggerProvider otellog.LoggerProvider) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.eventLoggerProvider = loggerProvider
