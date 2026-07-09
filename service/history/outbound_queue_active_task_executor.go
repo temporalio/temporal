@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -25,8 +26,8 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine                  chasm.Engine
-	workerCommandsTaskDispatcher *workerCommandsTaskDispatcher
+	chasmEngine              chasm.Engine
+	workerCommandsDispatcher *workercommands.Dispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -50,7 +51,7 @@ func newOutboundQueueActiveTaskExecutor(
 			metricsHandler: scopedMetricsHandler,
 		},
 		chasmEngine: chasmEngine,
-		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
+		workerCommandsDispatcher: workercommands.NewDispatcher(
 			matchingClient,
 			shardCtx.GetConfig(),
 			scopedMetricsHandler,
@@ -104,7 +105,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
-		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task, executable.Attempt(), namespaceTag.Value))
+		return respond(e.workerCommandsDispatcher.Execute(ctx, task, executable.Attempt(), namespaceTag.Value))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

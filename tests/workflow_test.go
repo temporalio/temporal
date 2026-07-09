@@ -1103,8 +1103,8 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            tv.WorkerIdentity(),
 	})
-	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	s.NoError(err0)
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// start workflow task, but do not respond to it
 	res, err := env.FrontendClient().PollWorkflowTaskQueue(testContext, &workflowservice.PollWorkflowTaskQueueRequest{

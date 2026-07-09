@@ -309,9 +309,12 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 					Usage:   "Schedule ID (single-schedule mode)",
 				},
 				&cli.StringFlag{
-					Name:     FlagTarget,
-					Usage:    "Target scheduler implementation: chasm, workflow",
-					Required: true,
+					Name: FlagTarget,
+					// Not marked Required here: it is validated (and required) by
+					// parseMigrateTarget when the migrate action itself runs. Marking it
+					// Required at the CLI level would also apply to the "status" subcommand
+					// below, which has no use for --target.
+					Usage: "Target scheduler implementation: chasm, workflow",
 				},
 				&cli.BoolFlag{
 					Name: FlagFromVisibility,
@@ -341,6 +344,15 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminMigrateSchedule(c, clientFactory)
+			},
+			Subcommands: []*cli.Command{
+				{
+					Name:  "status",
+					Usage: "Show counts of V1 (workflow-backed) and V2 (CHASM) schedules in --namespace, from visibility",
+					Action: func(c *cli.Context) error {
+						return AdminScheduleStatus(c, clientFactory)
+					},
+				},
 			},
 		},
 	}

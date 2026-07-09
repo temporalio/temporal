@@ -283,6 +283,8 @@ func ClientBeanProvider(
 	if err != nil {
 		return nil, err
 	}
+	// Deterministically release the bean's clients (daemon goroutines and
+	// cached gRPC connections) on shutdown.
 	lc.Append(fx.StopHook(bean.Close))
 	return bean, nil
 }

@@ -1490,6 +1490,10 @@ func (s *ContextImpl) IsValid() bool {
 	return s.state < contextStateStopping
 }
 
+func (s *ContextImpl) GetLifecycleContext() context.Context {
+	return s.lifecycleCtx
+}
+
 func (s *ContextImpl) stoppedForOwnershipLost() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
