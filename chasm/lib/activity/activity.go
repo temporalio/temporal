@@ -647,7 +647,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	// start_delay updates are only valid while the activity is still in its delay window.
 	_, hasStartDelayInMask := updateFields["startDelay"]
-	if !frontendReq.GetRestoreOriginal() && hasStartDelayInMask {
+	if hasStartDelayInMask {
 		newDelay := frontendReq.GetActivityOptions().GetStartDelay()
 		if err := validateStartDelay(newDelay); err != nil {
 			return nil, err
@@ -732,6 +732,16 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}, nil
 }
 
+// shouldRecalculateCurrentRetryInterval reports whether the pending retry's CurrentRetryInterval
+// should be re-derived from the (possibly updated) retry policy. All of the following must hold:
+//
+//   - the activity is waiting to retry, i.e. in SCHEDULED or PAUSED state (a running attempt has no
+//     pending backoff to recalculate);
+//   - a retry is actually pending (CurrentRetryInterval is set);
+//   - the update touches the retry policy: either RestoreOriginal (which replaces the whole policy),
+//     or the update mask includes "retryPolicy" or one of its subfields;
+//   - the pending interval is still policy-derived, i.e. it equals the pre-update policy value.
+//     A mismatch means the interval is a worker-provided NextRetryDelay override, which we preserve.
 func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	attempt *activitypb.ActivityAttemptState,
 	restoreOriginal bool,
