@@ -133,6 +133,7 @@ func startAndSignalWorkflow(
 		shard,
 		vrid,
 		newWorkflowLease,
+		currentWorkflowLease,
 		signalWithStartRequest.RequestId,
 	)
 }
@@ -227,6 +228,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
+	currentWorkflowLease api.WorkflowLease,
 	requestID string,
 ) (runID string, firstExecutionRunID string, started bool, err error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
@@ -274,7 +276,18 @@ func startAndSignalWithoutCurrentWorkflow(
 		return runID, runID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if _, ok := failedErr.RequestIDs[requestID]; ok {
-			return failedErr.RunID, failedErr.FirstExecutionRunID, false, nil
+			// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob,
+			// which may not have first_execution_run_id populated on records written before that
+			// field existed. Fall back to the mutable state we already have loaded to recover the
+			// canonical head-of-chain run id (mirrors StartWorkflowExecution's behavior).
+			firstRunID := failedErr.FirstExecutionRunID
+			if firstRunID == "" && currentWorkflowLease != nil &&
+				currentWorkflowLease.GetContext().GetWorkflowKey().RunID == failedErr.RunID {
+				if id, ferr := currentWorkflowLease.GetMutableState().GetFirstRunID(ctx); ferr == nil {
+					firstRunID = id
+				}
+			}
+			return failedErr.RunID, firstRunID, false, nil
 		}
 		return "", "", false, err
 	default:
