@@ -2237,7 +2237,7 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateFallsBackT
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	// Force the CHASM create to fail so the HSM fallback path is taken.
-	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
+	s.mockMutableState.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).
 		Return(nil, nil, serviceerror.NewInternal("chasm unavailable")).AnyTimes()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
@@ -2377,7 +2377,7 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 	ms.EXPECT().ChasmEnabled().Return(tc.chasmEnabled).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
-	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).
+	ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
 
 	rebuilder := NewMutableStateRebuilder(s.mockShard, s.logger, ms)

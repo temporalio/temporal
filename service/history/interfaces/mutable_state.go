@@ -361,6 +361,10 @@ type (
 		ChasmEnabled() bool
 		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
+		// ChasmWorkflowComponentForReplay is like ChasmWorkflowComponent but returns a context in
+		// replay mode (metrics suppressed), for re-applying events from history during reset /
+		// cherry-pick / conflict resolution without double-counting caller-side metrics.
+		ChasmWorkflowComponentForReplay(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
 		// Must be called before adding any components to the tree.

@@ -1816,7 +1816,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			registry: newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
-				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, cherryPickErr)
+				ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).Return(nil, nil, cherryPickErr)
 			},
 			wantOutcome: cherryPickSkipped,
 			wantErr:     cherryPickErr,
@@ -1826,7 +1826,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			registry: newChasmRegistryWithEvent(eventType, chasmworkflow.ErrEventNotCherryPickable),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
-				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+				ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).Return(nil, nil, nil)
 			},
 			wantOutcome: cherryPickSkipped,
 		},
@@ -1835,7 +1835,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			registry: newChasmRegistryWithEvent(eventType, cherryPickErr),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
-				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+				ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).Return(nil, nil, nil)
 			},
 			wantOutcome: cherryPickSkipped,
 			wantErr:     cherryPickErr,
@@ -1845,7 +1845,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			registry: newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
-				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+				ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).Return(nil, nil, nil)
 			},
 			wantOutcome: cherryPickApplied,
 		},
@@ -1876,7 +1876,7 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 	s.Run("falls back to chasm and reapplies when chasm owns the op", func() {
 		ms := historyi.NewMockMutableState(s.controller)
 		ms.EXPECT().ChasmEnabled().Return(true)
-		ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+		ms.EXPECT().ChasmWorkflowComponentForReplay(gomock.Any()).Return(nil, nil, nil)
 		ms.EXPECT().AddHistoryEvent(eventType, gomock.Any()).Return(&historypb.HistoryEvent{})
 
 		applied, err := reapplyEvents(
