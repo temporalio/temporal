@@ -3751,16 +3751,26 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
 		}
 
-		for _, pureTask := range componentAttr.GetPureTasks() {
-			// Pure tasks are represented by a single physical task, so we only need to
-			// regenerate that one. Time conversion for task regeneration is handled by
-			// backend.AddTask, so no time changes are needed here.
-			pureTask.PhysicalTaskStatus = physicalTaskStatusNone
-			if firstPureTask == nil || comparePureTasks(pureTask, firstPureTask) < 0 {
-				firstPureTask = pureTask
-				firstPureTaskNode = node
-			}
+		// Find the earliest pure task in the entire tree. Pure tasks are sorted
+		// by scheduled time, so pureTasks[0] is the earliest for this component.
+		pureTasks := componentAttr.GetPureTasks()
+		if len(pureTasks) == 0 {
+			continue
 		}
+
+		if firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0 {
+			firstPureTask = pureTasks[0]
+			firstPureTaskNode = node
+		}
+	}
+
+	if firstPureTask != nil {
+		// Pure tasks are represented by a single physical task, so we only need to
+		// regenerate that one. The earliest pure task is already
+		// physicalTaskStatusCreated from a prior transaction, and
+		// closeTransactionGeneratePhysicalPureTask short-circuits on that status.
+		// Reset it so backend.AddTask re-converts the fire time for the skipped time.
+		firstPureTask.PhysicalTaskStatus = physicalTaskStatusNone
 	}
 	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
 }
