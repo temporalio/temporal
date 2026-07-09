@@ -814,9 +814,9 @@ func extractResultsClean(output string) testResults {
 // stripLogHeader removes the TESTRUNNER LOG header from log file content.
 func stripLogHeader(content string) string {
 	headerEnd := logHeaderSeparator + "\n\n"
-	if idx := strings.Index(content, headerEnd); idx >= 0 {
+	if _, after, ok := strings.Cut(content, headerEnd); ok {
 		// Find the last occurrence of the separator (the header has 3 of them)
-		rest := content[idx+len(headerEnd):]
+		rest := after
 		return rest
 	}
 	return content
