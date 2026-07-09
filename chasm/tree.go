@@ -3560,6 +3560,7 @@ func (n *Node) ValidateSideEffectTask(
 		TaskAttributes{
 			ScheduledTime: chasmTask.GetVisibilityTime(),
 			Destination:   chasmTask.Destination,
+			Attempt:       chasmTask.Attempt,
 		},
 		chasmTask.DeserializedTask.Interface(),
 	)
@@ -3662,6 +3663,7 @@ func (n *Node) invokeSideEffectTaskFn(
 	taskAttributes := TaskAttributes{
 		ScheduledTime: chasmTask.GetVisibilityTime(),
 		Destination:   chasmTask.Destination,
+		Attempt:       chasmTask.Attempt,
 	}
 
 	ref := ComponentRef{

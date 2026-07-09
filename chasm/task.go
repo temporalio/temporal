@@ -22,6 +22,12 @@ type (
 		// callbacks). When non-empty, the task is categorized as outbound; when empty, it is
 		// categorized as a transfer task. Destination must only be set on immediate tasks.
 		Destination string
+		// Attempt is the current processing attempt for this physical task, starting at 1. It comes
+		// from the task executable and is not persisted; it resets to 1 on shard reload and on
+		// active or standby failover. It is 0 when validated outside of task processing, such as
+		// transaction close. Handlers may compare it against a threshold and return false from
+		// Validate to give up on a task that would otherwise never become invalid on its own.
+		Attempt int
 	}
 
 	// SideEffectTaskHandler handles side effect tasks that run outside of the state lock and have access to a Go
