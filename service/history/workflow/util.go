@@ -11,6 +11,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
@@ -316,4 +317,11 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 
 func timeNotSet(ts *timestamppb.Timestamp) bool {
 	return ts == nil || ts.AsTime().IsZero()
+}
+
+func toChasmTransactionPolicy(tp historyi.TransactionPolicy) chasm.TransactionPolicy {
+	if tp == historyi.TransactionPolicyActive {
+		return chasm.TransactionPolicyActive
+	}
+	return chasm.TransactionPolicyPassive
 }

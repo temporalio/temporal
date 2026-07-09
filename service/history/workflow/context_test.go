@@ -634,7 +634,7 @@ func (s *contextSuite) TestUpdateWorkflowExecutionWithNew_ChasmNoopSkipsPersiste
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasmArchetypeID).AnyTimes()
 	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
 	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{}, nil).Times(1)
 
 	s.workflowContext.archetypeID = chasmArchetypeID
 	s.workflowContext.MutableState = mutableState

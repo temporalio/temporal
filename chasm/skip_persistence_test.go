@@ -23,7 +23,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	mutation, err := rootNode.CloseTransaction()
+	mutation, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	s.Contains(mutation.UpdatedNodes, "", "brand-new node must always be persisted")
@@ -37,7 +37,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 	s.Contains(firstMutation.UpdatedNodes, "", "new node must be in UpdatedNodes")
 
@@ -56,7 +56,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	_, err = rootNode2.Component(ctx, ComponentRef{})
 	s.NoError(err)
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	s.NotContains(secondMutation.UpdatedNodes, "", "unchanged node must not be in UpdatedNodes")
@@ -74,7 +74,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
 
@@ -90,7 +90,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 
 	component.(*TestComponent).ComponentData.RunId = "modified-run-id"
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	s.Contains(secondMutation.UpdatedNodes, "", "modified node must be in UpdatedNodes")
@@ -108,7 +108,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
-	firstMutation, err := rootNode.CloseTransaction()
+	firstMutation, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 	persistedNodes := common.CloneProtoMap(firstMutation.UpdatedNodes)
 
@@ -126,7 +126,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	ctx.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task-payload")})
 
-	secondMutation, err := rootNode2.CloseTransaction()
+	secondMutation, err := rootNode2.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	s.Contains(secondMutation.UpdatedNodes, "", "node with a new task must be in UpdatedNodes even if data is unchanged")
@@ -150,7 +150,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_DeleteUnpersistedNode() {
 	component := rootNode.value.(*TestComponent)
 	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
 
-	mutation, err := rootNode.CloseTransaction()
+	mutation, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	s.Contains(mutation.UpdatedNodes, "", "root still needs initial persistence")

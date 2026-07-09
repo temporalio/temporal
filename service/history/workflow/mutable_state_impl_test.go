@@ -3556,7 +3556,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
 								Metadata: &persistencespb.ChasmNodeMetadata{
@@ -5097,7 +5097,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{
 						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
 					}, nil),
 				)
@@ -5249,7 +5249,7 @@ func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersist
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
 	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
 	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{}, nil).Times(1)
 
 	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
 	var lastUpdateTime *timestamppb.Timestamp
@@ -5300,7 +5300,7 @@ func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoes
 	mutableState.chasmTree = mockChasmTree
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{}, nil).Times(1)
 
 	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
 
@@ -5329,7 +5329,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
@@ -5354,7 +5354,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
 	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(nonEmptyMutation, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5393,7 +5393,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
 	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(nonEmptyMutation, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -6515,7 +6515,7 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any()).Return(chasm.NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			nodeKeyToUpdate: &updateNode,
 			newNodeKey:      &newNode,
