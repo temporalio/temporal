@@ -736,31 +736,14 @@ func emitGetMetrics(
 	}
 }
 
-func isWorkflowCloseEvent(eventType enumspb.EventType) bool {
-	switch eventType {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		return true
-	default:
-		return false
+// wroteEvents reports whether the run wrote any history events in this transaction.
+func wroteEvents(eventsSeq []*persistence.WorkflowEvents) bool {
+	for _, batch := range eventsSeq {
+		if len(batch.Events) > 0 {
+			return true
+		}
 	}
-}
-
-// containsWorkflowCloseEvent reports whether the run's closing event is written in this
-// transaction; the closing event is always the last event of the last batch.
-func containsWorkflowCloseEvent(eventsSeq []*persistence.WorkflowEvents) bool {
-	if len(eventsSeq) == 0 {
-		return false
-	}
-	lastBatch := eventsSeq[len(eventsSeq)-1].Events
-	if len(lastBatch) == 0 {
-		return false
-	}
-	return isWorkflowCloseEvent(lastBatch[len(lastBatch)-1].GetEventType())
+	return false
 }
 
 func snapshotToCompletionMetric(
@@ -782,7 +765,7 @@ func snapshotToCompletionMetric(
 		status:              workflowSnapshot.ExecutionState.Status,
 		startTime:           workflowSnapshot.ExecutionState.StartTime,
 		closeTime:           workflowSnapshot.ExecutionInfo.CloseTime,
-		closedInTransaction: containsWorkflowCloseEvent(eventsSeq),
+		closedInTransaction: wroteEvents(eventsSeq),
 	}
 }
 
@@ -805,7 +788,7 @@ func mutationToCompletionMetric(
 		status:              workflowMutation.ExecutionState.Status,
 		startTime:           workflowMutation.ExecutionState.StartTime,
 		closeTime:           workflowMutation.ExecutionInfo.CloseTime,
-		closedInTransaction: containsWorkflowCloseEvent(eventsSeq),
+		closedInTransaction: wroteEvents(eventsSeq),
 	}
 }
 
