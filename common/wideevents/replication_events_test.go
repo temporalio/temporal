@@ -37,7 +37,7 @@ func TestReplicationLifecycleEncodeSent(t *testing.T) {
 	f := attrMap(p.Attributes())
 
 	require.Equal(t, "sent", f["phase"].AsString())
-	require.Equal(t, true, f["is_first_sync"].AsBool())
+	require.True(t, f["is_first_sync"].AsBool())
 	require.Equal(t, int64(1), f["first_event_id"].AsInt64())
 	require.Equal(t, int64(8), f["next_event_id"].AsInt64())
 	require.Equal(t, ReplTaskSyncVersionedTransition, f["task_type"].AsString())
