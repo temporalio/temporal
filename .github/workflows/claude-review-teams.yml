@@ -2,7 +2,7 @@
 #
 # Uses `pull_request_target` so the workflow has access to secrets even when
 # a PR is opened from a fork. This is safe ONLY because the
-# `check-review-eligibility` job gates the review job behind trusted eligibility
+# `check-review-eligibility` job gates the review job behind trusted user
 # checks.
 name: Claude review for opted-in PRs
 
@@ -13,7 +13,7 @@ on:
 env:
   # Space- or newline-separated list of temporalio team slugs whose
   # members' PRs should receive an automated Claude review. Empty means only
-  # PRs labeled with REVIEW_OPT_IN_LABEL are reviewed.
+  # PRs labeled with REVIEW_OPT_IN_LABEL by a temporalio org member are reviewed.
   REVIEW_TEAMS: ""
   REVIEW_OPT_IN_LABEL: request-claude-review
   REVIEW_OPT_OUT_LABEL: skip-claude-review
@@ -116,7 +116,11 @@ jobs:
             echo "${role} ${user} is an active temporalio organization member"
           }
 
-          require_org_member "$AUTHOR" "author"
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            require_org_member "$EVENT_ACTOR" "labeler"
+          else
+            require_org_member "$AUTHOR" "author"
+          fi
 
           echo "Fetching labels for PR #${PR_NUMBER}"
           labels=$(gh api -H "Accept: application/vnd.github+json" \
@@ -136,7 +140,6 @@ jobs:
             if ! labels_match "$EVENT_LABEL_NAME" "$REVIEW_OPT_IN_LABEL"; then
               skip_review "label '${EVENT_LABEL_NAME}' does not request Claude review"
             fi
-            require_org_member "$EVENT_ACTOR" "labeler"
           fi
 
           echo "Checking PR #${PR_NUMBER} for request label '${REVIEW_OPT_IN_LABEL}'"
@@ -190,7 +193,7 @@ jobs:
         with:
           # pull_request_target defaults to the base ref; explicitly check out
           # the PR head so the review sees the proposed changes. Safe here
-          # because the team-membership gate above limits this to trusted authors.
+          # because the eligibility gate above limits this to trusted users.
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
       - name: Claude PR review
         uses: anthropics/claude-code-action@v1
