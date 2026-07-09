@@ -82,7 +82,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	}
 	e.MarkExecutionStart()
 
-	if e.Config.EmitReplicationLifecycleEvents() {
+	emitLifecycle := e.Config.EmitReplicationLifecycleEvents()
+	if emitLifecycle {
 		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskVerifyVersionedTransition, int32(e.Attempt()))
 	}
 
@@ -90,7 +91,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	// best-effort "applied" lifecycle event emitted below.
 	var inspectedMS *persistencespb.WorkflowMutableState
 	defer func() {
-		e.emitReplicationVerifyApplied(inspectedMS, retErr)
+		if emitLifecycle {
+			e.emitReplicationVerifyApplied(inspectedMS, retErr)
+		}
 	}()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())

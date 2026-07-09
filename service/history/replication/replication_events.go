@@ -172,9 +172,6 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	ms *persistencespb.WorkflowMutableState,
 	retErr error,
 ) {
-	if !e.Config.EmitReplicationLifecycleEvents() {
-		return
-	}
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
 	if err != nil {
 		return
