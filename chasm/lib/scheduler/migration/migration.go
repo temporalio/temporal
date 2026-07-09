@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"maps"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -11,6 +12,7 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	schedulescommon "go.temporal.io/server/common/schedules"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -107,10 +109,24 @@ func LegacyToCreateFromMigrationStateRequest(
 			InvokerState:         invokerState,
 			Backfillers:          backfillers,
 			LastCompletionResult: lastCompletion,
-			SearchAttributes:     searchAttributes.GetIndexedFields(),
+			SearchAttributes:     customSearchAttributesForMigration(searchAttributes),
 			Memo:                 memo.GetFields(),
 		},
 	}
+}
+
+// customSearchAttributesForMigration returns only the user-defined search attributes
+// from a V1 scheduler workflow, stripping any reserved/system SAs.
+func customSearchAttributesForMigration(sa *commonpb.SearchAttributes) map[string]*commonpb.Payload {
+	fields := sa.GetIndexedFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	out := maps.Clone(fields)
+	maps.DeleteFunc(out, func(k string, _ *commonpb.Payload) bool {
+		return sadefs.IsReserved(k)
+	})
+	return out
 }
 
 // CHASMToLegacyStartScheduleArgs converts CHASM scheduler state to V1 StartScheduleArgs.

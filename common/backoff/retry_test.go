@@ -212,6 +212,65 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	throttleRetryPolicy = originalThrottleRetryPolicy
 }
 
+// TestThrottleRetryContextWithReturnTimeout guards against a shadowing bug where a
+// retryable failure plus a deadline-triggered break returned (zero, nil): a false
+// success instead of the last error. Backoff far exceeds the deadline so the break
+// fires after the first failure.
+func (s *RetrySuite) TestThrottleRetryContextWithReturnTimeout() {
+	timeout := 200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	start := time.Now()
+	result, err := ThrottleRetryContextWithReturn(ctx,
+		func(_ context.Context) (string, error) { return "", &someError{} },
+		NewExponentialRetryPolicy(10*time.Second), retryEverything)
+	elapsed := time.Since(start)
+	s.ErrorAs(err, new(*someError), "must return the real error, not nil, on deadline break")
+	s.Empty(result)
+	s.Less(elapsed, timeout, "should break instead of sleeping past the deadline")
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnSuccess() {
+	attempt := 0
+	result, err := ThrottleRetryContextWithReturn(context.Background(),
+		func(_ context.Context) (string, error) {
+			attempt++
+			if attempt == 3 {
+				return "ok", nil
+			}
+			return "", &someError{}
+		},
+		NewExponentialRetryPolicy(1*time.Millisecond).WithMaximumAttempts(10),
+		retryEverything)
+	s.NoError(err)
+	s.Equal("ok", result)
+	s.Equal(3, attempt)
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnMaxAttempts() {
+	attempt := 0
+	result, err := ThrottleRetryContextWithReturn(context.Background(),
+		func(_ context.Context) (string, error) {
+			attempt++
+			return "", &someError{}
+		},
+		NewExponentialRetryPolicy(1*time.Millisecond).WithMaximumAttempts(2),
+		retryEverything)
+	s.ErrorAs(err, new(*someError))
+	s.Empty(result)
+	s.Equal(2, attempt)
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnContextCancel() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := ThrottleRetryContextWithReturn(ctx,
+		func(ctx context.Context) (string, error) { return "", ctx.Err() },
+		NewExponentialRetryPolicy(1*time.Millisecond), retryEverything)
+	s.ErrorIs(err, context.Canceled)
+	s.Empty(result)
+}
+
 var retryEverything IsRetryable = nil
 
 func (e *someError) Error() string {
