@@ -45,8 +45,8 @@ func compileRunFilter(filter string) *regexp.Regexp {
 	// Go's test framework splits -run on "/" and matches each level.
 	// For suite filtering, we only need the top-level pattern.
 	topLevel := filter
-	if idx := strings.Index(filter, "/"); idx >= 0 {
-		topLevel = filter[:idx]
+	if before, _, ok := strings.Cut(filter, "/"); ok {
+		topLevel = before
 	}
 	return regexp.MustCompile(topLevel)
 }
