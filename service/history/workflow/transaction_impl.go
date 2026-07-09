@@ -20,15 +20,14 @@ import (
 
 type (
 	completionMetric struct {
-		initialized         bool
-		isWorkflow          bool
-		taskQueue           string
-		namespaceState      string
-		workflowTypeName    string
-		status              enumspb.WorkflowExecutionStatus
-		startTime           *timestamppb.Timestamp
-		closeTime           *timestamppb.Timestamp
-		closedInTransaction bool
+		shouldRecord     bool
+		isWorkflow       bool
+		taskQueue        string
+		namespaceState   string
+		workflowTypeName string
+		status           enumspb.WorkflowExecutionStatus
+		startTime        *timestamppb.Timestamp
+		closeTime        *timestamppb.Timestamp
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -753,19 +752,19 @@ func snapshotToCompletionMetric(
 	isWorkflow bool,
 ) completionMetric {
 	if workflowSnapshot == nil {
-		return completionMetric{initialized: false}
+		return completionMetric{shouldRecord: false}
 	}
 
 	return completionMetric{
-		initialized:         true,
-		isWorkflow:          isWorkflow,
-		taskQueue:           workflowSnapshot.ExecutionInfo.TaskQueue,
-		namespaceState:      namespaceState,
-		workflowTypeName:    workflowSnapshot.ExecutionInfo.WorkflowTypeName,
-		status:              workflowSnapshot.ExecutionState.Status,
-		startTime:           workflowSnapshot.ExecutionState.StartTime,
-		closeTime:           workflowSnapshot.ExecutionInfo.CloseTime,
-		closedInTransaction: wroteEvents(eventsSeq),
+		// Record a completion only when the run wrote events (closed) in this transaction.
+		shouldRecord:     wroteEvents(eventsSeq),
+		isWorkflow:       isWorkflow,
+		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
+		status:           workflowSnapshot.ExecutionState.Status,
+		startTime:        workflowSnapshot.ExecutionState.StartTime,
+		closeTime:        workflowSnapshot.ExecutionInfo.CloseTime,
 	}
 }
 
@@ -776,19 +775,18 @@ func mutationToCompletionMetric(
 	isWorkflow bool,
 ) completionMetric {
 	if workflowMutation == nil {
-		return completionMetric{initialized: false}
+		return completionMetric{shouldRecord: false}
 	}
 
 	return completionMetric{
-		initialized:         true,
-		isWorkflow:          isWorkflow,
-		taskQueue:           workflowMutation.ExecutionInfo.TaskQueue,
-		namespaceState:      namespaceState,
-		workflowTypeName:    workflowMutation.ExecutionInfo.WorkflowTypeName,
-		status:              workflowMutation.ExecutionState.Status,
-		startTime:           workflowMutation.ExecutionState.StartTime,
-		closeTime:           workflowMutation.ExecutionInfo.CloseTime,
-		closedInTransaction: wroteEvents(eventsSeq),
+		shouldRecord:     wroteEvents(eventsSeq),
+		isWorkflow:       isWorkflow,
+		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
+		namespaceState:   namespaceState,
+		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
+		status:           workflowMutation.ExecutionState.Status,
+		startTime:        workflowMutation.ExecutionState.StartTime,
+		closeTime:        workflowMutation.ExecutionInfo.CloseTime,
 	}
 }
 
@@ -801,7 +799,7 @@ func emitCompletionMetrics(
 	namespaceName := namespace.Name()
 
 	for _, completionMetric := range completionMetrics {
-		if !completionMetric.initialized {
+		if !completionMetric.shouldRecord {
 			continue
 		}
 

@@ -114,12 +114,6 @@ func emitWorkflowCompletionStats(
 		return
 	}
 
-	// Emit only when the run closes in this transaction, so re-persisting a run that is
-	// already closed (e.g. a reset) does not re-emit a completion metric.
-	if !completion.closedInTransaction {
-		return
-	}
-
 	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, completion.taskQueue, config,
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
 		metrics.NamespaceStateTag(completion.namespaceState),
