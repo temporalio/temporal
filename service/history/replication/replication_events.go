@@ -74,9 +74,6 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	task *replicationspb.ReplicationTask,
 	item tasks.Task,
 ) {
-	if !s.config.EmitReplicationLifecycleEvents() {
-		return
-	}
 	logger := s.shardContext.GetEventLogger()
 	if logger == nil {
 		return
