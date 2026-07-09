@@ -1642,6 +1642,9 @@ func TestPartitionedSnapshot_ClusterLocalFieldGuard(t *testing.T) {
 		msg  proto.Message
 		want []string
 	}{
+		// The node wrapper itself: a cluster-local field added directly to the node (rather than its
+		// metadata) must still trip the guard.
+		{&persistencespb.ChasmNode{}, []string{"metadata", "data"}},
 		{
 			&persistencespb.ChasmNodeMetadata{},
 			[]string{
@@ -1665,6 +1668,8 @@ func TestPartitionedSnapshot_ClusterLocalFieldGuard(t *testing.T) {
 				"versioned_transition", "versioned_transition_offset", "physical_task_status",
 			},
 		},
+		// Reachable via ChasmComponentAttributes.requests.
+		{&persistencespb.ChasmComponentAttributes_RequestMetadata{}, []string{"links"}},
 		// Attribute types other than component carry no cluster-local state today; pinning their
 		// fields ensures a future cluster-local field added to one of them trips this guard too.
 		{&persistencespb.ChasmDataAttributes{}, nil},
