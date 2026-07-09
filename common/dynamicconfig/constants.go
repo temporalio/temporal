@@ -2437,6 +2437,13 @@ archivalQueueProcessor`,
 		2,
 		`ArchivalQueueMaxReaderCount is the max number of readers in one multi-cursor archival queue`,
 	)
+	ArchivalQueueArchiveOnlyOnActiveCluster = NewNamespaceBoolSetting(
+		"history.archivalQueueArchiveOnlyOnActiveCluster",
+		true,
+		`ArchivalQueueArchiveOnlyOnActiveCluster controls whether the archival queue skips the archive push when the
+current cluster is not active for the workflow's namespace. Set to false to restore the previous behavior of
+archiving from every cluster that replicates the namespace.`,
+	)
 
 	WorkflowExecutionMaxInFlightUpdates = NewNamespaceIntSetting(
 		"history.maxInFlightUpdates",
