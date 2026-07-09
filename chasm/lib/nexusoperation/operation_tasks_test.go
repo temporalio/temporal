@@ -115,7 +115,7 @@ func newInvocationTaskTestEnv(
 		},
 	}
 
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 	require.NoError(t, root.SetRootComponent(&mockStoreComponent{
 		invocationData: invocationData,
