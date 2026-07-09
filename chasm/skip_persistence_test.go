@@ -20,7 +20,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
 	mutation, err := rootNode.CloseTransaction()
@@ -34,7 +34,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
 	firstMutation, err := rootNode.CloseTransaction()
@@ -49,7 +49,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(err)
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
@@ -71,7 +71,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
 	firstMutation, err := rootNode.CloseTransaction()
@@ -81,7 +81,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(err)
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
@@ -105,7 +105,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
 	firstMutation, err := rootNode.CloseTransaction()
@@ -115,7 +115,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode2, err := NewTreeFromDB(persistedNodes, s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(err)
 
 	ctx := NewMutableContext(context.Background(), rootNode2)
@@ -138,7 +138,7 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_DeleteUnpersistedNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	rootNode := NewEmptyTree(s.registry, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(&TestComponent{
 		ComponentData: &persistencespb.WorkflowExecutionState{RunId: "root"},
 		SubComponent1: NewComponentField(nil, &TestSubComponent1{
