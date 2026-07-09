@@ -301,6 +301,7 @@ func (c *sqliteQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
+	_ bool, // usesCustomSearchAttribute: unused, SQLite never joins for count queries
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
