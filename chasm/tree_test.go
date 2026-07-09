@@ -4600,6 +4600,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 	// preserves the unmanaged skippable flag so IsExecutionSkippable is deterministic.
 	gateRoot := func(skippable bool) *Node {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 		s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 		s.timeSource.Update(baseTime)
@@ -4643,6 +4644,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	s.Run("NonRootNodeIsNoOp", func() {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC))
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
 			"": {
@@ -4764,6 +4766,7 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	// fresh backend with the clock pinned to baseTime.
 	buildRoot := func(sideEffect, pure []*persistencespb.ChasmComponentAttributes_Task) *Node {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(baseTime)
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
 			"": {
@@ -4845,6 +4848,7 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 
 	s.Run("RegeneratesSideEffectTimersAndEarliestPureTask", func() {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(baseTime)
 
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
@@ -4928,6 +4932,7 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 
 	s.Run("NoPureTasksDeletesWithMaximumKey", func() {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(baseTime)
 
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
@@ -4966,6 +4971,7 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 		// transaction. Regeneration must reset it so closeTransactionGeneratePhysicalPureTask
 		// does not short-circuit and instead re-adds the physical task at the skipped time.
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.timeSource.Update(baseTime)
 
 		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
