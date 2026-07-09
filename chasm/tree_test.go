@@ -3710,8 +3710,8 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Eq(TaskAttributes{
-					chasmTask.GetVisibilityTime(),
-					chasmTask.Destination,
+					ScheduledTime: chasmTask.GetVisibilityTime(),
+					Destination:   chasmTask.Destination,
 				}),
 				gomock.Any(),
 			).DoAndReturn(

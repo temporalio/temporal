@@ -103,6 +103,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task, nsName))
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
 		// Worker commands are best-effort and only executed on the active cluster.

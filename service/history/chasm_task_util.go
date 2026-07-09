@@ -37,7 +37,15 @@ func validateChasmSideEffectTask(
 		return false, false, errNoChasmTree
 	}
 
-	return tree.ValidateSideEffectTask(ctx, task)
+	isTaskInTree, isValidByComponent, err = tree.ValidateSideEffectTask(ctx, task)
+	if errors.Is(err, chasm.ErrTaskAttemptsExhausted) {
+		// A best-effort handler gave up after exhausting its attempts. Treat the task as
+		// invalidated (drop it) rather than surfacing a retryable error. This is the only
+		// component-driven invalidation honored on standby; a plain isValidByComponent=false
+		// is intentionally ignored so we don't drop tasks the active cluster still holds.
+		return false, false, nil
+	}
+	return isTaskInTree, isValidByComponent, err
 }
 
 // executeChasmSideEffectTask completes execution of a CHASM side effect task
@@ -77,12 +85,18 @@ func executeChasmSideEffectTask(
 	}
 
 	engineCtx := chasm.NewEngineContext(ctx, engine)
-	return tree.ExecuteSideEffectTask(
+	err := tree.ExecuteSideEffectTask(
 		engineCtx,
 		executionKey,
 		task,
 		validate,
 	)
+	if errors.Is(err, chasm.ErrTaskAttemptsExhausted) {
+		// A best-effort handler gave up after exhausting its attempts (surfaced from its
+		// Validate method during ref access). Drop the task instead of retrying.
+		return nil
+	}
+	return err
 }
 
 // discardChasmSideEffectTask handles discard of a CHASM side effect task on standby. It first checks if the execution

@@ -52,9 +52,17 @@ func newCancelCommandDispatchTaskHandler(opts cancelCommandDispatchTaskHandlerOp
 func (h *cancelCommandDispatchTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	attrs chasm.TaskAttributes,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
+	// Best-effort: give up once the task has exhausted the dispatcher's allowed attempts so an
+	// undeliverable cancel (e.g. the worker is gone) doesn't retry forever on the active cluster
+	// or pend indefinitely on standby. Attempt is 0 outside of task processing (e.g. transaction
+	// close validation), so this check never trips there.
+	if attrs.Attempt > workercommands.MaxTaskAttempts {
+		return false, chasm.ErrTaskAttemptsExhausted
+	}
+
 	// Valid if the activity is in a state where it has been requested to cancel or terminated
 	// (meaning it was running on a worker when the cancel/terminate was issued).
 	return activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ||
@@ -104,8 +112,5 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		h.logger,
 	)
 
-	// TODO: CHASM's SideEffectTaskHandler interface doesn't expose an attempt count. The
-	// dispatcher's max attempts check is effectively bypassed here. We need to either expose
-	// attempt count in the CHASM task interface or handle retry limiting differently.
-	return dispatcher.Execute(ctx, task, 1, nsEntry.Name().String())
+	return dispatcher.Execute(ctx, task, taskAttrs.Attempt, nsEntry.Name().String())
 }

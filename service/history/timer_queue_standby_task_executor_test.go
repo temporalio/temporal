@@ -2370,6 +2370,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
+	// Best-effort task exhausted its attempts — drop the physical task.
+	expectValidate(true, false, chasm.ErrTaskAttemptsExhausted)
+	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NotNil(resp)
+	s.NoError(resp.ExecutionErr)
+
 	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
 	expectValidate(false, false, expectedErr)

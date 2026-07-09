@@ -70,6 +70,10 @@ type ChasmTask struct {
 	// In-memory only
 	outboundTaskGroup string // set to the registered task's taskgroup after deserialization for outbound tasks
 	DeserializedTask  reflect.Value
+	// Attempt is the 1-based processing attempt for this physical task, copied from the task
+	// executable before execution/validation. It is not persisted and is surfaced to CHASM
+	// side-effect handlers via chasm.TaskAttributes.Attempt.
+	Attempt int
 }
 
 var _ Task = &ChasmTask{}

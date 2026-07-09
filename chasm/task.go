@@ -12,6 +12,14 @@ import (
 // indicating that a side-effect task on a standby cluster has been pending past the discard delay.
 var ErrTaskDiscarded = errors.New("standby task pending for too long")
 
+// ErrTaskAttemptsExhausted may be returned by a side-effect task handler's Validate method to signal a
+// definitive, best-effort give-up after the task has exceeded its allowed number of processing attempts
+// (see [TaskAttributes.Attempt]). Unlike returning (false, nil) — which only means "not valid right now"
+// and is ignored on standby to avoid dropping tasks the active cluster still holds — this error causes the
+// framework to drop the physical task on both active and standby clusters. Use it only for tasks whose
+// completion is not required for correctness.
+var ErrTaskAttemptsExhausted = errors.New("side-effect task exhausted its allowed attempts")
+
 type (
 	// TaskAttributes specifies scheduling metadata for a task.
 	TaskAttributes struct {
@@ -22,6 +30,12 @@ type (
 		// callbacks). When non-empty, the task is categorized as outbound; when empty, it is
 		// categorized as a transfer task. Destination must only be set on immediate tasks.
 		Destination string
+		// Attempt is the 1-based, in-memory processing attempt for this physical task. It is populated
+		// from the task executable and is NOT persisted; it resets to 1 on shard reload and on
+		// active/standby failover. It is 0 when the task is validated outside of task processing (e.g.
+		// during transaction close). Best-effort side-effect handlers may compare this against a
+		// threshold and return [ErrTaskAttemptsExhausted] to give up.
+		Attempt int
 	}
 
 	// SideEffectTaskHandler handles side effect tasks that run outside of the state lock and have access to a Go

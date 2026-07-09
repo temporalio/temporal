@@ -107,6 +107,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
