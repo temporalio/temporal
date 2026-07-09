@@ -20,14 +20,15 @@ import (
 
 type (
 	completionMetric struct {
-		initialized      bool
-		isWorkflow       bool
-		taskQueue        string
-		namespaceState   string
-		workflowTypeName string
-		status           enumspb.WorkflowExecutionStatus
-		startTime        *timestamppb.Timestamp
-		closeTime        *timestamppb.Timestamp
+		initialized         bool
+		isWorkflow          bool
+		taskQueue           string
+		namespaceState      string
+		workflowTypeName    string
+		status              enumspb.WorkflowExecutionStatus
+		startTime           *timestamppb.Timestamp
+		closeTime           *timestamppb.Timestamp
+		closedInTransaction bool
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -401,6 +402,7 @@ func createWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &mutableStateFailoverVersion),
 				&request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
 				isWorkflow,
 			),
 		)
@@ -448,16 +450,19 @@ func conflictResolveWorkflowExecution(
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), &resetWorkflowFailoverVersion),
 				&request.ResetWorkflowSnapshot,
+				request.ResetWorkflowEvents,
 				isWorkflow,
 			),
 			snapshotToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
 				request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
 				isWorkflow,
 			),
 			mutationToCompletionMetric(
 				namespaceState(shardContext.GetClusterMetadata(), currentWorkflowFailoverVersion),
 				request.CurrentWorkflowMutation,
+				request.CurrentWorkflowEvents,
 				isWorkflow,
 			),
 		)
@@ -536,29 +541,22 @@ func updateWorkflowExecution(
 			resp.NewMutableStateStats,
 		)
 
-		// To avoid double emission, we only want to emit completion metrics if workflow is not closed.
-		// This is done by checking the UpdateMode, which has three modes:
-		// 1. UpdateCurrent: Workflow must be the current run and thus must be running before this update.
-		// 2. IgnoreCurrent: We don't know if workflow is current or not, this only happens when it's already closed.
-		// 3. BypassCurrent: Workflow must NOT be the current run, this only happens for zombie workflows,
-		// 		which by definition is not closed yet.
-		// See updateWorkflowMode() method in context.go for more details.
-		if request.Mode != persistence.UpdateWorkflowModeIgnoreCurrent {
-			emitCompletionMetrics(
-				shardContext,
-				namespaceEntry,
-				mutationToCompletionMetric(
-					namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
-					&request.UpdateWorkflowMutation,
-					isWorkflow,
-				),
-				snapshotToCompletionMetric(
-					namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
-					request.NewWorkflowSnapshot,
-					isWorkflow,
-				),
-			)
-		}
+		emitCompletionMetrics(
+			shardContext,
+			namespaceEntry,
+			mutationToCompletionMetric(
+				namespaceState(shardContext.GetClusterMetadata(), &updateWorkflowFailoverVersion),
+				&request.UpdateWorkflowMutation,
+				request.UpdateWorkflowEvents,
+				isWorkflow,
+			),
+			snapshotToCompletionMetric(
+				namespaceState(shardContext.GetClusterMetadata(), newWorkflowFailoverVersion),
+				request.NewWorkflowSnapshot,
+				request.NewWorkflowEvents,
+				isWorkflow,
+			),
+		)
 	}
 
 	return resp, nil
@@ -738,9 +736,37 @@ func emitGetMetrics(
 	}
 }
 
+func isWorkflowCloseEvent(eventType enumspb.EventType) bool {
+	switch eventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		return true
+	default:
+		return false
+	}
+}
+
+// containsWorkflowCloseEvent reports whether the run's closing event is written in this
+// transaction; the closing event is always the last event of the last batch.
+func containsWorkflowCloseEvent(eventsSeq []*persistence.WorkflowEvents) bool {
+	if len(eventsSeq) == 0 {
+		return false
+	}
+	lastBatch := eventsSeq[len(eventsSeq)-1].Events
+	if len(lastBatch) == 0 {
+		return false
+	}
+	return isWorkflowCloseEvent(lastBatch[len(lastBatch)-1].GetEventType())
+}
+
 func snapshotToCompletionMetric(
 	namespaceState string,
 	workflowSnapshot *persistence.WorkflowSnapshot,
+	eventsSeq []*persistence.WorkflowEvents,
 	isWorkflow bool,
 ) completionMetric {
 	if workflowSnapshot == nil {
@@ -748,20 +774,22 @@ func snapshotToCompletionMetric(
 	}
 
 	return completionMetric{
-		initialized:      true,
-		isWorkflow:       isWorkflow,
-		taskQueue:        workflowSnapshot.ExecutionInfo.TaskQueue,
-		namespaceState:   namespaceState,
-		workflowTypeName: workflowSnapshot.ExecutionInfo.WorkflowTypeName,
-		status:           workflowSnapshot.ExecutionState.Status,
-		startTime:        workflowSnapshot.ExecutionState.StartTime,
-		closeTime:        workflowSnapshot.ExecutionInfo.CloseTime,
+		initialized:         true,
+		isWorkflow:          isWorkflow,
+		taskQueue:           workflowSnapshot.ExecutionInfo.TaskQueue,
+		namespaceState:      namespaceState,
+		workflowTypeName:    workflowSnapshot.ExecutionInfo.WorkflowTypeName,
+		status:              workflowSnapshot.ExecutionState.Status,
+		startTime:           workflowSnapshot.ExecutionState.StartTime,
+		closeTime:           workflowSnapshot.ExecutionInfo.CloseTime,
+		closedInTransaction: containsWorkflowCloseEvent(eventsSeq),
 	}
 }
 
 func mutationToCompletionMetric(
 	namespaceState string,
 	workflowMutation *persistence.WorkflowMutation,
+	eventsSeq []*persistence.WorkflowEvents,
 	isWorkflow bool,
 ) completionMetric {
 	if workflowMutation == nil {
@@ -769,14 +797,15 @@ func mutationToCompletionMetric(
 	}
 
 	return completionMetric{
-		initialized:      true,
-		isWorkflow:       isWorkflow,
-		taskQueue:        workflowMutation.ExecutionInfo.TaskQueue,
-		namespaceState:   namespaceState,
-		workflowTypeName: workflowMutation.ExecutionInfo.WorkflowTypeName,
-		status:           workflowMutation.ExecutionState.Status,
-		startTime:        workflowMutation.ExecutionState.StartTime,
-		closeTime:        workflowMutation.ExecutionInfo.CloseTime,
+		initialized:         true,
+		isWorkflow:          isWorkflow,
+		taskQueue:           workflowMutation.ExecutionInfo.TaskQueue,
+		namespaceState:      namespaceState,
+		workflowTypeName:    workflowMutation.ExecutionInfo.WorkflowTypeName,
+		status:              workflowMutation.ExecutionState.Status,
+		startTime:           workflowMutation.ExecutionState.StartTime,
+		closeTime:           workflowMutation.ExecutionInfo.CloseTime,
+		closedInTransaction: containsWorkflowCloseEvent(eventsSeq),
 	}
 }
 

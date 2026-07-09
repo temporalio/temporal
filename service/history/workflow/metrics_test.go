@@ -30,14 +30,15 @@ func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 	}
 
 	completionMetric := completionMetric{
-		initialized:      true,
-		isWorkflow:       true,
-		taskQueue:        "test-task-queue",
-		namespaceState:   "active",
-		workflowTypeName: "test-workflow",
-		status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		startTime:        timestamppb.New(time.Unix(100, 0)),
-		closeTime:        timestamppb.New(time.Unix(130, 0)),
+		initialized:         true,
+		isWorkflow:          true,
+		taskQueue:           "test-task-queue",
+		namespaceState:      "active",
+		workflowTypeName:    "test-workflow",
+		status:              enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		startTime:           timestamppb.New(time.Unix(100, 0)),
+		closeTime:           timestamppb.New(time.Unix(130, 0)),
+		closedInTransaction: true,
 	}
 
 	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, config)
