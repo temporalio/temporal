@@ -3751,7 +3751,13 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }
 
+// closeTransactionHandleTimeSkipping handles all steps of time skipping of one execution
+// at close transaction time in the active cluster.
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+	// todo@feiyang: change to transaction policy check
+	if !n.subtreeIsDirty {
+		return nil
+	}
 	if n.parent != nil {
 		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil
@@ -3766,8 +3772,6 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
-	// todo@feiyang: how to check that the current cluster is active cluster
-	// and this closeTransaction state change logic should only happen in active cluster
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
