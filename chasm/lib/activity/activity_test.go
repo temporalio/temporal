@@ -643,3 +643,83 @@ func TestEffectiveUserMetadata_FallsBackToLegacy(t *testing.T) {
 	got := activity.effectiveUserMetadata(ctx)
 	require.Same(t, legacyMD, got)
 }
+
+func TestShouldRecalculateCurrentRetryInterval(t *testing.T) {
+	policyRetryInterval := 2 * time.Second
+
+	testCases := []struct {
+		name                 string
+		status               activitypb.ActivityExecutionStatus
+		restoreOriginal      bool
+		updateFields         map[string]struct{}
+		currentRetryInterval *durationpb.Duration
+		expectRecalculate    bool
+	}{
+		{
+			name:                 "retry policy subfield update with policy-derived interval",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields:         map[string]struct{}{"retryPolicy.initialInterval": {}},
+			currentRetryInterval: durationpb.New(policyRetryInterval),
+			expectRecalculate:    true,
+		},
+		{
+			name:                 "retry policy replacement with policy-derived interval",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields:         map[string]struct{}{"retryPolicy": {}},
+			currentRetryInterval: durationpb.New(policyRetryInterval),
+			expectRecalculate:    true,
+		},
+		{
+			name:                 "restore original with policy-derived interval",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+			restoreOriginal:      true,
+			currentRetryInterval: durationpb.New(policyRetryInterval),
+			expectRecalculate:    true,
+		},
+		{
+			name:                 "unrelated update preserves retry interval",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields:         map[string]struct{}{"heartbeatTimeout": {}},
+			currentRetryInterval: durationpb.New(policyRetryInterval),
+		},
+		{
+			name:                 "worker override differs from policy interval",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields:         map[string]struct{}{"retryPolicy.initialInterval": {}},
+			currentRetryInterval: durationpb.New(policyRetryInterval + time.Second),
+		},
+		{
+			name:                 "started activity is not in retry backoff",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			updateFields:         map[string]struct{}{"retryPolicy.initialInterval": {}},
+			currentRetryInterval: durationpb.New(policyRetryInterval),
+		},
+		{
+			name:         "missing retry interval",
+			status:       activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields: map[string]struct{}{"retryPolicy.initialInterval": {}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status: tc.status,
+				},
+			}
+			attempt := &activitypb.ActivityAttemptState{
+				CurrentRetryInterval: tc.currentRetryInterval,
+			}
+
+			got := activity.shouldRecalculateCurrentRetryInterval(
+				attempt,
+				tc.restoreOriginal,
+				tc.updateFields,
+				policyRetryInterval,
+			)
+
+			require.Equal(t, tc.expectRecalculate, got)
+		})
+	}
+}

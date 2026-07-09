@@ -20,7 +20,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	activityspb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -30,12 +32,16 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
+	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -7847,6 +7853,156 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
 		require.NoError(t, err)
+		require.NotEmpty(t, pollResp2.GetTaskToken())
+		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("ChangeRetryInterval_Consecutive", func(t *testing.T) {
+		// Consecutive retry_policy updates in backoff: the second update must recalculate the
+		// interval from the value the first update left behind, not the original interval.
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		// Start with a long retry interval to keep the activity in backoff after failure.
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Minute),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		// Poll and fail with a retryable failure — activity enters the 10-minute backoff.
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Update 1: shorten to 5 minutes. Recalculates, but stays in backoff for the rest of the test.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(5 * time.Minute),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+
+		// Update 2: shorten to 1ms. Must recalculate from update 1's interval so the retry fires now.
+		updateResp, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(1 * time.Millisecond),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updateResp)
+
+		// Activity should now be available to poll for attempt 2 since we shortened it to 1ms.
+		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp2.GetTaskToken())
+		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("UpdateUnrelatedField_PreservesNextRetryDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		nextRetryDelay := 2 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Minute),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable:   false,
+						NextRetryDelay: durationpb.New(nextRetryDelay),
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Updating an unrelated option must not recalculate the worker-provided next retry interval.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				HeartbeatTimeout: durationpb.New(5 * time.Second),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+		})
+		require.NoError(t, err)
+
+		// Backoff is the worker's 2s NextRetryDelay set during RespondActivityTaskFailed, not the policy's 10m, so 8s is enough to poll it.
+		pollCtx, pollCancel := context.WithTimeout(ctx, 8*time.Second)
+		defer pollCancel()
+		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp2.GetTaskToken())
 		require.EqualValues(t, 2, pollResp2.Attempt)
 	})
 
@@ -8393,6 +8549,120 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		)
 	})
+}
+
+// Verifies update-options invalidates a legacy ScheduleToClose timer whose stamp is 0.
+// The test seeds persisted activity state as if it was created before ScheduleToCloseStamp existed,
+// then extends ScheduleToClose. The original zero-stamp timer must be ignored after the update emits
+// a newer stamped ScheduleToClose timer.
+func (s *standaloneActivityTestSuite) TestUpdateOptionsInvalidatesLegacyScheduleToClose() {
+	t := s.T()
+	env := s.newTestEnv(testcore.WithFxOptions(
+		primitives.HistoryService,
+		fx.Decorate(func(executionManager persistence.ExecutionManager) persistence.ExecutionManager {
+			return &legacyScheduleToCloseStampExecutionManager{ExecutionManager: executionManager}
+		}),
+	))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	originalScheduleToClose := 2 * time.Second
+	updatedTimeout := 30 * time.Second
+
+	startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:              env.Namespace().String(),
+		ActivityId:             activityID,
+		ActivityType:           &commonpb.ActivityType{Name: "test-activity"},
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+		ScheduleToCloseTimeout: durationpb.New(originalScheduleToClose),
+		RetryPolicy:            &commonpb.RetryPolicy{MaximumAttempts: 1},
+	})
+	require.NoError(t, err)
+
+	_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.GetRunId(),
+		ActivityOptions: &activitypb.ActivityOptions{
+			ScheduleToCloseTimeout: durationpb.New(updatedTimeout),
+			// Extend ScheduleToStart too so this unpolled activity does not time out at the old deadline.
+			ScheduleToStartTimeout: durationpb.New(updatedTimeout),
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "schedule_to_start_timeout"}},
+	})
+	require.NoError(t, err)
+
+	require.Never(t, func() bool {
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		return descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	}, originalScheduleToClose+timerSafetyMargin, 200*time.Millisecond,
+		"legacy zero-stamp ScheduleToClose task must not remain valid after update-options emits a newer ScheduleToClose stamp")
+}
+
+type legacyScheduleToCloseStampExecutionManager struct {
+	persistence.ExecutionManager
+}
+
+func (m *legacyScheduleToCloseStampExecutionManager) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.CreateWorkflowExecutionRequest,
+) (*persistence.CreateWorkflowExecutionResponse, error) {
+	if request.ArchetypeID == activity.ArchetypeID {
+		if err := forceLegacyScheduleToCloseStamp(&request.NewWorkflowSnapshot); err != nil {
+			return nil, err
+		}
+	}
+	return m.ExecutionManager.CreateWorkflowExecution(ctx, request)
+}
+
+func forceLegacyScheduleToCloseStamp(snapshot *persistence.WorkflowSnapshot) error {
+	rootNode := snapshot.ChasmNodes[""]
+	if rootNode == nil {
+		return serviceerror.NewInternal("activity CHASM root node not found")
+	}
+
+	state := &activityspb.ActivityState{}
+	if err := serialization.Decode(rootNode.GetData(), state); err != nil {
+		return err
+	}
+	state.ScheduleToCloseStamp = 0
+
+	encodedState, err := serialization.Encode(state, serialization.WithDeterministicProto3)
+	if err != nil {
+		return err
+	}
+	rootNode.Data = encodedState
+
+	taskTypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName("activity", "scheduleToCloseTimer"))
+	taskFound := false
+	for _, task := range rootNode.GetMetadata().GetComponentAttributes().GetPureTasks() {
+		if task.GetTypeId() != taskTypeID {
+			continue
+		}
+		scheduleToCloseTask := &activityspb.ScheduleToCloseTimeoutTask{}
+		if err := serialization.Decode(task.GetData(), scheduleToCloseTask); err != nil {
+			return err
+		}
+		scheduleToCloseTask.Stamp = 0
+		encodedTask, err := serialization.Encode(scheduleToCloseTask, serialization.WithDeterministicProto3)
+		if err != nil {
+			return err
+		}
+		task.Data = encodedTask
+		taskFound = true
+	}
+	if !taskFound {
+		return serviceerror.NewInternal("activity ScheduleToCloseTimeoutTask not found")
+	}
+	return nil
 }
 
 func (env *standaloneActivityEnv) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
