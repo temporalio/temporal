@@ -1,7 +1,12 @@
 package testcore
 
 import (
+	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -103,4 +108,67 @@ func TestClusterPool_PoisonedActiveClusterSwapsWithoutRecycling(t *testing.T) {
 	// The old poisoned lease remains active, while leaseCount restarts on the replacement.
 	require.Equal(t, 2, slot.activeLeases)
 	require.Equal(t, 1, slot.leaseCount)
+}
+
+// TestClusterPool_SharedClusterConcurrency spins up multiple subtests in parallel and acquire
+// a singular shared cluster. This test ensures that concurrent access to this cluster is allowed
+// by the pool, and parallel tests are not blocked waiting.
+func TestClusterPool_SharedClusterConcurrency(t *testing.T) {
+	// Mirrors the real shared pool: a single slot, non-exclusive access.
+	p := newClusterPool(1, false, 0)
+	singleSharedClusterSlot := p.allSlots[0]
+
+	var clustersCreated atomic.Int32
+	createCluster := func() *FunctionalTestBase {
+		clustersCreated.Add(1)
+		return &FunctionalTestBase{}
+	}
+
+	const numSubtests = 5
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	// Each subtest will simply request a shared cluster, and append it
+	// to `clusters` slice, in parallel.
+	var mu sync.Mutex
+	clusters := make([]*FunctionalTestBase, 0, numSubtests)
+
+	// Use a channel + atomic var to block on all subtests until all of them
+	// have acquired the shared cluster.
+	var arrived atomic.Int32
+	release := make(chan struct{})
+
+	for i := range numSubtests {
+		t.Run(fmt.Sprintf("subtest-%d", i), func(t *testing.T) {
+			t.Parallel()
+
+			cluster := p.get(t, createCluster)
+
+			mu.Lock()
+			clusters = append(clusters, cluster)
+			mu.Unlock()
+
+			// Unblock the `release` chan iff all subtests finished acquiring the shared cluster.
+			// I.e., if `p.get(...)` blocks, we'd fail the subtest(s) via hitting the ctx timeout.
+			if arrived.Add(1) == numSubtests {
+				close(release)
+			}
+			select {
+			case <-release:
+			case <-ctx.Done():
+				t.Fatal("timed out waiting for sibling subtests to acquire the shared cluster")
+			}
+		})
+	}
+
+	// Need to put assertions in t.Cleanup(...) so it runs after the top-level test function returns
+	// AND all parallel subtests above complete.
+	t.Cleanup(func() {
+		require.Equal(t, int32(1), clustersCreated.Load())
+		require.Len(t, clusters, numSubtests)
+		for _, c := range clusters {
+			require.Same(t, singleSharedClusterSlot.cluster, c)
+		}
+	})
 }

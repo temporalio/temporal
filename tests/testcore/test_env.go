@@ -141,12 +141,14 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 }
 
 // WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
-func WithWorkerService(reason string) TestOption {
+// default to avoid the worker overhead.
+// If this is not coupled with any option that requires a dedicated cluster,
+// we will create a cluster that will be recycled by other tests that also
+// need the system worker service.
+// The string parameter serves as documentation regarding the usage of the worker service.
+func WithWorkerService(_ string) TestOption {
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
 		o.needWorkerService = true
-		o.dedicatedReason = "worker service required: " + reason
 	}
 }
 
@@ -288,6 +290,33 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	)
 	if err != nil {
 		t.Fatalf("Failed to register namespace: %v", err)
+	}
+	if !options.dedicatedCluster {
+		// EXPERIMENT: shared clusters live for the whole test binary, so namespaces
+		// registered by each test otherwise accumulate for the process lifetime.
+		// Delete the persistence record directly rather than going through
+		// DeleteNamespaceWorkflow/ReclaimResourcesWorkflow: routing every test's
+		// cleanup through the shared cluster's one system worker caused an OOM
+		// (async, unbounded backlog) and then a suite-wide timeout (sync, worker
+		// throughput bottleneck) in earlier attempts. See DeleteNamespaceRecord.
+		//
+		// Deliberately NOT delayed: an earlier version soft-marked the namespace
+		// synchronously and scheduled the physical delete via time.AfterFunc after
+		// a grace period, to avoid racing detached goroutines some test helpers
+		// (e.g. sendUpdateInternal) spawn without guaranteeing they finish before
+		// the test returns. That delayed callback held a direct reference to the
+		// shared cluster's *FunctionalTestBase across the delay, and the shared
+		// pool can poison-and-recycle that same object at any time (tearing down
+		// and nilling its testCluster field) if any test taints it - so once any
+		// test poisoned the shared cluster, every other still-pending delayed
+		// delete would nil-pointer-panic in an unrecovered goroutine, crashing the
+		// whole process. That crash was worse than the race it was meant to fix,
+		// so deleting immediately here is the safer tradeoff for now.
+		t.Cleanup(func() {
+			if err := base.DeleteNamespaceRecord(ns); err != nil {
+				t.Logf("namespace cleanup failed for %s: %v", ns, err)
+			}
+		})
 	}
 
 	tv := testvars.New(t)
