@@ -168,8 +168,8 @@ func propagateTimeSkippingToChild(
 	}
 
 	enabled := source.GetTimeSkippingInfo().GetConfig().GetEnabled()
-	disableChildPropagation := source.GetTimeSkippingInfo().GetConfig().GetDisableChildPropagation()
-	if !enabled || disableChildPropagation {
+	disablePropagation := source.GetTimeSkippingInfo().GetConfig().GetDisablePropagation()
+	if !enabled || disablePropagation {
 		return nil, stateProp
 	}
 
