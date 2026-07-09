@@ -18,6 +18,7 @@ import (
 const (
 	retryTimeout = 30 * time.Second
 	omesModule   = "github.com/temporalio/omes"
+	omesBranch   = "main"
 	omesRepo     = "https://" + omesModule + ".git"
 	temporalRepo = "https://github.com/temporalio/temporal.git"
 )
@@ -25,21 +26,6 @@ const (
 func sourceRoot() string {
 	_, filename, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(filename), "..", "..")
-}
-
-// omesRef returns the sha of github.com/temporalio/omes as pinned in go.mod,
-// queried via `go list -m` so go.mod stays the single source of truth.
-// Pseudo-versions look like "v0.0.0-20260512170720-ab5a6ff22874"; we take the
-// trailing 12-char sha.
-func omesRef(t *testing.T) string {
-	t.Helper()
-	out, err := exec.CommandContext(t.Context(), "go", "list", "-m", "-f", "{{.Version}}", omesModule).Output()
-	require.NoError(t, err, "go list -m %s", omesModule)
-	version := strings.TrimSpace(string(out))
-	if i := strings.LastIndex(version, "-"); i >= 0 {
-		return version[i+1:]
-	}
-	return version
 }
 
 // resolveReleaseVersion returns the highest version for the previous minor.
@@ -88,7 +74,7 @@ func fetchPreviousMinorTag(t *testing.T) string {
 	return "v" + version.String()
 }
 
-// downloadAndBuildOmes clones omes at omesRef into workDir/omes and builds its
+// downloadAndBuildOmes clones omes main into workDir/omes and builds its
 // CLI into outputPath. We clone instead of going through the module cache so
 // the build resolves omes's transitive deps independently of this module's
 // go.sum (omes uses replace directives that block `go install`).
@@ -96,20 +82,22 @@ func downloadAndBuildOmes(t *testing.T, workDir, outputPath string) {
 	t.Helper()
 
 	repoDir := filepath.Join(workDir, "omes")
-	ref := omesRef(t)
-	t.Logf("Cloning %s at %s...", omesRepo, ref)
+	t.Logf("Cloning %s branch %s...", omesRepo, omesBranch)
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		_ = os.RemoveAll(repoDir)
-		out, err := exec.CommandContext(t.Context(), "git", "clone", "--filter=blob:none", omesRepo, repoDir).CombinedOutput()
+		out, err := exec.CommandContext(t.Context(),
+			"git", "clone",
+			"--filter=blob:none",
+			"--branch", omesBranch,
+			"--single-branch", omesRepo,
+			repoDir,
+		).CombinedOutput()
 		require.NoError(collect, err, "git clone failed:\n%s", out)
 	}, retryTimeout, 2*time.Second, "git clone omes")
 
-	out, err := exec.CommandContext(t.Context(), "git", "-C", repoDir, "checkout", ref).CombinedOutput()
-	require.NoError(t, err, "git checkout %s failed:\n%s", ref, out)
-
 	t.Logf("Building omes into %s...", outputPath)
-	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", outputPath, "./cmd")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", outputPath, "./cmd/omes")
 	cmd.Dir = repoDir
-	out, err = cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "build omes failed:\n%s", out)
 }
