@@ -5647,8 +5647,8 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 			"the timer side-effect task must be regenerated")
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[1].PhysicalTaskStatus,
 			"the non-timer side-effect task is untouched and keeps its created status")
-		s.Equal(physicalTaskStatusNone, rootAttrs.PureTasks[0].PhysicalTaskStatus,
-			"a non-earliest pure task is reset but not regenerated")
+		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus,
+			"a non-earliest pure task is left untouched and not regenerated")
 
 		childAttrs := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
 		s.Equal(physicalTaskStatusCreated, childAttrs.PureTasks[0].PhysicalTaskStatus,
@@ -5688,5 +5688,48 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 		s.Equal(1, s.nodeBackend.NumTasksAdded(), "only the side-effect timer task is regenerated")
 		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
 			"with no pure tasks, deletion sweeps up to the maximum key")
+	})
+
+	s.Run("RegeneratesAlreadyCreatedEarliestPureTask", func() {
+		// The earliest pure task already carries physicalTaskStatusCreated from a prior
+		// transaction. Regeneration must reset it so closeTransactionGeneratePhysicalPureTask
+		// does not short-circuit and instead re-adds the physical task at the skipped time.
+		s.nodeBackend = &MockNodeBackend{}
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									TypeId:                    testPureTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+
+		s.NoError(root.regenerateTimerTasksForTimeSkipping())
+
+		s.Equal(1, s.nodeBackend.NumTasksAdded(),
+			"the already-created earliest pure task is reset and regenerated, not short-circuited")
+		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
+			"pure-task deletion is anchored at the earliest pure scheduled time")
+
+		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
+		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus,
+			"the regenerated earliest pure task ends up created again")
 	})
 }
