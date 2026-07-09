@@ -40,6 +40,13 @@ func logDir(t *testing.T) string {
 	return dir
 }
 
+func setDefaultEnv(t *testing.T, key, value string) {
+	t.Helper()
+	if os.Getenv(key) == "" {
+		t.Setenv(key, value)
+	}
+}
+
 // nexusEndpoint is created in the throughput_stress namespace before Omes runs.
 const nexusEndpoint = "mixed-brain-nexus"
 
@@ -105,7 +112,14 @@ func TestMixedBrain(t *testing.T) {
 	if persistenceDriver == "" {
 		persistenceDriver = "postgres12"
 	}
-	require.Contains(t, []string{"postgres12", "postgres12_pgx"}, persistenceDriver, "mixedbrain requires PostgreSQL because older release config templates do not support SQLite")
+	switch persistenceDriver {
+	case "postgres12", "postgres12_pgx":
+		setDefaultEnv(t, "POSTGRES_SEEDS", "127.0.0.1")
+		setDefaultEnv(t, "POSTGRES_USER", "temporal")
+		setDefaultEnv(t, "POSTGRES_PWD", "temporal")
+	default:
+		t.Fatalf("mixedbrain requires PostgreSQL because older release config templates do not support SQLite")
+	}
 	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
 
 	var currentSrv, releaseSrv *devserver.Server
