@@ -116,7 +116,7 @@ type ScheduleToCloseTimeoutTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The schedule-to-close stamp for this task. Used for task validation.
 	// See also [ActivityState.schedule_to_close_stamp].
-	// Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+	// Tasks without a stamp (stamp=0) predate this field and are valid only while the activity stamp is also 0.
 	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

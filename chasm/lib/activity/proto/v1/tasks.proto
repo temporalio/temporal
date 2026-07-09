@@ -17,7 +17,7 @@ message ScheduleToStartTimeoutTask {
 message ScheduleToCloseTimeoutTask {
   // The schedule-to-close stamp for this task. Used for task validation.
   // See also [ActivityState.schedule_to_close_stamp].
-  // Tasks without a stamp (stamp=0) predate this field and are not validated by stamp.
+  // Tasks without a stamp (stamp=0) predate this field and are valid only while the activity stamp is also 0.
   int32 stamp = 1;
 }
 
