@@ -116,10 +116,37 @@ jobs:
             echo "${role} ${user} is an active temporalio organization member"
           }
 
+          require_repo_write() {
+            user="$1"
+            role="$2"
+
+            echo "Checking repository write permission for ${role} ${user}"
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${REPO}/collaborators/${user}/permission" 2>&1); then
+              permission=$(echo "$response" | jq -r '.permission')
+              case "$permission" in
+                admin|write)
+                  echo "${role} ${user} has repository ${permission} permission"
+                  ;;
+                *)
+                  skip_review "${role} has repository ${permission} permission, not write/admin"
+                  ;;
+              esac
+            elif echo "$response" | grep -q "HTTP 404"; then
+              skip_review "${role} is not a repository collaborator"
+            else
+              echo "Unexpected error checking repository permission for ${role} ${user}: ${response}" >&2
+              exit 1
+            fi
+          }
+
           if [ "$EVENT_ACTION" = "labeled" ]; then
             require_org_member "$EVENT_ACTOR" "labeler"
+            require_repo_write "$EVENT_ACTOR" "labeler"
           else
             require_org_member "$AUTHOR" "author"
+            require_repo_write "$AUTHOR" "author"
           fi
 
           echo "Fetching labels for PR #${PR_NUMBER}"
