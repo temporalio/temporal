@@ -240,14 +240,18 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
-	// appliedMS is the post-apply mutable state captured on the success path for the best-effort
-	// "applied" lifecycle event emitted below. It stays nil on duplicate/error paths.
-	var appliedMS historyi.MutableState
+	// emitApplied gates the best-effort "applied" lifecycle event; computed once here so the gate
+	// lives at the call site, like the other replication lifecycle emitters.
+	emitApplied := r.eventLogger != nil && r.shardContext.GetConfig().EmitReplicationLifecycleEvents()
+	// ms is the mutable state being applied; appliedMS is a snapshot of its post-apply state taken
+	// under the workflow lock (see the releaseFn wrapper below) for the deferred emit. Reading the
+	// live ms after the lock is released would race with the next writer.
+	var ms historyi.MutableState
+	var appliedMS *persistencespb.WorkflowMutableState
 	defer func() {
-		if retError != nil {
+		if retError != nil || !emitApplied {
 			return
 		}
-		// Gated inside emitReplicationVersionedTransitionApplied on EmitReplicationLifecycleEvents.
 		r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS)
 	}()
 
@@ -265,6 +269,18 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if err != nil {
 		return err
 	}
+	if emitApplied {
+		// Snapshot the post-apply mutable state at release time: the only point that is both after
+		// the apply (which mutates ms in place) and still under the workflow lock, since the apply
+		// releases via the transaction manager.
+		innerReleaseFn := releaseFn
+		releaseFn = func(err error) {
+			if err == nil && appliedMS == nil && ms != nil {
+				appliedMS = ms.CloneToProto()
+			}
+			innerReleaseFn(err)
+		}
+	}
 	defer func() {
 		if rec := recover(); rec != nil {
 			releaseFn(errPanic)
@@ -281,8 +297,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 	}
 
-	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
-	appliedMS = ms
+	ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
 		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName)
@@ -366,16 +381,8 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	ms historyi.MutableState,
+	ms *persistencespb.WorkflowMutableState,
 ) {
-	logger := r.eventLogger
-	if logger == nil {
-		return
-	}
-	if !r.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
-		return
-	}
-
 	var nsName string
 	if name, err := r.namespaceRegistry.GetNamespaceName(namespaceID); err == nil {
 		nsName = name.String()
@@ -396,7 +403,7 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		state := ms.GetExecutionState()
 		payload.State = state.GetState().String()
 		payload.Status = state.GetStatus().String()
-		payload.AppliedNextEventID = ms.GetNextEventID()
+		payload.AppliedNextEventID = ms.GetNextEventId()
 		if th := info.GetTransitionHistory(); len(th) > 0 {
 			entries := make([]wideevents.VersionedTransitionEntry, 0, len(th))
 			for _, vt := range th {
@@ -426,7 +433,7 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.PopulateParentInfo(info)
 	}
 
-	wideevents.Emit(logger, payload)
+	wideevents.Emit(r.eventLogger, payload)
 }
 
 // populateAppliedExecutionSummary fills the post-apply mutable-state summary fields shared across
