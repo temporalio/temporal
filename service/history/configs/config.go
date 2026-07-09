@@ -2,6 +2,7 @@ package configs
 
 import (
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -69,6 +70,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -494,6 +496,7 @@ func NewConfig(
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
+		EnableChasmNexusWorkflowOperations:    nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -835,7 +836,17 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
+	return reapplyEvents(
+		ctx,
+		mutableState,
+		nil,
+		r.shardContext.StateMachineRegistry(),
+		r.shardContext.ChasmWorkflowRegistry(),
+		events,
+		resetReapplyExcludeTypes,
+		"",
+		true,
+	)
 }
 
 func reapplyEvents(
@@ -843,6 +854,7 @@ func reapplyEvents(
 	mutableState historyi.MutableState,
 	targetBranchUpdateRegistry update.Registry,
 	stateMachineRegistry *hsm.Registry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
@@ -1012,17 +1024,27 @@ func reapplyEvents(
 				return nil, err
 			}
 		default:
-			root := mutableState.HSM()
-			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
-			if !ok {
-				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
-				continue
-			}
-			if err := def.CherryPick(root, event, resetReapplyExcludeTypes); err != nil {
-				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
-					continue
-				}
+			// Nexus operations (and other state-machine-backed components) can be backed by either the
+			// HSM tree or the CHASM tree, and both coexist on the same mutable state. Reset must rebuild
+			// the op regardless of which framework owns it.
+			// TODO(follow-up): the completion-token resolution path (HSM StateMachineRef vs CHASM
+			// ComponentRef) also needs the same fallback; see the completion handler in nexusoperation.
+			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes)
+			if err != nil {
 				return reappliedEvents, err
+			}
+			if outcome == cherryPickFallback {
+				// HSM doesn't own this op (unknown type, or component not in the HSM tree): try the
+				// CHASM workflow tree.
+				outcome, err = cherryPickChasmEvent(ctx, mutableState, chasmWorkflowRegistry, event, resetReapplyExcludeTypes)
+				if err != nil {
+					return reappliedEvents, err
+				}
+			}
+			if outcome != cherryPickApplied {
+				// Either skipped (recognized but not cherry-pickable) or unhandled by both frameworks.
+				// Only reapply hardcoded events above or ones cherry-picked in HSM or CHASM.
+				continue
 			}
 			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
 				he.Attributes = event.Attributes
@@ -1035,6 +1057,82 @@ func reapplyEvents(
 		}
 	}
 	return reappliedEvents, nil
+}
+
+// cherryPickOutcome is the result of attempting to cherry-pick an event against a single framework
+// (HSM or CHASM) during reset reapply.
+type cherryPickOutcome int
+
+const (
+	// cherryPickApplied: the event was cherry-picked and should be reappended to history.
+	cherryPickApplied cherryPickOutcome = iota
+	// cherryPickSkipped: the framework recognizes the event but intentionally won't cherry-pick it
+	// (e.g. excluded by reset-reapply-exclude-types, or not a cherry-pickable transition). The event
+	// must be skipped, NOT routed to the other framework, to avoid double-applying.
+	cherryPickSkipped
+	// cherryPickFallback: this framework doesn't own the op (unknown event type, or the component is
+	// not in this tree). The caller should try the other framework.
+	cherryPickFallback
+)
+
+// cherryPickHSMEvent attempts to cherry-pick an event against the HSM tree.
+func cherryPickHSMEvent(
+	mutableState historyi.MutableState,
+	stateMachineRegistry *hsm.Registry,
+	event *historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+) (cherryPickOutcome, error) {
+	def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
+	if !ok {
+		// Event type isn't an HSM event at all; let the caller try CHASM.
+		return cherryPickFallback, nil
+	}
+	if err := def.CherryPick(mutableState.HSM(), event, resetReapplyExcludeTypes); err != nil {
+		switch {
+		case errors.Is(err, hsm.ErrStateMachineNotFound):
+			// The op isn't in the HSM tree. It may live in the CHASM tree instead, so fall back.
+			return cherryPickFallback, nil
+		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
+			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
+			return cherryPickSkipped, nil
+		default:
+			return cherryPickSkipped, err
+		}
+	}
+	return cherryPickApplied, nil
+}
+
+// cherryPickChasmEvent attempts to cherry-pick an event against the CHASM workflow tree. It mirrors
+// cherryPickHSMEvent. When CHASM is disabled or the event type is unknown to CHASM, it returns
+// cherryPickFallback (the caller has already exhausted HSM, so this degrades to "unhandled" and the
+// event is skipped).
+func cherryPickChasmEvent(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
+	event *historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+) (cherryPickOutcome, error) {
+	// Fall back unless CHASM defines this event type and the workflow is CHASM-backed. The event-type
+	// lookup is a cheap, side-effect-free registry check, so it runs before consulting mutable state.
+	def, ok := chasmWorkflowRegistry.EventDefinitionByEventType(event.GetEventType())
+	if !ok {
+		return cherryPickFallback, nil
+	}
+	if !mutableState.ChasmEnabled() {
+		return cherryPickFallback, nil
+	}
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return cherryPickSkipped, err
+	}
+	if err := def.CherryPick(chasmCtx, wf, event, resetReapplyExcludeTypes); err != nil {
+		if errors.Is(err, chasmworkflow.ErrEventNotCherryPickable) {
+			return cherryPickSkipped, nil
+		}
+		return cherryPickSkipped, err
+	}
+	return cherryPickApplied, nil
 }
 
 // reapplyChildEvents reapplies all child events except EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED.
