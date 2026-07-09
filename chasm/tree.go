@@ -1688,7 +1688,7 @@ func (n *Node) AddTask(
 
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
-func (n *Node) CloseTransaction() (NodesMutation, error) {
+func (n *Node) CloseTransaction(transactionPolicy TransactionPolicy) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1734,7 +1734,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if err := n.closeTransactionHandleTimeSkipping(immutableContext); err != nil {
+	if err := n.closeTransactionHandleTimeSkipping(immutableContext, transactionPolicy); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -3751,7 +3751,12 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
 }
 
-func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+// closeTransactionHandleTimeSkipping includes all the steps needed at close transaction time
+// for time skipping of an execution in an active cluster.
+func (n *Node) closeTransactionHandleTimeSkipping(chasmContext Context, transactionPolicy TransactionPolicy) error {
+	if transactionPolicy != TransactionPolicyActive {
+		return nil
+	}
 	if n.parent != nil {
 		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil
@@ -3766,9 +3771,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
-	// todo@feiyang: how to check that the current cluster is active cluster
-	// and this closeTransaction state change logic should only happen in active cluster
-	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	rootComponent, err := n.Component(chasmContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
@@ -3781,7 +3784,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	}
 
 	// runtime check
-	if !tsRoot.IsExecutionSkippable(immutableContext) {
+	if !tsRoot.IsExecutionSkippable(chasmContext) {
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()

@@ -432,7 +432,7 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	if _, err = exec.node.CloseTransaction(); err != nil {
+	if _, err = exec.node.CloseTransaction(chasm.TransactionPolicyActive); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -475,7 +475,7 @@ func (e *Engine) startAndUpdateNew(
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	if _, err = exec.node.CloseTransaction(); err != nil {
+	if _, err = exec.node.CloseTransaction(chasm.TransactionPolicyActive); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -612,7 +612,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if _, err = execution.node.CloseTransaction(); err != nil {
+	if _, err = execution.node.CloseTransaction(chasm.TransactionPolicyActive); err != nil {
 		return nil, err
 	}
 

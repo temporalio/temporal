@@ -217,7 +217,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.Equal(rootComponent, sc1.RootPointer.Internal.v)
 
 	// CloseTransaction should resolve the deferred pointer.
-	mutations, err := rootNode.CloseTransaction()
+	mutations, err := rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 	s.NotEmpty(mutations.UpdatedNodes)
 
@@ -272,7 +272,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// Transaction 1: sc11 points to root (grandparent).
 	sc11.GrandparentPointer = ComponentPointerTo(ctx, rootComponent)
 
-	_, err = rootNode.CloseTransaction()
+	_, err = rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 	s.Equal(fieldTypePointer, sc11.GrandparentPointer.Internal.fieldType())
 
@@ -290,7 +290,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypePointer, sc11.GrandparentPointer.Internal.fieldType())
 	s.Equal(fieldTypeDeferredPointer, sc1.RootPointer.Internal.fieldType())
 
-	_, err = rootNode.CloseTransaction()
+	_, err = rootNode.CloseTransaction(TransactionPolicyActive)
 	s.NoError(err)
 
 	// Ensure both pointers have been resolved.
@@ -342,7 +342,7 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 
-	_, err = rootNode.CloseTransaction()
+	_, err = rootNode.CloseTransaction(TransactionPolicyActive)
 	s.Error(err)
 	s.Contains(err.Error(), "failed to resolve deferred pointer during transaction close")
 }
@@ -388,7 +388,7 @@ func (s *fieldSuite) TestNonAncestorComponentPointerRejected() {
 	// Root pointing to descendant sc11 should be rejected.
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, sc11)
 
-	_, err = rootNode.CloseTransaction()
+	_, err = rootNode.CloseTransaction(TransactionPolicyActive)
 	s.Error(err)
 	s.Contains(err.Error(), "is not an ancestor of component")
 }
@@ -428,7 +428,7 @@ func (s *fieldSuite) TestChildComponentPointerRejected() {
 	// Root pointing to child sc1 via interface pointer should be rejected.
 	rootComponent.SubComponentInterfacePointer = ComponentPointerTo[Component](ctx, sc1)
 
-	_, err = rootNode.CloseTransaction()
+	_, err = rootNode.CloseTransaction(TransactionPolicyActive)
 	s.Error(err)
 	s.Contains(err.Error(), "is not an ancestor of component")
 }

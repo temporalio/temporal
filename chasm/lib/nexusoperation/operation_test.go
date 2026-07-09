@@ -372,7 +372,7 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 		nil,
 	))
 	require.NoError(t, root.SetRootComponent(op))
-	_, err := root.CloseTransaction()
+	_, err := root.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)
