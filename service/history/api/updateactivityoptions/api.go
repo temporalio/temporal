@@ -87,6 +87,8 @@ func Invoke(
 	targetingMethod := "type"
 	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
 		targetingMethod = "id"
+	} else if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_MatchAll); ok {
+		targetingMethod = "match_all"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
 		metrics.ActivityUpdateOptionsRequests.With(shardContext.GetMetricsHandler().WithTags(
@@ -353,6 +355,10 @@ func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest,
 			if ai.ActivityType.Name == activityType {
 				activityIDs = append(activityIDs, ai.ActivityId)
 			}
+		}
+	case *workflowservice.UpdateActivityOptionsRequest_MatchAll:
+		for _, ai := range ms.GetPendingActivityInfos() {
+			activityIDs = append(activityIDs, ai.ActivityId)
 		}
 	}
 	return activityIDs

@@ -40,6 +40,9 @@ type ScaleManagerSuite struct {
 
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
+
+	// newTarget counts "new target" logs, which are also used for test synchronization
+	newTarget *testlogger.Expectation
 }
 
 func TestScaleManagerSuite(t *testing.T) {
@@ -80,7 +83,7 @@ func (s *ScaleManagerSuite) TearDownTest() {
 // startManager builds and starts the scaleManager. Call this after configuring
 // EXPECTs and tweaking s.settings. Pass initial=nil to start with no prior state.
 func (s *ScaleManagerSuite) startManager(writePartitions int, initial *persistencespb.PartitionScaleState) {
-	s.startManagerWithLogger(log.NewTestLogger(), writePartitions, initial)
+	s.startManagerWithLogger(testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly), writePartitions, initial)
 }
 
 func (s *ScaleManagerSuite) startManagerWithLogger(
@@ -88,6 +91,9 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 	writePartitions int,
 	initial *persistencespb.PartitionScaleState,
 ) {
+	if tl, ok := logger.(*testlogger.TestLogger); ok {
+		s.newTarget = tl.Expect(testlogger.Info, "new target")
+	}
 	s.sm = newScaleManager(
 		context.Background(),
 		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
@@ -112,6 +118,14 @@ func (s *ScaleManagerSuite) fireBackgroundTimer() {
 		"worker never registered a periodic timer")
 	// BackgroundInterval has up to 5% jitter; advance comfortably past it.
 	s.timeSource.Advance(s.settings.BackgroundInterval*2 + time.Millisecond)
+}
+
+// awaitDecisionApplied blocks until the worker has fully applied n decisions.
+// This uses the "new target" log that's emitted at the end of callScaler, so we know that
+// an update has been fully applied.
+func (s *ScaleManagerSuite) awaitDecisionApplied(n int64) {
+	s.T().Helper()
+	waitLogMatches(s, s.newTarget, n, "decision not fully applied before clock advance")
 }
 
 // waitRecv blocks until ch yields a value, failing the test on timeout.
@@ -334,6 +348,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 	s.Equal(0, in1.CurrentTarget)
 	s.Nil(in1.PrivateState)
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
@@ -349,7 +364,6 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -359,7 +373,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "NoChange decision should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "NoChange decision should not log")
 }
 
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
@@ -368,7 +382,6 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 4)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -389,7 +402,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "first shadow log missing")
+	waitLogMatches(s, s.newTarget, 1, "first shadow log missing")
 
 	s.sm.AddedTasks(1)
 	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
@@ -397,23 +410,22 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "shadow log repeated before cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "shadow log repeated before cadence")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "fourth shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "second shadow log missing")
+	waitLogMatches(s, s.newTarget, 2, "second shadow log missing")
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -426,7 +438,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "disabled scaler should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "disabled scaler should not log")
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
@@ -534,7 +546,6 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 3)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -556,17 +567,17 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "shadow target 3 not logged")
+	waitLogMatches(s, s.newTarget, 1, "shadow target 3 not logged")
 
 	s.timeSource.Advance(time.Minute) // past cooldown and cadence
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "shadow target 2 not logged")
+	waitLogMatches(s, s.newTarget, 2, "shadow target 2 not logged")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	waitLogMatches(s, shadowLog, 3, "shadow target 3 after oscillation not logged")
+	waitLogMatches(s, s.newTarget, 3, "shadow target 3 after oscillation not logged")
 }
 
 // TestNoChangeDecisionSkipsWrite covers two skip paths: explicit NoChange, and
@@ -648,6 +659,7 @@ func (s *ScaleManagerSuite) TestCooldown() {
 
 	// Advance fake time past cooldown. Trigger another wakeup; the scaler
 	// should now be called with the accumulated 8 tasks.
+	s.awaitDecisionApplied(1) // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond)
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second decision never delivered")
@@ -688,6 +700,7 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 	s.Nil(in1.PrivateState, "first call should have no private state")
 	waitRecv(s, dbWrites, "first db write missing")
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second call missing")

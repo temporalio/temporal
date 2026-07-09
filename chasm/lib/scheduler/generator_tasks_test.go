@@ -197,6 +197,38 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	}
 }
 
+// TestGeneratorTask_PausedDropsActionsAdvancesHWM verifies the "drop, don't
+// buffer; keep advancing the HWM" semantic of the always-on GeneratorTask.
+// A paused Execute over a non-trivial time range must produce no buffered
+// starts and must still advance the high water mark.
+func TestGeneratorTask_PausedDropsActionsAdvancesHWM(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	// Pause and pull the HWM back so a non-paused run would have buffered
+	// several actions across the interval.
+	sched.Schedule.State.Paused = true
+	pausedStart := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+	generator.LastProcessedTime = timestamppb.New(pausedStart)
+
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	// No actions buffered while paused - they are dropped.
+	require.Empty(t, invoker.BufferedStarts)
+
+	// HWM advanced past the paused window so a future unpause won't replay
+	// the dropped window.
+	newHWM := generator.LastProcessedTime.AsTime()
+	require.True(t, newHWM.After(pausedStart),
+		"HWM should advance past the paused start: was %v, now %v", pausedStart, newHWM)
+}
+
 func TestUnpause_ResumesProcessing(t *testing.T) {
 	env := newTestEnv(t)
 

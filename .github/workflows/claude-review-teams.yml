@@ -35,13 +35,14 @@ jobs:
     outputs:
       should_review: ${{ steps.decision.outputs.should_review }}
       head_sha: ${{ steps.resolve.outputs.head_sha }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
     steps:
       - name: Generate app token
         id: generate_token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
-          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           # Least-privilege: members:read for team-membership lookups,
           # pull-requests:read for the workflow_dispatch PR lookup, and
@@ -147,6 +148,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -157,4 +159,15 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          mode: review
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
+          prompt: |
+            Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
+            Please review this pull request.
+            The PR branch is already checked out in the current working directory.
+            Prefer inline comments for all actionable findings.
+            Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
+            Only use `gh pr comment` for a brief summary if there are no inline findings or if a finding cannot be attached to a specific changed line.
+            Do not duplicate inline findings in a top-level comment.
+            Only post GitHub comments - don't submit review text as messages.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

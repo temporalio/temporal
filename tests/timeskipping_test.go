@@ -1246,3 +1246,70 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeo
 		"timing out at the execution timeout is not a fast-forward disable")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT))
 }
+
+func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOptionsUpdated() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	// Start WITHOUT time skipping.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: schedule a user timer. Time skipping is off, so the workflow just goes idle with a
+	// pending timer (no skip yet).
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{startTimerCmd("t1", time.Hour)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Enable time skipping. The workflow is idle with a pending timer, so this update's close-tx
+	// emits a transition skipping to the timer — in the same transaction as OPTIONS_UPDATED.
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+
+	// The transition and the OPTIONS_UPDATED that triggered it must both be present, and the
+	// OPTIONS_UPDATED must come first (the transition is the last event of the transaction).
+	optionsUpdatedIdx, transitionIdx := -1, -1
+	for i, e := range hist {
+		switch e.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			optionsUpdatedIdx = i
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED:
+			transitionIdx = i
+		default:
+			// other event types are irrelevant to this ordering check
+		}
+	}
+	s.NotEqual(-1, optionsUpdatedIdx, "expected an OPTIONS_UPDATED event")
+	s.NotEqual(-1, transitionIdx, "expected a TIME_SKIPPING_TRANSITIONED event")
+	s.Less(optionsUpdatedIdx, transitionIdx,
+		"OPTIONS_UPDATED (event %d) must precede the transition it triggered (event %d)",
+		hist[optionsUpdatedIdx].GetEventId(), hist[transitionIdx].GetEventId())
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
+}
