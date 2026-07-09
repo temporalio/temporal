@@ -557,6 +557,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)),
 			metrics.SuggestContinueAsNewReasonTooManyHistoryEventsTag(
 				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)),
+			metrics.SuggestContinueAsNewReasonTooManySignalsTag(
+				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_SIGNALS)),
 		)).Record(1)
 	}
 
@@ -1510,6 +1512,14 @@ func (m *workflowTaskStateMachine) getHistorySizeInfo() (int64, []enumspb.Sugges
 	}
 	if historyCount >= countLimit {
 		reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)
+	}
+	maxSignals := config.MaximumSignalsPerExecution(namespaceName)
+	signalThreshold := config.MaximumSignalsPerExecutionSuggestContinueAsNewThreshold(namespaceName)
+	if maxSignals > 0 && signalThreshold > 0 {
+		signalSuggest := int(math.Ceil(float64(maxSignals) * signalThreshold))
+		if signalSuggest > 0 && int(m.ms.GetExecutionInfo().SignalCount) >= signalSuggest {
+			reasons = append(reasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_SIGNALS)
+		}
 	}
 	return historySize, reasons
 }

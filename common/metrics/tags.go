@@ -53,6 +53,7 @@ const (
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
 	suggestContinueAsNewReasonTooManyHistoryEvents = "suggest_continue_as_new_reason_too_many_history_events"
 	suggestContinueAsNewReasonHistorySizeTooLarge  = "suggest_continue_as_new_reason_history_size_too_large"
+	suggestContinueAsNewReasonTooManySignals       = "suggest_continue_as_new_reason_too_many_signals"
 	isFirstAttempt                                 = "first-attempt"
 	workflowStatus                                 = "workflow_status"
 	behaviorBefore                                 = "behavior_before"
@@ -506,6 +507,14 @@ func SuggestContinueAsNewReasonHistorySizeTooLargeTag(present bool) Tag {
 		v = trueValue
 	}
 	return Tag{Key: suggestContinueAsNewReasonHistorySizeTooLarge, Value: v}
+}
+
+func SuggestContinueAsNewReasonTooManySignalsTag(present bool) Tag {
+	v := falseValue
+	if present {
+		v = trueValue
+	}
+	return Tag{Key: suggestContinueAsNewReasonTooManySignals, Value: v}
 }
 
 func WorkflowStatusTag(status string) Tag {

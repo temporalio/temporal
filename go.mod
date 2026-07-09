@@ -233,3 +233,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+// TODO: remove this replace once temporalio/api#822 merges and a released
+// go.temporal.io/api version contains SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_SIGNALS.
+replace go.temporal.io/api => github.com/nitishagar/api-go v1.63.3-0.suggestsignals.1
