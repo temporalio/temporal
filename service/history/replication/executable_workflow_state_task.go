@@ -11,13 +11,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -83,7 +83,7 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 	e.MarkExecutionStart()
 
 	if e.Config.EmitReplicationLifecycleEvents() {
-		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, commonevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(), e.WorkflowKey, wideevents.ReplTaskSyncWorkflowState, int32(e.Attempt()))
 	}
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())

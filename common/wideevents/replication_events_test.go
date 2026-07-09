@@ -1,28 +1,23 @@
-package events
+package wideevents
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/log"
 )
 
-// captureEncoder records all encoded fields for assertions.
-type captureEncoder struct {
-	fields map[string]any
+// attrMap indexes a payload's emitted attributes by key for assertions.
+func attrMap(kvs []log.KeyValue) map[string]log.Value {
+	m := make(map[string]log.Value, len(kvs))
+	for _, kv := range kvs {
+		m[kv.Key] = kv.Value
+	}
+	return m
 }
 
-func newCaptureEncoder() *captureEncoder {
-	return &captureEncoder{fields: make(map[string]any)}
-}
-
-func (e *captureEncoder) String(key, value string)      { e.fields[key] = value }
-func (e *captureEncoder) Int64(key string, v int64)     { e.fields[key] = v }
-func (e *captureEncoder) Float64(key string, v float64) { e.fields[key] = v }
-func (e *captureEncoder) Bool(key string, v bool)       { e.fields[key] = v }
-func (e *captureEncoder) Any(key string, v any)         { e.fields[key] = v }
-
-func TestReplicationLifecycleRegisteredName(t *testing.T) {
-	require.Equal(t, "replication_lifecycle", ReplicationLifecycle.Name())
+func TestReplicationLifecycleEventName(t *testing.T) {
+	require.Equal(t, "replication_lifecycle", ReplicationLifecyclePayload{}.EventName())
 }
 
 func TestReplicationLifecycleEncodeSent(t *testing.T) {
@@ -39,22 +34,21 @@ func TestReplicationLifecycleEncodeSent(t *testing.T) {
 		FirstEventID:    1,
 		NextEventID:     8,
 	}
-	enc := newCaptureEncoder()
-	p.Encode(enc)
+	f := attrMap(p.Attributes())
 
-	require.Equal(t, "sent", enc.fields["phase"])
-	require.Equal(t, true, enc.fields["is_first_sync"])
-	require.Equal(t, int64(1), enc.fields["first_event_id"])
-	require.Equal(t, int64(8), enc.fields["next_event_id"])
-	require.Equal(t, ReplTaskSyncVersionedTransition, enc.fields["task_type"])
-	require.Equal(t, int64(3), enc.fields["shard"])
-	require.Equal(t, "ns-id", enc.fields["namespace_id"])
-	require.Equal(t, "wf-id", enc.fields["workflow_id"])
-	require.Equal(t, "run-id", enc.fields["run_id"])
-	require.Equal(t, int64(5), enc.fields["failover_version"])
-	require.Equal(t, int64(7), enc.fields["transition_count"])
-	// verify-only fields must be absent for non-verify task type.
-	_, ok := enc.fields["verify_next_event_id"]
+	require.Equal(t, "sent", f["phase"].AsString())
+	require.True(t, f["is_first_sync"].AsBool())
+	require.Equal(t, int64(1), f["first_event_id"].AsInt64())
+	require.Equal(t, int64(8), f["next_event_id"].AsInt64())
+	require.Equal(t, ReplTaskSyncVersionedTransition, f["task_type"].AsString())
+	require.Equal(t, int64(3), f["shard"].AsInt64())
+	require.Equal(t, "ns-id", f["namespace_id"].AsString())
+	require.Equal(t, "wf-id", f["workflow_id"].AsString())
+	require.Equal(t, "run-id", f["run_id"].AsString())
+	require.Equal(t, int64(5), f["failover_version"].AsInt64())
+	require.Equal(t, int64(7), f["transition_count"].AsInt64())
+	// applied-only fields must be absent for the sent phase.
+	_, ok := f["outcome"]
 	require.False(t, ok)
 }
 
@@ -77,36 +71,36 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 		SignalCount:        6,
 		UpdateCount:        2,
 	}
-	enc := newCaptureEncoder()
-	p.Encode(enc)
+	f := attrMap(p.Attributes())
 
-	require.Equal(t, "applied", enc.fields["phase"])
-	require.Equal(t, "new-run", enc.fields["new_execution_run_id"])
-	require.Equal(t, int64(6), enc.fields["signal_count"])
-	require.Equal(t, int64(2), enc.fields["update_count"])
+	require.Equal(t, "applied", f["phase"].AsString())
+	require.Equal(t, "new-run", f["new_execution_run_id"].AsString())
+	require.Equal(t, int64(6), f["signal_count"].AsInt64())
+	require.Equal(t, int64(2), f["update_count"].AsInt64())
 	// zero-valued applied summary fields must be omitted.
-	_, ok := enc.fields["activity_count"]
+	_, ok := f["activity_count"]
 	require.False(t, ok)
-	require.Equal(t, "applied", enc.fields["outcome"])
-	require.Equal(t, "Running", enc.fields["state"])
-	require.Equal(t, "Unspecified", enc.fields["status"])
-	require.Equal(t, int64(10), enc.fields["applied_next_event_id"])
-	require.Equal(t, []VersionedTransitionEntry{{FailoverVersion: 5, TransitionCount: 7}}, enc.fields["transition_history"])
-	require.Equal(t, int64(9), enc.fields["last_event_id"])
-	require.Equal(t, int64(5), enc.fields["last_event_version"])
+	require.Equal(t, "applied", f["outcome"].AsString())
+	require.Equal(t, "Running", f["state"].AsString())
+	require.Equal(t, "Unspecified", f["status"].AsString())
+	require.Equal(t, int64(10), f["applied_next_event_id"].AsInt64())
+	// composite fields are emitted as a compact JSON string.
+	require.JSONEq(t, `[{"failover_version":5,"transition_count":7}]`, f["transition_history"].AsString())
+	require.Equal(t, int64(9), f["last_event_id"].AsInt64())
+	require.Equal(t, int64(5), f["last_event_version"].AsInt64())
 	// sent-only fields must be absent.
-	_, ok = enc.fields["is_force_replication"]
+	_, ok = f["is_first_sync"]
 	require.False(t, ok)
 }
 
 func TestEmitReplicationLifecycleNilSafe(t *testing.T) {
 	require.NotPanics(t, func() {
-		EmitReplicationLifecycle(nil, ReplicationLifecyclePayload{Phase: ReplicationSent})
+		Emit(nil, ReplicationLifecyclePayload{Phase: ReplicationSent})
 	})
 }
 
 // fullyPopulatedReplication returns a payload with every field set to a non-zero value so that
-// Encode exercises every conditional branch. Phase-specific fields are only emitted for their
+// Attributes exercises every conditional branch. Phase-specific fields are only emitted for their
 // phase, so callers must union the results across all phases to see the full field set.
 func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePayload {
 	return ReplicationLifecyclePayload{
@@ -168,10 +162,8 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 
 	got := make(map[string]struct{})
 	for _, phase := range []ReplicationPhase{ReplicationSent, ReplicationExecuting, ReplicationApplied} {
-		enc := newCaptureEncoder()
-		fullyPopulatedReplication(phase).Encode(enc)
-		for k := range enc.fields {
-			got[k] = struct{}{}
+		for _, kv := range fullyPopulatedReplication(phase).Attributes() {
+			got[kv.Key] = struct{}{}
 		}
 	}
 	gotKeys := make([]string, 0, len(got))

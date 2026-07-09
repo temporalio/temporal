@@ -1,13 +1,13 @@
 package shard
 
 import (
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -48,7 +48,7 @@ type (
 		HostInfoProvider            membership.HostInfoProvider
 		Logger                      log.Logger
 		MetricsHandler              metrics.Handler
-		EventHandler                commonevents.Handler
+		EventLogger                 otellog.Logger
 		NamespaceRegistry           namespace.Registry
 		PayloadSerializer           serialization.Serializer
 		PersistenceExecutionManager persistence.ExecutionManager
@@ -94,7 +94,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ClientBean,
 		c.HistoryClient,
 		c.MetricsHandler,
-		c.EventHandler,
+		c.EventLogger,
 		c.PayloadSerializer,
 		c.TimeSource,
 		c.NamespaceRegistry,

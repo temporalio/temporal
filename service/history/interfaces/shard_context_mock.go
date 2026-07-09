@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	log "go.opentelemetry.io/otel/log"
 	common "go.temporal.io/api/common/v1"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	clock "go.temporal.io/server/api/clock/v1"
@@ -24,10 +25,9 @@ import (
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
-	events "go.temporal.io/server/common/events"
 	finalizer "go.temporal.io/server/common/finalizer"
 	locks "go.temporal.io/server/common/locks"
-	log "go.temporal.io/server/common/log"
+	log0 "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -36,7 +36,7 @@ import (
 	quotas "go.temporal.io/server/common/quotas"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
-	events0 "go.temporal.io/server/service/history/events"
+	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -370,25 +370,25 @@ func (mr *MockShardContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockShardContext)(nil).GetEngine), ctx)
 }
 
-// GetEventHandler mocks base method.
-func (m *MockShardContext) GetEventHandler() events.Handler {
+// GetEventLogger mocks base method.
+func (m *MockShardContext) GetEventLogger() log.Logger {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEventHandler")
-	ret0, _ := ret[0].(events.Handler)
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
 	return ret0
 }
 
-// GetEventHandler indicates an expected call of GetEventHandler.
-func (mr *MockShardContextMockRecorder) GetEventHandler() *gomock.Call {
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockShardContextMockRecorder) GetEventLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventHandler", reflect.TypeOf((*MockShardContext)(nil).GetEventHandler))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockShardContext)(nil).GetEventLogger))
 }
 
 // GetEventsCache mocks base method.
-func (m *MockShardContext) GetEventsCache() events0.Cache {
+func (m *MockShardContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(events0.Cache)
+	ret0, _ := ret[0].(events.Cache)
 	return ret0
 }
 
@@ -470,10 +470,10 @@ func (mr *MockShardContextMockRecorder) GetLifecycleContext() *gomock.Call {
 }
 
 // GetLogger mocks base method.
-func (m *MockShardContext) GetLogger() log.Logger {
+func (m *MockShardContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -670,10 +670,10 @@ func (mr *MockShardContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockShardContext) GetThrottledLogger() log.Logger {
+func (m *MockShardContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -1215,25 +1215,25 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockControllableContext)(nil).GetEngine), ctx)
 }
 
-// GetEventHandler mocks base method.
-func (m *MockControllableContext) GetEventHandler() events.Handler {
+// GetEventLogger mocks base method.
+func (m *MockControllableContext) GetEventLogger() log.Logger {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEventHandler")
-	ret0, _ := ret[0].(events.Handler)
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
 	return ret0
 }
 
-// GetEventHandler indicates an expected call of GetEventHandler.
-func (mr *MockControllableContextMockRecorder) GetEventHandler() *gomock.Call {
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockControllableContextMockRecorder) GetEventLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventHandler", reflect.TypeOf((*MockControllableContext)(nil).GetEventHandler))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockControllableContext)(nil).GetEventLogger))
 }
 
 // GetEventsCache mocks base method.
-func (m *MockControllableContext) GetEventsCache() events0.Cache {
+func (m *MockControllableContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(events0.Cache)
+	ret0, _ := ret[0].(events.Cache)
 	return ret0
 }
 
@@ -1315,10 +1315,10 @@ func (mr *MockControllableContextMockRecorder) GetLifecycleContext() *gomock.Cal
 }
 
 // GetLogger mocks base method.
-func (m *MockControllableContext) GetLogger() log.Logger {
+func (m *MockControllableContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -1529,10 +1529,10 @@ func (mr *MockControllableContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockControllableContext) GetThrottledLogger() log.Logger {
+func (m *MockControllableContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 

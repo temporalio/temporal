@@ -1,10 +1,13 @@
-package events
+package wideevents
 
 import (
+	"go.opentelemetry.io/otel/log"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var ReplicationLifecycle = NewEventDef("replication_lifecycle")
+// ReplicationLifecycleEventName is the stable event name for the ReplicationLifecycle wide event,
+// which traces a replication task sent -> executing -> applied.
+const ReplicationLifecycleEventName = "replication_lifecycle"
 
 type ReplicationPhase string
 
@@ -79,97 +82,110 @@ type VersionHistoryEntry struct {
 	Version int64 `json:"version"`
 }
 
-func (p ReplicationLifecyclePayload) Encode(enc Encoder) {
-	enc.String("phase", string(p.Phase))
-	enc.String("task_type", p.TaskType)
-	enc.Int64("shard", int64(p.Shard))
-	enc.String("namespace", p.Namespace)
-	enc.String("namespace_id", p.NamespaceID)
-	enc.String("workflow_id", p.WorkflowID)
-	enc.String("run_id", p.RunID)
+func (p ReplicationLifecyclePayload) EventName() string { return ReplicationLifecycleEventName }
+
+func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
+	attrs := []log.KeyValue{
+		log.String("phase", string(p.Phase)),
+		log.String("task_type", p.TaskType),
+		log.Int64("shard", int64(p.Shard)),
+		log.String("namespace", p.Namespace),
+		log.String("namespace_id", p.NamespaceID),
+		log.String("workflow_id", p.WorkflowID),
+		log.String("run_id", p.RunID),
+	}
 	if p.FailoverVersion != 0 || p.TransitionCount != 0 {
-		enc.Int64("failover_version", p.FailoverVersion)
-		enc.Int64("transition_count", p.TransitionCount)
+		attrs = append(attrs,
+			log.Int64("failover_version", p.FailoverVersion),
+			log.Int64("transition_count", p.TransitionCount),
+		)
 	}
 	// parent fields are phase-independent: emitted on any phase that populated them (sent +
 	// applied). Guards keep them absent when not applicable (e.g. executing, or a workflow that is
 	// not a child).
 	if p.ParentWorkflowID != "" {
-		enc.String("parent_workflow_id", p.ParentWorkflowID)
-		enc.String("parent_run_id", p.ParentRunID)
+		attrs = append(attrs,
+			log.String("parent_workflow_id", p.ParentWorkflowID),
+			log.String("parent_run_id", p.ParentRunID),
+		)
 		if p.ParentInitiatedID != 0 {
-			enc.Int64("parent_initiated_id", p.ParentInitiatedID)
+			attrs = append(attrs, log.Int64("parent_initiated_id", p.ParentInitiatedID))
 		}
 	}
 	if len(p.Details) > 0 {
-		enc.Any("details", p.Details)
+		attrs = append(attrs, jsonAttr("details", p.Details))
 	}
 	if len(p.EventVersionHistory) > 0 {
-		enc.Any("event_version_history", p.EventVersionHistory)
+		attrs = append(attrs, jsonAttr("event_version_history", p.EventVersionHistory))
 	}
 	switch p.Phase {
 	case ReplicationSent:
-		p.encodeSent(enc)
+		attrs = p.appendSent(attrs)
 	case ReplicationExecuting:
-		enc.Int64("attempt", int64(p.Attempt))
+		attrs = append(attrs, log.Int64("attempt", int64(p.Attempt)))
 	case ReplicationApplied:
-		p.encodeApplied(enc)
+		attrs = p.appendApplied(attrs)
 	default:
 	}
+	return attrs
 }
 
-func (p ReplicationLifecyclePayload) encodeSent(enc Encoder) {
+func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyValue {
 	if p.NewRunID != "" {
-		enc.String("new_run_id", p.NewRunID)
+		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
 	}
-	enc.Bool("is_first_sync", p.IsFirstSync)
+	attrs = append(attrs, log.Bool("is_first_sync", p.IsFirstSync))
 	if p.FirstEventID != 0 {
-		enc.Int64("first_event_id", p.FirstEventID)
+		attrs = append(attrs, log.Int64("first_event_id", p.FirstEventID))
 	}
 	if p.NextEventID != 0 {
-		enc.Int64("next_event_id", p.NextEventID)
+		attrs = append(attrs, log.Int64("next_event_id", p.NextEventID))
 	}
+	return attrs
 }
 
-func (p ReplicationLifecyclePayload) encodeApplied(enc Encoder) {
-	enc.String("outcome", p.Outcome)
+func (p ReplicationLifecyclePayload) appendApplied(attrs []log.KeyValue) []log.KeyValue {
+	attrs = append(attrs, log.String("outcome", p.Outcome))
 	if p.Error != "" {
-		enc.String("error", p.Error)
+		attrs = append(attrs, log.String("error", p.Error))
 	}
 	if p.State == "" {
-		return
+		return attrs
 	}
-	enc.String("state", p.State)
-	enc.String("status", p.Status)
-	enc.Int64("applied_next_event_id", p.AppliedNextEventID)
+	attrs = append(attrs,
+		log.String("state", p.State),
+		log.String("status", p.Status),
+		log.Int64("applied_next_event_id", p.AppliedNextEventID),
+	)
 	if len(p.TransitionHistory) > 0 {
-		enc.Any("transition_history", p.TransitionHistory)
+		attrs = append(attrs, jsonAttr("transition_history", p.TransitionHistory))
 	}
-	enc.Int64("last_event_id", p.LastEventID)
+	attrs = append(attrs, log.Int64("last_event_id", p.LastEventID))
 	if p.LastEventVersion != 0 {
-		enc.Int64("last_event_version", p.LastEventVersion)
+		attrs = append(attrs, log.Int64("last_event_version", p.LastEventVersion))
 	}
 	if p.NewExecutionRunID != "" {
-		enc.String("new_execution_run_id", p.NewExecutionRunID)
+		attrs = append(attrs, log.String("new_execution_run_id", p.NewExecutionRunID))
 	}
 	if p.ResetRunID != "" {
-		enc.String("reset_run_id", p.ResetRunID)
+		attrs = append(attrs, log.String("reset_run_id", p.ResetRunID))
 	}
 	if p.SignalCount != 0 {
-		enc.Int64("signal_count", p.SignalCount)
+		attrs = append(attrs, log.Int64("signal_count", p.SignalCount))
 	}
 	if p.ActivityCount != 0 {
-		enc.Int64("activity_count", p.ActivityCount)
+		attrs = append(attrs, log.Int64("activity_count", p.ActivityCount))
 	}
 	if p.UserTimerCount != 0 {
-		enc.Int64("user_timer_count", p.UserTimerCount)
+		attrs = append(attrs, log.Int64("user_timer_count", p.UserTimerCount))
 	}
 	if p.ChildExecutionCount != 0 {
-		enc.Int64("child_execution_count", p.ChildExecutionCount)
+		attrs = append(attrs, log.Int64("child_execution_count", p.ChildExecutionCount))
 	}
 	if p.UpdateCount != 0 {
-		enc.Int64("update_count", p.UpdateCount)
+		attrs = append(attrs, log.Int64("update_count", p.UpdateCount))
 	}
+	return attrs
 }
 
 // PopulateParentInfo records the parent workflow identity when info describes a child workflow.
@@ -181,12 +197,4 @@ func (p *ReplicationLifecyclePayload) PopulateParentInfo(info *persistencespb.Wo
 	p.ParentWorkflowID = info.GetParentWorkflowId()
 	p.ParentRunID = info.GetParentRunId()
 	p.ParentInitiatedID = info.GetParentInitiatedId()
-}
-
-// EmitReplicationLifecycle is a nil-safe helper.
-func EmitReplicationLifecycle(h Handler, p ReplicationLifecyclePayload) {
-	if h == nil {
-		return
-	}
-	ReplicationLifecycle.With(h).Emit(p)
 }

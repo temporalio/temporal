@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -14,7 +15,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -47,7 +47,7 @@ type (
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler
-		GetEventHandler() commonevents.Handler
+		GetEventLogger() otellog.Logger
 		GetTimeSource() clock.TimeSource
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)

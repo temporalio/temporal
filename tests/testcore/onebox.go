@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -29,7 +30,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -500,7 +501,7 @@ func (c *TemporalImpl) startHistory() {
 			),
 			fx.Provide(c.configProvider),
 			fx.Provide(c.GetMetricsHandler),
-			fx.Provide(func() commonevents.Handler { return commonevents.NoopHandler() }),
+			fx.Provide(func() otellog.Logger { return wideevents.NoopLogger() }),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),

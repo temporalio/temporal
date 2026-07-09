@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -31,7 +32,6 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	commonevents "go.temporal.io/server/common/events"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -88,7 +89,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
-		eventHandler        commonevents.Handler
+		eventLogger         otellog.Logger
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -2052,7 +2053,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
-	eventHandler commonevents.Handler,
+	eventLogger otellog.Logger,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2090,7 +2091,7 @@ func newContext(
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
-		eventHandler:            eventHandler,
+		eventLogger:             eventLogger,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2199,11 +2200,11 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
 }
 
-func (s *ContextImpl) GetEventHandler() commonevents.Handler {
-	if s.eventHandler == nil {
-		return commonevents.NoopHandler()
+func (s *ContextImpl) GetEventLogger() otellog.Logger {
+	if s.eventLogger == nil {
+		return wideevents.NoopLogger()
 	}
-	return s.eventHandler
+	return s.eventLogger
 }
 
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
