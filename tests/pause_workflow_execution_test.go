@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type PauseWorkflowExecutionSuite struct {
@@ -364,6 +365,286 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 	var result string
 	s.NoError(workflowRun.Get(ctx, &result), "workflow did not complete after unpause; a fresh workflow task was likely never scheduled")
 	s.Equal("done", result)
+}
+
+// TestPauseWorkflowExecution_StartedWorkflowTaskSurvivesPause is the counterpart
+// to TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime: it verifies
+// that pausing while a workflow task is already started (polled by a worker, but
+// not yet completed) does not interfere with it. The worker's eventual completion
+// must still be accepted normally, in contrast to a merely-scheduled (never polled)
+// task, which pausing fails outright.
+//
+// Test sequence:
+//  1. Start a workflow and manually poll its first workflow task (marking it
+//     started), without responding yet.
+//  2. Pause the workflow while that task is still outstanding. Because a
+//     workflow task is in flight, the paused event is buffered rather than
+//     landing in history immediately - this is ordinary Temporal event-batching
+//     behavior, unrelated to pause specifically.
+//  3. Complete the task with no commands and assert the completion succeeds and
+//     the task resolves as completed, not failed. (A command that closes the
+//     workflow, like CompleteWorkflowExecution, would be rejected here for an
+//     unrelated reason: Temporal never allows a terminal command in the same
+//     batch as buffered events, regardless of pause.)
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskSurvivesPause() {
+	env := s.newTestEnv()
+	tv := env.Tv()
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tv.RequestID(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(60 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	workflowID := tv.WorkflowID()
+	runID := we.GetRunId()
+
+	// Poll (and thus start) the first workflow task, but don't respond yet.
+	polledTask, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	s.NotEmpty(polledTask.GetTaskToken())
+
+	// Pause while that task is started (in flight with the "worker" above).
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// The task that was already started before pause must still be completable,
+	// even with no commands to process.
+	_, err = env.TaskPoller().HandleWorkflowTask(tv, polledTask, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err, "a workflow task that was already started before pause must still be completable")
+
+	// The task resolved as completed (not failed), and the paused event -
+	// buffered while the task was in flight - is flushed right after it.
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	})
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionPaused`, events)
+
+	// The workflow remains paused (we never unpaused it); no new workflow task
+	// was scheduled as a side effect of completing the in-flight one.
+	s.assertWorkflowIsPaused(env, workflowID, runID)
+}
+
+// TestPauseWorkflowExecution_StartedWorkflowTaskTimesOutWhilePaused covers if
+// a workflow task was started before pause and its worker crashes, the task
+// must still resolve via its own normal start-to-close timeout. The
+// workflow must remain correctly paused (no new task scheduled) until unpaused,
+// at which point a fresh workflow task becomes available.
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskTimesOutWhilePaused() {
+	env := s.newTestEnv()
+	tv := env.Tv()
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tv.RequestID(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(60 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	workflowID := tv.WorkflowID()
+	runID := we.GetRunId()
+
+	// Poll (and thus start) the first workflow task, but never respond - simulating
+	// a worker that crashed or otherwise never comes back.
+	polledTask, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	s.NotEmpty(polledTask.GetTaskToken())
+
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// The task's own start-to-close timeout must still fire normally - it must
+	// not be silently dropped as stale - and the buffered paused event flushes
+	// right after it, same as a normal completion would.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		})
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskTimedOut
+  5 WorkflowExecutionPaused`, events)
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// No new workflow task was scheduled as a result of the timeout, since the
+	// workflow is still paused.
+	desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Nil(desc.GetPendingWorkflowTask(), "no new workflow task should be scheduled while paused")
+
+	// Unpause; a fresh workflow task must become available and completable.
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	unpauseResp, err := env.FrontendClient().UnpauseWorkflowExecution(s.Context(), unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err, "a fresh workflow task must become available and completable after unpause")
+}
+
+// TestPauseWorkflowExecution_StartedWorkflowTaskFailsWhilePaused is the third
+// variant alongside TestPauseWorkflowExecution_StartedWorkflowTaskSurvivesPause
+// (completed) and TestPauseWorkflowExecution_StartedWorkflowTaskTimesOutWhilePaused
+// (timed out): if a worker explicitly fails a workflow task that was already
+// started before pause (e.g. reporting a workflow panic), that failure must
+// still be accepted normally. Unlike a plain in-flight completion, a failure's
+// own request to create a retry task is suppressed while paused (the same
+// paused gate that skips scheduling a follow-up after any in-flight
+// resolution), so no retry task is scheduled until the workflow is unpaused.
+func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskFailsWhilePaused() {
+	env := s.newTestEnv()
+	tv := env.Tv()
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           tv.RequestID(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(60 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	workflowID := tv.WorkflowID()
+	runID := we.GetRunId()
+
+	// Poll (and thus start) the first workflow task, but don't respond yet.
+	polledTask, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+	s.NotEmpty(polledTask.GetTaskToken())
+
+	// Pause while that task is started (in flight with the "worker" above).
+	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	pauseResp, err := env.FrontendClient().PauseWorkflowExecution(s.Context(), pauseRequest)
+	s.NoError(err)
+	s.NotNil(pauseResp)
+
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// The worker now reports a failure (e.g. a workflow panic) for the task
+	// that was already started before pause. This must still be accepted.
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: polledTask.GetTaskToken(),
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err, "a workflow task that was already started before pause must still be failable")
+
+	// The task resolved as failed, and the paused event - buffered while the
+	// task was in flight - is flushed right after it. No retry task is
+	// scheduled: RespondWorkflowTaskFailed's own request to create one is
+	// suppressed by the same paused gate that applies to any in-flight
+	// resolution (completion, failure, or timeout).
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	})
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionPaused`, events)
+
+	desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Nil(desc.GetPendingWorkflowTask(), "no retry task should be scheduled while paused")
+
+	// Unpause; a fresh workflow task must become available and completable.
+	unpauseRequest := &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	}
+	unpauseResp, err := env.FrontendClient().UnpauseWorkflowExecution(s.Context(), unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err, "a fresh workflow task must become available and completable after unpause")
 }
 
 // TestListWorkflowExecutionsPausedHasNoCloseTime verifies that a paused workflow,

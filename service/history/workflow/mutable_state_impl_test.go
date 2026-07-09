@@ -2004,11 +2004,13 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.True(pausedEvent.GetWorkerMayIgnore())
 }
 
-// TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskInvalidated verifies
+// TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskLeftAlone verifies
 // that pausing while a workflow task is already started (in flight with a
-// worker) invalidates it by bumping its stamp, rather than failing it - that
-// task is left for the worker's (now stale) completion attempt to be rejected.
-func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskInvalidated() {
+// worker) leaves it completely untouched: its stamp, attempt, and identity
+// are unchanged, so the worker's eventual completion or failure is accepted
+// normally, and an unresponsive worker's task still resolves via its own
+// start-to-close timeout.
+func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskLeftAlone() {
 	s.SetupSubTest()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -2032,6 +2034,7 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowT
 	)
 	s.NoError(err)
 	prevWFTStamp := wft.Stamp
+	prevWFTAttempt := wft.Attempt
 
 	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
 	s.NoError(err)
@@ -2039,7 +2042,10 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowT
 	wftInfo := s.mutableState.GetPendingWorkflowTask()
 	s.NotNil(wftInfo)
 	s.Equal(wft.ScheduledEventID, wftInfo.ScheduledEventID)
-	s.Greater(wftInfo.Stamp, prevWFTStamp)
+	s.Equal(wft.StartedEventID, wftInfo.StartedEventID)
+	s.Equal(prevWFTStamp, wftInfo.Stamp)
+	s.Equal(prevWFTAttempt, wftInfo.Attempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	s.True(pausedEvent.GetWorkerMayIgnore())
 }
