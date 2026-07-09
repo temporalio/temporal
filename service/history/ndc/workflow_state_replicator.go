@@ -249,10 +249,9 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	var ms historyi.MutableState
 	var appliedMS *persistencespb.WorkflowMutableState
 	defer func() {
-		if retError != nil || !emitApplied {
-			return
+		if emitApplied && retError == nil {
+			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS)
 		}
-		r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS)
 	}()
 
 	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
