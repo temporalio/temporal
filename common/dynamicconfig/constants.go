@@ -2514,6 +2514,11 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumSignalsPerExecutionSuggestContinueAsNewThreshold = NewNamespaceFloatSetting(
+		"history.maximumSignalsPerExecution.suggestContinueAsNewThreshold",
+		0,
+		`MaximumSignalsPerExecutionSuggestContinueAsNewThreshold is the percentage threshold of total signals that any given workflow execution can receive before suggesting to continue-as-new. Set to zero to disable.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,

@@ -194,10 +194,11 @@ type Config struct {
 	ReplicatorProcessorMaxSkipTaskCount                 dynamicconfig.IntPropertyFn
 
 	// System Limits
-	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
-	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
-	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
+	MaximumBufferedEventsBatch                              dynamicconfig.IntPropertyFn
+	MaximumBufferedEventsSizeInBytes                        dynamicconfig.IntPropertyFn
+	MaximumSignalsPerExecution                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumSignalsPerExecutionSuggestContinueAsNewThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	MaximumEventBatchSizeInBytes                            dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
@@ -635,15 +636,16 @@ func NewConfig(
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
 
-		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
-		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
-		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
-		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
-		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
-		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
-		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
-		ShardSyncMinInterval:             dynamicconfig.ShardSyncMinInterval.Get(dc),
-		ShardSyncTimerJitterCoefficient:  dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient.Get(dc),
+		MaximumBufferedEventsBatch:                              dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
+		MaximumBufferedEventsSizeInBytes:                        dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
+		MaximumSignalsPerExecution:                              dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumSignalsPerExecutionSuggestContinueAsNewThreshold: dynamicconfig.MaximumSignalsPerExecutionSuggestContinueAsNewThreshold.Get(dc),
+		MaximumEventBatchSizeInBytes:                            dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
+		ShardUpdateMinInterval:                                  dynamicconfig.ShardUpdateMinInterval.Get(dc),
+		ShardFirstUpdateInterval:                                dynamicconfig.ShardFirstUpdateInterval.Get(dc),
+		ShardUpdateMinTasksCompleted:                            dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
+		ShardSyncMinInterval:                                    dynamicconfig.ShardSyncMinInterval.Get(dc),
+		ShardSyncTimerJitterCoefficient:                         dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient.Get(dc),
 
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
