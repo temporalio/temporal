@@ -134,6 +134,133 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { testListSchedulesFilterAndEntryFields(t, newContext) })
 	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { testListSchedulesFilterByScheduleID(t, newContext) })
 	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { testBufferSizeReportedWhenBuffered(t, newContext) })
+	t.Run("TestSystemSearchAttributesNotStoredAsCustom", func(t *testing.T) { testSystemSearchAttributesNotStoredAsCustom(t, newContext) })
+}
+
+// testSystemSearchAttributesNotStoredAsCustom verifies that reserved/system
+// search attributes supplied to CreateSchedule and UpdateSchedule are not stored
+// in the schedule's custom search attribute set.
+//
+// A handful of reserved SAs (e.g. TemporalSchedulePaused, TemporalNamespaceDivision)
+// are on the frontend's predefined whitelist, so they pass request validation and
+// reach the scheduler verbatim. They are framework-managed and have no per-namespace
+// custom-SA mapping, so if they leak into the custom SA set the visibility mapper
+// emits a spurious warn log ("no mapping defined for search attribute"). This test
+// runs on both the V1 and V2 (CHASM) stacks; on the CHASM stack it fails without the
+// create/update-path filtering fix in chasm/lib/scheduler/scheduler.go.
+func testSystemSearchAttributesNotStoredAsCustom(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-system-sa")
+	wid := testcore.RandomizeStr("sched-system-sa-wf")
+	wt := testcore.RandomizeStr("sched-system-sa-wt")
+
+	csaKeyword := "CustomKeywordField"
+	csaValue := payload.EncodeString("user-value")
+
+	// Reserved SAs that are on the predefined whitelist, so the frontend accepts
+	// them. Types must match their definitions or request validation rejects them.
+	pausedSA, _ := payload.Encode(true)
+	nsDivisionSA := payload.EncodeString("should-not-leak")
+	reservedFields := map[string]*commonpb.Payload{
+		sadefs.TemporalSchedulePaused:    pausedSA,
+		sadefs.TemporalNamespaceDivision: nsDivisionSA,
+	}
+
+	// requestFields returns the custom SA plus the reserved SAs under test.
+	requestFields := func() map[string]*commonpb.Payload {
+		fields := map[string]*commonpb.Payload{csaKeyword: csaValue}
+		for k, v := range reservedFields {
+			fields[k] = v
+		}
+		return fields
+	}
+
+	// assertNoReservedLeak asserts the custom SA set holds the user SA but no
+	// reserved SAs.
+	assertNoReservedLeak := func(sa *commonpb.SearchAttributes, label string) {
+		fields := sa.GetIndexedFields()
+		s.Equal(csaValue.Data, fields[csaKeyword].GetData(), "%s: custom SA must be stored", label)
+		for k := range fields {
+			s.Falsef(sadefs.IsReserved(k), "%s: reserved SA %q leaked into custom search attributes", label, k)
+		}
+	}
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:        s.Namespace().String(),
+		ScheduleId:       sid,
+		Schedule:         schedule,
+		Identity:         "test",
+		RequestId:        uuid.NewString(),
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: requestFields()},
+	})
+	s.NoError(err)
+
+	// Reserved SAs must not leak into the custom set on the create path.
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		describeResp, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(c, descErr)
+		require.Equal(c, csaValue.Data, describeResp.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+		for k := range describeResp.GetSearchAttributes().GetIndexedFields() {
+			require.Falsef(c, sadefs.IsReserved(k), "create: reserved SA %q leaked into custom search attributes", k)
+		}
+	}, 15*time.Second, 500*time.Millisecond)
+
+	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	assertNoReservedLeak(describeResp.GetSearchAttributes(), "create")
+
+	// The custom SA must be filterable via ListSchedules (proves it was indexed).
+	getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetSearchAttributes().GetIndexedFields()[csaKeyword] != nil
+	})
+
+	// Reserved SAs must not leak into the custom set on the update path either.
+	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
+		Namespace:        s.Namespace().String(),
+		ScheduleId:       sid,
+		Schedule:         schedule,
+		Identity:         "test",
+		RequestId:        uuid.NewString(),
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: requestFields()},
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		describeResp, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(c, descErr)
+		require.Equal(c, csaValue.Data, describeResp.GetSearchAttributes().GetIndexedFields()[csaKeyword].GetData())
+		for k := range describeResp.GetSearchAttributes().GetIndexedFields() {
+			require.Falsef(c, sadefs.IsReserved(k), "update: reserved SA %q leaked into custom search attributes", k)
+		}
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
