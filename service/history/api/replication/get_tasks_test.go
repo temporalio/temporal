@@ -30,16 +30,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -48,7 +48,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockShard           *shard.MockContext
+		mockShard           *historyi.MockShardContext
 		mockClusterMetadata *cluster.MockMetadata
 		mockAckManager      *replication.MockAckManager
 	}
@@ -62,7 +62,7 @@ func (s *getTasksSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.mockShard = shard.NewMockContext(s.controller)
+	s.mockShard = historyi.NewMockShardContext(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockAckManager = replication.NewMockAckManager(s.controller)
 
