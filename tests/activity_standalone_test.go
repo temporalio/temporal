@@ -8338,6 +8338,140 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		}
 	})
 
+	t.Run("ChangeTaskQueue_StartedAttemptCompletesFromOriginalQueue", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		queueA := testcore.RandomizeStr(t.Name() + "-A")
+		queueB := testcore.RandomizeStr(t.Name() + "-B")
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: queueA},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.pollActivityTaskQueue(ctx, queueA)
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp.GetActivityId(), "task should be dispatched from the original task queue")
+		require.EqualValues(t, 1, pollResp.GetAttempt())
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{TaskQueue: &taskqueuepb.TaskQueue{Name: queueB}},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"task_queue.name"}},
+		})
+		require.NoError(t, err)
+
+		newQueuePollCtx, newQueuePollCancel := context.WithTimeout(ctx, common.MinLongPollTimeout+time.Second)
+		defer newQueuePollCancel()
+		newQueueResp, err := env.pollActivityTaskQueue(newQueuePollCtx, queueB)
+		if err == nil {
+			require.Empty(t, newQueueResp.GetActivityId(), "in-flight task should not be redispatched to the updated task queue")
+		} else {
+			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
+		}
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+
+	t.Run("ChangeTaskQueue_StartedAttemptFailureRetriesOnNewQueue", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		queueA := testcore.RandomizeStr(t.Name() + "-A")
+		queueB := testcore.RandomizeStr(t.Name() + "-B")
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: queueA},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(1 * time.Millisecond),
+				BackoffCoefficient: 1.0,
+				MaximumAttempts:    2,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp1, err := env.pollActivityTaskQueue(ctx, queueA)
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp1.GetActivityId(), "first attempt should be dispatched from the original task queue")
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{TaskQueue: &taskqueuepb.TaskQueue{Name: queueB}},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"task_queue.name"}},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp1.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+			Identity: defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		pollResp2, err := env.pollActivityTaskQueue(ctx, queueB)
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollResp2.GetActivityId(), "retry attempt should be dispatched from the updated task queue")
+		require.EqualValues(t, 2, pollResp2.GetAttempt())
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp2.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+
 	t.Run("ChangeHeartbeatTimeout", func(t *testing.T) {
 		// Poll the activity (STARTED), then shorten heartbeat timeout via update.
 		// The update re-creates the HeartbeatTimeoutTask with the new timeout, so no further
