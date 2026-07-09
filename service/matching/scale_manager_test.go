@@ -939,7 +939,9 @@ func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
 			writes <- dbWrite{common.CloneProto(state), sync}
 		}).
 		Return(nil)
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	pushes := make(chan *taskqueuespb.PartitionScaleInfo, 4)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { pushes <- common.CloneProto(info) }).AnyTimes()
 
 	initial := &persistencespb.PartitionScaleState{
 		Target:       2,
@@ -955,8 +957,16 @@ func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
 	s.Equal([]byte{number.EncodeCompact8(500), number.EncodeCompact8(500)}, w.state.BacklogCounts)
 	s.Equal(int32(2), bitSet(w.state.BacklogState).len(), "read partitions preserved (no drain)")
 
-	// in-memory state should reflect the new counts
-	s.Equal(number.EncodeCompact8(500), s.sm.scaleState.GetBacklogCounts()[0])
+	// The DB write above happens before setState applies the state in memory and
+	// pushes the new ephemeral data. Synchronize on that push (rather than reading
+	// s.sm.scaleState, which would race the worker) to confirm the counts were
+	// applied and propagated to clients via scaleStateToInfo.
+	var info *taskqueuespb.PartitionScaleInfo
+	for info.GetBacklogCounts() == nil {
+		info = waitRecv(s, pushes, "no ephemeral push carrying the new backlog counts")
+	}
+	s.Equal([]byte{number.EncodeCompact8(500), number.EncodeCompact8(500)}, info.BacklogCounts)
+	s.Equal(int32(2), info.Write, "target unchanged in pushed info")
 }
 
 // TestNoWriteWhenBacklogUnchanged verifies that when the sampled backlog counts
