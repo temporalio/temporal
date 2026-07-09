@@ -64,6 +64,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
+          EVENT_ACTOR: ${{ github.actor }}
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
@@ -95,20 +96,27 @@ jobs:
             printf '%s\n' "$labels" | awk -v label="$1" 'tolower($0) == tolower(label) { found = 1 } END { exit !found }'
           }
 
-          echo "Checking temporalio organization membership for ${AUTHOR}"
-          if response=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "/orgs/temporalio/memberships/${AUTHOR}" 2>&1); then
-            if [ "$(echo "$response" | jq -r '.state')" != "active" ]; then
-              skip_review "author is not an active temporalio organization member"
+          require_org_member() {
+            user="$1"
+            role="$2"
+
+            echo "Checking temporalio organization membership for ${role} ${user}"
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/memberships/${user}" 2>&1); then
+              if [ "$(echo "$response" | jq -r '.state')" != "active" ]; then
+                skip_review "${role} is not an active temporalio organization member"
+              fi
+            elif echo "$response" | grep -q "HTTP 404"; then
+              skip_review "${role} is not a temporalio organization member"
+            else
+              echo "Unexpected error checking temporalio organization membership for ${role} ${user}: ${response}" >&2
+              exit 1
             fi
-          elif echo "$response" | grep -q "HTTP 404"; then
-            skip_review "author is not a temporalio organization member"
-          else
-            echo "Unexpected error checking temporalio organization membership: ${response}" >&2
-            exit 1
-          fi
-          echo "${AUTHOR} is an active temporalio organization member"
+            echo "${role} ${user} is an active temporalio organization member"
+          }
+
+          require_org_member "$AUTHOR" "author"
 
           echo "Fetching labels for PR #${PR_NUMBER}"
           labels=$(gh api -H "Accept: application/vnd.github+json" \
@@ -128,6 +136,7 @@ jobs:
             if ! labels_match "$EVENT_LABEL_NAME" "$REVIEW_OPT_IN_LABEL"; then
               skip_review "label '${EVENT_LABEL_NAME}' does not request Claude review"
             fi
+            require_org_member "$EVENT_ACTOR" "labeler"
           fi
 
           echo "Checking PR #${PR_NUMBER} for request label '${REVIEW_OPT_IN_LABEL}'"
