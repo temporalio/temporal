@@ -699,7 +699,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		policyRetryIntervalBeforeUpdate,
 	) {
 		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
-		attempt.CurrentRetryInterval = durationpb.New(newInterval)
+		if newInterval < attempt.GetCurrentRetryInterval().AsDuration() {
+			attempt.CurrentRetryInterval = durationpb.New(newInterval)
+		}
 	}
 
 	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
