@@ -37,14 +37,9 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		author = "Unknown"
 	}
 
-	shortSHA := run.HeadSHA
-	if len(shortSHA) > 7 {
-		shortSHA = shortSHA[:7]
-	}
-
 	commit := CommitInfo{
 		SHA:      run.HeadSHA,
-		ShortSHA: shortSHA,
+		ShortSHA: run.ShortSHA(),
 		Author:   author,
 		Message:  run.DisplayTitle,
 	}
