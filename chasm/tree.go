@@ -2076,15 +2076,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 				break
 			}
 
-			// When re-stamping for replication time-skipping, timer tasks are (re)generated
-			// against the new accumulated skip by regenerateTimerTasksForTimeSkipping, which is
-			// the sole owner of timer generation for this transaction. Skipping them here avoids
-			// generating a duplicate physical timer for a task that was added in the same
-			// replicated delta as the skip.
-			if n.regenForTimeSkippingInReplication && taskCategory(sideEffectTask) == tasks.CategoryTimer {
-				continue
-			}
-
 			node.closeTransactionGeneratePhysicalSideEffectTask(
 				sideEffectTask,
 				nodePath,
@@ -2111,13 +2102,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
 	// in one transaction. This means it's possible that task generated for a component in the first
 	// task, and that component get deleted by the second task.
-
-	// When re-stamping for replication time-skipping, the single physical pure task is
-	// (re)generated against the new accumulated skip by regenerateTimerTasksForTimeSkipping,
-	// so skip it here to avoid generating the pure timer twice.
-	if n.regenForTimeSkippingInReplication {
-		return nil
-	}
 
 	return n.closeTransactionGeneratePhysicalPureTask(
 		firstPureTask,
