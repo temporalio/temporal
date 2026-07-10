@@ -8140,6 +8140,63 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		require.EqualValues(t, 2, pollResp2.Attempt)
 	})
 
+	t.Run("NilRetryPolicyOnStartUsesDefaultRetryPolicy", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy:         nil,
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+		require.NotNil(t, pollResp.GetRetryPolicy())
+		require.EqualValues(t, 0, pollResp.GetRetryPolicy().GetMaximumAttempts())
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, pollResp2.Attempt)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		require.NotNil(t, descResp.GetInfo().GetRetryPolicy())
+		require.EqualValues(t, 0, descResp.GetInfo().GetRetryPolicy().GetMaximumAttempts())
+	})
+
 	t.Run("ClearRetryPolicyNormalizesToDefaultRetryPolicy", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
@@ -8762,38 +8819,6 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		}
 	})
 
-	t.Run("RejectNilRetryPolicyReplacement", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-		defer cancel()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(30 * time.Minute),
-			RetryPolicy: &commonpb.RetryPolicy{
-				InitialInterval: durationpb.New(10 * time.Second),
-				MaximumAttempts: 5,
-			},
-		})
-		require.NoError(t, err)
-
-		// A full retry_policy replacement (top-level mask path) with no policy provided must be rejected.
-		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
-			Namespace:       env.Namespace().String(),
-			ActivityId:      activityID,
-			RunId:           startResp.RunId,
-			ActivityOptions: &activitypb.ActivityOptions{},
-			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"retry_policy"}},
-		})
-		var invalidArgErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgErr)
-		require.Contains(t, invalidArgErr.Message, "RetryPolicy is not provided")
-	})
 }
 
 func (env *standaloneActivityEnv) pollActivityTaskQueue(ctx context.Context, taskQueue string) (*workflowservice.PollActivityTaskQueueResponse, error) {
