@@ -42,10 +42,10 @@ type ScaleManagerSuite struct {
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
 
-	// metricsHandler is wired into the manager. It defaults to capture (so any
-	// test can assert on emitted gauges via s.capture), and gauge emission is
-	// enabled whenever the handler isn't the Noop handler. A test can opt out by
-	// setting s.metricsHandler = metrics.NoopMetricsHandler before startManager.
+	// metricsHandler is wired into the manager. It defaults to Noop (gauge
+	// emission is enabled whenever the handler isn't the Noop handler, so gauges
+	// are off by default). A test that asserts on emitted gauges sets
+	// s.metricsHandler = s.capture before startManager.
 	metricsHandler metrics.Handler
 	capture        *metricstest.CaptureHandler
 
@@ -66,7 +66,7 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
 	s.capture = metricstest.NewCaptureHandler()
-	s.metricsHandler = s.capture
+	s.metricsHandler = metrics.NoopMetricsHandler
 
 	// scaler.Stop is called from sm.Stop in TearDownTest, but only if the test
 	// actually started the manager.
@@ -262,6 +262,7 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
 // decision records the read, write, and target gauges with the expected values.
 func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
+	s.metricsHandler = s.capture
 	capture := s.capture.StartCapture()
 	defer s.capture.StopCapture(capture)
 
