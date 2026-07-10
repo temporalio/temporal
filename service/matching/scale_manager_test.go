@@ -42,11 +42,12 @@ type ScaleManagerSuite struct {
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
 
-	// metricsHandler and emitGauges control the gauge metrics wired into the
-	// manager. Tests that assert on emitted gauges swap in a capture handler and
-	// enable emission before calling startManager.
+	// metricsHandler is wired into the manager. It defaults to capture (so any
+	// test can assert on emitted gauges via s.capture), and gauge emission is
+	// enabled whenever the handler isn't the Noop handler. A test can opt out by
+	// setting s.metricsHandler = metrics.NoopMetricsHandler before startManager.
 	metricsHandler metrics.Handler
-	emitGauges     bool
+	capture        *metricstest.CaptureHandler
 
 	// newTarget counts "new target" logs, which are also used for test synchronization
 	newTarget *testlogger.Expectation
@@ -64,8 +65,8 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.userData = NewMockuserDataManager(s.controller)
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
-	s.metricsHandler = metrics.NoopMetricsHandler
-	s.emitGauges = false
+	s.capture = metricstest.NewCaptureHandler()
+	s.metricsHandler = s.capture
 
 	// scaler.Stop is called from sm.Stop in TearDownTest, but only if the test
 	// actually started the manager.
@@ -116,7 +117,7 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 		s.timeSource,
 		dynamicconfig.GetTypedPropertyFn(s.settings),
 		dynamicconfig.GetIntPropertyFn(writePartitions),
-		dynamicconfig.GetBoolPropertyFn(s.emitGauges),
+		func() bool { return s.metricsHandler != metrics.NoopMetricsHandler },
 	)
 	s.sm.Start(initial, s.scaleDB)
 }
@@ -261,11 +262,8 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
 // decision records the read, write, and target gauges with the expected values.
 func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
-	capture := metricstest.NewCaptureHandler()
-	cap := capture.StartCapture()
-	defer capture.StopCapture(cap)
-	s.metricsHandler = capture
-	s.emitGauges = true
+	cap := s.capture.StartCapture()
+	defer s.capture.StopCapture(cap)
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NewTarget: 2})
