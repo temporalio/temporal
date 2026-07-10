@@ -56,9 +56,10 @@ type invocationTraceContext struct {
 
 // tags returns the structured log tags describing the call.
 func (c invocationTraceContext) tags() []tag.Tag {
-	tags := []tag.Tag{
+	return []tag.Tag{
 		tag.Operation(c.operationTag),
 		tag.WorkflowNamespace(c.namespaceName),
+		tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID),
 		tag.RequestID(c.requestID),
 		tag.NexusOperation(c.operation),
 		tag.Endpoint(c.endpointName),
@@ -67,10 +68,6 @@ func (c invocationTraceContext) tags() []tag.Tag {
 		tag.AttemptStart(c.attemptStart),
 		tag.Attempt(c.attempt),
 	}
-	if c.targetNamespaceID != "" {
-		tags = append(tags, tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID))
-	}
-	return tags
 }
 
 type invocation interface {

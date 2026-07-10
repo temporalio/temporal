@@ -163,7 +163,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordCallOutcome(ns, endpoint, args.endpointName, "CancelOperation", cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)
+	h.recordCallOutcome(endpoint, cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)
 
 	saveErr := h.saveCancellationResult(ctx, cancelRef, callErr)
 

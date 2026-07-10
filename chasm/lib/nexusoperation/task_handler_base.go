@@ -168,23 +168,20 @@ func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, timeout tim
 
 // recordCallOutcome records metrics and logs errors for the outcome of an outbound Nexus call.
 func (b *nexusTaskHandlerBase) recordCallOutcome(
-	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
-	endpointName string,
-	methodName string,
 	outcomeTag string,
 	callErr error,
 	callDuration time.Duration,
 	failureSource string,
 	traceCtx invocationTraceContext,
 ) {
-	methodTag := metrics.NexusMethodTag(methodName)
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	methodTag := metrics.NexusMethodTag(traceCtx.operationTag)
+	namespaceTag := metrics.NamespaceTag(traceCtx.namespaceName)
 	var destTag metrics.Tag
 	if endpoint != nil {
 		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	} else {
-		destTag = metrics.DestinationTag(endpointName)
+		destTag = metrics.DestinationTag(traceCtx.endpointName)
 	}
 	outcomeMetricTag := metrics.OutcomeTag(outcomeTag)
 	failureSourceTag := metrics.FailureSourceTag(failureSource)

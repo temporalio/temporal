@@ -210,7 +210,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordStartCallOutcome(callCtx, ns, endpoint, args, response, callErr, callDuration, failureSource, traceCtx)
+	h.recordStartCallOutcome(callCtx, endpoint, response, callErr, callDuration, failureSource, traceCtx)
 
 	result, err := newInvocationResult(response, callErr)
 	if err != nil {
@@ -305,22 +305,20 @@ func (h *operationInvocationTaskHandler) validateStartResult(
 
 func (h *operationInvocationTaskHandler) recordStartCallOutcome(
 	callCtx context.Context,
-	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
-	args startArgs,
 	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
 	callErr error,
 	callDuration time.Duration,
 	failureSource string,
 	traceCtx invocationTraceContext,
 ) {
-	methodTag := metrics.NexusMethodTag("StartOperation")
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	methodTag := metrics.NexusMethodTag(traceCtx.operationTag)
+	namespaceTag := metrics.NamespaceTag(traceCtx.namespaceName)
 	var destTag metrics.Tag
 	if endpoint != nil {
 		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	} else {
-		destTag = metrics.DestinationTag(args.endpointName)
+		destTag = metrics.DestinationTag(traceCtx.endpointName)
 	}
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, response, callErr))
 	failureSourceTag := metrics.FailureSourceTag(failureSource)
