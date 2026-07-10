@@ -4,14 +4,13 @@
 #
 # 1. Snapshot status:
 #       Samples memory every SNAPSHOT_INTERVAL_SECONDS and writes every sample
-#       to SNAPSHOT_HISTORY_FILE with lightweight tests.test process fields and
-#       goroutine count. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS,
-#       records those lines in SNAPSHOT_STATUS_HISTORY_FILE, and writes the
-#       highest-memory snapshot report to SNAPSHOT_FILE.
+#       to SNAPSHOT_HISTORY_FILE. Logs status every
+#       SNAPSHOT_PRINT_INTERVAL_SECONDS, records those lines in
+#       SNAPSHOT_STATUS_HISTORY_FILE, and writes the highest-memory snapshot
+#       report to SNAPSHOT_FILE.
 #
 # 2. Profile capture:
-#       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures
-#       pprof, debug, process, runtime, cgroup, and system profiles in
+#       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures a heap profile in
 #       PROFILE_OUTPUT_DIR before running analysis, then repeats every
 #       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
 #
@@ -34,7 +33,7 @@ fi
 
 # Snapshot config.
 MEMORY_OUTPUT_DIR="${MEMORY_OUTPUT_DIR:-.testoutput/memory}"
-SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-5}"
+SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-history.txt}"
@@ -47,7 +46,7 @@ PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
 # OOM prevention config.
-OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-95}"
+OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
 OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
@@ -76,15 +75,6 @@ fetch_pprof() {
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${profile_type}" -o "$output_file" 2>/dev/null
 }
 
-# Fetch a debug endpoint and save to file
-# Usage: fetch_debug <endpoint> <output_file>
-# Returns 0 on success, 1 on failure
-fetch_debug() {
-  local endpoint="$1"
-  local output_file="$2"
-  curl -s --max-time 10 "http://${PPROF_HOST}/debug/${endpoint}" -o "$output_file" 2>/dev/null
-}
-
 # Print pprof top analysis.
 # Usage: pprof_top <profile_file> <lines> [extra_flags...]
 pprof_top() {
@@ -95,35 +85,6 @@ pprof_top() {
   go tool pprof -top "$@" "$profile_file" 2>/dev/null | head -"$lines" || true
 }
 
-# Print goroutine profile analysis.
-print_goroutines() {
-  local profile_file="$1"
-
-  if [[ -s "$profile_file" ]]; then
-    echo "=== top functions by goroutine count ==="
-    pprof_top "$profile_file" 30
-  else
-    echo "(goroutine profile not available)"
-  fi
-}
-
-# Extract goroutine count from the saved goroutine debug profile.
-count_goroutines() {
-  local profile_file="$1"
-  local count
-
-  count="$(grep -c '^goroutine ' "$profile_file" 2>/dev/null || true)"
-  echo "${count:-?}"
-}
-
-current_goroutine_count() {
-  local count
-
-  count="$(curl -fsS --max-time 2 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" 2>/dev/null |
-    awk 'NR == 1 && $1 == "goroutine" && $2 == "profile:" && $3 == "total" { print $4 }' || true)"
-  echo "${count:-?}"
-}
-
 # Print heap profile analysis.
 print_heap() {
   local profile_file="$1"
@@ -131,205 +92,17 @@ print_heap() {
   echo "--- Go Heap Profile ---"
   if [[ -s "$profile_file" ]]; then
     echo "=== inuse_space (what's currently held) ==="
-    pprof_top "$profile_file" 30 -inuse_space
-    echo ""
-    echo "=== alloc_space (total allocations) ==="
-    pprof_top "$profile_file" 30 -alloc_space
-    echo ""
-    echo "=== alloc_objects (total objects allocated) ==="
-    pprof_top "$profile_file" 30 -alloc_objects
+    pprof_top "$profile_file" 15 -inuse_space
   else
     echo "(heap profile not available)"
   fi
-}
-
-test_binary_pid() {
-  ps -eo pid=,rss=,comm= --sort=-rss | awk '$3 == "tests.test" {print $1; exit}'
-}
-
-process_snapshot_fields() {
-  local pid="$1"
-  local fields
-
-  if [[ -z "$pid" ]] || [[ ! -r "/proc/$pid/status" ]]; then
-    echo "pid=? rss=? anon=? data=? threads=?"
-    return
-  fi
-
-  fields="$(awk -v pid="$pid" '
-    $1 == "VmRSS:" { rss = int($2 / 1024) "MB" }
-    $1 == "RssAnon:" { anon = int($2 / 1024) "MB" }
-    $1 == "VmData:" { data = int($2 / 1024) "MB" }
-    $1 == "Threads:" { threads = $2 }
-    END {
-      if (rss == "") { rss = "?" }
-      if (anon == "") { anon = "?" }
-      if (data == "") { data = "?" }
-      if (threads == "") { threads = "?" }
-      printf "pid=%s rss=%s anon=%s data=%s threads=%s", pid, rss, anon, data, threads
-    }
-  ' "/proc/$pid/status" 2>/dev/null || true)"
-  echo "${fields:-pid=$pid rss=? anon=? data=? threads=?}"
-}
-
-format_process_profile() {
-  local pid="$1"
-  local prefix="$2"
-
-  if [[ -z "$pid" ]] || [[ ! -s "${prefix}.status.txt" ]]; then
-    echo "(tests.test process not found)"
-    return
-  fi
-
-  echo "--- tests.test /proc/$pid/status ---"
-  cat "${prefix}.status.txt" 2>/dev/null || true
-  echo ""
-  echo "--- tests.test /proc/$pid/smaps_rollup ---"
-  cat "${prefix}.smaps_rollup.txt" 2>/dev/null || true
-  echo ""
-  echo "--- tests.test pmap ---"
-  tail -40 "${prefix}.pmap.txt" 2>/dev/null || true
-}
-
-save_process_profile_files() {
-  local pid="$1"
-  local prefix="$2"
-
-  if [[ -z "$pid" ]] || [[ ! -d "/proc/$pid" ]]; then
-    return
-  fi
-
-  mkdir -p "$(dirname "$prefix")"
-  tr '\0' ' ' < "/proc/$pid/cmdline" > "${prefix}.cmdline.txt" 2>/dev/null || true
-  cat "/proc/$pid/status" > "${prefix}.status.txt" 2>/dev/null || true
-  cat "/proc/$pid/stat" > "${prefix}.stat.txt" 2>/dev/null || true
-  cat "/proc/$pid/statm" > "${prefix}.statm.txt" 2>/dev/null || true
-  cat "/proc/$pid/limits" > "${prefix}.limits.txt" 2>/dev/null || true
-  cat "/proc/$pid/sched" > "${prefix}.sched.txt" 2>/dev/null || true
-  cat "/proc/$pid/schedstat" > "${prefix}.schedstat.txt" 2>/dev/null || true
-  cat "/proc/$pid/io" > "${prefix}.io.txt" 2>/dev/null || true
-  cat "/proc/$pid/cgroup" > "${prefix}.process-cgroup.txt" 2>/dev/null || true
-  cat "/proc/$pid/oom_score" > "${prefix}.oom_score.txt" 2>/dev/null || true
-  cat "/proc/$pid/oom_score_adj" > "${prefix}.oom_score_adj.txt" 2>/dev/null || true
-  cat "/proc/$pid/maps" > "${prefix}.maps.txt" 2>/dev/null || true
-  cat "/proc/$pid/numa_maps" > "${prefix}.numa_maps.txt" 2>/dev/null || true
-  cat "/proc/$pid/smaps" > "${prefix}.smaps.txt" 2>/dev/null || true
-  cat "/proc/$pid/smaps_rollup" > "${prefix}.smaps_rollup.txt" 2>/dev/null || true
-  find "/proc/$pid/fd" -maxdepth 1 -mindepth 1 -type l -ls > "${prefix}.fd.txt" 2>/dev/null || true
-  find "/proc/$pid/task" -maxdepth 2 -name status -print -exec cat {} \; > "${prefix}.threads-status.txt" 2>/dev/null || true
-  pmap -x "$pid" > "${prefix}.pmap.txt" 2>/dev/null || true
-  pmap -XX "$pid" > "${prefix}.pmap-XX.txt" 2>/dev/null || true
-}
-
-save_runtime_profile_files() {
-  local prefix="$1"
-
-  mkdir -p "$(dirname "$prefix")"
-  {
-    echo "=== uname -a ==="
-    uname -a
-    echo ""
-    echo "=== ulimit -a ==="
-    ulimit -a
-  } > "${prefix}.runtime.txt" 2>/dev/null || true
-
-  printenv | sort | awk -F= '
-    BEGIN { IGNORECASE = 1 }
-    $1 ~ /(TOKEN|SECRET|PASSWORD|PASS|KEY|CREDENTIAL|AUTH|COOKIE)/ {
-      print $1 "=<redacted>"
-      next
-    }
-    { print }
-  ' > "${prefix}.runtime-env.txt" 2>/dev/null || true
-  go env > "${prefix}.go-env.txt" 2>/dev/null || true
-}
-
-save_system_profile_files() {
-  local prefix="$1"
-  local cgroup_file="${prefix}.system-cgroup-files.txt"
-
-  mkdir -p "$(dirname "$prefix")"
-  ps -eo pid,ppid,pgid,%mem,rss,vsz,comm,args --sort=-rss > "${prefix}.system-processes.txt" 2>/dev/null || true
-  free -m > "${prefix}.system-free.txt" 2>/dev/null || true
-  uptime > "${prefix}.system-uptime.txt" 2>/dev/null || true
-  cat /proc/loadavg > "${prefix}.system-loadavg.txt" 2>/dev/null || true
-  cat /proc/meminfo > "${prefix}.system-meminfo.txt" 2>/dev/null || true
-  cat /proc/vmstat > "${prefix}.system-vmstat.txt" 2>/dev/null || true
-  cat /proc/slabinfo > "${prefix}.system-slabinfo.txt" 2>/dev/null || true
-  cat /proc/buddyinfo > "${prefix}.system-buddyinfo.txt" 2>/dev/null || true
-  cat /proc/pagetypeinfo > "${prefix}.system-pagetypeinfo.txt" 2>/dev/null || true
-  cat /proc/zoneinfo > "${prefix}.system-zoneinfo.txt" 2>/dev/null || true
-  cat /proc/pressure/memory > "${prefix}.system-pressure-memory.txt" 2>/dev/null || true
-  cat /proc/pressure/cpu > "${prefix}.system-pressure-cpu.txt" 2>/dev/null || true
-  cat /proc/pressure/io > "${prefix}.system-pressure-io.txt" 2>/dev/null || true
-  df -h > "${prefix}.system-df.txt" 2>/dev/null || true
-  mount > "${prefix}.system-mount.txt" 2>/dev/null || true
-  lsblk > "${prefix}.system-lsblk.txt" 2>/dev/null || true
-  lscpu > "${prefix}.system-lscpu.txt" 2>/dev/null || true
-  dmesg -T 2>/dev/null | tail -200 > "${prefix}.system-dmesg-tail.txt" 2>/dev/null || true
-  docker ps -a > "${prefix}.docker-ps.txt" 2>/dev/null || true
-  docker stats --no-stream > "${prefix}.docker-stats.txt" 2>/dev/null || true
-  cat /proc/self/cgroup > "${prefix}.system-cgroup.txt" 2>/dev/null || true
-
-  : > "$cgroup_file"
-  for file in \
-    /sys/fs/cgroup/cgroup.controllers \
-    /sys/fs/cgroup/cgroup.events \
-    /sys/fs/cgroup/cgroup.procs \
-    /sys/fs/cgroup/cgroup.threads \
-    /sys/fs/cgroup/cgroup.type \
-    /sys/fs/cgroup/cpu.max \
-    /sys/fs/cgroup/cpu.stat \
-    /sys/fs/cgroup/io.stat \
-    /sys/fs/cgroup/memory.events \
-    /sys/fs/cgroup/memory.events.local \
-    /sys/fs/cgroup/memory.current \
-    /sys/fs/cgroup/memory.peak \
-    /sys/fs/cgroup/memory.high \
-    /sys/fs/cgroup/memory.low \
-    /sys/fs/cgroup/memory.max \
-    /sys/fs/cgroup/memory.min \
-    /sys/fs/cgroup/memory.numa_stat \
-    /sys/fs/cgroup/memory.oom.group \
-    /sys/fs/cgroup/memory.pressure \
-    /sys/fs/cgroup/memory.stat \
-    /sys/fs/cgroup/memory.swap.current \
-    /sys/fs/cgroup/memory.swap.events \
-    /sys/fs/cgroup/memory.swap.high \
-    /sys/fs/cgroup/memory.swap.max; do
-    if [[ -r "$file" ]]; then
-      {
-        echo "=== $file ==="
-        cat "$file"
-        echo ""
-      } >> "$cgroup_file" 2>/dev/null || true
-    fi
-  done
-}
-
-save_debug_files() {
-  local prefix="$1"
-
-  mkdir -p "$(dirname "$prefix")"
-  fetch_debug "vars" "${prefix}.debug-vars.json" || true
 }
 
 save_pprof_files() {
   local prefix="$1"
 
   mkdir -p "$(dirname "$prefix")"
-  fetch_pprof "cmdline" "${prefix}.pprof-cmdline.txt" || true
   fetch_pprof "heap" "${prefix}.heap.pb.gz" || true
-  fetch_pprof "heap?debug=1" "${prefix}.heap-debug-1.txt" || true
-  fetch_pprof "allocs" "${prefix}.allocs.pb.gz" || true
-  fetch_pprof "allocs?debug=1" "${prefix}.allocs-debug-1.txt" || true
-  fetch_pprof "block" "${prefix}.block.pb.gz" || true
-  fetch_pprof "mutex" "${prefix}.mutex.pb.gz" || true
-  fetch_pprof "goroutine" "${prefix}.goroutine.pb.gz" || true
-  fetch_pprof "goroutine?debug=1" "${prefix}.goroutine-debug-1.txt" || true
-  fetch_pprof "threadcreate" "${prefix}.threadcreate.pb.gz" || true
-  fetch_pprof "threadcreate?debug=1" "${prefix}.threadcreate-debug-1.txt" || true
-  fetch_pprof "goroutine?debug=2" "${prefix}.goroutine-debug-2.txt" || true
 }
 
 should_capture_profile() {
@@ -357,12 +130,7 @@ terminate_monitored_processes() {
     return
   fi
 
-  local test_pid
-  test_pid="$(test_binary_pid)"
-  if [[ -n "$test_pid" ]]; then
-    echo "Terminating tests.test process ${test_pid} at ${pct}% memory to preserve diagnostics artifacts."
-    kill -TERM "$test_pid" 2>/dev/null || true
-  fi
+  echo "No monitored process group set at ${pct}% memory; leaving processes running."
 }
 
 write_oom_junit() {
@@ -390,7 +158,7 @@ Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
 $(cat "$SNAPSHOT_STATUS_HISTORY_FILE")
 
 --- Top Processes ---
-$(ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20)
+$(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
 
 --- Memory Summary ---
 $(free -m)
@@ -412,34 +180,20 @@ print_snapshot_status() {
 
 capture_profile() {
   local pct="$1"
-  local goroutine_output goroutine_count pprof_output test_pid profile_prefix process_profile_output
+  local pprof_output profile_prefix
 
   profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
-  test_pid="$(test_binary_pid)"
   save_pprof_files "$profile_prefix"
-  save_debug_files "$profile_prefix"
-  save_process_profile_files "$test_pid" "$profile_prefix"
-  save_runtime_profile_files "$profile_prefix"
-  save_system_profile_files "$profile_prefix"
-  goroutine_output="$(print_goroutines "${profile_prefix}.goroutine.pb.gz")"
-  goroutine_count="$(count_goroutines "${profile_prefix}.goroutine-debug-2.txt")"
   pprof_output="$(print_heap "${profile_prefix}.heap.pb.gz")"
-  process_profile_output="$(format_process_profile "$test_pid" "$profile_prefix")"
 
   cat <<EOF
 
-Captured goroutines: $goroutine_count
-
-$process_profile_output
-
 $pprof_output
-
-$goroutine_output
 EOF
 }
 
 snapshot() {
-  local goroutine_count memtotal_kb memavail_kb memused_kb memused_mb pct process_fields profile_report report should_terminate test_pid
+  local memtotal_kb memavail_kb memused_kb memused_mb pct profile_report report should_terminate
   ensure_snapshot_dirs
 
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
@@ -448,18 +202,15 @@ snapshot() {
   memused_mb=$(( memused_kb / 1024 ))
   pct=$(( memused_kb * 100 / memtotal_kb ))
 
-  # Get processes with >=1% memory, format as "name (MB)"
+  # Get the top memory-heavy processes, format as "name (MB)".
   local top_procs
-  top_procs="$(ps -eo %mem,rss,comm --sort=-%mem | awk 'NR>1 && $1>=1.0 {printf "%s (%dMB), ", $3, $2/1024}' | sed 's/, $//')"
-  test_pid="$(test_binary_pid)"
-  process_fields="$(process_snapshot_fields "$test_pid")"
-  goroutine_count="$(current_goroutine_count)"
+  top_procs="$(ps -eo rss,comm --sort=-rss | awk 'NR>1 && NR<=6 {printf "%s (%dMB), ", $2, $1/1024}' | sed 's/, $//')"
 
   local timestamp
   timestamp="$(date '+%H:%M:%S')"
 
   local status_line
-  status_line="$(printf "%s used=%s%% mem=%sMB goroutines=%s test=[%s] procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$goroutine_count" "$process_fields" "$top_procs")"
+  status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$top_procs")"
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
 
   local now
@@ -487,8 +238,8 @@ snapshot() {
   report="$(build_snapshot_report "$pct")"
   report+="$profile_report"
 
-  # Write report to disk only if memory usage is at or above high water mark.
-  if [[ "$pct" -ge "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
+  # Write report to disk only when memory usage reaches a new high water mark.
+  if [[ "$pct" -gt "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
     echo "$report" > "$SNAPSHOT_FILE"
     SNAPSHOT_HIGH_WATER_MARK="$pct"
   fi
