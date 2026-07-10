@@ -56,8 +56,12 @@ LAST_SNAPSHOT_PRINT_TIME=0
 HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
-init_snapshot_files() {
+ensure_snapshot_dirs() {
   mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
+}
+
+init_snapshot_files() {
+  ensure_snapshot_dirs
   : > "$SNAPSHOT_HISTORY_FILE"
 }
 
@@ -117,6 +121,7 @@ write_snapshot_report() {
   local memory_pct="$1"
   local optional_heap_profile_section="$2"
 
+  ensure_snapshot_dirs
   cat > "$SNAPSHOT_FILE" <<EOF
 Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${memory_pct}%)
 
@@ -176,6 +181,7 @@ snapshot() {
 
   local status_line
   status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$memory_pct" "$memory_used_mb" "$top_processes")"
+  ensure_snapshot_dirs
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
   print_snapshot_status "$now" "$status_line"
 
@@ -192,7 +198,7 @@ snapshot() {
 
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
-  if [[ "$memory_pct" -gt "$MEMORY_HIGH_WATER_MARK" ]]; then
+  if [[ "$memory_pct" -gt "$MEMORY_HIGH_WATER_MARK" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
     write_snapshot_report "$memory_pct" "$heap_profile_section"
     MEMORY_HIGH_WATER_MARK="$memory_pct"
   fi

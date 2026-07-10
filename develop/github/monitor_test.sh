@@ -27,6 +27,6 @@ MONITORED_PROCESS_GROUP="$COMMAND_PID"
 # Start monitor
 MONITORED_PROCESS_GROUP="$MONITORED_PROCESS_GROUP" "$SCRIPT_DIR/memory_monitor.sh" &
 MONITOR_PID=$!
-trap 'kill "$MONITOR_PID" 2>/dev/null' EXIT
+trap 'kill "$MONITOR_PID" 2>/dev/null || true' EXIT
 
 wait "$COMMAND_PID"
