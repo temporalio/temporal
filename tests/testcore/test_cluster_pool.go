@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"runtime"
@@ -33,13 +34,20 @@ func init() {
 		dedicatedSize = n
 	}
 
-	testClusterRouter = &clusterRouter{
-		shared:    newClusterPool(sharedSize, false, 0),
-		dedicated: newClusterPool(dedicatedSize, true, 0),
+	var eventsFile *os.File
+	if path := os.Getenv("TEMPORAL_TEST_CLUSTER_EVENTS_FILE"); path != "" {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			log.Printf("cluster events disabled: cannot open %q: %v", path, err)
+		}
+		eventsFile = f
 	}
 
-	log.Printf("CLUSTERPOOL config: GOMAXPROCS=%d sharedSize=%d dedicatedSize=%d",
-		runtime.GOMAXPROCS(0), sharedSize, dedicatedSize)
+	testClusterRouter = &clusterRouter{
+		shared:     newClusterPool(sharedSize, false, 0),
+		dedicated:  newClusterPool(dedicatedSize, true, 0),
+		eventsFile: eventsFile,
+	}
 }
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
@@ -165,6 +173,11 @@ type clusterRouter struct {
 	shared      *clusterPool
 	dedicated   *clusterPool
 	suiteScoped sync.Map
+
+	// eventsMu guards appends to eventsFile, the JSON Lines sink for cluster
+	// creation events. A nil eventsFile means events fall back to the test log.
+	eventsMu   sync.Mutex
+	eventsFile *os.File
 }
 
 // suiteScopedCluster owns one lazily created legacy suite cluster.
@@ -211,8 +224,8 @@ const (
 type clusterRequest struct {
 	kind              string // set by the router: shared, dedicated, or suite-scoped
 	dedicated         bool
-	needWorkerService bool
 	dedicatedReason   string
+	needWorkerService bool
 	dynamicConfig     map[dynamicconfig.Key]any
 	clusterOpts       []TestClusterOption
 }
@@ -248,13 +261,31 @@ func (r clusterRequest) reason() string {
 	}
 }
 
-// recordCreation logs one line per test-cluster creation (prefixed with
-// CLUSTEREVENT) so a CI run can be grepped for which suite created how many
-// clusters of each kind, and why.
+// recordCreation appends one JSON Lines event per test-cluster creation so a CI
+// run can be queried for which suite created how many clusters of each kind, and
+// why. The append is flushed per line so it survives a hard process kill (e.g.
+// an OOM); events fall back to the test log when no events file is configured.
 func (r clusterRequest) recordCreation(t *testing.T) {
 	suite, _, _ := strings.Cut(t.Name(), "/")
-	log.Printf("CLUSTEREVENT suite=%q test=%q kind=%s worker=%v reason=%q",
-		suite, t.Name(), r.kind, r.needWorkerService, r.reason())
+	line, err := json.Marshal(map[string]any{
+		"suite":  suite,
+		"test":   t.Name(),
+		"kind":   r.kind,
+		"reason": r.reason(),
+		"worker": r.needWorkerService,
+	})
+	if err != nil {
+		return
+	}
+
+	if testClusterRouter.eventsFile == nil {
+		log.Printf("CLUSTEREVENT %s", line)
+		return
+	}
+	// A sub-page append is atomic, so concurrent tests interleave cleanly.
+	testClusterRouter.eventsMu.Lock()
+	defer testClusterRouter.eventsMu.Unlock()
+	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
 }
 
 func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
