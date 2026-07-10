@@ -44,3 +44,18 @@ func TestParseJUnitSingleTestsuite(t *testing.T) {
 
 	require.Equal(t, []string{"TestMatchingWorkflow"}, failures(suites))
 }
+
+func TestFailuresIncludesDataRace(t *testing.T) {
+	suites, err := parseJUnit([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="suite">
+  <testcase classname="race" name="DATA RACE: detected">
+    <failure message="WARNING: DATA RACE">race details</failure>
+  </testcase>
+  <testcase classname="race" name="NotADataRace">
+    <failure message="data race">lowercase marker should not match</failure>
+  </testcase>
+</testsuite>`))
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"DATA RACE: detected"}, failures(suites))
+}
