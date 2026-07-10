@@ -1577,6 +1577,8 @@ default as namespace cardinality can be high and this requires a metrics collect
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
 			MaxRate:               0.33,
+			ShrinkRatio:           0.1,
+			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
