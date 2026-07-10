@@ -50,6 +50,7 @@ type OnCompleteCallContext struct {
 // Is there something like this already exposed from the Go SDK?
 type UnitTypeHack struct{}
 
+// Completion handler using the raw service contract for the CompletionService (the nexuspb.OnCompleteHandlerInput) parameter.
 var completionHandler = nexus.NewSyncOperation(
 	OnCompleteOperationName,
 	func(ctx context.Context, input *nexuspb.OnCompleteHandlerInput, options nexus.StartOperationOptions) (UnitTypeHack, error) {

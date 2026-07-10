@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
@@ -82,11 +83,21 @@ func (s *NexusWorkerCallbacksSuite) registerNexusEndpoint(ctx context.Context, e
 	return err
 }
 
-// Run the test via:
-// % go test ./tests/nexusworkercallbacks -v -count=1 -tags=test_dep
-func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
+type workerCallbackTestInfra struct {
+	Env *testcore.TestEnv
+
+	CallerClient            client.Client
+	CallerNexusEndpointName string
+
+	HandlerClient            client.Client
+	HandlerNexusEndpointName string
+
+	// Shutdown gracefully shuts down the started workers.
+	Shutdown func()
+}
+
+func (s *NexusWorkerCallbacksSuite) setupTestInfra(ctx context.Context) *workerCallbackTestInfra {
 	env := s.newEnv()
-	ctx := s.Context()
 
 	// Register the Temporal namespaces.
 	retentionDays := int32(1)
@@ -105,7 +116,7 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 	s.NoError(err, "creating Handler worker")
 	err = handlerWorker.Start()
 	s.NoError(err, "starting Handler worker")
-	defer handlerWorker.Stop()
+
 	// Register the Nexus endpoint.
 	handlerNexusEndpointName := "handler-nexus-endpoint"
 	err = s.registerNexusEndpoint(ctx, env, handlerNexusEndpointName, handlerNamespace, handler.HandlerTaskQueue)
@@ -119,7 +130,7 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 	s.NoError(err, "creating Caller worker")
 	err = callerWorker.Start()
 	s.NoError(err, "starting Caller worker")
-	defer callerWorker.Stop()
+
 	callerNexusEndpointName := "caller-nexus-endpoint"
 	err = s.registerNexusEndpoint(ctx, env, callerNexusEndpointName, callerNamespace, caller.CallerTaskQueue)
 	s.NoError(err, "creating Nexus endpoint for caller")
@@ -127,11 +138,35 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 	// Reset the global variable, confirming the worker callback was invoked.
 	caller.ResetTimesWorkerCallbackCalled()
 
+	return &workerCallbackTestInfra{
+		Env:                     env,
+		CallerClient:            callerClient,
+		CallerNexusEndpointName: callerNexusEndpointName,
+
+		HandlerClient:            handlerClient,
+		HandlerNexusEndpointName: handlerNexusEndpointName,
+
+		// HACK: There are better ways to gracefully shutdown the workers.
+		Shutdown: func() {
+			callerWorker.Stop()
+			handlerWorker.Stop()
+		},
+	}
+}
+
+// Run the test via:
+// % go test ./tests/nexusworkercallbacks -v -count=1 -tags=test_dep
+func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
+	ctx := s.Context()
+	infra := s.setupTestInfra(ctx)
+	defer infra.Shutdown()
+
 	// Starter
 	//
 	// We call the Nexus operation via SANO.
+	callerClient := infra.CallerClient
 	nexusClient, err := callerClient.NewNexusClient(client.NexusClientOptions{
-		Endpoint: handlerNexusEndpointName,
+		Endpoint: infra.HandlerNexusEndpointName,
 		Service:  handler.NexusServiceName,
 	})
 	s.NoError(err, "creating Nexus client")
@@ -147,13 +182,14 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 
 	// Attach the worker callback. The completion is dispatched to the caller's task queue, where the
 	// completion Nexus service is registered.
-	callbackRef := fauxsdk.CallbackRef{
-		TaskQueueName: caller.CallerTaskQueue,
-	}
 	callCtx := caller.OnCompleteCallContext{
 		Message: s.T().Name(),
 	}
-	fauxsdk.AttachWorkerCallback(&callOpts, callbackRef, callCtx)
+	callbackRef := fauxsdk.UseCompletionService(
+		caller.CallerTaskQueue,
+		callCtx,
+	)
+	fauxsdk.AttachWorkerCallback(&callOpts, callbackRef)
 
 	callHandle, err := nexusClient.ExecuteOperation(ctx, handler.AddOperationName, callInput, callOpts)
 	s.NoError(err, "calling Nexus operation")
@@ -190,4 +226,72 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 	err = payload.Decode(gotCompletionInput.GetSourceContext(), &gotCallCtx)
 	s.NoError(err, "decoding source context")
 	s.Equal(s.T().Name(), gotCallCtx.Message)
+}
+
+// Same as before, but pushing more registration code into the faux SDK.
+func (s *NexusWorkerCallbacksSuite) TestBasicExample2() {
+	ctx := s.Context()
+	infra := s.setupTestInfra(ctx)
+	defer infra.Shutdown()
+
+	const alternativeTaskQueue = "different-task-queue"
+
+	// setupTestInfra spawns a Worker in the Caller namespace, watching caller.CallerTaskQueue.
+	// Here we spawn a DIFFERENT worker in the Caller namespace, specifically for handling completion events.
+	callerClient := infra.CallerClient
+	newCallerWorker := worker.New(callerClient, alternativeTaskQueue, worker.Options{})
+
+	// Define the completion handler for this new task queue here in the testcase.
+	// This function will be invoked by the newWorkerCaller as appropriate.
+	var gotResults []fauxsdk.Completion
+	completionHandlerFn := func(ctx fauxsdk.CompletionContext, result fauxsdk.Completion) error {
+		gotResults = append(gotResults, result)
+		return nil
+	}
+
+	// Set the completion handler for the new worker.
+	err := fauxsdk.SetCompletionHandler[caller.OnCompleteCallContext](newCallerWorker, completionHandlerFn)
+	s.NoError(err, "setting completion handler")
+
+	// Start the new worker, so the new completion handler is live.
+	err = newCallerWorker.Start()
+	s.NoError(err, "starting second caller worker")
+	defer newCallerWorker.Stop()
+
+	// Now invoke the handler's SANO.
+	nexusClient, err := callerClient.NewNexusClient(client.NexusClientOptions{
+		Endpoint: infra.HandlerNexusEndpointName,
+		Service:  handler.NexusServiceName,
+	})
+	s.NoError(err, "creating Nexus client")
+
+	callInput := handler.AddInput{
+		A: 8,
+		B: 8,
+	}
+	callOpts := client.StartNexusOperationOptions{
+		ID:                     "add-8-and-8",
+		ScheduleToCloseTimeout: 5 * time.Second,
+	}
+	callCtx := caller.OnCompleteCallContext{
+		Message: s.T().Name(),
+	}
+	callbackRef := fauxsdk.UseCompletionService(
+		// Point to the worker completion handler listening in this other task queue.
+		alternativeTaskQueue,
+		callCtx,
+	)
+	fauxsdk.AttachWorkerCallback(&callOpts, callbackRef)
+
+	// Execute the SANO.
+	_, err = nexusClient.ExecuteOperation(ctx, handler.AddOperationName, callInput, callOpts)
+	s.NoError(err, "calling Nexus operation")
+
+	// We aren't bothering to wait on the SANO's result. We are looking for the completion handler being triggered.
+	s.Eventually(func() bool {
+		return len(gotResults) > 0
+	}, 10*time.Second, 200*time.Millisecond, "alternative worker callback was never executed")
+
+	s.Equal(1, len(gotResults))
+	// TODO: Crack open the payload and confirm it has the right data.
 }

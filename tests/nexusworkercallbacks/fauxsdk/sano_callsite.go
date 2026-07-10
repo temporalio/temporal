@@ -8,23 +8,31 @@ import (
 
 // CallbackRef is a reference to a Nexus-based completion handler. (Which is a Nexus operation
 // with a specific type signature.)
+//
+// This is intentionally opaque, to support different kinds of worker callbacks in the future.
+// For now the only way to create a valid instance is via `func UseCompletionService(...)`.
 type CallbackRef struct {
-	// TaskQueueName is the task queue the completion callback is dispatched to when the source
-	// operation reaches a terminal state.
-	TaskQueueName string
+	taskqueueName string
+	callContext   any
+}
+
+func UseCompletionService(targetTaskQueue string, sourceCallContext any) *CallbackRef {
+	return &CallbackRef{
+		taskqueueName: targetTaskQueue,
+		callContext:   sourceCallContext,
+	}
 }
 
 // AttachWorkerCallback attaches the target worker callback to the StartNexusOperationOptions.
 func AttachWorkerCallback(
 	inCallOpts *client.StartNexusOperationOptions,
-	ref CallbackRef,
-	context any) {
+	callback *CallbackRef) {
 
 	// Build the Callback proto variant.
 	cb := &commonpb.Callback_NexusWorker_{
 		NexusWorker: &commonpb.Callback_NexusWorker{
-			TaskqueueName: ref.TaskQueueName,
-			SourceContext: mustBuildPayloads(context),
+			TaskqueueName: callback.taskqueueName,
+			SourceContext: mustBuildPayloads(callback.callContext),
 		},
 	}
 	newCB := &commonpb.Callback{
