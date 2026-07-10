@@ -12,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -524,7 +525,9 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
-			next := s.cspec.GetNextTime(s.jitterSeed(), t)
+			// This (pre-cache-v2) path can't represent the compute limit distinctly, so a
+			// limit-exceeded result is treated as end-of-schedule (zero Next stops the loop).
+			next, _ := s.cspec.GetNextTime(s.jitterSeed(), t)
 			results[t] = next
 			t = next.Next
 		}
@@ -535,8 +538,9 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 
 // Gets the next scheduled time after `after`, making use of a cache. If the cache needs to be
 // refilled, try to refill it starting from `cacheBase` instead of `after`. This avoids having
-// the cache range jump back and forth when generating a sequence of times.
-func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) GetNextTimeResult {
+// the cache range jump back and forth when generating a sequence of times. A *LimitExceededError
+// is returned when the spec is over-excluded (see CompiledSpec.GetNextTime).
+func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) (GetNextTimeResult, error) {
 	// cacheBase must be before after
 	cacheBase = util.MinTime(cacheBase, after)
 
@@ -552,8 +556,8 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) GetNextTimeResult 
 	// the second is refilled from cacheBase, and the third is if cacheBase was set
 	// too far in the past, we ignore it and fill the cache from after.
 	for try := 1; try <= 3; try++ {
-		if res, ok := searchCache(s.nextTimeCacheV2, after); ok {
-			return res
+		if res, ok, err := searchCache(s.nextTimeCacheV2, after); ok {
+			return res, err
 		}
 		// Otherwise refill from base
 		s.fillNextTimeCacheV2(cacheBase)
@@ -564,10 +568,15 @@ func (s *scheduler) getNextTimeV2(cacheBase, after time.Time) GetNextTimeResult 
 
 	// This should never happen unless there's a bug.
 	s.logger.Error("getNextTimeV2: time not found in cache", "after", after)
-	return GetNextTimeResult{}
+	return GetNextTimeResult{}, nil
 }
 
-func searchCache(cache *schedulespb.NextTimeCache, after time.Time) (GetNextTimeResult, bool) {
+// searchCache resolves `after` against the cached next-time series, returning (result, found,
+// err). found is true when the cache answers the query: result holds the next time, or the
+// schedule is completed (zero result), or the fill stopped at the compute limit (err is a
+// *LimitExceededError and result is zero). found is false when `after` falls off the end of the
+// cache and it must be refilled.
+func searchCache(cache *schedulespb.NextTimeCache, after time.Time) (GetNextTimeResult, bool, error) {
 	// The cache covers a contiguous time range so we can do a linear search in it.
 	start := cache.StartTime.AsTime()
 	afterOffset := int64(after.Sub(start))
@@ -578,14 +587,20 @@ func searchCache(cache *schedulespb.NextTimeCache, after time.Time) (GetNextTime
 			if i < len(cache.NominalTimes) && cache.NominalTimes[i] != 0 {
 				nominal = start.Add(time.Duration(cache.NominalTimes[i]))
 			}
-			return GetNextTimeResult{Nominal: nominal, Next: next}, true
+			return GetNextTimeResult{Nominal: nominal, Next: next}, true, nil
 		}
 	}
-	// Ran off end: if completed, then we're done
-	if cache.Completed {
-		return GetNextTimeResult{}, true
+	// Ran off the end. If the fill stopped at the compute limit, resume from there; otherwise,
+	// if completed, we're done.
+	if cache.LimitExceededOffset != 0 {
+		if retryAfter := start.Add(time.Duration(cache.LimitExceededOffset)); retryAfter.After(after) {
+			return GetNextTimeResult{}, true, &LimitExceededError{RetryAfter: retryAfter}
+		}
 	}
-	return GetNextTimeResult{}, false
+	if cache.Completed {
+		return GetNextTimeResult{}, true, nil
+	}
+	return GetNextTimeResult{}, false, nil
 }
 
 func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
@@ -601,7 +616,16 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 			NominalTimes: make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
 		}
 		for t := start; len(cache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
-			next := s.cspec.GetNextTime(s.jitterSeed(), t)
+			next, err := s.cspec.GetNextTime(s.jitterSeed(), t)
+			if err != nil {
+				// Record where the over-excluded search stopped so the schedule resumes from
+				// there rather than treating the cache as completed.
+				var limitErr *LimitExceededError
+				if errors.As(err, &limitErr) {
+					cache.LimitExceededOffset = int64(limitErr.RetryAfter.Sub(start))
+				}
+				break
+			}
 			if next.Next.IsZero() {
 				cache.Completed = true
 				break
@@ -641,20 +665,23 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	}
 }
 
-func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
+func (s *scheduler) getNextTime(after time.Time) (GetNextTimeResult, error) {
 	// Implementation using a cache to save markers + computation.
 	if s.hasMinVersion(NewCacheAndJitter) {
 		return s.getNextTimeV2(after, after)
 	} else if s.hasMinVersion(BatchAndCacheTimeQueries) {
-		return s.getNextTimeV1(after)
+		return s.getNextTimeV1(after), nil
 	}
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	var next GetNextTimeResult
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
-		return s.cspec.GetNextTime(s.jitterSeed(), after)
+		// Older workflows will simply close, instead of sleeping, in the event of
+		// hitting the computation limit.
+		res, _ := s.cspec.GetNextTime(s.jitterSeed(), after)
+		return res
 	}).Get(&next))
-	return next
+	return next, nil
 }
 
 func (s *scheduler) processTimeRange(
@@ -680,14 +707,19 @@ func (s *scheduler) processTimeRange(
 		// Skip over entire time range if paused or no actions can be taken
 		if !s.canTakeScheduledAction(manual, false) {
 			// use end as last action time so that we don't reprocess time spent paused
-			return s.getNextTime(end).Next, end
+			next, err := s.getNextTime(end)
+			if err != nil {
+				return s.limitExceededWakeup(err), end
+			}
+			return next.Next, end
 		}
 	}
 
 	lastAction := start
 	recordedGenerateLatency := false
 	var next GetNextTimeResult
-	for next = s.getNextTime(start); !(next.Next.IsZero() || next.Next.After(end)); next = s.getNextTime(next.Next) {
+	var nextErr error
+	for next, nextErr = s.getNextTime(start); nextErr == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, nextErr = s.getNextTime(next.Next) {
 		if !s.hasMinVersion(BatchAndCacheTimeQueries) && !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
@@ -724,7 +756,25 @@ func (s *scheduler) processTimeRange(
 			}
 		}
 	}
+	if nextErr != nil {
+		w := s.limitExceededWakeup(nextErr)
+		return w, w
+	}
 	return next.Next, lastAction
+}
+
+// limitExceededWakeup handles a *LimitExceededError from GetNextTime: it records the limit metric
+// and a warning (s.logger is already tagged with the schedule ID), then returns the time to sleep
+// until computing should be retried. Any other error yields no wakeup.
+func (s *scheduler) limitExceededWakeup(err error) time.Time {
+	var limitErr *LimitExceededError
+	if !errors.As(err, &limitErr) {
+		return time.Time{}
+	}
+	s.metrics.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Inc(1)
+	s.logger.Warn("schedule spec next-time search hit the compute limit; sleeping until the search frontier without scheduling an action",
+		"retry-after", limitErr.RetryAfter)
+	return limitErr.RetryAfter
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -1092,13 +1142,15 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 
 	// Pure version not using workflow context
 	next := func(t time.Time) time.Time {
-		return s.cspec.GetNextTime(s.jitterSeed(), t).Next
+		res, _ := s.cspec.GetNextTime(s.jitterSeed(), t)
+		return res.Next
 	}
 
 	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
 		// We can use the cache here
 		next = func(t time.Time) time.Time {
-			return s.getNextTimeV2(base, t).Next
+			res, _ := s.getNextTimeV2(base, t)
+			return res.Next
 		}
 	}
 
@@ -1152,7 +1204,11 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	t1 := timestamp.TimeValue(req.StartTime)
 	for range maxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
-		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
+		res, err := s.cspec.GetNextTime(s.jitterSeed(), t1)
+		if err != nil {
+			return nil, serviceerror.NewFailedPrecondition(err.Error())
+		}
+		t1 = res.Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}

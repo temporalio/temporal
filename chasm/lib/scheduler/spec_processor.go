@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -100,12 +101,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.NextTime(scheduler, end)
+		wakeup, err := s.wakeupForResult(scheduler, metricsHandler, next, err)
 		if err != nil {
 			return nil, err
 		}
 
 		return &ProcessedTimeRange{
-			NextWakeupTime: next.Next,
+			NextWakeupTime: wakeup,
 			LastActionTime: end,
 			BufferedStarts: nil,
 		}, nil
@@ -186,11 +188,39 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 	}
 
+	nextWakeup, err := s.wakeupForResult(scheduler, metricsHandler, next, err)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ProcessedTimeRange{
-		NextWakeupTime: next.Next,
+		NextWakeupTime: nextWakeup,
 		LastActionTime: lastAction,
 		BufferedStarts: bufferedStarts,
 	}, nil
+}
+
+// wakeupForResult resolves a NextTime result/error into a next-wakeup time. A *LimitExceededError
+// (an over-excluded spec) is not fatal: it records the limit metric and a scheduleID-tagged log,
+// then returns the search frontier so the generator retries later without scheduling an action.
+func (s *SpecProcessorImpl) wakeupForResult(
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	next legacyscheduler.GetNextTimeResult,
+	err error,
+) (time.Time, error) {
+	if err == nil {
+		return next.Next, nil
+	}
+	var limitErr *legacyscheduler.LimitExceededError
+	if !errors.As(err, &limitErr) {
+		return time.Time{}, err
+	}
+	metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
+	newTaggedLogger(s.logger, scheduler).Warn(
+		"schedule spec next-time search hit the compute limit; sleeping until the search frontier without scheduling an action",
+		tag.Time("retry-after", limitErr.RetryAfter))
+	return limitErr.RetryAfter, nil
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
@@ -210,5 +240,5 @@ func (s *SpecProcessorImpl) NextTime(scheduler *Scheduler, after time.Time) (leg
 		return legacyscheduler.GetNextTimeResult{}, err
 	}
 
-	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
+	return spec.GetNextTime(scheduler.jitterSeed(), after)
 }

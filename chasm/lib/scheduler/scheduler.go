@@ -754,7 +754,11 @@ func (s *Scheduler) ListMatchingTimes(
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(frontendReq.StartTime)
 	for range maxListMatchingTimesCount {
-		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
+		res, err := cspec.GetNextTime(s.jitterSeed(), t1)
+		if err != nil {
+			return nil, serviceerror.NewFailedPrecondition(err.Error())
+		}
+		t1 = res.Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
 			break
 		}

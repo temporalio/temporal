@@ -161,4 +161,8 @@ message NextTimeCache {
   repeated int64 next_times = 3;
   repeated int64 nominal_times = 4;
   bool completed = 5;
+  // limit_exceeded_offset, if non-zero, is the nanosecond offset from start_time where the
+  // search hit the compute iteration limit. It distinguishes "done" (completed) from
+  // "stopped early"; the schedule should resume searching from this time.
+  int64 limit_exceeded_offset = 6;
 }

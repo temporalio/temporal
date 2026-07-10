@@ -43,7 +43,8 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedulepb.Schedu
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.GetNextTime(jitterSeed, start)
+		result, err := cs.GetNextTime(jitterSeed, start)
+		s.Require().NoError(err)
 		if exp.IsZero() {
 			s.Require().True(
 				result.Nominal.IsZero(),
@@ -376,7 +377,29 @@ func (s *specSuite) TestExcludeAll() {
 		},
 	})
 	s.NoError(err)
-	s.Zero(cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC)))
+	result, err := cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC))
+	s.Require().NoError(err)
+	s.Zero(result)
+}
+
+func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
+	// Mirrored calendar/exclude: every candidate is excluded, so the search hits the bound.
+	const iterations = 10_000
+	builder := NewSpecBuilder(WithMaxIterations(func() int { return iterations }))
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+	})
+	s.Require().NoError(err)
+
+	after := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	result, err := cs.GetNextTime("", after)
+
+	var limitErr *LimitExceededError
+	s.Require().ErrorAs(err, &limitErr)
+	s.Zero(result)
+	// Each excluded candidate advances one second, so the search stops `iterations` seconds out.
+	s.Equal(after.Add(iterations*time.Second), limitErr.RetryAfter)
 }
 
 func (s *specSuite) TestSpecStartTime() {
