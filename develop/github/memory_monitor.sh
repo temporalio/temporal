@@ -9,9 +9,7 @@
 #
 # 2. Profile capture:
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
-#       profile in HEAP_PROFILES_DIR before running analysis, then repeats
-#       every HEAP_PROFILE_INTERVAL_SECONDS while usage remains above the
-#       threshold.
+#       profile in HEAP_PROFILES_DIR before running analysis.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
@@ -30,7 +28,7 @@ if [[ $# -gt 1 ]]; then
   exit 1
 fi
 
-# == Snapshot config.
+# Snapshot config.
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
 # Sample every second so short OOM ramps still leave history, but print less
 # often to keep CI logs readable.
@@ -39,15 +37,14 @@ SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
 
-# == Heap profile config.
-HEAP_PROFILE_INTERVAL_SECONDS="${HEAP_PROFILE_INTERVAL_SECONDS:-30}"
+# Heap profile config.
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
 HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
 HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
-# == OOM prevention config.
+# OOM prevention config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
 OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
@@ -56,8 +53,6 @@ OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 # State.
 MEMORY_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
-LAST_HEAP_PROFILE_CAPTURE_TIME=0
-WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=false
 HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
@@ -101,22 +96,6 @@ print_heap_profile_summary() {
   else
     echo "(heap profile not available)"
   fi
-}
-
-should_capture_heap_profile() {
-  local memory_pct="$1"
-  local now="$2"
-
-  if [[ "$memory_pct" -lt "$HEAP_PROFILE_CAPTURE_THRESHOLD" ]]; then
-    WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=false
-    return 1
-  fi
-  if [[ "$WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD" == "false" ]]; then
-    WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=true
-    return 0
-  fi
-
-  [[ $(( now - LAST_HEAP_PROFILE_CAPTURE_TIME )) -ge "$HEAP_PROFILE_INTERVAL_SECONDS" ]]
 }
 
 terminate_monitored_processes() {
@@ -222,12 +201,8 @@ snapshot() {
     should_terminate_process_group=true
   fi
 
-  if [[ "$should_terminate_process_group" == "true" && "$HAS_CAPTURED_HEAP_PROFILE" == "false" ]]; then
-    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
-    heap_profile_section="$(capture_heap_profile "$memory_pct")"
-    HAS_CAPTURED_HEAP_PROFILE=true
-  elif [[ "$should_terminate_process_group" == "false" ]] && should_capture_heap_profile "$memory_pct" "$now"; then
-    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
+  if [[ "$HAS_CAPTURED_HEAP_PROFILE" == "false" ]] &&
+    [[ "$memory_pct" -ge "$HEAP_PROFILE_CAPTURE_THRESHOLD" || "$should_terminate_process_group" == "true" ]]; then
     heap_profile_section="$(capture_heap_profile "$memory_pct")"
     HAS_CAPTURED_HEAP_PROFILE=true
   fi
