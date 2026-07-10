@@ -4,25 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 )
-
-const defaultTimeout = 30 * time.Second
-
-func apiJSON(ctx context.Context, path string, out any) error {
-	output, err := commandOutput(ctx, defaultTimeout, "api", path)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(output, out); err != nil {
-		return fmt.Errorf("failed to parse gh api response for %s: %w", path, err)
-	}
-	return nil
-}
 
 // RunView executes `gh run view` and decodes the JSON response into out.
 func RunView(ctx context.Context, runID string, fields []string, out any) error {
@@ -102,28 +87,52 @@ func RunDownload(ctx context.Context, runID string, opts RunDownloadOptions) err
 		args = append(args, "--dir", opts.Dir)
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctxTimeout, "gh", args...)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gh %s failed: %w", strings.Join(args, " "), err)
-	}
-	return nil
+	return commandRun(ctx, defaultTimeout, args...)
 }
 
-func commandOutput(ctx context.Context, timeout time.Duration, args ...string) ([]byte, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+// WorkflowRun represents a GitHub Actions workflow run from the REST API.
+type WorkflowRun struct {
+	ID         int64     `json:"id"`
+	Number     int       `json:"run_number"`
+	CreatedAt  time.Time `json:"created_at"`
+	Status     string    `json:"status"`
+	Conclusion string    `json:"conclusion"`
+	HeadBranch string    `json:"head_branch"`
+	HeadSHA    string    `json:"head_sha"`
+}
 
-	cmd := exec.CommandContext(ctxTimeout, "gh", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("gh %s failed: %w\nstderr: %s", strings.Join(args, " "), err, string(exitErr.Stderr))
+// ListWorkflowRunsOptions configures workflow-run listing through the REST API.
+type ListWorkflowRunsOptions struct {
+	Branch  string
+	Created string
+}
+
+// ListWorkflowRuns retrieves workflow runs through the GitHub Actions REST API.
+func ListWorkflowRuns(ctx context.Context, repo string, workflowID int64, opts ListWorkflowRunsOptions) ([]WorkflowRun, error) {
+	var allRuns []WorkflowRun
+
+	page := 1
+	for {
+		var response struct {
+			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
 		}
-		return nil, fmt.Errorf("failed to execute gh %s: %w", strings.Join(args, " "), err)
+		path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
+			repo, workflowID, opts.Branch, opts.Created, page)
+		if err := getJSON(ctx, path, &response); err != nil {
+			return nil, fmt.Errorf("failed to fetch workflow runs page %d: %w", page, err)
+		}
+
+		if len(response.WorkflowRuns) == 0 {
+			break
+		}
+
+		allRuns = append(allRuns, response.WorkflowRuns...)
+		if len(response.WorkflowRuns) < 100 {
+			break
+		}
+
+		page++
 	}
-	return output, nil
+
+	return allRuns, nil
 }

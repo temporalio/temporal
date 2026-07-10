@@ -21,7 +21,7 @@ func ListRunArtifacts(ctx context.Context, repo string, runID int64) ([]Artifact
 	var response struct {
 		Artifacts []Artifact `json:"artifacts"`
 	}
-	if err := apiJSON(ctx, fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", repo, runID), &response); err != nil {
+	if err := getJSON(ctx, fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", repo, runID), &response); err != nil {
 		return nil, err
 	}
 

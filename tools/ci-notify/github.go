@@ -9,8 +9,8 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
-// GetWorkflowRun fetches workflow run details using gh CLI
-func GetWorkflowRun(runID string) (*WorkflowRun, error) {
+// getWorkflowRun fetches workflow run details for failure notifications.
+func getWorkflowRun(runID string) (*WorkflowRun, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -32,27 +32,17 @@ func GetWorkflowRun(runID string) (*WorkflowRun, error) {
 	return &run, nil
 }
 
-// GetCommitAuthor fetches commit author using gh CLI
-func GetCommitAuthor(sha string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	commit, err := github.GetCommit(ctx, "temporalio/temporal", sha)
-	if err != nil {
-		return "", fmt.Errorf("failed to get commit author: %w", err)
-	}
-
-	return commit.Author, nil
-}
-
 // BuildFailureReport aggregates all failure information
 func BuildFailureReport(runID string) (*FailureReport, error) {
-	run, err := GetWorkflowRun(runID)
+	run, err := getWorkflowRun(runID)
 	if err != nil {
 		return nil, err
 	}
 
-	author, err := GetCommitAuthor(run.HeadSHA)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	commitMeta, err := github.GetCommit(ctx, "temporalio/temporal", run.HeadSHA)
+	author := commitMeta.Author
 	if err != nil {
 		// Non-fatal: use unknown if we can't get author
 		author = "Unknown"
@@ -152,8 +142,8 @@ func calculatePercentUnder(durations []time.Duration, threshold time.Duration) f
 	return (float64(count) / float64(len(durations))) * 100
 }
 
-// GetWorkflowRuns fetches workflow runs for a branch within a time range
-func GetWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRunSummary, error) {
+// getWorkflowRuns fetches workflow runs for a branch within a time range.
+func getWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRunSummary, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -197,7 +187,7 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 	startDate := endDate.AddDate(0, 0, -days)
 
 	// Fetch workflow runs
-	runs, err := GetWorkflowRuns(branch, workflowName, startDate)
+	runs, err := getWorkflowRuns(branch, workflowName, startDate)
 	if err != nil {
 		return nil, err
 	}
