@@ -159,6 +159,7 @@ func (s *activityOptionsSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
