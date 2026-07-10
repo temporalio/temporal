@@ -334,9 +334,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	if callErr != nil {
 		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
-			e.Logger.Debug("Nexus StartOperation request failed", tag.WorkflowNamespace(ns.Name().String()), tag.Error(callErr))
+			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
 		} else {
-			e.Logger.Error("Nexus StartOperation request failed", tag.WorkflowNamespace(ns.Name().String()), tag.Error(callErr))
+			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
 		}
 	}
 

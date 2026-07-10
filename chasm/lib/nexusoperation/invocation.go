@@ -40,17 +40,37 @@ type startArgs struct {
 	serializedRef          []byte
 }
 
-// invocationTraceContext captures per-call contextual information needed to set up HTTP tracing.
+// invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.
 type invocationTraceContext struct {
-	operationTag  string // "StartOperation" or "CancelOperation"
-	namespaceName string
-	requestID     string
-	operation     string
-	endpointName  string
-	workflowID    string
-	runID         string
-	attemptStart  time.Time
-	attempt       int32
+	operationTag      string // "StartOperation" or "CancelOperation"
+	namespaceName     string // source (caller) namespace
+	targetNamespaceID string // target namespace of the endpoint's worker target, if any
+	requestID         string
+	operation         string
+	endpointName      string
+	workflowID        string
+	runID             string
+	attemptStart      time.Time
+	attempt           int32
+}
+
+// tags returns the structured log tags describing the call.
+func (c invocationTraceContext) tags() []tag.Tag {
+	tags := []tag.Tag{
+		tag.Operation(c.operationTag),
+		tag.WorkflowNamespace(c.namespaceName),
+		tag.RequestID(c.requestID),
+		tag.NexusOperation(c.operation),
+		tag.Endpoint(c.endpointName),
+		tag.WorkflowID(c.workflowID),
+		tag.WorkflowRunID(c.runID),
+		tag.AttemptStart(c.attemptStart),
+		tag.Attempt(c.attempt),
+	}
+	if c.targetNamespaceID != "" {
+		tags = append(tags, tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID))
+	}
+	return tags
 }
 
 type invocation interface {
@@ -104,17 +124,7 @@ func (b *nexusTaskHandlerBase) newInvocationHTTP(
 	}
 	var clientTrace *httptrace.ClientTrace
 	if b.httpTraceProvider != nil {
-		traceLogger := log.With(b.logger,
-			tag.Operation(traceCtx.operationTag),
-			tag.WorkflowNamespace(traceCtx.namespaceName),
-			tag.RequestID(traceCtx.requestID),
-			tag.NexusOperation(traceCtx.operation),
-			tag.Endpoint(traceCtx.endpointName),
-			tag.WorkflowID(traceCtx.workflowID),
-			tag.WorkflowRunID(traceCtx.runID),
-			tag.AttemptStart(traceCtx.attemptStart),
-			tag.Attempt(traceCtx.attempt),
-		)
+		traceLogger := log.With(b.logger, traceCtx.tags()...)
 		clientTrace = b.httpTraceProvider.NewTrace(traceCtx.attempt, traceLogger)
 	}
 	return &invocationHTTP{client: client, clientTrace: clientTrace}, nil

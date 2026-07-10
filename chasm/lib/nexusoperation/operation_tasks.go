@@ -185,7 +185,20 @@ func (h *operationInvocationTaskHandler) Execute(
 		Links: args.nexusLinks,
 	}
 
-	invocation, err := h.newInvocation(callCtx, ns, endpoint, opRef, args, task, callTimeout, timeoutType)
+	traceCtx := invocationTraceContext{
+		operationTag:      "StartOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        opRef.BusinessID,
+		runID:             opRef.RunID,
+		attemptStart:      args.currentTime.UTC(),
+		attempt:           task.GetAttempt(),
+	}
+
+	invocation, err := h.newInvocation(callCtx, ns, endpoint, args.service, callTimeout, timeoutType, traceCtx)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
@@ -197,7 +210,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordStartCallOutcome(callCtx, ns, endpoint, args, response, callErr, callDuration, failureSource)
+	h.recordStartCallOutcome(callCtx, ns, endpoint, args, response, callErr, callDuration, failureSource, traceCtx)
 
 	result, err := newInvocationResult(response, callErr)
 	if err != nil {
@@ -245,11 +258,10 @@ func (h *operationInvocationTaskHandler) newInvocation(
 	ctx context.Context,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
-	opRef chasm.ComponentRef,
-	args startArgs,
-	task *nexusoperationpb.InvocationTask,
+	service string,
 	callTimeout time.Duration,
 	timeoutType enumspb.TimeoutType,
+	traceCtx invocationTraceContext,
 ) (invocation, error) {
 	base := nexusTaskHandlerBase{
 		config:            h.config,
@@ -266,21 +278,11 @@ func (h *operationInvocationTaskHandler) newInvocation(
 		ctx,
 		ns,
 		endpoint,
-		args.endpointName,
-		args.service,
+		traceCtx.endpointName,
+		service,
 		callTimeout,
 		timeoutType,
-		invocationTraceContext{
-			operationTag:  "StartOperation",
-			namespaceName: ns.Name().String(),
-			requestID:     args.requestID,
-			operation:     args.operation,
-			endpointName:  args.endpointName,
-			workflowID:    opRef.BusinessID,
-			runID:         opRef.RunID,
-			attemptStart:  args.currentTime.UTC(),
-			attempt:       task.GetAttempt(),
-		},
+		traceCtx,
 	)
 }
 
@@ -310,6 +312,7 @@ func (h *operationInvocationTaskHandler) recordStartCallOutcome(
 	callErr error,
 	callDuration time.Duration,
 	failureSource string,
+	traceCtx invocationTraceContext,
 ) {
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
@@ -324,14 +327,7 @@ func (h *operationInvocationTaskHandler) recordStartCallOutcome(
 	OutboundRequestCounter.With(h.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	OutboundRequestLatency.With(h.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
-	if callErr != nil {
-		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
-		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-			h.logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
-		} else {
-			h.logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
-		}
-	}
+	logCallFailure(h.logger, traceCtx, callErr, failureSource)
 }
 
 type operationBackoffTaskHandler struct {

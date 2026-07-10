@@ -176,6 +176,7 @@ func (b *nexusTaskHandlerBase) recordCallOutcome(
 	callErr error,
 	callDuration time.Duration,
 	failureSource string,
+	traceCtx invocationTraceContext,
 ) {
 	methodTag := metrics.NexusMethodTag(methodName)
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
@@ -190,12 +191,21 @@ func (b *nexusTaskHandlerBase) recordCallOutcome(
 	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 
-	if callErr != nil {
-		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
-		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-			b.logger.Debug(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
-		} else {
-			b.logger.Error(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
-		}
+	logCallFailure(b.logger, traceCtx, callErr, failureSource)
+}
+
+// logCallFailure logs a failed outbound Nexus call with the full set of structured call tags.
+// Worker-origin failures and below-minimum-timeout errors are expected, so they are logged at debug level.
+func logCallFailure(logger log.Logger, traceCtx invocationTraceContext, callErr error, failureSource string) {
+	if callErr == nil {
+		return
+	}
+	tags := append(traceCtx.tags(), tag.Error(callErr))
+	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
+	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+		logger.Debug(msg, tags...)
+	} else {
+		logger.Error(msg, tags...)
 	}
 }
