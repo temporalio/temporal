@@ -174,7 +174,6 @@ EOF
 
 snapshot() {
   local heap_profile_section="" memory_total_kb memory_available_kb memory_used_kb memory_used_mb memory_pct should_terminate_process_group
-  ensure_snapshot_dirs
 
   memory_total_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memory_available_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
