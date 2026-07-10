@@ -13,8 +13,7 @@ import (
 
 const defaultTimeout = 30 * time.Second
 
-// API executes `gh api` and decodes the JSON response into out.
-func API(ctx context.Context, path string, out any) error {
+func apiJSON(ctx context.Context, path string, out any) error {
 	output, err := commandOutput(ctx, defaultTimeout, "api", path)
 	if err != nil {
 		return err

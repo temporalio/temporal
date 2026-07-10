@@ -33,7 +33,7 @@ func GetCommit(ctx context.Context, repo, sha string) (Commit, error) {
 		} `json:"files"`
 	}
 
-	if err := API(ctx, fmt.Sprintf("/repos/%s/commits/%s", repo, sha), &response); err != nil {
+	if err := apiJSON(ctx, fmt.Sprintf("/repos/%s/commits/%s", repo, sha), &response); err != nil {
 		return Commit{SHA: sha}, err
 	}
 

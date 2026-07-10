@@ -25,32 +25,13 @@ func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branc
 	}
 	fmt.Printf("Fetching workflow runs created %s...\n", createdFilter)
 
-	page := 1
-	for {
-		var response struct {
-			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
-		}
-		path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
-			repo, workflowID, branch, createdFilter, page)
-		if err := github.API(ctx, path, &response); err != nil {
-			return nil, fmt.Errorf("failed to fetch workflow runs page %d: %w", page, err)
-		}
-
-		if len(response.WorkflowRuns) == 0 {
-			break
-		}
-
-		allRuns = append(allRuns, response.WorkflowRuns...)
-		fmt.Printf("Fetched page %d: %d runs (total: %d)\n", page, len(response.WorkflowRuns), len(allRuns))
-
-		// If we got fewer than 100 results, this is the last page
-		if len(response.WorkflowRuns) < 100 {
-			break
-		}
-
-		page++
+	allRuns, err := github.ListWorkflowRuns(ctx, repo, workflowID, github.ListWorkflowRunsOptions{
+		Branch:  branch,
+		Created: createdFilter,
+	})
+	if err != nil {
+		return nil, err
 	}
-
 	fmt.Printf("Total workflow runs fetched: %d\n", len(allRuns))
 	return allRuns, nil
 }

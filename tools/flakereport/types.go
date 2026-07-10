@@ -73,15 +73,7 @@ type FailedTestRecord struct {
 }
 
 // WorkflowRun represents a GitHub Actions workflow run
-type WorkflowRun struct {
-	ID         int64     `json:"id"`
-	Number     int       `json:"run_number"`
-	CreatedAt  time.Time `json:"created_at"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	HeadBranch string    `json:"head_branch"`
-	HeadSHA    string    `json:"head_sha"`
-}
+type WorkflowRun = github.WorkflowRun
 
 // CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
 type CommitObservation struct {
