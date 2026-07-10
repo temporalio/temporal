@@ -214,6 +214,20 @@ func validateAndNormalizeTimeouts(
 	return nil
 }
 
+// validateOriginalOptionsRestorable checks that a captured "original options" snapshot has enough
+// information to safely restore. An activity persisted before original_options existed (or
+// otherwise missing a snapshot) has original == nil; restoring it would silently wipe TaskQueue and
+// both close/start timeouts, leaving an invalid activity configuration, so reject the request instead.
+func validateOriginalOptionsRestorable(original *activitypb.ActivityOptions) error {
+	if original.GetTaskQueue().GetName() == "" {
+		return serviceerror.NewInvalidArgument("cannot restore original options: no original task queue was recorded for this activity")
+	}
+	if original.GetScheduleToCloseTimeout().AsDuration() <= 0 && original.GetStartToCloseTimeout().AsDuration() <= 0 {
+		return serviceerror.NewInvalidArgument("cannot restore original options: no original schedule-to-close or start-to-close timeout was recorded for this activity")
+	}
+	return nil
+}
+
 func validateAndNormalizeIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
 	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
 		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE

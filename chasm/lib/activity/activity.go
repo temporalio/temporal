@@ -642,6 +642,13 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 
 	frontendReq := req.GetFrontendRequest()
+
+	if frontendReq.GetRestoreOriginal() {
+		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
+			return nil, err
+		}
+	}
+
 	updateFields := map[string]struct{}{}
 	if mask := frontendReq.GetUpdateMask(); mask != nil {
 		updateFields = util.ParseFieldMask(mask)
@@ -1081,6 +1088,12 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 // For CANCEL_REQUESTED activities: rejected with FailedPrecondition; cancel takes precedence.
 func (a *Activity) handleReset(ctx chasm.MutableContext, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
+
+	if frontendReq.GetRestoreOriginalOptions() {
+		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
+			return nil, err
+		}
+	}
 
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityResetScope)
 	if err != nil {
