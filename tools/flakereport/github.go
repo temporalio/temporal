@@ -157,9 +157,3 @@ func buildGitHubURL(repo, runID, jobID string) string {
 	}
 	return github.RunURL(repo, runID)
 }
-
-// fetchCommitMeta fetches commit title, author, and changed file list for a single commit SHA.
-// Uses: GET /repos/{owner}/{repo}/commits/{sha}
-func fetchCommitMeta(ctx context.Context, repo, sha string) (github.Commit, error) {
-	return github.GetCommit(ctx, repo, sha)
-}

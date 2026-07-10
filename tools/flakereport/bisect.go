@@ -487,7 +487,7 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 	g.SetLimit(maxConcurrency)
 	for i, sha := range shas {
 		g.Go(func() error {
-			meta, err := fetchCommitMeta(ctx, repo, sha)
+			meta, err := github.GetCommit(ctx, repo, sha)
 			if err != nil {
 				fmt.Printf("Warning: failed to fetch metadata for commit %s: %v\n", sha[:7], err)
 				return nil
