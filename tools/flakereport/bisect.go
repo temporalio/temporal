@@ -241,6 +241,8 @@ func allFilesMatchSuffixes(files, suffixes []string) bool {
 
 // runBisectForTest runs the full bisect pipeline for a single test name.
 // commitMetas is a pre-populated, read-only cache of commit metadata (SHA → github.Commit).
+//
+//nolint:revive // Keep the bisect pipeline linear so the filtering steps remain reviewable.
 func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]github.Commit) TestBisectReport {
 	obs := buildObservations(testName, allRuns, commitOrderSlice, runToSHA)
 

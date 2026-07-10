@@ -115,28 +115,25 @@ func runJSON(ctx context.Context, args []string, fields []string, out any) error
 	return nil
 }
 
-// RunListOptions configures `gh run list`.
+// RunListOptions configures workflow-run listing.
 type RunListOptions struct {
-	Repo     string
-	Branch   string
-	Workflow string
-	Event    string
-	Status   string
-	Created  string
-	Limit    int
-	All      bool
-}
-
-// WorkflowRunListOptions configures paginated workflow-run listing.
-type WorkflowRunListOptions struct {
 	Repo       string
 	WorkflowID int64
 	Branch     string
+	Workflow   string
+	Event      string
+	Status     string
 	Created    string
+	Limit      int
+	All        bool
 }
 
 // ListRuns retrieves workflow runs through the gh CLI.
 func ListRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
+	if opts.WorkflowID != 0 {
+		return listWorkflowRuns(ctx, opts)
+	}
+
 	fields := []string{
 		"databaseId",
 		"number",
@@ -161,8 +158,7 @@ func ListRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
 	return runs, nil
 }
 
-// ListWorkflowRuns retrieves all workflow runs for a workflow through the gh CLI.
-func ListWorkflowRuns(ctx context.Context, opts WorkflowRunListOptions) ([]Run, error) {
+func listWorkflowRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
 	var allRuns []Run
 
 	page := 1
@@ -188,6 +184,9 @@ func ListWorkflowRuns(ctx context.Context, opts WorkflowRunListOptions) ([]Run, 
 
 		for _, run := range response.WorkflowRuns {
 			allRuns = append(allRuns, run.toRun())
+		}
+		if opts.Limit > 0 && len(allRuns) >= opts.Limit {
+			return allRuns[:opts.Limit], nil
 		}
 		if len(response.WorkflowRuns) < 100 {
 			break

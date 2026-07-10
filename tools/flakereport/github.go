@@ -23,7 +23,7 @@ func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branc
 	}
 	fmt.Printf("Fetching workflow runs created %s...\n", createdFilter)
 
-	allRuns, err := github.ListWorkflowRuns(ctx, github.WorkflowRunListOptions{
+	allRuns, err := github.ListRuns(ctx, github.RunListOptions{
 		Repo:       repo,
 		WorkflowID: workflowID,
 		Branch:     branch,
