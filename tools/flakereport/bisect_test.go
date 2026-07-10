@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/github"
 )
 
 func TestLogBetaBinomial(t *testing.T) {
@@ -409,7 +410,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 
 func TestCommitPriorWeight(t *testing.T) {
 	t.Run("docs-only commit is deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{".github/workflows/ci.yml", "docs/architecture.md"},
 		}
@@ -419,7 +420,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("markdown-only commit is deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{"README.md", "CHANGELOG.md"},
 		}
@@ -429,7 +430,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("service/history/ commit is neutral weight", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{"service/history/workflow_executor.go", "service/history/mutable_state.go"},
 		}
@@ -439,7 +440,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("test-only commit is mildly deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{"service/frontend/nexus_handler_test.go", "service/worker/deployment_test.go"},
 		}
@@ -449,7 +450,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("mixed code and doc files is neutral", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{"service/frontend/handler.go", "README.md"},
 		}
@@ -461,14 +462,14 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("empty files list returns neutral weight", func(t *testing.T) {
-		meta := CommitMeta{SHA: "abc", Files: nil}
+		meta := github.Commit{SHA: "abc", Files: nil}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 1.0, weight, 1e-10)
 		assert.Empty(t, note)
 	})
 
 	t.Run("service/frontend/ commit is neutral weight", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
 			Files: []string{"service/frontend/nexus_handler.go"},
 		}

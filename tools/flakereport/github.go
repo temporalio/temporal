@@ -16,8 +16,8 @@ import (
 // fetchWorkflowRuns retrieves all completed workflow runs within a date range.
 // since is the oldest bound (inclusive); until is the newest bound (zero means open-ended).
 // Implements proper pagination to fix the 100-run limit bug.
-func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, error) {
-	var allRuns []WorkflowRun
+func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.WorkflowRun, error) {
+	var allRuns []github.WorkflowRun
 
 	createdFilter := ">=" + since.Format("2006-01-02")
 	if !until.IsZero() {
@@ -160,6 +160,6 @@ func buildGitHubURL(repo, runID, jobID string) string {
 
 // fetchCommitMeta fetches commit title, author, and changed file list for a single commit SHA.
 // Uses: GET /repos/{owner}/{repo}/commits/{sha}
-func fetchCommitMeta(ctx context.Context, repo, sha string) (CommitMeta, error) {
+func fetchCommitMeta(ctx context.Context, repo, sha string) (github.Commit, error) {
 	return github.GetCommit(ctx, repo, sha)
 }

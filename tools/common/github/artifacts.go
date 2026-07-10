@@ -18,14 +18,31 @@ type Artifact struct {
 
 // ListRunArtifacts retrieves artifacts for a GitHub Actions workflow run.
 func ListRunArtifacts(ctx context.Context, repo string, runID int64) ([]Artifact, error) {
-	var response struct {
-		Artifacts []Artifact `json:"artifacts"`
-	}
-	if err := getJSON(ctx, fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100", repo, runID), &response); err != nil {
-		return nil, err
+	var artifacts []Artifact
+
+	page := 1
+	for {
+		var response struct {
+			Artifacts []Artifact `json:"artifacts"`
+		}
+		path := fmt.Sprintf("/repos/%s/actions/runs/%d/artifacts?per_page=100&page=%d", repo, runID, page)
+		if err := getJSON(ctx, path, &response); err != nil {
+			return nil, fmt.Errorf("failed to fetch artifacts page %d for run %d: %w", page, runID, err)
+		}
+
+		if len(response.Artifacts) == 0 {
+			break
+		}
+
+		artifacts = append(artifacts, response.Artifacts...)
+		if len(response.Artifacts) < 100 {
+			break
+		}
+
+		page++
 	}
 
-	return response.Artifacts, nil
+	return artifacts, nil
 }
 
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.

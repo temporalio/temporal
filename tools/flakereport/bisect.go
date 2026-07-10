@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/tools/common/github"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -184,7 +185,7 @@ func runBisect(obs []CommitObservation) []BisectResult {
 // the prior for commits that only touch test files or docs/config files.
 // Weight < 1.0 makes the commit less likely to be the culprit.
 // Weight > 1.0 makes it more likely.
-func commitPriorWeight(meta CommitMeta, testName string) (weight float64, note string) {
+func commitPriorWeight(meta github.Commit, testName string) (weight float64, note string) {
 	files := meta.Files
 	if len(files) == 0 {
 		return 1.0, ""
@@ -239,8 +240,8 @@ func allFilesMatchSuffixes(files, suffixes []string) bool {
 }
 
 // runBisectForTest runs the full bisect pipeline for a single test name.
-// commitMetas is a pre-populated, read-only cache of commit metadata (SHA → CommitMeta).
-func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]CommitMeta) TestBisectReport {
+// commitMetas is a pre-populated, read-only cache of commit metadata (SHA → github.Commit).
+func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, commitOrderSlice []string, runToSHA map[int64]string, commitMetas map[string]github.Commit) TestBisectReport {
 	obs := buildObservations(testName, allRuns, commitOrderSlice, runToSHA)
 
 	totalPasses, totalFails := 0, 0
@@ -406,7 +407,7 @@ func selectTopFlakyTests(allRuns []TestRun, cfg BisectConfig) []string {
 
 // runBisectAnalysis is the top-level bisect orchestrator called from the generate command.
 // It runs bisect for the top-N flakiest tests and returns their reports.
-func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, workflowRuns []WorkflowRun) ([]TestBisectReport, error) {
+func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, workflowRuns []github.WorkflowRun) ([]TestBisectReport, error) {
 	// Build runID → SHA map from workflow runs
 	runToSHA := make(map[int64]string, len(workflowRuns))
 	var oldestSHA string
@@ -474,10 +475,10 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 }
 
 // fetchCommitMetasParallel fetches commit metadata for a list of SHAs concurrently,
-// bounded by maxConcurrency. Returns an immutable map of SHA → CommitMeta; failed
+// bounded by maxConcurrency. Returns an immutable map of SHA → github.Commit; failed
 // fetches are logged and omitted (heuristic priors fall back to 1.0).
-func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) map[string]CommitMeta {
-	metas := make([]CommitMeta, len(shas))
+func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, maxConcurrency int) map[string]github.Commit {
+	metas := make([]github.Commit, len(shas))
 	ok := make([]bool, len(shas))
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -496,7 +497,7 @@ func fetchCommitMetasParallel(ctx context.Context, repo string, shas []string, m
 	}
 	_ = g.Wait()
 
-	commitMetas := make(map[string]CommitMeta, len(shas))
+	commitMetas := make(map[string]github.Commit, len(shas))
 	for i, sha := range shas {
 		if ok[i] {
 			commitMetas[sha] = metas[i]

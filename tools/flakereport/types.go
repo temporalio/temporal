@@ -1,10 +1,6 @@
 package flakereport
 
-import (
-	"time"
-
-	"go.temporal.io/server/tools/common/github"
-)
+import "time"
 
 // TestFailure represents a single test failure extracted from JUnit XML
 type TestFailure struct {
@@ -72,9 +68,6 @@ type FailedTestRecord struct {
 	FailureType string `json:"failure_type"`
 }
 
-// WorkflowRun represents a GitHub Actions workflow run
-type WorkflowRun = github.WorkflowRun
-
 // CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
 type CommitObservation struct {
 	CommitSHA     string
@@ -107,10 +100,6 @@ type TestBisectReport struct {
 	TotalObs    int            // total observations (pass + fail) used
 	Skipped     bool           // true if below signal or confidence threshold
 }
-
-// CommitMeta holds changed-file info fetched from the GitHub API.
-// GET /repos/{owner}/{repo}/commits/{sha}
-type CommitMeta = github.Commit
 
 // BisectConfig holds configuration for a bisect analysis run.
 type BisectConfig struct {

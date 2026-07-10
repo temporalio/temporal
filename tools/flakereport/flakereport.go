@@ -9,6 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/common/github"
 )
 
 const (
@@ -115,7 +116,7 @@ func NewCliApp() *cli.App {
 
 // fetchAndAnalyzeWorkflowRuns fetches workflow runs between since and until and counts successes.
 // until is zero for an open-ended (up to now) window.
-func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, int, error) {
+func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.WorkflowRun, int, error) {
 	fmt.Println("\n=== Fetching workflow runs ===")
 	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, since, until)
 	if err != nil {
@@ -141,7 +142,7 @@ func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID in
 }
 
 // collectArtifactJobs collects all artifact jobs from workflow runs
-func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, tempDir string) ([]ArtifactJob, error) {
+func collectArtifactJobs(ctx context.Context, repo string, runs []github.WorkflowRun, tempDir string) ([]ArtifactJob, error) {
 	fmt.Println("\n=== Collecting artifacts ===")
 	var jobs []ArtifactJob
 	totalArtifacts := 0
@@ -184,7 +185,7 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, t
 // buildReportSummary builds the complete report summary from processed data
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
-	allFailures []TestFailure, allTestRuns []TestRun, runs []WorkflowRun, successfulRuns int) *ReportSummary {
+	allFailures []TestFailure, allTestRuns []TestRun, runs []github.WorkflowRun, successfulRuns int) *ReportSummary {
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
