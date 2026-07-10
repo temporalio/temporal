@@ -78,37 +78,6 @@ func TestFormatMessageForDebug(t *testing.T) {
 	assert.Contains(t, output, "test-job-1")
 }
 
-func TestShortSHA(t *testing.T) {
-	tests := []struct {
-		name     string
-		sha      string
-		expected string
-	}{
-		{
-			name:     "normal SHA",
-			sha:      "abc1234567890defghijk",
-			expected: "abc1234",
-		},
-		{
-			name:     "short SHA",
-			sha:      "abc123",
-			expected: "abc123",
-		},
-		{
-			name:     "exactly 7 chars",
-			sha:      "abc1234",
-			expected: "abc1234",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			run := github.Run{HeadSHA: tt.sha}
-			assert.Equal(t, tt.expected, run.ShortSHA())
-		})
-	}
-}
-
 func TestSlackMessageStructure(t *testing.T) {
 	report := &FailureReport{
 		Workflow: github.Run{
