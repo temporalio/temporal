@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -41,6 +42,12 @@ type ScaleManagerSuite struct {
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
 
+	// metricsHandler and emitGauges control the gauge metrics wired into the
+	// manager. Tests that assert on emitted gauges swap in a capture handler and
+	// enable emission before calling startManager.
+	metricsHandler metrics.Handler
+	emitGauges     bool
+
 	// newTarget counts "new target" logs, which are also used for test synchronization
 	newTarget *testlogger.Expectation
 }
@@ -57,6 +64,8 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.userData = NewMockuserDataManager(s.controller)
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
+	s.metricsHandler = metrics.NoopMetricsHandler
+	s.emitGauges = false
 
 	// scaler.Stop is called from sm.Stop in TearDownTest, but only if the test
 	// actually started the manager.
@@ -100,14 +109,14 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 		context.Background(),
 		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		logger,
-		metrics.NoopMetricsHandler,
+		s.metricsHandler,
 		s.userData,
 		s.matching,
 		s.scaler,
 		s.timeSource,
 		dynamicconfig.GetTypedPropertyFn(s.settings),
 		dynamicconfig.GetIntPropertyFn(writePartitions),
-		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(s.emitGauges),
 	)
 	s.sm.Start(initial, s.scaleDB)
 }
@@ -247,6 +256,55 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	info := waitRecv(s, scaleInfos, "no ephemeral data update")
 	s.Equal(int32(4), info.Read)
 	s.Equal(int32(2), info.Write)
+}
+
+// TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
+// decision records the read, write, and target gauges with the expected values.
+func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
+	capture := metricstest.NewCaptureHandler()
+	cap := capture.StartCapture()
+	defer capture.StopCapture(cap)
+	s.metricsHandler = capture
+	s.emitGauges = true
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NewTarget: 2})
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil)
+
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	s.startManager(4, nil) // 4 write partitions in dynamic config
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, dbWrites, "no db write")
+
+	// setState records the gauges after the ephemeral push, so poll the snapshot
+	// until the decision's values land: Read=4 (dynamic config), Write=Target=2.
+	lastValue := func(name string) (float64, bool) {
+		recs := cap.Snapshot()[name]
+		if len(recs) == 0 {
+			return 0, false
+		}
+		v, ok := recs[len(recs)-1].Value.(float64)
+		return v, ok
+	}
+	await.RequireTruef(s.T(), func() bool {
+		v, ok := lastValue(metrics.PartitionScaleTarget.Name())
+		return ok && v == 2
+	}, time.Second, time.Millisecond, "target gauge never reached 2")
+
+	read, _ := lastValue(metrics.PartitionScaleRead.Name())
+	write, _ := lastValue(metrics.PartitionScaleWrite.Name())
+	target, _ := lastValue(metrics.PartitionScaleTarget.Name())
+	s.Equal(float64(4), read, "read gauge")
+	s.Equal(float64(2), write, "write gauge")
+	s.Equal(float64(2), target, "target gauge")
 }
 
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
