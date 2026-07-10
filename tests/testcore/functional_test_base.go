@@ -334,6 +334,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
 
+	recordClusterCreation(s.T().Name(), params.SharedCluster, params.EnableWorkerService)
+
 	// Setup test cluster namespaces.
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
 	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")

@@ -1,17 +1,26 @@
 package testcore
 
 import (
+	"log"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
 var testClusterRouter *clusterRouter
+
+// clusterCounts tracks how many pooled clusters have actually been created,
+// so the CI logs reveal the real dedicated/shared cluster count per test binary.
+var clusterCounts struct {
+	shared    atomic.Int64
+	dedicated atomic.Int64
+}
 
 func init() {
 	sharedSize := 1
@@ -28,6 +37,9 @@ func init() {
 		shared:    newClusterPool(sharedSize, false, 0),
 		dedicated: newClusterPool(dedicatedSize, true, 0),
 	}
+
+	log.Printf("CLUSTERPOOL config: GOMAXPROCS=%d sharedSize=%d dedicatedSize=%d",
+		runtime.GOMAXPROCS(0), sharedSize, dedicatedSize)
 }
 
 // clusterPool manages a fixed number of test [clusterPoolSlot]s.
@@ -273,4 +285,15 @@ func (p *clusterRouter) createCluster(t *testing.T, dynamicConfig map[dynamiccon
 	tbase.setupCluster(opts...)
 
 	return tbase
+}
+
+// recordClusterCreation logs each pooled cluster that is actually created, along
+// with a running per-kind count, so CI logs reveal the real number of dedicated
+// (and shared) clusters spun up per test binary.
+func recordClusterCreation(name string, shared, worker bool) {
+	kind, count := "dedicated", &clusterCounts.dedicated
+	if shared {
+		kind, count = "shared", &clusterCounts.shared
+	}
+	log.Printf("CLUSTERPOOL created %s cluster #%d (worker=%v) for %s", kind, count.Add(1), worker, name)
 }
