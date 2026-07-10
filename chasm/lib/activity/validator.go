@@ -27,7 +27,7 @@ func ValidateAndNormalizeStandaloneActivity(
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 ) error {
@@ -41,7 +41,7 @@ func ValidateAndNormalizeStandaloneActivity(
 		activityType,
 		getDefaultActivityRetrySettings,
 		maxIDLengthLimit,
-		namespaceID,
+		namespaceName,
 		options,
 		priority,
 		durationpb.New(0))
@@ -53,7 +53,7 @@ func ValidateAndNormalizeEmbeddedActivity(
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
@@ -68,7 +68,7 @@ func ValidateAndNormalizeEmbeddedActivity(
 		activityType,
 		getDefaultActivityRetrySettings,
 		maxIDLengthLimit,
-		namespaceID,
+		namespaceName,
 		options,
 		priority,
 		runTimeout)
@@ -90,7 +90,7 @@ func validateAndNormalizeActivityAttributes(
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	options *activitypb.ActivityOptions,
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
@@ -102,7 +102,7 @@ func validateAndNormalizeActivityAttributes(
 		return serviceerror.NewInvalidArgument("activityType is not set")
 	}
 
-	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
+	if err := validateActivityRetryPolicy(namespaceName, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
 		return err
 	}
 
@@ -133,15 +133,14 @@ func validateStartDelay(startDelay *durationpb.Duration) error {
 }
 
 func validateActivityRetryPolicy(
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	retryPolicy *commonpb.RetryPolicy,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 ) error {
 	if retryPolicy == nil {
 		return nil
 	}
-	// TODO(saa-preview): this is a namespace setting, not a namespace id setting
-	defaultActivityRetrySettings := getDefaultActivityRetrySettings(namespaceID.String())
+	defaultActivityRetrySettings := getDefaultActivityRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }

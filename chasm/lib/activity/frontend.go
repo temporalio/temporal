@@ -389,7 +389,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
-		namespaceID,
+		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
 	)
