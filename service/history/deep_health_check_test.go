@@ -351,7 +351,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					HealthRPCErrorRatio:             func() float64 { return 0.1 },
 					HealthHistoryInitializationTime: func() time.Duration { return time.Minute },
 				},
-				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, time.Second, 100),
+				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, time.Second, 10, time.Second, 10),
 				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger),
 				startupTime:             startupTime,
 			}
