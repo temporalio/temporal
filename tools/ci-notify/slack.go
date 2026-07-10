@@ -66,10 +66,10 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 			failures = failures[:maxFailures]
 		}
 
-			var failureLines []string
-			for _, failure := range failures {
-				failureLines = append(failureLines, fmt.Sprintf("`%s`", failure))
-			}
+		var failureLines []string
+		for _, failure := range failures {
+			failureLines = append(failureLines, failure)
+		}
 		blocks = append(blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{

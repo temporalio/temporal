@@ -46,6 +46,8 @@ func TestBuildFailureMessage(t *testing.T) {
 	require.NotNil(t, msg.Blocks[1].Text)
 	assert.Contains(t, msg.Blocks[1].Text.Text, "TestHistoryWorkflow")
 	assert.Contains(t, msg.Blocks[1].Text.Text, "TestMatchingWorkflow")
+	assert.NotContains(t, msg.Blocks[1].Text.Text, "•")
+	assert.NotContains(t, msg.Blocks[1].Text.Text, "`")
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
@@ -93,6 +95,8 @@ func TestSlackMessageStructure(t *testing.T) {
 
 	require.NotNil(t, msg.Blocks[1].Text)
 	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
+	assert.Contains(t, msg.Blocks[1].Text.Text, "<http://example.com/job1|job1>")
+	assert.NotContains(t, msg.Blocks[1].Text.Text, "•")
 }
 
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
