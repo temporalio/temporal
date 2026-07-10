@@ -515,17 +515,17 @@ func NewMutableStateFromDB(
 		mutableState.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
 	}
 
+	// FirstExecutionRunId was duplicated from ExecutionInfo onto ExecutionState so the dedup /
+	// conflict path can surface it without loading ExecutionInfo. Backfill in memory for records
+	// written before that change so the next persist writes it through.
+	if dbRecord.ExecutionState.FirstExecutionRunId == "" && dbRecord.ExecutionInfo.FirstExecutionRunId != "" {
+		dbRecord.ExecutionState.FirstExecutionRunId = dbRecord.ExecutionInfo.FirstExecutionRunId
+	}
+
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
-
-	// FirstExecutionRunId was duplicated from ExecutionInfo onto ExecutionState so the dedup /
-	// conflict path can surface it without loading ExecutionInfo. Backfill in memory for records
-	// written before that change so the next persist writes it through.
-	if mutableState.executionState.FirstExecutionRunId == "" && mutableState.executionInfo.FirstExecutionRunId != "" {
-		mutableState.executionState.FirstExecutionRunId = mutableState.executionInfo.FirstExecutionRunId
-	}
 
 	// StartTime was moved from ExecutionInfo to executionState
 	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {

@@ -5861,10 +5861,11 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     state.executionState.RunId,
-			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			StartTime: state.executionState.StartTime,
+			RunId:               state.executionState.RunId,
+			State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime:           state.executionState.StartTime,
+			FirstExecutionRunId: state.executionState.FirstExecutionRunId,
 		},
 		NextEventId: 103,
 	}
