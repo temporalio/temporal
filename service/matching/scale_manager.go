@@ -102,6 +102,7 @@ func (sm *scaleManager) Stop() {
 		// this is unfortunate but at least allows max() across pods to get the right value
 		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(-1))
 		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(-1))
+		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(-1))
 	}
 }
 
@@ -298,6 +299,7 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 	if sm.emitGaugeMetrics() {
 		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(newInfo.Read))
 		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(newInfo.Write))
+		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(sm.scaleState.GetTarget()))
 	}
 }
 
