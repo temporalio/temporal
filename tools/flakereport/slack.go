@@ -208,7 +208,7 @@ func (msg *SlackMessage) addBisectSection(reports []TestBisectReport, repo strin
 }
 
 // buildFailureMessage creates failure notification
-func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
+func buildFailureMessage(runID, refName, sha, repo string, failedFinalTests []string) *SlackMessage {
 	msg := &SlackMessage{
 		Text: "Flaky Tests Report Generation Failed",
 		Blocks: []SlackBlock{
@@ -241,6 +241,24 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 				},
 			},
 		},
+	}
+
+	if len(failedFinalTests) > 0 {
+		if len(failedFinalTests) > slackFailureMaxTests {
+			failedFinalTests = failedFinalTests[:slackFailureMaxTests]
+		}
+		lines := make([]string, 0, len(failedFinalTests))
+		for _, testName := range failedFinalTests {
+			lines = append(lines, fmt.Sprintf("• %s", testName))
+		}
+		text := fmt.Sprintf("*Tests that failed final retry (up to %d):*\n%s", slackFailureMaxTests, strings.Join(lines, "\n"))
+		msg.Blocks = append(msg.Blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{
+				Type: "mrkdwn",
+				Text: truncateToSlackLimit(text, 2900),
+			},
+		})
 	}
 
 	// Add link to workflow run
