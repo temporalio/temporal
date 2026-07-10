@@ -8549,6 +8549,99 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 			pollOutcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		)
 	})
+
+	t.Run("RejectInvalidMergedRetryPolicy", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		// Start with a valid retry policy. The subfield updates below are validated against
+		// the merged result, not just the incoming delta.
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Second),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		testCases := []struct {
+			name        string
+			options     *activitypb.ActivityOptions
+			mask        []string
+			expectedErr string
+		}{
+			{
+				// 1s is a valid duration on its own; it is invalid only because the merged
+				// policy would have MaximumInterval (1s) < the existing InitialInterval (10s).
+				name:        "MaximumIntervalBelowInitialInterval",
+				options:     &activitypb.ActivityOptions{RetryPolicy: &commonpb.RetryPolicy{MaximumInterval: durationpb.New(1 * time.Second)}},
+				mask:        []string{"retry_policy.maximum_interval"},
+				expectedErr: "MaximumInterval cannot be less than InitialInterval",
+			},
+			{
+				name:        "BackoffCoefficientBelowOne",
+				options:     &activitypb.ActivityOptions{RetryPolicy: &commonpb.RetryPolicy{BackoffCoefficient: 0.5}},
+				mask:        []string{"retry_policy.backoff_coefficient"},
+				expectedErr: "BackoffCoefficient cannot be less than 1",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       env.Namespace().String(),
+					ActivityId:      activityID,
+					RunId:           startResp.RunId,
+					ActivityOptions: tc.options,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: tc.mask},
+				})
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, invalidArgErr.Message, tc.expectedErr)
+			})
+		}
+	})
+
+	t.Run("RejectNilRetryPolicyReplacement", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(10 * time.Second),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		// A full retry_policy replacement (top-level mask path) with no policy provided must be rejected.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"retry_policy"}},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "RetryPolicy is not provided")
+	})
 }
 
 // Verifies update-options invalidates a legacy ScheduleToClose timer whose stamp is 0.

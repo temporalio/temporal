@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -52,6 +51,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -196,14 +196,14 @@ func NewStandaloneActivity(
 			Priority:               request.Priority,
 			StartDelay:             request.GetStartDelay(),
 			OriginalOptions: &apiactivitypb.ActivityOptions{
-				TaskQueue:              request.GetTaskQueue(),
-				ScheduleToCloseTimeout: request.GetScheduleToCloseTimeout(),
-				ScheduleToStartTimeout: request.GetScheduleToStartTimeout(),
-				StartToCloseTimeout:    request.GetStartToCloseTimeout(),
-				HeartbeatTimeout:       request.GetHeartbeatTimeout(),
-				RetryPolicy:            request.GetRetryPolicy(),
-				Priority:               request.GetPriority(),
-				StartDelay:             request.GetStartDelay(),
+				TaskQueue:              common.CloneProto(request.GetTaskQueue()),
+				ScheduleToCloseTimeout: common.CloneProto(request.GetScheduleToCloseTimeout()),
+				ScheduleToStartTimeout: common.CloneProto(request.GetScheduleToStartTimeout()),
+				StartToCloseTimeout:    common.CloneProto(request.GetStartToCloseTimeout()),
+				HeartbeatTimeout:       common.CloneProto(request.GetHeartbeatTimeout()),
+				RetryPolicy:            common.CloneProto(request.GetRetryPolicy()),
+				Priority:               common.CloneProto(request.GetPriority()),
+				StartDelay:             common.CloneProto(request.GetStartDelay()),
 			},
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
@@ -760,14 +760,7 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	}
 
 	if !restoreOriginal {
-		hasRetryPolicyInMask := false
-		for field := range updateFields {
-			if field == "retryPolicy" || strings.HasPrefix(field, "retryPolicy.") {
-				hasRetryPolicyInMask = true
-				break
-			}
-		}
-		if !hasRetryPolicyInMask {
+		if !util.FieldMaskHasPathOrSubPath(updateFields, "retryPolicy") {
 			return false
 		}
 	}
@@ -787,18 +780,24 @@ func (a *Activity) mergeActivityOptions(
 
 	// Build an ActivityOptions view of the current Activity state so we can use the shared merge function.
 	ao := &apiactivitypb.ActivityOptions{
-		TaskQueue:              a.TaskQueue,
-		ScheduleToCloseTimeout: a.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
-		StartToCloseTimeout:    a.StartToCloseTimeout,
-		HeartbeatTimeout:       a.HeartbeatTimeout,
-		Priority:               a.Priority,
-		RetryPolicy:            a.RetryPolicy,
-		StartDelay:             a.StartDelay,
+		TaskQueue:              common.CloneProto(a.TaskQueue),
+		ScheduleToCloseTimeout: common.CloneProto(a.ScheduleToCloseTimeout),
+		ScheduleToStartTimeout: common.CloneProto(a.ScheduleToStartTimeout),
+		StartToCloseTimeout:    common.CloneProto(a.StartToCloseTimeout),
+		HeartbeatTimeout:       common.CloneProto(a.HeartbeatTimeout),
+		Priority:               common.CloneProto(a.Priority),
+		RetryPolicy:            common.CloneProto(a.RetryPolicy),
+		StartDelay:             common.CloneProto(a.StartDelay),
 	}
 
-	if err := activityoptions.MergeActivityOptions(ao, req.GetActivityOptions(), updateFields); err != nil {
+	if err := activityoptions.MergeActivityOptions(ao, common.CloneProto(req.GetActivityOptions()), updateFields); err != nil {
 		return err
+	}
+
+	if util.FieldMaskHasSubPath(updateFields, "retryPolicy") {
+		if err := retrypolicy.Validate(ao.GetRetryPolicy()); err != nil {
+			return err
+		}
 	}
 
 	// Re-normalize timeouts after the update so that relationships like

@@ -165,6 +165,9 @@ func TestMergeActivityOptionsErrors(t *testing.T) {
 	err = MergeActivityOptions(&activitypb.ActivityOptions{}, emptyOpts, makeReq("retry_policy.initial_interval"))
 	require.ErrorContains(t, err, "RetryPolicy is not provided")
 
+	err = MergeActivityOptions(&activitypb.ActivityOptions{}, emptyOpts, makeReq("retry_policy"))
+	require.ErrorContains(t, err, "RetryPolicy is not provided")
+
 	err = MergeActivityOptions(&activitypb.ActivityOptions{}, emptyOpts, makeReq("taskQueue.name"))
 	require.ErrorContains(t, err, "TaskQueue is not provided")
 

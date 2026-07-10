@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -199,6 +200,12 @@ func processActivityOptionsUpdate(
 	// update activity options
 	if err := activityoptions.MergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
+	}
+
+	if util.FieldMaskHasSubPath(updateFields, "retryPolicy") {
+		if err := retrypolicy.Validate(mergeInto.GetRetryPolicy()); err != nil {
+			return nil, err
+		}
 	}
 
 	// validate the updated options
