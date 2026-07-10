@@ -176,6 +176,8 @@ type (
 		currentMemo proto.Message
 
 		needsPointerResolution bool
+
+		regenForTimeSkippingInReplication bool
 	}
 
 	taskWithAttributes struct {
@@ -2496,6 +2498,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.needsPointerResolution = false
+	n.regenForTimeSkippingInReplication = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -2765,6 +2768,12 @@ func (n *Node) applyUpdates(
 }
 
 func (n *Node) RefreshTasks() error {
+	// A full refresh regenerates every physical task, including skip-adjusted timers (fire
+	// times are converted against the current accumulated skip in backend.AddTasks). It
+	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
+	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
+	n.regenForTimeSkippingInReplication = false
+
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
 		// CloseTransaction() is called to persist the changes.
@@ -2786,6 +2795,18 @@ func (n *Node) RefreshTasks() error {
 	}
 
 	return nil
+}
+
+// RegenerateForTimeSkippingInReplication marks the tree so the next CloseTransaction
+// re-stamps physical timer tasks against the current accumulated skip that was decided
+// on the active cluster and replicated here. Unlike the active-cluster path
+// (closeTransactionHandleTimeSkipping), it records NO new skip transition: it only
+// re-converts fire times for the already-applied skip.
+//
+// This is the passive counterpart to the workflow-only refreshTasksForTimeSkipping in
+// TaskRefresher.PartialRefresh, which skips CHASM executions.
+func (n *Node) RegenerateForTimeSkippingInReplication() {
+	n.regenForTimeSkippingInReplication = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -3754,10 +3775,19 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 // closeTransactionHandleTimeSkipping handles all steps of time skipping of one execution
 // at close transaction time in the active cluster.
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+
+	// passive path
 	// todo@feiyang: change to transaction policy check
 	if !n.subtreeIsDirty {
+		if n.regenForTimeSkippingInReplication {
+			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
+
+	// active path
 	if n.parent != nil {
 		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil

@@ -22,6 +22,7 @@ type ChasmTree interface {
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	RefreshTasks() error
+	RegenerateForTimeSkippingInReplication()
 	IsStateDirty() bool
 	IsDirty() bool
 	Terminate(chasm.TerminateComponentRequest) error

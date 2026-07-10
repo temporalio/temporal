@@ -9044,6 +9044,10 @@ func (ms *MutableStateImpl) ApplyMutation(
 	prevExecutionInfoSize := ms.executionInfo.Size()
 	currentVersionedTransition := ms.CurrentVersionedTransition()
 
+	// Capture the TimeSkippingInfo versioned transition before syncExecutionInfo overwrites it,
+	// so we can detect whether a skip transition was applied in this delta.
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
 	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
 	if err != nil {
@@ -9079,15 +9083,23 @@ func (ms *MutableStateImpl) ApplyMutation(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplyMutation(chasm.NodesMutation{
+	if err := ms.chasmTree.ApplyMutation(chasm.NodesMutation{
 		UpdatedNodes: mutation.UpdatedChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	ms.flagChasmTimeSkippingRegenIfNeeded(prevTimeSkippingVT)
+	return nil
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
+
+	// Capture the TimeSkippingInfo versioned transition before syncExecutionInfo overwrites it,
+	// so we can detect whether a skip transition was applied in this snapshot.
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
 	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
@@ -9120,9 +9132,30 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
+	if err := ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
 		Nodes: snapshot.ChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	ms.flagChasmTimeSkippingRegenIfNeeded(prevTimeSkippingVT)
+	return nil
+}
+
+// flagChasmTimeSkippingRegenIfNeeded marks the chasm tree to re-stamp timer tasks against the
+// replicated accumulated skip when a skip transition was applied in this delta, detected by
+// TimeSkippingInfo's versioned transition advancing past its pre-sync value. Workflow executions
+// are handled separately by TaskRefresher.refreshTasksForTimeSkipping, so they are excluded here
+// to mirror the CHASM carve-out in TaskRefresher.PartialRefresh.
+func (ms *MutableStateImpl) flagChasmTimeSkippingRegenIfNeeded(
+	prevTimeSkippingVT *persistencespb.VersionedTransition,
+) {
+	if ms.IsWorkflow() {
+		return
+	}
+	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) > 0 {
+		ms.chasmTree.RegenerateForTimeSkippingInReplication()
+	}
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
