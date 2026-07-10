@@ -19,36 +19,36 @@
 #       captures one before terminating.
 #
 # Usage:
-#   ./memory_monitor.sh [snapshot-file]
+#   ./memory_monitor.sh
 #
 set -euo pipefail
 
-if [[ $# -gt 1 ]]; then
-  echo "Usage: $0 [snapshot-file]" >&2
+if [[ $# -ne 0 ]]; then
+  echo "Usage: $0" >&2
   exit 1
 fi
 
 # Snapshot config.
-SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
+readonly SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
 # Sample every second so short OOM ramps still leave history, but print less
 # often to keep CI logs readable.
-SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
-SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
-SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}}"
-SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
+readonly SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
+readonly SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
+readonly SNAPSHOT_FILE="${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}"
+readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
 
 # Heap profile config.
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
-HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
-HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
-PPROF_HOST="${PPROF_HOST:-localhost:7000}"
+readonly HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
+readonly HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
+readonly PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
 # OOM prevention config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
-OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
-OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
+readonly OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
+readonly OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
 MEMORY_HIGH_WATER_MARK=0
@@ -56,13 +56,12 @@ LAST_SNAPSHOT_PRINT_TIME=0
 HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
-ensure_snapshot_dirs() {
+init_snapshot_files() {
   mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
+  : > "$SNAPSHOT_HISTORY_FILE"
 }
 
-# Clear history on start
-ensure_snapshot_dirs
-: > "$SNAPSHOT_HISTORY_FILE"
+init_snapshot_files
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <pprof_profile> <output_file>
@@ -71,16 +70,6 @@ fetch_pprof() {
   local pprof_profile="$1"
   local output_file="$2"
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${pprof_profile}" -o "$output_file" 2>/dev/null
-}
-
-# Print pprof top analysis.
-# Usage: pprof_top <heap_profile_file> <lines> [extra_flags...]
-pprof_top() {
-  local heap_profile_file="$1"
-  local lines="$2"
-  shift 2
-
-  go tool pprof -top "$@" "$heap_profile_file" 2>/dev/null | head -"$lines" || true
 }
 
 # Print heap profile analysis.
@@ -92,7 +81,7 @@ print_heap_profile_summary() {
     echo "=== inuse_space (what's currently held) ==="
     # Keep the artifact focused on retained memory; allocation totals are noisy
     # for this CI OOM investigation.
-    pprof_top "$heap_profile_file" 15 -inuse_space
+    go tool pprof -top -inuse_space "$heap_profile_file" 2>/dev/null | head -15 || true
   else
     echo "(heap profile not available)"
   fi
@@ -166,10 +155,7 @@ capture_heap_profile() {
   fetch_pprof "heap" "${heap_profile_path_prefix}.pb.gz" || true
   heap_profile_summary="$(print_heap_profile_summary "${heap_profile_path_prefix}.pb.gz")"
 
-  cat <<EOF
-
-$heap_profile_summary
-EOF
+  printf '\n%s\n' "$heap_profile_summary"
 }
 
 snapshot() {
