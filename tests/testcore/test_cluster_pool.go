@@ -174,9 +174,6 @@ type clusterRouter struct {
 	dedicated   *clusterPool
 	suiteScoped sync.Map
 
-	// eventsLock guards appends to eventsFile, the JSON Lines sink for cluster
-	// creation events. A nil eventsFile means events fall back to the test log.
-	eventsLock sync.Mutex
 	eventsFile *os.File
 }
 
@@ -282,9 +279,8 @@ func (r clusterRequest) recordCreation(t *testing.T) {
 		log.Printf("CLUSTEREVENT %s", line)
 		return
 	}
-	// A sub-page append is atomic, so concurrent tests interleave cleanly.
-	testClusterRouter.eventsLock.Lock()
-	defer testClusterRouter.eventsLock.Unlock()
+	// O_APPEND makes each write land atomically at EOF and os.File serializes
+	// concurrent writes, so lines from parallel tests don't interleave.
 	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
 }
 
