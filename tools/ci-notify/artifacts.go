@@ -21,7 +21,7 @@ import (
 var finalTestRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingTestSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
-func getFinalFailedTests(ctx context.Context, run github.Run, runID string) ([]string, error) {
+func getFinalFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
 	artifactRunID, err := artifactRunID(run, runID)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func getFinalFailedTests(ctx context.Context, run github.Run, runID string) ([]s
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	var tests []string
+	var failures []string
 	for _, artifact := range artifacts {
 		if artifact.Expired || !isJUnitArtifact(artifact.Name) {
 			continue
@@ -52,14 +52,14 @@ func getFinalFailedTests(ctx context.Context, run github.Run, runID string) ([]s
 			continue
 		}
 
-		artifactTests, err := finalFailedTestsFromZip(zipPath)
+		artifactFailures, err := finalFailuresFromZip(zipPath)
 		if err != nil {
 			continue
 		}
-		tests = append(tests, artifactTests...)
+		failures = append(failures, artifactFailures...)
 	}
 
-	return uniqueSorted(tests), nil
+	return uniqueSorted(failures), nil
 }
 
 func artifactRunID(run github.Run, runID string) (int64, error) {
@@ -77,29 +77,29 @@ func isJUnitArtifact(name string) bool {
 	return strings.Contains(strings.ToLower(name), "junit")
 }
 
-func finalFailedTestsFromZip(zipPath string) ([]string, error) {
+func finalFailuresFromZip(zipPath string) ([]string, error) {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open artifact zip %s: %w", zipPath, err)
 	}
 	defer func() { _ = reader.Close() }()
 
-	var tests []string
+	var failures []string
 	for _, file := range reader.File {
 		if file.FileInfo().IsDir() || !strings.HasSuffix(strings.ToLower(file.Name), ".xml") {
 			continue
 		}
 
-		fileTests, err := finalFailedTestsFromZipFile(file)
+		fileFailures, err := finalFailuresFromZipFile(file)
 		if err != nil {
 			continue
 		}
-		tests = append(tests, fileTests...)
+		failures = append(failures, fileFailures...)
 	}
-	return tests, nil
+	return failures, nil
 }
 
-func finalFailedTestsFromZipFile(file *zip.File) ([]string, error) {
+func finalFailuresFromZipFile(file *zip.File) ([]string, error) {
 	rc, err := file.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s in artifact zip: %w", file.Name, err)
@@ -115,7 +115,7 @@ func finalFailedTestsFromZipFile(file *zip.File) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
-	return finalFailedTests(suites), nil
+	return finalFailures(suites), nil
 }
 
 func parseJUnit(data []byte) (*junit.Testsuites, error) {
@@ -131,17 +131,17 @@ func parseJUnit(data []byte) (*junit.Testsuites, error) {
 	return &junit.Testsuites{Suites: []junit.Testsuite{suite}}, nil
 }
 
-func finalFailedTests(suites *junit.Testsuites) []string {
-	var tests []string
+func finalFailures(suites *junit.Testsuites) []string {
+	var failures []string
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
 			if testcase.Failure == nil || testcase.Skipped != nil || !finalTestRegex.MatchString(testcase.Name) {
 				continue
 			}
-			tests = append(tests, normalizeTestName(testcase.Name))
+			failures = append(failures, normalizeTestName(testcase.Name))
 		}
 	}
-	return tests
+	return failures
 }
 
 func normalizeTestName(name string) string {

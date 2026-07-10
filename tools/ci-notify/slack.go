@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const maxFailedTests = 5
+const maxFailures = 5
 
 // SlackMessage represents a Slack Block Kit message
 type SlackMessage struct {
@@ -60,23 +60,23 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	}
 
 	blocks := []SlackBlock{headerBlock}
-	if len(report.FailedTests) > 0 {
-		tests := report.FailedTests
-		if len(tests) > maxFailedTests {
-			tests = tests[:maxFailedTests]
+	if len(report.Failures) > 0 {
+		failures := report.Failures
+		if len(failures) > maxFailures {
+			failures = failures[:maxFailures]
 		}
 
-		var failedTests []string
-		for _, test := range tests {
-			failedTests = append(failedTests, fmt.Sprintf("• `%s`", test))
+		var failureLines []string
+		for _, failure := range failures {
+			failureLines = append(failureLines, fmt.Sprintf("• `%s`", failure))
 		}
 		blocks = append(blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Final failed tests (%d):*\n%s",
-					len(report.FailedTests),
-					strings.Join(failedTests, "\n")),
+				Text: fmt.Sprintf("*Final failures (%d):*\n%s",
+					len(report.Failures),
+					strings.Join(failureLines, "\n")),
 			},
 		})
 	}
@@ -102,10 +102,10 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
-	if len(report.FailedTests) > 0 {
-		fmt.Fprintf(&sb, "Final failed tests (%d):\n", len(report.FailedTests))
-		for _, test := range report.FailedTests[:min(len(report.FailedTests), maxFailedTests)] {
-			fmt.Fprintf(&sb, "  • %s\n", test)
+	if len(report.Failures) > 0 {
+		fmt.Fprintf(&sb, "Final failures (%d):\n", len(report.Failures))
+		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
+			fmt.Fprintf(&sb, "  • %s\n", failure)
 		}
 		fmt.Fprintln(&sb)
 	}

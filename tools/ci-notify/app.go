@@ -117,7 +117,7 @@ func runAlertCommand(c *cli.Context) error {
 
 	logger.Info("Built failure report",
 		zap.Int("failed_jobs", len(report.FailedJobs)),
-		zap.Int("failed_tests", len(report.FailedTests)),
+		zap.Int("failures", len(report.Failures)),
 		zap.Int("total_jobs", report.TotalJobs),
 	)
 

@@ -9,10 +9,10 @@ import (
 
 // FailureReport aggregates all failure information
 type FailureReport struct {
-	Run         github.Run
-	FailedJobs  []github.Job
-	FailedTests []string
-	TotalJobs   int
+	Run        github.Run
+	FailedJobs []github.Job
+	Failures   []string
+	TotalJobs  int
 }
 
 // DigestReport aggregates success metrics for a time period

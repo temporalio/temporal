@@ -30,8 +30,8 @@ func TestBuildFailureMessage(t *testing.T) {
 				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/2",
 			},
 		},
-		FailedTests: []string{"TestHistoryWorkflow", "TestMatchingWorkflow"},
-		TotalJobs:   5,
+		Failures:  []string{"TestHistoryWorkflow", "TestMatchingWorkflow"},
+		TotalJobs: 5,
 	}
 
 	msg := BuildFailureMessage(report)
@@ -56,9 +56,9 @@ func TestFormatMessageForDebug(t *testing.T) {
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 		},
-		FailedJobs:  []github.Job{{Name: "test-job-1", Conclusion: "failure"}},
-		FailedTests: []string{"TestHistoryWorkflow"},
-		TotalJobs:   5,
+		FailedJobs: []github.Job{{Name: "test-job-1", Conclusion: "failure"}},
+		Failures:   []string{"TestHistoryWorkflow"},
+		TotalJobs:  5,
 	}
 
 	output := FormatMessageForDebug(report)
@@ -95,7 +95,7 @@ func TestSlackMessageStructure(t *testing.T) {
 	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
 }
 
-func TestBuildFailureMessageLimitsFinalFailedTests(t *testing.T) {
+func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	report := &FailureReport{
 		Run: github.Run{
 			URL: "https://github.com/temporalio/temporal/actions/runs/123",
@@ -103,7 +103,7 @@ func TestBuildFailureMessageLimitsFinalFailedTests(t *testing.T) {
 		FailedJobs: []github.Job{
 			{Name: "job1", URL: "http://example.com/job1"},
 		},
-		FailedTests: []string{
+		Failures: []string{
 			"Test01",
 			"Test02",
 			"Test03",
@@ -118,7 +118,7 @@ func TestBuildFailureMessageLimitsFinalFailedTests(t *testing.T) {
 
 	require.Len(t, msg.Blocks, 4)
 	require.NotNil(t, msg.Blocks[1].Text)
-	assert.Contains(t, msg.Blocks[1].Text.Text, "*Final failed tests (6):*")
+	assert.Contains(t, msg.Blocks[1].Text.Text, "*Final failures (6):*")
 	assert.Contains(t, msg.Blocks[1].Text.Text, "Test05")
 	assert.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
 }

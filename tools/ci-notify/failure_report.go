@@ -36,15 +36,15 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		}
 	}
 
-	failedTests, err := getFinalFailedTests(context.Background(), *run, runID)
+	failures, err := getFinalFailures(context.Background(), *run, runID)
 	if err != nil {
-		failedTests = nil
+		failures = nil
 	}
 
 	return &FailureReport{
-		Run:         *run,
-		FailedJobs:  failedJobs,
-		FailedTests: failedTests,
-		TotalJobs:   len(run.Jobs),
+		Run:        *run,
+		FailedJobs: failedJobs,
+		Failures:   failures,
+		TotalJobs:  len(run.Jobs),
 	}, nil
 }
