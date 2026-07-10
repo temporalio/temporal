@@ -57,3 +57,22 @@ var addOperation = temporalnexus.NewWorkflowRunOperation(
 		}
 		return wfStartOpts, nil
 	})
+
+const AlwaysFailOperationName = "always-fail"
+
+// alwaysFailOperation is an operation that, like you would guess, always fails.
+var alwaysFailOperation = temporalnexus.MustNewTemporalOperation(temporalnexus.TemporalOperationOptions[string, string]{
+	Name: AlwaysFailOperationName,
+	Start: func(
+		ctx context.Context,
+		nc temporalnexus.NexusClient,
+		input string,
+		options temporalnexus.StartTemporalOperationOptions,
+	) (temporalnexus.TemporalOperationResult[string], error) {
+		// Return a terminal Nexus application error (state "failed") rather than a plain
+		// error. A plain error is a retryable handler error, so the operation would never
+		// reach a terminal state and the completion callback would never fire.
+		err := nexus.NewOperationFailedErrorf("operation failed with input [%s]", input)
+		return temporalnexus.TemporalOperationResult[string]{}, err
+	},
+})

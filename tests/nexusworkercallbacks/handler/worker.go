@@ -16,7 +16,7 @@ func NewWorker(c client.Client) (worker.Worker, error) {
 	w.RegisterWorkflow(addOperationWorkflow)
 
 	nexusSvc := nexus.NewService(NexusServiceName)
-	err := nexusSvc.Register(addOperation)
+	err := nexusSvc.Register(addOperation, alwaysFailOperation)
 	if err != nil {
 		return nil, fmt.Errorf("registering Nexus service: %w", err)
 	}

@@ -36,7 +36,9 @@ type NexusWorkerCallbacksSuite struct {
 }
 
 func TestNexusWorkerCallbacksSuite(t *testing.T) {
-	parallelsuite.Run(t, &NexusWorkerCallbacksSuite{})
+	// 😓 This is just because I need to find a better way to expose the completion handler
+	// invocations to testcases. (Maybe just have a different task queue + handler per-testcase?)
+	parallelsuite.RunLegacySequential(t, &NexusWorkerCallbacksSuite{})
 }
 
 func (s *NexusWorkerCallbacksSuite) newEnv() *testcore.TestEnv {
@@ -294,4 +296,46 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample2() {
 
 	s.Equal(1, len(gotResults))
 	// TODO: Crack open the payload and confirm it has the right data.
+	gotResult := gotResults[0]
+	s.NotNil(gotResult.Success)
+	s.Nil(gotResult.Failure)
+}
+
+// A Nexus operation that terminates with an application error delivers a failure outcome
+// (and no success result) to the completion callback.
+func (s *NexusWorkerCallbacksSuite) TestNexusOperationFails() {
+	ctx := s.Context()
+	infra := s.setupTestInfra(ctx)
+	defer infra.Shutdown()
+
+	// setupTestInfra already runs a caller worker on caller.CallerTaskQueue with a completion
+	// handler registered, so we just aim the callback at it and inspect the recorded outcome.
+	nexusClient, err := infra.CallerClient.NewNexusClient(client.NexusClientOptions{
+		Endpoint: infra.HandlerNexusEndpointName,
+		Service:  handler.NexusServiceName,
+	})
+	s.NoError(err, "creating Nexus client")
+
+	callOpts := client.StartNexusOperationOptions{
+		ID:                     "always-fail",
+		ScheduleToCloseTimeout: 5 * time.Second,
+	}
+	callbackRef := fauxsdk.UseCompletionService(caller.CallerTaskQueue, caller.OnCompleteCallContext{})
+	fauxsdk.AttachWorkerCallback(&callOpts, callbackRef)
+
+	// The always-fail operation terminates with a Nexus application error.
+	_, err = nexusClient.ExecuteOperation(ctx, handler.AlwaysFailOperationName, "input-value", callOpts)
+	s.NoError(err, "calling Nexus operation")
+
+	// Wait for the completion callback to fire.
+	s.Eventually(func() bool {
+		return caller.TimesWorkerCallbackCalled() > 0
+	}, 10*time.Second, 200*time.Millisecond, "nexus-worker-callback was never executed")
+
+	// The completion carries a failure outcome, not a success result.
+	s.Equal(1, caller.TimesWorkerCallbackCalled())
+	outcome := caller.MustGetWorkerCallbackResult(0).Input.GetOutcome()
+	s.Nil(outcome.GetSuccess(), "expected no success result")
+	s.NotNil(outcome.GetFailure(), "expected a failure outcome")
+	s.Contains(outcome.GetFailure().GetMessage(), "operation failed with input [input-value]")
 }
