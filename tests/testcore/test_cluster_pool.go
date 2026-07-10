@@ -260,8 +260,7 @@ func (r clusterRequest) reason() string {
 
 // recordCreation appends one JSON Lines event per test-cluster creation so a CI
 // run can be queried for which suite created how many clusters of each kind, and
-// why. The append is flushed per line so it survives a hard process kill (e.g.
-// an OOM); events fall back to the test log when no events file is configured.
+// why. Events fall back to the test log when no events file is configured.
 func (r clusterRequest) recordCreation(t *testing.T) {
 	suite, _, _ := strings.Cut(t.Name(), "/")
 	line, err := json.Marshal(map[string]any{
