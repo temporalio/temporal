@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -245,4 +246,50 @@ func TestProcessTimeRange_Basic(t *testing.T) {
 	// Validate next wakeup time.
 	require.GreaterOrEqual(t, res.NextWakeupTime, end)
 	require.Less(t, res.NextWakeupTime, end.Add(defaultInterval*2))
+}
+
+func TestProcessTimeRange_ComputeLimitExceeded(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+	schedule := defaultSchedule()
+	everySecond := &schedulepb.CalendarSpec{Second: "*", Minute: "*", Hour: "*"}
+	schedule.Spec = &schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{everySecond},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{everySecond},
+	}
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	require.NoError(t, err)
+
+	rec := metricstest.NewCaptureHandler()
+	capture := rec.StartCapture()
+	defer rec.StopCapture(capture)
+
+	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder.SetMaxIterations(func() int { return 10_000 })
+	processor := scheduler.NewSpecProcessor(
+		&scheduler.Config{
+			Tweakables: func(_ string) scheduler.Tweakables { return scheduler.DefaultTweakables },
+		},
+		rec,
+		log.NewTestLogger(),
+		specBuilder,
+	)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval)
+
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err, "an over-excluded spec must not error out of ProcessTimeRange (would DLQ the generator task)")
+	require.Empty(t, res.BufferedStarts, "no action should be buffered for an over-excluded spec")
+	require.True(t, res.NextWakeupTime.IsZero(), "no wakeup should be armed; the schedule takes no further action")
+
+	sched.Schedule.State.Paused = true
+	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err)
+	require.Empty(t, res.BufferedStarts)
+	require.True(t, res.NextWakeupTime.IsZero())
+
+	recorded := capture.Snapshot()[metrics.ScheduleComputeLimitExceeded.Name()]
+	require.Len(t, recorded, 2, "expected the compute-limit counter to fire on both the active and paused paths")
 }

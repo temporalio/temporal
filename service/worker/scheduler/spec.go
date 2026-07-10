@@ -19,17 +19,15 @@ import (
 // will consider before giving up, used when no dynamic-config accessor is injected into the
 // SpecBuilder. It is two weeks' worth of one-second ticks: enough that no well-formed spec ever
 // reaches it, small enough that an adversarial spec (calendar matches every second, exclude
-// cancels every second) can't burn CPU spinning toward maxCalendarYear.
+// cancels every second).
 const DefaultMaxIterations = 2 * 7 * 24 * 60 * 60
 
 type (
 	CompiledSpec struct {
-		spec     *schedulepb.ScheduleSpec
-		tz       *time.Location
-		calendar []*compiledCalendar
-		excludes []*compiledCalendar
-		// maxIterations bounds how many excluded candidate times GetNextTime will consider before
-		// giving up.
+		spec          *schedulepb.ScheduleSpec
+		tz            *time.Location
+		calendar      []*compiledCalendar
+		excludes      []*compiledCalendar
 		maxIterations int
 	}
 
@@ -45,14 +43,8 @@ type (
 		// the time zone database is changed while the process is running. To handle that, we
 		// expire entries after a day. Note that we cache negative results also.
 		locationCache cache.Cache
-
-		// maxIterations, if set, is the dynamic-config accessor for the base GetNextTime search
-		// bound. It is read once per NewCompiledSpec, not per GetNextTime call.
 		maxIterations func() int
 	}
-
-	// SpecBuilderOption configures a SpecBuilder.
-	SpecBuilderOption func(*SpecBuilder)
 
 	locationAndError struct {
 		loc *time.Location
@@ -60,36 +52,38 @@ type (
 	}
 )
 
-// LimitExceededError is returned by GetNextTime when the search for the next matching time hit
-// the compute iteration bound before finding a non-excluded time (an over-excluded / adversarial
-// spec). RetryAfter is the time at which the bounded search stopped; callers that schedule
-// actions should resume searching from there rather than treating the schedule as finished.
-type LimitExceededError struct {
-	RetryAfter time.Time
-}
+// ErrComputeLimitExceeded is returned by GetNextTime when the search for the next matching time
+// hits the compute iteration bound before finding a non-excluded time. It indicates an
+// over-excluded (e.g. a calendar and exclude that cancel each other out).
+// Callers should surface it (metric + log) and stop scheduling; the schedule takes no further
+// action until its spec is changed.
+var ErrComputeLimitExceeded = errors.New("schedule spec next-time search exceeded the compute iteration limit")
 
-func (e *LimitExceededError) Error() string {
-	return "schedule spec next-time search exceeded the compute iteration limit"
-}
-
-// WithMaxIterations sets the dynamic-config accessor for the base GetNextTime search bound.
-// Without it, DefaultMaxIterations is used.
-func WithMaxIterations(fn func() int) SpecBuilderOption {
-	return func(b *SpecBuilder) { b.maxIterations = fn }
-}
-
-func NewSpecBuilder(opts ...SpecBuilderOption) *SpecBuilder {
-	b := &SpecBuilder{
+func NewSpecBuilder() *SpecBuilder {
+	return &SpecBuilder{
 		locationCache: cache.New(1000,
 			&cache.Options{
 				TTL: 24 * time.Hour,
 			},
 		),
 	}
-	for _, opt := range opts {
-		opt(b)
+}
+
+// SetMaxIterations sets the dynamic-config accessor for the base GetNextTime search bound.
+// Without it, DefaultMaxIterations is used.
+func (b *SpecBuilder) SetMaxIterations(fn func() int) {
+	b.maxIterations = fn
+}
+
+// MaxIterations returns the raw (unclamped) search bound from the dynamic-config accessor, or
+// DefaultMaxIterations if none was set. Reading dynamic config is non-deterministic, so a workflow
+// must snapshot this through a deterministic channel (e.g. MutableSideEffect) and apply it via
+// CompiledSpec.setMaxIterations, rather than relying on the value read at NewCompiledSpec time.
+func (b *SpecBuilder) MaxIterations() int {
+	if b.maxIterations == nil {
+		return DefaultMaxIterations
 	}
-	return b
+	return b.maxIterations()
 }
 
 func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledSpec, error) {
@@ -116,22 +110,22 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 		excludes[i] = newCompiledCalendar(excal, tz)
 	}
 
-	maxIterations := DefaultMaxIterations
-	if b.maxIterations != nil {
-		if v := b.maxIterations(); v > 0 {
-			maxIterations = max(v, 10_000)
-		}
-	}
-
 	cspec := &CompiledSpec{
 		spec:          spec,
 		tz:            tz,
 		calendar:      ccs,
 		excludes:      excludes,
-		maxIterations: maxIterations,
+		maxIterations: b.MaxIterations(),
 	}
 
 	return cspec, nil
+}
+
+// setMaxIterations overrides the compiled search bound. The legacy scheduler workflow uses this
+// to apply a value snapshotted through its "tweakables" MutableSideEffect, so the bound is
+// deterministic across replay rather than read live from dynamic config at compile time.
+func (cs *CompiledSpec) setMaxIterations(v int) {
+	cs.maxIterations = v
 }
 
 // CleanSpec sets default values in ranges.
@@ -325,12 +319,17 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
 	}
+	maxIterations := cs.maxIterations
+	if maxIterations <= 0 {
+		maxIterations = DefaultMaxIterations
+	}
+
 	var nominal time.Time
 	for iterations := 0; nominal.IsZero() || cs.excluded(nominal); iterations++ {
 		// Bound the search so an over-excluded / adversarial spec can't spin toward
 		// maxCalendarYear. Well-formed specs resolve in a handful of iterations.
-		if iterations >= cs.maxIterations {
-			return GetNextTimeResult{}, &LimitExceededError{RetryAfter: nominal}
+		if iterations >= maxIterations {
+			return GetNextTimeResult{}, ErrComputeLimitExceeded
 		}
 		nominal = cs.rawNextTime(after)
 		after = nominal

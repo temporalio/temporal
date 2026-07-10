@@ -385,7 +385,8 @@ func (s *specSuite) TestExcludeAll() {
 func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
 	// Mirrored calendar/exclude: every candidate is excluded, so the search hits the bound.
 	const iterations = 10_000
-	builder := NewSpecBuilder(WithMaxIterations(func() int { return iterations }))
+	builder := NewSpecBuilder()
+	builder.SetMaxIterations(func() int { return iterations })
 	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
 		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
 		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
@@ -395,11 +396,8 @@ func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
 	after := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
 	result, err := cs.GetNextTime("", after)
 
-	var limitErr *LimitExceededError
-	s.Require().ErrorAs(err, &limitErr)
+	s.Require().ErrorIs(err, ErrComputeLimitExceeded)
 	s.Zero(result)
-	// Each excluded candidate advances one second, so the search stops `iterations` seconds out.
-	s.Equal(after.Add(iterations*time.Second), limitErr.RetryAfter)
 }
 
 func (s *specSuite) TestSpecStartTime() {

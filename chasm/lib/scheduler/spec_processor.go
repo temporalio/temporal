@@ -101,7 +101,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.NextTime(scheduler, end)
-		wakeup, err := s.wakeupForResult(scheduler, metricsHandler, next, err)
+		wakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 	}
 
-	nextWakeup, err := s.wakeupForResult(scheduler, metricsHandler, next, err)
+	nextWakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 	if err != nil {
 		return nil, err
 	}
@@ -200,27 +200,29 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}, nil
 }
 
-// wakeupForResult resolves a NextTime result/error into a next-wakeup time. A *LimitExceededError
-// (an over-excluded spec) is not fatal: it records the limit metric and a scheduleID-tagged log,
-// then returns the search frontier so the generator retries later without scheduling an action.
-func (s *SpecProcessorImpl) wakeupForResult(
+// checkNextScheduleResult resolves a NextTime result/error into a next-wakeup time.
+// and handles error cases
+func (s *SpecProcessorImpl) checkNextScheduleResult(
 	scheduler *Scheduler,
 	metricsHandler metrics.Handler,
 	next legacyscheduler.GetNextTimeResult,
 	err error,
 ) (time.Time, error) {
+	// default case, no error, continue
 	if err == nil {
 		return next.Next, nil
 	}
-	var limitErr *legacyscheduler.LimitExceededError
-	if !errors.As(err, &limitErr) {
-		return time.Time{}, err
+
+	// special case: broken or pathological spec
+	// in this particular case, just swallow the error and log.
+	// The schedule will just degrade to return nothing
+	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
+		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
+		newTaggedLogger(s.logger, scheduler).Warn(
+			"schedule spec next-time search hit the compute limit; taking no further action until the spec is changed")
+		return time.Time{}, nil
 	}
-	metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
-	newTaggedLogger(s.logger, scheduler).Warn(
-		"schedule spec next-time search hit the compute limit; sleeping until the search frontier without scheduling an action",
-		tag.Time("retry-after", limitErr.RetryAfter))
-	return limitErr.RetryAfter, nil
+	return time.Time{}, err
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {

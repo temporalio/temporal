@@ -978,15 +978,11 @@ type NextTimeCache struct {
 	// offset from start_time. next_times has one value for each time in the cache.
 	// nominal_times may have up to the same number of values, but it may also be shorter (or
 	// empty), if the corresponding nominal time is equal to the next time.
-	NextTimes    []int64 `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3" json:"next_times,omitempty"`
-	NominalTimes []int64 `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3" json:"nominal_times,omitempty"`
-	Completed    bool    `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
-	// limit_exceeded_time, if non-zero, is the nanosecond offset from start_time where the
-	// search hit the recompute iteration limit. It distinguishes "done" (completed) from
-	// "stopped early"; the schedule should resume searching from this time.
-	LimitExceededOffset int64 `protobuf:"varint,6,opt,name=limit_exceeded_offset,json=limitExceededOffset,proto3" json:"limit_exceeded_offset,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	NextTimes     []int64 `protobuf:"varint,3,rep,packed,name=next_times,json=nextTimes,proto3" json:"next_times,omitempty"`
+	NominalTimes  []int64 `protobuf:"varint,4,rep,packed,name=nominal_times,json=nominalTimes,proto3" json:"nominal_times,omitempty"`
+	Completed     bool    `protobuf:"varint,5,opt,name=completed,proto3" json:"completed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NextTimeCache) Reset() {
@@ -1052,13 +1048,6 @@ func (x *NextTimeCache) GetCompleted() bool {
 		return x.Completed
 	}
 	return false
-}
-
-func (x *NextTimeCache) GetLimitExceededOffset() int64 {
-	if x != nil {
-		return x.LimitExceededOffset
-	}
-	return 0
 }
 
 var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescriptor
@@ -1144,7 +1133,7 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"request_id\x18\x03 \x01(\tR\trequestId\x12\x1a\n" +
 	"\bidentity\x18\x04 \x01(\tR\bidentity\x12G\n" +
 	"\texecution\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x16\n" +
-	"\x06reason\x18\x06 \x01(\tR\x06reason\"\xfa\x01\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\"\xc6\x01\n" +
 	"\rNextTimeCache\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x129\n" +
 	"\n" +
@@ -1152,8 +1141,7 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"next_times\x18\x03 \x03(\x03R\tnextTimes\x12#\n" +
 	"\rnominal_times\x18\x04 \x03(\x03R\fnominalTimes\x12\x1c\n" +
-	"\tcompleted\x18\x05 \x01(\bR\tcompleted\x122\n" +
-	"\x15limit_exceeded_offset\x18\x06 \x01(\x03R\x13limitExceededOffsetB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
+	"\tcompleted\x18\x05 \x01(\bR\tcompletedB0Z.go.temporal.io/server/api/schedule/v1;scheduleb\x06proto3"
 
 var (
 	file_temporal_server_api_schedule_v1_message_proto_rawDescOnce sync.Once
