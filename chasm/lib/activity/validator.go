@@ -446,6 +446,7 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
 func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
 ) error {
 	if req.GetActivityId() == "" {
@@ -541,6 +542,10 @@ func validateUpdateActivityExecutionOptionsRequest(
 
 	// RetryPolicy: validate the full policy when replacing it, or validate individual sub-fields.
 	if _, ok := updateFields["retryPolicy"]; ok {
+		if opts.RetryPolicy == nil {
+			opts.RetryPolicy = &commonpb.RetryPolicy{}
+		}
+		retrypolicy.EnsureDefaults(opts.RetryPolicy, getDefaultActivityRetrySettings(req.GetNamespace()))
 		if err := retrypolicy.Validate(opts.GetRetryPolicy()); err != nil {
 			return err
 		}

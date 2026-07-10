@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/await"
@@ -8137,6 +8138,91 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		})
 		require.NoError(t, err)
 		require.EqualValues(t, 2, pollResp2.Attempt)
+	})
+
+	t.Run("ClearRetryPolicyNormalizesToDefaultRetryPolicy", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		defaultRetryInitialInterval := 10 * time.Minute
+		cleanup := env.OverrideDynamicConfig(dynamicconfig.DefaultActivityRetryPolicy, retrypolicy.DefaultRetrySettings{
+			InitialInterval:            defaultRetryInitialInterval,
+			MaximumIntervalCoefficient: 100.0,
+			BackoffCoefficient:         2.0,
+			MaximumAttempts:            0,
+		})
+		defer cleanup()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		updateResp, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"retry_policy"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updateResp.GetActivityOptions().GetRetryPolicy())
+		require.Equal(t, defaultRetryInitialInterval, updateResp.GetActivityOptions().GetRetryPolicy().GetInitialInterval().AsDuration())
+		require.EqualValues(t, 0, updateResp.GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: false},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, descResp.GetInfo().GetRunState())
+		require.EqualValues(t, 2, descResp.GetInfo().GetAttempt())
+		require.NotNil(t, descResp.GetInfo().GetRetryPolicy())
+		require.Equal(t, defaultRetryInitialInterval, descResp.GetInfo().GetRetryPolicy().GetInitialInterval().AsDuration())
+		require.EqualValues(t, 0, descResp.GetInfo().GetRetryPolicy().GetMaximumAttempts())
+
+		pollCtx, pollCancel := context.WithTimeout(ctx, common.MinLongPollTimeout+time.Second)
+		defer pollCancel()
+		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		if err == nil {
+			require.Empty(t, pollResp2.GetActivityId(), "retry should not dispatch immediately after normalizing nil retry policy to default backoff")
+		} else {
+			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
+		}
 	})
 
 	t.Run("ChangeScheduleToClose", func(t *testing.T) {

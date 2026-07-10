@@ -542,6 +542,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 
 	if err := validateUpdateActivityExecutionOptionsRequest(
 		req,
+		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
 	); err != nil {
 		return nil, err
