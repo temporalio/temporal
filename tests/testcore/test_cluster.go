@@ -21,8 +21,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -32,7 +30,6 @@ import (
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
@@ -49,7 +46,6 @@ import (
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
-	"go.uber.org/fx"
 	"go.uber.org/multierr"
 )
 
@@ -64,29 +60,25 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		EnableArchival                  bool
-		IsMasterCluster                 bool
-		ClusterMetadata                 cluster.Config
-		Persistence                     persistencetests.TestBaseOptions
-		FrontendConfig                  FrontendConfig
-		HistoryConfig                   HistoryConfig
-		MatchingConfig                  MatchingConfig
-		WorkerConfig                    WorkerConfig
-		ESConfig                        *esclient.Config
-		MockAdminClient                 map[string]adminservice.AdminServiceClient
-		FaultInjection                  *config.FaultInjection
-		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DynamicConfigOverrides          map[dynamicconfig.Key]any
-		EnableMTLS                      bool
-		EnableMetricsCapture            bool
-		EnableHistoryTaskRecorder       bool
-		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
-		TokenProvider     auth.TokenProvider
-		TLSConfigProvider *encryption.FixedTLSConfigProvider
+		IsMasterCluster           bool
+		ClusterMetadata           cluster.Config
+		Persistence               persistencetests.TestBaseOptions
+		HistoryConfig             HistoryConfig
+		WorkerConfig              WorkerConfig
+		ESConfig                  *esclient.Config
+		MockAdminClient           map[string]adminservice.AdminServiceClient
+		FaultInjection            *config.FaultInjection
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableMetricsCapture      bool
+		EnableHistoryTaskRecorder bool
+		EnableReplicationRecorder bool
+		EnableArchival            bool
+		SpanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TokenProvider             auth.TokenProvider
+		TLSConfigProvider         *encryption.FixedTLSConfigProvider
+		AdditionalServerOptions   []temporal.ServerOption
 	}
 
 	TestClusterFactory interface {
@@ -150,26 +142,17 @@ func newClusterWithPersistenceTestBaseFactory(
 	logger log.Logger,
 	tbFactory persistenceTestBaseFactory,
 ) (*TestCluster, error) {
-	// determine number of hosts per service
-	const minNodes = 1
-	clusterConfig.FrontendConfig.NumFrontendHosts = max(minNodes, clusterConfig.FrontendConfig.NumFrontendHosts)
-	clusterConfig.HistoryConfig.NumHistoryHosts = max(minNodes, clusterConfig.HistoryConfig.NumHistoryHosts)
-	clusterConfig.MatchingConfig.NumMatchingHosts = max(minNodes, clusterConfig.MatchingConfig.NumMatchingHosts)
-	clusterConfig.WorkerConfig.NumWorkers = max(minNodes, clusterConfig.WorkerConfig.NumWorkers)
-	if clusterConfig.WorkerConfig.DisableWorker {
-		clusterConfig.WorkerConfig.NumWorkers = 0
-	}
-
-	// allocate ports
+	// Allocate addresses for every service, including worker, since NewServer validates
+	// the full static host map even when a test opts out of starting worker.
 	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
 		grpcProtocol: {
-			primitives.FrontendService: {All: makeAddresses(clusterConfig.FrontendConfig.NumFrontendHosts)},
-			primitives.MatchingService: {All: makeAddresses(clusterConfig.MatchingConfig.NumMatchingHosts)},
-			primitives.HistoryService:  {All: makeAddresses(clusterConfig.HistoryConfig.NumHistoryHosts)},
-			primitives.WorkerService:   {All: makeAddresses(clusterConfig.WorkerConfig.NumWorkers)},
+			primitives.FrontendService: {All: makeAddresses(1)},
+			primitives.MatchingService: {All: makeAddresses(1)},
+			primitives.HistoryService:  {All: makeAddresses(1)},
+			primitives.WorkerService:   {All: makeAddresses(1)},
 		},
 		httpProtocol: {
-			primitives.FrontendService: {All: makeAddresses(clusterConfig.FrontendConfig.NumFrontendHosts)},
+			primitives.FrontendService: {All: makeAddresses(1)},
 		},
 	}
 
@@ -200,21 +183,11 @@ func newClusterWithPersistenceTestBaseFactory(
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
-	archiverMetadata, archiverProvider := newArchivalMetadataAndProvider(
-		clusterConfig.EnableArchival,
-		clusterConfig.CustomHistoryArchiverFactory,
-		clusterConfig.CustomVisibilityArchiverFactory,
-		testBase.ExecutionManager,
-		logger,
-	)
 	var err error
 
 	pConfig := testBase.DefaultTestCluster.Config()
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
 
-	var (
-		esClient esclient.Client
-	)
 	if !UseSQLVisibility() {
 		clusterConfig.ESConfig = &esclient.Config{
 			Indices: map[string]string{
@@ -236,10 +209,6 @@ func newClusterWithPersistenceTestBaseFactory(
 		pConfig.VisibilityStore = "test-es-visibility"
 		pConfig.DataStores[pConfig.VisibilityStore] = config.DataStore{
 			Elasticsearch: clusterConfig.ESConfig,
-		}
-		esClient, err = esclient.NewClient(clusterConfig.ESConfig, nil, logger)
-		if err != nil {
-			return nil, err
 		}
 	} else {
 		clusterConfig.ESConfig = nil
@@ -298,41 +267,37 @@ func newClusterWithPersistenceTestBaseFactory(
 		}
 	}
 
-	temporalParams := &temporalParams{
-		clusterMetadataConfig:            clusterMetadataConfig,
-		persistenceConfig:                pConfig,
-		metadataMgr:                      testBase.MetadataManager,
-		clusterMetadataManager:           testBase.ClusterMetadataManager,
-		shardMgr:                         testBase.ShardMgr,
-		executionManager:                 testBase.ExecutionManager,
-		namespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
-		abstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
-		visibilityStoreFactory:           testBase.VisibilityStoreFactory,
-		taskMgr:                          testBase.TaskMgr,
-		logger:                           logger,
-		esConfig:                         clusterConfig.ESConfig,
-		esClient:                         esClient,
-		archiverMetadata:                 archiverMetadata,
-		archiverProvider:                 archiverProvider,
-		frontendConfig:                   clusterConfig.FrontendConfig,
-		historyConfig:                    clusterConfig.HistoryConfig,
-		matchingConfig:                   clusterConfig.MatchingConfig,
-		workerConfig:                     clusterConfig.WorkerConfig,
-		mockAdminClient:                  clusterConfig.MockAdminClient,
-		namespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
-		dcRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
-		dynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
-		tlsConfigProvider:                tlsConfigProvider,
-		serviceFxOptions:                 clusterConfig.ServiceFxOptions,
-		taskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverMetadata),
-		hostsByProtocolByService:         hostsByProtocolByService,
-		spanExporters:                    clusterConfig.SpanExporters,
-		tokenProvider:                    clusterConfig.TokenProvider,
-		enableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
+	persistenceConfig := copyPersistenceConfig(pConfig)
+	if clusterConfig.ESConfig != nil {
+		esDataStoreName := "es-visibility"
+		persistenceConfig.VisibilityStore = esDataStoreName
+		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			Elasticsearch: clusterConfig.ESConfig,
+		}
 	}
 
+	serverConfig := &config.Config{
+		Global: config.Global{
+			Membership: config.Membership{
+				MaxJoinDuration: time.Second,
+			},
+		},
+		Persistence:         persistenceConfig,
+		ClusterMetadata:     clusterMetadataConfig,
+		DCRedirectionPolicy: clusterConfig.DCRedirectionPolicy,
+		Visibility:          config.Visibility{},
+		ExporterConfig: telemetry.ExportConfig{
+			CustomExporters: clusterConfig.SpanExporters,
+		},
+	}
+
+	if clusterConfig.EnableArchival {
+		enableArchivalConfig(serverConfig)
+	}
+
+	var captureMetricsHandler *metricstest.CaptureHandler
 	if clusterConfig.EnableMetricsCapture {
-		temporalParams.captureMetricsHandler = metricstest.NewCaptureHandler()
+		captureMetricsHandler = metricstest.NewCaptureHandler()
 	}
 
 	err = newPProfInitializerImpl(logger, PprofTestPort).Start()
@@ -340,12 +305,28 @@ func newClusterWithPersistenceTestBaseFactory(
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := newTemporal(t, temporalParams)
-	if err = cluster.Start(); err != nil {
+	host := newTemporal(t, &temporalParams{
+		Config:                    serverConfig,
+		MetadataMgr:               testBase.MetadataManager,
+		AbstractDataStoreFactory:  testBase.AbstractDataStoreFactory,
+		VisibilityStoreFactory:    testBase.VisibilityStoreFactory,
+		Logger:                    logger,
+		MockAdminClient:           clusterConfig.MockAdminClient,
+		DynamicConfigOverrides:    clusterConfig.DynamicConfigOverrides,
+		TLSConfigProvider:         tlsConfigProvider,
+		HostsByProtocolByService:  hostsByProtocolByService,
+		TokenProvider:             clusterConfig.TokenProvider,
+		CaptureMetricsHandler:     captureMetricsHandler,
+		EnableHistoryTaskRecorder: clusterConfig.EnableHistoryTaskRecorder,
+		EnableReplicationRecorder: clusterConfig.EnableReplicationRecorder,
+		WorkerConfig:              clusterConfig.WorkerConfig,
+		AdditionalServerOptions:   clusterConfig.AdditionalServerOptions,
+	})
+	if err = host.Start(); err != nil {
 		return nil, err
 	}
 
-	return &TestCluster{testBase: testBase, host: cluster}, nil
+	return &TestCluster{testBase: testBase, host: host}, nil
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
@@ -460,56 +441,46 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 	}
 }
 
-// TODO: remove when onebox uses temporal.NewServerFx and archival wiring comes from production config.
-func newArchivalMetadataAndProvider(
-	enabled bool,
-	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
-	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-) (archiver.ArchivalMetadata, provider.ArchiverProvider) {
-	dcCollection := dynamicconfig.NewNoopCollection()
-	if !enabled {
-		return archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider.NewArchiverProvider(nil, nil, nil, nil, nil, logger, metrics.NoopMetricsHandler)
-	}
-
-	cfg := &config.FilestoreArchiver{
+func enableArchivalConfig(cfg *config.Config) {
+	filestoreArchiver := &config.FilestoreArchiver{
 		FileMode: "0666",
 		DirMode:  "0766",
 	}
-	archiverProvider := provider.NewArchiverProvider(
-		&config.HistoryArchiverProvider{
-			Filestore: cfg,
+	cfg.Archival.History = config.HistoryArchival{
+		State:      config.ArchivalEnabled,
+		EnableRead: true,
+		Provider: &config.HistoryArchiverProvider{
+			Filestore: filestoreArchiver,
 		},
-		&config.VisibilityArchiverProvider{
-			Filestore: cfg,
+	}
+	cfg.Archival.Visibility = config.VisibilityArchival{
+		State:      config.ArchivalEnabled,
+		EnableRead: true,
+		Provider: &config.VisibilityArchiverProvider{
+			Filestore: filestoreArchiver,
 		},
-		customHistoryArchiverFactory,
-		customVisibilityArchiverFactory,
-		executionManager,
-		logger,
-		metrics.NoopMetricsHandler,
-	)
-	return archiver.NewArchivalMetadata(dcCollection, "enabled", true, "enabled", true, &config.ArchivalNamespaceDefaults{
+	}
+	cfg.NamespaceDefaults.Archival = config.ArchivalNamespaceDefaults{
 		History: config.HistoryArchivalNamespaceDefaults{
-			State: "enabled",
+			State: config.ArchivalEnabled,
 			URI:   "testScheme://test/history/archive/path",
 		},
 		Visibility: config.VisibilityArchivalNamespaceDefaults{
-			State: "enabled",
+			State: config.ArchivalEnabled,
 			URI:   "testScheme://test/visibility/archive/path",
 		},
-	}), archiverProvider
+	}
 }
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UseSQLVisibility() && tc.host.esConfig != nil {
-		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
-			errs = multierr.Combine(errs, err)
+	if !UseSQLVisibility() {
+		if esConfig := tc.host.serverConfig.Persistence.DataStores[tc.host.serverConfig.Persistence.VisibilityStore].Elasticsearch; esConfig != nil {
+			if err := deleteIndex(esConfig, tc.host.logger); err != nil {
+				errs = multierr.Combine(errs, err)
+			}
 		}
 	}
 	return errs
@@ -549,7 +520,7 @@ func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 
 // ExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
-	return tc.host.executionManager
+	return tc.testBase.ExecutionManager
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.
@@ -566,7 +537,7 @@ func (tc *TestCluster) WorkerGRPCAddress() string {
 }
 
 func (tc *TestCluster) ClusterName() string {
-	return tc.host.clusterMetadataConfig.CurrentClusterName
+	return tc.host.serverConfig.ClusterMetadata.CurrentClusterName
 }
 
 func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder {

@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -110,21 +111,24 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		AudienceGetter             authorization.JWTAudienceMapper
-		TokenProvider              auth.TokenProvider
-		ServiceHosts               map[primitives.ServiceName]static.Hosts
+		SearchAttributesMapper       searchattribute.Mapper
+		CustomFrontendInterceptors   []grpc.UnaryServerInterceptor
+		AdditionalStreamInterceptors []grpc.StreamServerInterceptor
+		Authorizer                   authorization.Authorizer
+		ClaimMapper                  authorization.ClaimMapper
+		AudienceGetter               authorization.JWTAudienceMapper
+		TokenProvider                auth.TokenProvider
+		ServiceHosts                 map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                log.Logger
-		ClientFactoryProvider client.FactoryProvider
-		DynamicConfigClient   dynamicconfig.Client
-		TLSConfigProvider     encryption.TLSConfigProvider
-		EsClient              esclient.Client
-		MetricsHandler        metrics.Handler
+		Logger                     log.Logger
+		ClientFactoryProvider      client.FactoryProvider
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
+		DynamicConfigClient        dynamicconfig.Client
+		TLSConfigProvider          encryption.TLSConfigProvider
+		EsClient                   esclient.Client
+		MetricsHandler             metrics.Handler
+		TestHooks                  testhooks.TestHooks
 	}
 )
 
@@ -135,7 +139,6 @@ var (
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
-			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
 			FrontendServiceProvider,
@@ -195,6 +198,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
+	persistenceFactoryProvider := so.persistenceFactoryProvider
+	if persistenceFactoryProvider == nil {
+		persistenceFactoryProvider = PersistenceFactoryProvider()
+	}
+
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
@@ -218,6 +226,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			logger.Info("Dynamic config client is not configured. Using default values.")
 			dcClient = dynamicconfig.NewNoopClient()
 		}
+	}
+
+	testHooks := testhooks.NewTestHooks()
+	if so.testHooks != nil {
+		testHooks = *so.testHooks
 	}
 
 	// TLSConfigProvider
@@ -301,19 +314,22 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
 
-		SearchAttributesMapper:     so.searchAttributesMapper,
-		CustomFrontendInterceptors: so.customFrontendInterceptors,
-		Authorizer:                 so.authorizer,
-		ClaimMapper:                so.claimMapper,
-		AudienceGetter:             so.audienceGetter,
-		TokenProvider:              so.tokenProvider,
+		SearchAttributesMapper:       so.searchAttributesMapper,
+		CustomFrontendInterceptors:   so.customFrontendInterceptors,
+		AdditionalStreamInterceptors: so.additionalStreamInterceptors,
+		Authorizer:                   so.authorizer,
+		ClaimMapper:                  so.claimMapper,
+		AudienceGetter:               so.audienceGetter,
+		TokenProvider:                so.tokenProvider,
 
-		Logger:                logger,
-		ClientFactoryProvider: clientFactoryProvider,
-		DynamicConfigClient:   dcClient,
-		TLSConfigProvider:     tlsConfigProvider,
-		EsClient:              esClient,
-		MetricsHandler:        metricHandler,
+		Logger:                     logger,
+		ClientFactoryProvider:      clientFactoryProvider,
+		PersistenceFactoryProvider: persistenceFactoryProvider,
+		DynamicConfigClient:        dcClient,
+		TLSConfigProvider:          tlsConfigProvider,
+		EsClient:                   esClient,
+		MetricsHandler:             metricHandler,
+		TestHooks:                  testHooks,
 	}, nil
 }
 
@@ -369,6 +385,7 @@ type (
 		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
 		SearchAttributesMapper          searchattribute.Mapper
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		AdditionalStreamInterceptors    []grpc.StreamServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper
 		TokenProvider                   auth.TokenProvider
@@ -380,6 +397,7 @@ type (
 		InstanceID                      resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		TestHooks                       testhooks.TestHooks
 	}
 )
 
@@ -462,11 +480,15 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 				return params.TaskCategoryRegistry
 			},
 		),
+		fx.Decorate(func() testhooks.TestHooks {
+			return params.TestHooks
+		}),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
 		chasm.Module,
+		fx.Supply(params.AdditionalStreamInterceptors),
 	)
 }
 
@@ -557,7 +579,6 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
-		fx.Supply([]grpc.StreamServerInterceptor{}),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
