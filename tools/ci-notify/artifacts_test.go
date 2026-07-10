@@ -1,61 +1,51 @@
 package cinotify
 
 import (
+	"archive/zip"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestFailures(t *testing.T) {
-	suites, err := parseJUnit([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-  <testsuite name="suite">
-    <testcase classname="history" name="TestHistoryWorkflow (retry 1) (final)">
-      <failure message="failed">failed</failure>
-    </testcase>
-    <testcase classname="history" name="TestRetryFailure (retry 1)">
-      <failure message="failed">failed</failure>
-    </testcase>
-    <testcase classname="history" name="TestSkippedFinal (final)">
-      <skipped message="skipped"/>
-      <failure message="failed">failed</failure>
-    </testcase>
-    <testcase classname="history" name="TestPassedFinal (final)"/>
-  </testsuite>
-  <testsuite name="DATA RACE">
-    <testcase classname="race" name="DATA RACE: detected">
-      <failure message="WARNING: DATA RACE">race details</failure>
-    </testcase>
-  </testsuite>
-</testsuites>`))
-	require.NoError(t, err)
+func TestFinalFailures(t *testing.T) {
+	rows := []summaryRow{
+		{Name: "TestHistoryWorkflow (retry 1) (final)", Final: true},
+		{Name: "TestRetryFailure (retry 1)"},
+		{Name: "DATA RACE: detected"},
+	}
 
-	require.Equal(t, []string{"TestHistoryWorkflow", "DATA RACE: detected"}, failures(suites))
+	require.Equal(t, []string{"TestHistoryWorkflow"}, finalFailures(rows))
 }
 
-func TestParseJUnitSingleTestsuite(t *testing.T) {
-	suites, err := parseJUnit([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="suite">
-  <testcase classname="matching" name="TestMatchingWorkflow (final)">
-    <failure message="failed">failed</failure>
-  </testcase>
-</testsuite>`))
+func TestFailuresFromZip(t *testing.T) {
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "artifact.zip")
+	file, err := os.Create(zipPath)
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"TestMatchingWorkflow"}, failures(suites))
-}
-
-func TestFailuresIncludesDataRace(t *testing.T) {
-	suites, err := parseJUnit([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="suite">
-  <testcase classname="race" name="DATA RACE: detected">
-    <failure message="WARNING: DATA RACE">race details</failure>
-  </testcase>
-  <testcase classname="race" name="NotADataRace">
-    <failure message="data race">lowercase marker should not match</failure>
-  </testcase>
-</testsuite>`))
+	writer := zip.NewWriter(file)
+	summaryFile, err := writer.Create("test-summary.json")
 	require.NoError(t, err)
+	_, err = summaryFile.Write([]byte(`{
+  "rows": [
+    {
+      "kind": "Failed",
+      "name": "TestMatchingWorkflow (final)",
+      "final": true
+    },
+    {
+      "kind": "DATA RACE",
+      "name": "DATA RACE: detected"
+    }
+  ]
+}`))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	require.NoError(t, file.Close())
 
-	require.Equal(t, []string{"DATA RACE: detected"}, failures(suites))
+	failures, err := failuresFromZip(zipPath)
+	require.NoError(t, err)
+	require.Equal(t, []string{"TestMatchingWorkflow"}, failures)
 }

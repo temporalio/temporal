@@ -2,9 +2,8 @@ package cinotify
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
-	"encoding/xml"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,13 +13,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
 	"go.temporal.io/server/tools/common/github"
 )
 
-var finalTestRegex = regexp.MustCompile(`\s*\(final\)$`)
-var trailingTestSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
-var dataRaceRegex = regexp.MustCompile(`(^|\n)DATA RACE: `)
+var trailingFailureSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
+
+type testSummary struct {
+	Rows []summaryRow `json:"rows"`
+}
+
+type summaryRow struct {
+	Name  string `json:"name"`
+	Final bool   `json:"final,omitempty"`
+}
 
 func getFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
 	artifactRunID, err := artifactRunID(run, runID)
@@ -44,7 +49,7 @@ func getFailures(ctx context.Context, run github.Run, runID string) ([]string, e
 
 	var failures []string
 	for _, artifact := range artifacts {
-		if artifact.Expired || !isJUnitArtifact(artifact.Name) {
+		if artifact.Expired || !isSummaryArtifact(artifact.Name) {
 			continue
 		}
 
@@ -74,8 +79,8 @@ func artifactRunID(run github.Run, runID string) (int64, error) {
 	return id, nil
 }
 
-func isJUnitArtifact(name string) bool {
-	return strings.Contains(strings.ToLower(name), "junit")
+func isSummaryArtifact(name string) bool {
+	return strings.HasPrefix(name, "test-summary-json--")
 }
 
 func failuresFromZip(zipPath string) ([]string, error) {
@@ -87,7 +92,7 @@ func failuresFromZip(zipPath string) ([]string, error) {
 
 	var failures []string
 	for _, file := range reader.File {
-		if file.FileInfo().IsDir() || !strings.HasSuffix(strings.ToLower(file.Name), ".xml") {
+		if file.FileInfo().IsDir() || !strings.HasSuffix(file.Name, "test-summary.json") {
 			continue
 		}
 
@@ -112,50 +117,27 @@ func failuresFromZipFile(file *zip.File) ([]string, error) {
 		return nil, fmt.Errorf("failed to read %s in artifact zip: %w", file.Name, err)
 	}
 
-	suites, err := parseJUnit(data)
-	if err != nil {
+	var summary testSummary
+	if err := json.Unmarshal(data, &summary); err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
-	return failures(suites), nil
+	return finalFailures(summary.Rows), nil
 }
 
-func parseJUnit(data []byte) (*junit.Testsuites, error) {
-	var suites junit.Testsuites
-	if err := xml.NewDecoder(bytes.NewReader(data)).Decode(&suites); err == nil {
-		return &suites, nil
-	}
-
-	var suite junit.Testsuite
-	if err := xml.NewDecoder(bytes.NewReader(data)).Decode(&suite); err != nil {
-		return nil, err
-	}
-	return &junit.Testsuites{Suites: []junit.Testsuite{suite}}, nil
-}
-
-func failures(suites *junit.Testsuites) []string {
+func finalFailures(rows []summaryRow) []string {
 	var failures []string
-	for _, suite := range suites.Suites {
-		for _, testcase := range suite.Testcases {
-			if testcase.Failure == nil || testcase.Skipped != nil || !isReportableFailure(testcase) {
-				continue
-			}
-			failures = append(failures, normalizeTestName(testcase.Name))
+	for _, row := range rows {
+		if !row.Final {
+			continue
 		}
+		failures = append(failures, normalizeFailureName(row.Name))
 	}
 	return failures
 }
 
-func isReportableFailure(testcase junit.Testcase) bool {
-	return finalTestRegex.MatchString(testcase.Name) || isDataRaceFailure(testcase)
-}
-
-func isDataRaceFailure(testcase junit.Testcase) bool {
-	return dataRaceRegex.MatchString(testcase.Name)
-}
-
-func normalizeTestName(name string) string {
+func normalizeFailureName(name string) string {
 	for {
-		stripped := trailingTestSuffixRegex.ReplaceAllString(name, "")
+		stripped := trailingFailureSuffixRegex.ReplaceAllString(name, "")
 		if stripped == name {
 			return name
 		}
