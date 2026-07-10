@@ -47,7 +47,7 @@ readonly PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 # OOM prevention config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
-readonly OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
+readonly OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-99}"
 readonly OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
 # State.
