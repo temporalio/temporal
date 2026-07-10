@@ -49,7 +49,7 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 		case sqlite.PluginName:
 			return GetSQLiteMemoryTestClusterOption()
 		case mssql.PluginName:
-			return GetMSSQLTestClusterOption()
+			return GetMSSQLTestClusterOption(driver, nil)
 		default:
 			panic(fmt.Sprintf("unknown sql driver: %v", driver))
 		}
@@ -115,16 +115,17 @@ func GetPostgreSQLTestClusterOption(
 }
 
 // GetMSSQLTestClusterOption return test options
-func GetMSSQLTestClusterOption() *TestBaseOptions {
+func GetMSSQLTestClusterOption(pluginName string, connectAttributes map[string]string) *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: mssql.PluginName,
-		DBName:          GenerateRandomDBName(),
-		DBUsername:      testMSSQLUser,
-		DBPassword:      testMSSQLPassword,
-		DBHost:          environment.GetMSSQLAddress(),
-		DBPort:          environment.GetMSSQLPort(),
-		SchemaDir:       testMSSQLSchemaDir,
-		StoreType:       config.StoreTypeSQL,
+		SQLDBPluginName:   pluginName,
+		DBName:            GenerateRandomDBName(),
+		DBUsername:        testMSSQLUser,
+		DBPassword:        testMSSQLPassword,
+		DBHost:            environment.GetMSSQLAddress(),
+		DBPort:            environment.GetMSSQLPort(),
+		SchemaDir:         testMSSQLSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: connectAttributes,
 	}
 }
 
