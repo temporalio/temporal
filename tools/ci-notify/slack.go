@@ -52,10 +52,10 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 		Type: "section",
 		Text: &SlackText{
 			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Failed jobs (%d/%d):*\n%s",
+			Text: fmt.Sprintf("*Failed jobs (%d/%d):* %s",
 				len(report.FailedJobs),
 				report.TotalJobs,
-				strings.Join(failedJobNames, "\n")),
+				strings.Join(failedJobNames, ", ")),
 		},
 	}
 
@@ -68,15 +68,15 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 
 		var failureLines []string
 		for _, failure := range failures {
-			failureLines = append(failureLines, failure)
+			failureLines = append(failureLines, fmt.Sprintf("`%s`", failure))
 		}
 		blocks = append(blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Failures (%d):*\n%s",
+				Text: fmt.Sprintf("*Failures (%d):* %s",
 					len(report.Failures),
-					strings.Join(failureLines, "\n")),
+					strings.Join(failureLines, ", ")),
 			},
 		})
 	}
@@ -103,17 +103,19 @@ func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
 	if len(report.Failures) > 0 {
-		fmt.Fprintf(&sb, "Failures (%d):\n", len(report.Failures))
+		var failures []string
 		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
-			fmt.Fprintf(&sb, "  %s\n", failure)
+			failures = append(failures, fmt.Sprintf("`%s`", failure))
 		}
+		fmt.Fprintf(&sb, "Failures (%d): %s\n", len(report.Failures), strings.Join(failures, ", "))
 		fmt.Fprintln(&sb)
 	}
 
-	fmt.Fprintf(&sb, "Failed jobs (%d/%d):\n", len(report.FailedJobs), report.TotalJobs)
+	var failedJobNames []string
 	for _, job := range report.FailedJobs {
-		fmt.Fprintf(&sb, "  %s\n    %s\n", job.Name, job.URL)
+		failedJobNames = append(failedJobNames, fmt.Sprintf("%s (%s)", job.Name, job.URL))
 	}
+	fmt.Fprintf(&sb, "Failed jobs (%d/%d): %s\n", len(report.FailedJobs), report.TotalJobs, strings.Join(failedJobNames, ", "))
 	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()
 }
