@@ -136,7 +136,7 @@ func failures(suites *junit.Testsuites) []string {
 	var failures []string
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
-			if testcase.Failure == nil || testcase.Skipped != nil || !isReportableFailure(suite, testcase) {
+			if testcase.Failure == nil || testcase.Skipped != nil || !isReportableFailure(testcase) {
 				continue
 			}
 			failures = append(failures, normalizeTestName(testcase.Name))
@@ -145,25 +145,12 @@ func failures(suites *junit.Testsuites) []string {
 	return failures
 }
 
-func isReportableFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
-	return finalTestRegex.MatchString(testcase.Name) || isDataRaceFailure(suite, testcase)
+func isReportableFailure(testcase junit.Testcase) bool {
+	return finalTestRegex.MatchString(testcase.Name) || isDataRaceFailure(testcase)
 }
 
-func isDataRaceFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
-	if dataRaceRegex.MatchString(suite.Name) ||
-		dataRaceRegex.MatchString(testcase.Name) ||
-		dataRaceRegex.MatchString(testcase.Classname) {
-		return true
-	}
-
-	if testcase.Failure != nil {
-		if dataRaceRegex.MatchString(testcase.Failure.Message) ||
-			dataRaceRegex.MatchString(testcase.Failure.Type) ||
-			dataRaceRegex.MatchString(testcase.Failure.Data) {
-			return true
-		}
-	}
-	return false
+func isDataRaceFailure(testcase junit.Testcase) bool {
+	return dataRaceRegex.MatchString(testcase.Name)
 }
 
 func normalizeTestName(name string) string {
