@@ -150,16 +150,16 @@ func isReportableFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
 }
 
 func isDataRaceFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
-	fields := []string{
-		suite.Name,
-		testcase.Name,
-		testcase.Classname,
+	if dataRaceRegex.MatchString(suite.Name) ||
+		dataRaceRegex.MatchString(testcase.Name) ||
+		dataRaceRegex.MatchString(testcase.Classname) {
+		return true
 	}
+
 	if testcase.Failure != nil {
-		fields = append(fields, testcase.Failure.Message, testcase.Failure.Type, testcase.Failure.Data)
-	}
-	for _, field := range fields {
-		if dataRaceRegex.MatchString(field) {
+		if dataRaceRegex.MatchString(testcase.Failure.Message) ||
+			dataRaceRegex.MatchString(testcase.Failure.Type) ||
+			dataRaceRegex.MatchString(testcase.Failure.Data) {
 			return true
 		}
 	}
