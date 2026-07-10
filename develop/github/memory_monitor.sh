@@ -31,21 +31,27 @@ if [[ $# -gt 1 ]]; then
   exit 1
 fi
 
-# Snapshot config.
+## Snapshot config.
 MEMORY_OUTPUT_DIR="${MEMORY_OUTPUT_DIR:-.testoutput/memory}"
+# Sample every second so short OOM ramps still leave history, but print less
+# often to keep CI logs readable.
 SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-history.txt}"
 SNAPSHOT_STATUS_HISTORY_FILE="${SNAPSHOT_STATUS_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-status-history.txt}"
 
-# Profile config.
+## Profile config.
 PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
+# Capture before the termination threshold so the diagnostic profile is usually
+# available even if the runner kills the job before our termination path runs.
 PROFILE_CAPTURE_THRESHOLD="${PROFILE_CAPTURE_THRESHOLD:-90}"
 PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
-# OOM prevention config.
+## OOM prevention config.
+# Terminate late enough to avoid masking near-finished tests, but before the
+# runner OOM killer skips post-test artifact upload.
 OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
 OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 
@@ -92,6 +98,8 @@ print_heap() {
   echo "--- Go Heap Profile ---"
   if [[ -s "$profile_file" ]]; then
     echo "=== inuse_space (what's currently held) ==="
+    # Keep the artifact focused on retained memory; allocation totals are noisy
+    # for this CI OOM investigation.
     pprof_top "$profile_file" 15 -inuse_space
   else
     echo "(heap profile not available)"
@@ -232,7 +240,8 @@ snapshot() {
   report="$(build_snapshot_report "$pct")"
   report+="$profile_report"
 
-  # Write report to disk only when memory usage reaches a new high water mark.
+  # Write the snapshot only at new memory highs so the final artifact represents
+  # the worst observed point without emitting one file per sample.
   if [[ "$pct" -gt "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
     echo "$report" > "$SNAPSHOT_FILE"
     SNAPSHOT_HIGH_WATER_MARK="$pct"
