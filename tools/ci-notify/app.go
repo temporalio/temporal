@@ -116,10 +116,8 @@ func runAlertCommand(c *cli.Context) error {
 	}
 
 	logger.Info("Built failure report",
-		zap.String("workflow", report.Workflow.Name),
-		zap.String("sha", report.Commit.ShortSHA),
-		zap.String("author", report.Commit.Author),
 		zap.Int("failed_jobs", len(report.FailedJobs)),
+		zap.Int("failed_tests", len(report.FailedTests)),
 		zap.Int("total_jobs", report.TotalJobs),
 	)
 

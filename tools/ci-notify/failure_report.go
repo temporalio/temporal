@@ -28,22 +28,6 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	commitMeta, err := github.GetCommit(ctx, "temporalio/temporal", run.HeadSHA)
-	author := commitMeta.Commit.Author.Name
-	if err != nil {
-		// Non-fatal: use unknown if we can't get author
-		author = "Unknown"
-	}
-
-	commit := CommitInfo{
-		SHA:      run.HeadSHA,
-		ShortSHA: run.ShortSHA(),
-		Author:   author,
-		Message:  run.DisplayTitle,
-	}
-
 	// Identify failed jobs
 	var failedJobs []github.Job
 	for _, job := range run.Jobs {
@@ -52,10 +36,15 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		}
 	}
 
+	failedTests, err := getFinalFailedTests(context.Background(), *run, runID)
+	if err != nil {
+		failedTests = nil
+	}
+
 	return &FailureReport{
-		Workflow:   *run,
-		Commit:     commit,
-		FailedJobs: failedJobs,
-		TotalJobs:  len(run.Jobs),
+		Run:         *run,
+		FailedJobs:  failedJobs,
+		FailedTests: failedTests,
+		TotalJobs:   len(run.Jobs),
 	}, nil
 }

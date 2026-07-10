@@ -7,20 +7,12 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
-// CommitInfo represents commit metadata
-type CommitInfo struct {
-	SHA      string
-	ShortSHA string // First 7 chars
-	Author   string
-	Message  string
-}
-
 // FailureReport aggregates all failure information
 type FailureReport struct {
-	Workflow   github.Run
-	Commit     CommitInfo
-	FailedJobs []github.Job
-	TotalJobs  int
+	Run         github.Run
+	FailedJobs  []github.Job
+	FailedTests []string
+	TotalJobs   int
 }
 
 // DigestReport aggregates success metrics for a time period

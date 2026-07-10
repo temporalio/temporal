@@ -11,18 +11,12 @@ import (
 
 func TestBuildFailureMessage(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 			CreatedAt:  time.Now(),
-		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890defghijk",
-			ShortSHA: "abc1234",
-			Author:   "Test Author",
-			Message:  "Test commit message",
 		},
 		FailedJobs: []github.Job{
 			{
@@ -36,7 +30,8 @@ func TestBuildFailureMessage(t *testing.T) {
 				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/2",
 			},
 		},
-		TotalJobs: 5,
+		FailedTests: []string{"TestHistoryWorkflow", "TestMatchingWorkflow"},
+		TotalJobs:   5,
 	}
 
 	msg := BuildFailureMessage(report)
@@ -48,48 +43,41 @@ func TestBuildFailureMessage(t *testing.T) {
 	// Check that the first block contains the header
 	require.NotNil(t, msg.Blocks[0].Text)
 	assert.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
+	require.NotNil(t, msg.Blocks[1].Text)
+	assert.Contains(t, msg.Blocks[1].Text.Text, "TestHistoryWorkflow")
+	assert.Contains(t, msg.Blocks[1].Text.Text, "TestMatchingWorkflow")
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890defghijk",
-			ShortSHA: "abc1234",
-			Author:   "Test Author",
-		},
-		FailedJobs: []github.Job{
-			{Name: "test-job-1", Conclusion: "failure"},
-		},
-		TotalJobs: 5,
+		FailedJobs:  []github.Job{{Name: "test-job-1", Conclusion: "failure"}},
+		FailedTests: []string{"TestHistoryWorkflow"},
+		TotalJobs:   5,
 	}
 
 	output := FormatMessageForDebug(report)
 
 	assert.Contains(t, output, "CI Failed")
-	assert.Contains(t, output, "All Tests")
-	assert.Contains(t, output, "abc1234")
-	assert.Contains(t, output, "Test Author")
+	assert.NotContains(t, output, "Workflow:")
+	assert.NotContains(t, output, "Branch:")
+	assert.NotContains(t, output, "Commit:")
 	assert.Contains(t, output, "test-job-1")
+	assert.Contains(t, output, "TestHistoryWorkflow")
 }
 
 func TestSlackMessageStructure(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123",
-		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890",
-			ShortSHA: "abc1234",
-			Author:   "Test",
 		},
 		FailedJobs: []github.Job{
 			{Name: "job1", URL: "http://example.com/job1"},
@@ -100,12 +88,39 @@ func TestSlackMessageStructure(t *testing.T) {
 	msg := BuildFailureMessage(report)
 
 	// Verify we have the expected number of blocks
-	// Header, Info, Summary, Jobs List, Link = 5 blocks
-	assert.Len(t, msg.Blocks, 5)
+	// Header, Jobs List, Link = 3 blocks
+	assert.Len(t, msg.Blocks, 3)
 
-	// Verify the info block has 4 fields
-	infoBlock := msg.Blocks[1]
-	assert.Len(t, infoBlock.Fields, 4)
+	require.NotNil(t, msg.Blocks[1].Text)
+	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
+}
+
+func TestBuildFailureMessageLimitsFinalFailedTests(t *testing.T) {
+	report := &FailureReport{
+		Run: github.Run{
+			URL: "https://github.com/temporalio/temporal/actions/runs/123",
+		},
+		FailedJobs: []github.Job{
+			{Name: "job1", URL: "http://example.com/job1"},
+		},
+		FailedTests: []string{
+			"Test01",
+			"Test02",
+			"Test03",
+			"Test04",
+			"Test05",
+			"Test06",
+		},
+		TotalJobs: 3,
+	}
+
+	msg := BuildFailureMessage(report)
+
+	require.Len(t, msg.Blocks, 4)
+	require.NotNil(t, msg.Blocks[1].Text)
+	assert.Contains(t, msg.Blocks[1].Text.Text, "*Final failed tests (6):*")
+	assert.Contains(t, msg.Blocks[1].Text.Text, "Test05")
+	assert.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
 }
 
 func TestFilterCompleted(t *testing.T) {
