@@ -4747,15 +4747,18 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
 		t.Helper()
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.AwaitTrue(
-			func() bool {
+		await.Require(
+			s.Context(),
+			t,
+			func(c *await.T) {
 				var err error
-				resp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
+				resp, err = env.FrontendClient().ListActivityExecutions(c.Context(), &workflowservice.ListActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					PageSize:  pageSize,
 					Query:     query,
 				})
-				return err == nil && len(resp.GetExecutions()) >= 1
+				require.NoError(c, err)
+				require.NotEmpty(c, resp.GetExecutions())
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4763,16 +4766,17 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		require.Len(t, resp.GetExecutions(), 1, "expected exactly 1 result for query: %s", query)
 		exec := resp.GetExecutions()[0]
 		// Verify all ActivityExecutionListInfo fields
-		s.Equal(activityID, exec.GetActivityId())
-		s.Equal(runID, exec.GetRunId())
-		s.Equal(activityType, exec.GetActivityType().GetName())
-		s.Equal(taskQueue, exec.GetTaskQueue())
-		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-		s.NotNil(exec.GetScheduleTime())
-		s.Nil(exec.GetCloseTime())         // Running activity has no close time
-		s.Nil(exec.GetExecutionDuration()) // Running activity has no execution duration
-		s.GreaterOrEqual(exec.GetStateSizeBytes(), int64(0))
-		s.GreaterOrEqual(exec.GetStateTransitionCount(), int64(0))
+		require.Equal(t, activityID, exec.GetActivityId())
+		require.Equal(t, runID, exec.GetRunId())
+		require.Equal(t, activityType, exec.GetActivityType().GetName())
+		require.Equal(t, taskQueue, exec.GetTaskQueue())
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, exec.GetStatus())
+		require.NotNil(t, exec.GetScheduleTime())
+		require.NotNil(t, exec.GetExecutionTime())
+		require.Nil(t, exec.GetCloseTime())         // Running activity has no close time
+		require.Nil(t, exec.GetExecutionDuration()) // Running activity has no execution duration
+		require.GreaterOrEqual(t, exec.GetStateSizeBytes(), int64(0))
+		require.GreaterOrEqual(t, exec.GetStateTransitionCount(), int64(0))
 	}
 
 	t.Run("QueryByActivityId", func(t *testing.T) {
@@ -4793,6 +4797,151 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 	t.Run("QueryByMultipleFields", func(t *testing.T) {
 		verifyListQuery(t, fmt.Sprintf("ActivityId = '%s' AND ActivityType = '%s'", activityID, activityType), 10)
+	})
+
+	// QueryByExecutionTime verifies delayed activities are queryable and countable by dispatch time,
+	// List returns the Describe execution time, and a later boundary excludes the activity.
+	t.Run("QueryByExecutionTime", func(t *testing.T) {
+		delayedID := "execution-time-activity-id"
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          delayedID,
+			ActivityType:        &commonpb.ActivityType{Name: activityType},
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			StartDelay:          durationpb.New(10 * time.Minute),
+			RequestId:           "execution-time-request-id",
+		})
+		require.NoError(t, err)
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: delayedID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, describeResp.GetInfo().GetScheduleTime())
+		require.NotNil(t, describeResp.GetInfo().GetExecutionTime())
+		// Describe and List source schedule time from separate snapshots, so they may differ slightly.
+		scheduleTime := describeResp.GetInfo().GetScheduleTime().AsTime()
+		expectedExecutionTime := describeResp.GetInfo().GetExecutionTime().AsTime()
+
+		// Use the midpoint of the delay so dispatch time matches while creation time does not.
+		inWindow := scheduleTime.Add(5 * time.Minute).Format(time.RFC3339)
+		matchQuery := fmt.Sprintf("ActivityId = '%s' AND ExecutionTime > '%s'", delayedID, inWindow)
+
+		var resp *workflowservice.ListActivityExecutionsResponse
+		await.Require(
+			s.Context(),
+			t,
+			func(c *await.T) {
+				var err error
+				resp, err = env.FrontendClient().ListActivityExecutions(c.Context(), &workflowservice.ListActivityExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					PageSize:  10,
+					Query:     matchQuery,
+				})
+				require.NoError(c, err)
+				require.NotEmpty(c, resp.GetExecutions())
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Len(t, resp.GetExecutions(), 1)
+		exec := resp.GetExecutions()[0]
+		require.Equal(t, delayedID, exec.GetActivityId())
+		require.NotNil(t, exec.GetExecutionTime())
+		require.WithinDuration(t, expectedExecutionTime, exec.GetExecutionTime().AsTime(), time.Millisecond)
+
+		countResp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     matchQuery,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), countResp.GetCount())
+
+		pastWindow := expectedExecutionTime.Add(time.Second).Format(time.RFC3339Nano)
+		noMatch, err := env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  10,
+			Query:     fmt.Sprintf("ActivityId = '%s' AND ExecutionTime > '%s'", delayedID, pastWindow),
+		})
+		require.NoError(t, err)
+		require.Empty(t, noMatch.GetExecutions())
+	})
+
+	// ExecutionTimeTracksStartDelayUpdates verifies that visibility recomputes ExecutionTime when
+	// start delay changes and restores the original indexed value when the options are restored.
+	t.Run("ExecutionTimeTracksStartDelayUpdates", func(t *testing.T) {
+		activityID := "execution-time-update-activity-id"
+		originalDelay := 10 * time.Minute
+		updatedDelay := 2 * time.Minute
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: activityType},
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			StartDelay:          durationpb.New(originalDelay),
+			RequestId:           "execution-time-update-request-id",
+		})
+		require.NoError(t, err)
+
+		listExecution := func(ctx context.Context) (*activitypb.ActivityExecutionListInfo, error) {
+			resp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				PageSize:  10,
+				Query:     fmt.Sprintf("ActivityId = '%s'", activityID),
+			})
+			if err != nil || len(resp.GetExecutions()) != 1 {
+				return nil, err
+			}
+			return resp.GetExecutions()[0], nil
+		}
+
+		var originalExecutionTime time.Time
+		await.Require(s.Context(), t, func(c *await.T) {
+			exec, err := listExecution(c.Context())
+			require.NoError(c, err)
+			require.NotNil(c, exec)
+			require.NotNil(c, exec.GetExecutionTime())
+			originalExecutionTime = exec.GetExecutionTime().AsTime()
+			require.False(c, originalExecutionTime.IsZero())
+		}, testcore.WaitForESToSettle, 100*time.Millisecond)
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.GetRunId(),
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(updatedDelay)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+		await.Require(s.Context(), t, func(c *await.T) {
+			exec, err := listExecution(c.Context())
+			require.NoError(c, err)
+			require.NotNil(c, exec)
+			require.NotNil(c, exec.GetExecutionTime())
+			require.Equal(c, originalExecutionTime.Add(updatedDelay-originalDelay), exec.GetExecutionTime().AsTime())
+		}, testcore.WaitForESToSettle, 100*time.Millisecond)
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.GetRunId(),
+			RestoreOriginal: true,
+		})
+		require.NoError(t, err)
+		await.Require(s.Context(), t, func(c *await.T) {
+			exec, err := listExecution(c.Context())
+			require.NoError(c, err)
+			require.NotNil(c, exec)
+			require.NotNil(c, exec.GetExecutionTime())
+			require.Equal(c, originalExecutionTime, exec.GetExecutionTime().AsTime())
+		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 	})
 
 	t.Run("QueryByCustomSearchAttribute", func(t *testing.T) {
@@ -4818,28 +4967,31 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		require.NoError(t, err)
 
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.AwaitTrue(
-			func() bool {
+		await.Require(
+			s.Context(),
+			t,
+			func(c *await.T) {
 				var err error
-				resp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
+				resp, err = env.FrontendClient().ListActivityExecutions(c.Context(), &workflowservice.ListActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					PageSize:  10,
 					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
 				})
-				return err == nil && len(resp.GetExecutions()) >= 1
+				require.NoError(c, err)
+				require.NotEmpty(c, resp.GetExecutions())
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 		require.Len(t, resp.GetExecutions(), 1)
 		exec := resp.GetExecutions()[0]
-		s.Equal(customSAActivityID, exec.GetActivityId())
-		s.NotNil(exec.GetSearchAttributes())
+		require.Equal(t, customSAActivityID, exec.GetActivityId())
+		require.NotNil(t, exec.GetSearchAttributes())
 		returnedSA := exec.GetSearchAttributes().GetIndexedFields()[customSAName]
-		s.NotNil(returnedSA)
+		require.NotNil(t, returnedSA)
 		var returnedValue string
-		s.NoError(payload.Decode(returnedSA, &returnedValue))
-		s.Equal(customSAValue, returnedValue)
+		require.NoError(t, payload.Decode(returnedSA, &returnedValue))
+		require.Equal(t, customSAValue, returnedValue)
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
@@ -4848,7 +5000,8 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			PageSize:  10,
 			Query:     "invalid query syntax !!!",
 		})
-		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
 	})
 
 	t.Run("InvalidSearchAttribute", func(t *testing.T) {
@@ -4857,7 +5010,8 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			PageSize:  10,
 			Query:     "NonExistentField = 'value'",
 		})
-		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
 	})
 
 	t.Run("NamespaceNotFound", func(t *testing.T) {
@@ -4866,7 +5020,8 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			PageSize:  10,
 			Query:     "",
 		})
-		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
+		var namespaceNotFound *serviceerror.NamespaceNotFound
+		require.ErrorAs(t, err, &namespaceNotFound)
 	})
 
 	t.Run("ZeroPageSizeDefaultsToConfigMax", func(t *testing.T) {
@@ -4900,13 +5055,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		}
 
 		// Wait for both activities to be indexed in Elasticsearch before testing pagination
-		s.AwaitTrue(
-			func() bool {
-				countResp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
+		await.Require(
+			s.Context(),
+			t,
+			func(c *await.T) {
+				countResp, err := env.FrontendClient().CountActivityExecutions(c.Context(), &workflowservice.CountActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
 				})
-				return err == nil && countResp.GetCount() == 2
+				require.NoError(c, err)
+				require.Equal(c, int64(2), countResp.GetCount())
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
