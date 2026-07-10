@@ -61,8 +61,6 @@ init_snapshot_files() {
   : > "$SNAPSHOT_HISTORY_FILE"
 }
 
-init_snapshot_files
-
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <pprof_profile> <output_file>
 # Returns 0 on success, 1 on failure
@@ -205,6 +203,8 @@ snapshot() {
     terminate_monitored_processes "$memory_pct"
   fi
 }
+
+init_snapshot_files
 
 # Take snapshots until killed.
 while true; do
