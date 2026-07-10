@@ -2498,7 +2498,7 @@ func (s *nodeSuite) TestCloseTransaction_CleanupTasksAfterInvalidTask() {
 	s.NotNil(root)
 
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(task1Attributes), gomock.Eq(task1)).
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: task1Attributes}), gomock.Eq(task1)).
 		Return(false, nil).
 		Times(1)
 	executed, err := root.ExecutePureTask(s.T().Context(), task1Attributes, task1)
@@ -3596,9 +3596,9 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 
 	// One valid task, one invalid task
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(false, nil).Times(1)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Execute(
 			gomock.AssignableToTypeOf(&mutableCtx{}),
@@ -3643,7 +3643,7 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	)
 
 	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(true, nil).Times(2)
+		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Any()).Return(true, nil).Times(2)
 
 	var observedTimes []time.Time
 	s.testLibrary.mockPureTaskHandler.EXPECT().
@@ -3887,7 +3887,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 
 	expectValidate := func(retValue bool, errValue error) {
 		s.testLibrary.mockPureTaskHandler.EXPECT().
-			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Eq(pureTask)).
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).
 			Return(retValue, errValue).
 			Times(1)
 	}
@@ -4275,9 +4275,11 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 			Validate(
 				gomock.AssignableToTypeOf((*immutableCtx)(nil)),
 				gomock.AssignableToTypeOf(componentType),
-				gomock.Eq(TaskAttributes{
-					ScheduledTime: chasmTask.GetVisibilityTime(),
-					Destination:   chasmTask.Destination,
+				gomock.Eq(TaskInvocation{
+					TaskAttributes: TaskAttributes{
+						ScheduledTime: chasmTask.GetVisibilityTime(),
+						Destination:   chasmTask.Destination,
+					},
 				}),
 				gomock.AssignableToTypeOf(&TestSideEffectTask{}),
 			).Return(retValue, errValue).Times(1)
@@ -4290,6 +4292,24 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.True(isValidByComponent)
 	s.NoError(err)
 	s.True(chasmTask.DeserializedTask.IsValid())
+
+	// The physical task's attempt is threaded into the validator's TaskInvocation.
+	chasmTask.Attempt = 7
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(
+			gomock.AssignableToTypeOf((*immutableCtx)(nil)),
+			gomock.AssignableToTypeOf((*TestComponent)(nil)),
+			gomock.Any(),
+			gomock.AssignableToTypeOf(&TestSideEffectTask{}),
+		).DoAndReturn(func(_ Context, _ any, inv TaskInvocation, _ *TestSideEffectTask) (bool, error) {
+		s.Equal(7, inv.Attempt)
+		return true, nil
+	}).Times(1)
+	isTaskInTree, isValidByComponent, err = root.ValidateSideEffectTask(ctx, chasmTask)
+	s.True(isTaskInTree)
+	s.True(isValidByComponent)
+	s.NoError(err)
+	chasmTask.Attempt = 0
 
 	// Task is in tree but component says invalid.
 	expectValidate((*TestComponent)(nil), false, nil)
