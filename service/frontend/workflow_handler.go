@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -338,6 +339,7 @@ func NewWorkflowHandler(
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 	validator *workflow.RequestValidator,
+	chasmNsReplClient nsreplpb.NamespaceReplicationServiceClient,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -357,6 +359,7 @@ func NewWorkflowHandler(
 			archiverProvider,
 			timeSource,
 			config,
+			chasmNsReplClient,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,

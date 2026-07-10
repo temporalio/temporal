@@ -244,6 +244,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
+		nil, // CHASM nsrepl client; tests don't exercise the CHASM path
 	)
 }
 

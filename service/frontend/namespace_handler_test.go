@@ -94,6 +94,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockArchiverProvider,
 		s.fakeClock,
 		s.config,
+		nil, // CHASM nsrepl client; tests run with UseCHASMNamespaceReplication off
 	)
 }
 

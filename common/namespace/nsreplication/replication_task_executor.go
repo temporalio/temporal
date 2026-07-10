@@ -43,10 +43,42 @@ var (
 
 // NOTE: the counterpart of namespace replication transmission logic is in service/frontend package
 
+// ApplyOutcome reports what happened when a namespace replication task was
+// applied to the local metadata store. The queue-based path discards this and
+// only looks at the error; the CHASM-based admin RPC path surfaces it on the
+// wire so callers can distinguish "we wrote new state" from "we already had
+// equal-or-newer state" for observability and metrics.
+type ApplyOutcome int
+
+const (
+	// OutcomeUnspecified is the zero value. Returned alongside any non-nil error.
+	OutcomeUnspecified ApplyOutcome = iota
+	// OutcomeApplied means an existing namespace was updated (incoming ConfigVersion
+	// or FailoverVersion was strictly higher than the receiver's current values).
+	OutcomeApplied
+	// OutcomeCreated means the namespace did not exist on this cell and was created.
+	OutcomeCreated
+	// OutcomeNoOpStale means the incoming mutation was not newer than the
+	// receiver's current state and no write was performed. Not a failure.
+	OutcomeNoOpStale
+	// OutcomeDuplicate means CreateNamespace failed because a matching record
+	// already existed (same id and name). The create is treated as success.
+	OutcomeDuplicate
+	// OutcomeNotAdmitted means the admitter rejected the namespace. No write.
+	OutcomeNotAdmitted
+)
+
 type (
-	// TaskExecutor is the interface for executing namespace replication tasks
+	// TaskExecutor is the interface for executing namespace replication tasks.
 	TaskExecutor interface {
+		// Execute applies the task. Returns nil on any success (Applied, Created,
+		// NoOpStale, Duplicate, NotAdmitted) or an error on failure. Used by the
+		// queue-based replication path, which doesn't care about the outcome.
 		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
+
+		// ExecuteWithOutcome is Execute but also reports which outcome occurred.
+		// Used by the CHASM-based admin RPC path to surface the outcome on the wire.
+		ExecuteWithOutcome(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (ApplyOutcome, error)
 	}
 
 	taskExecutorImpl struct {
@@ -78,22 +110,42 @@ func NewTaskExecutor(
 	}
 }
 
-// Execute handles receiving of the namespace replication task
+// Execute handles receiving of the namespace replication task. Used by the
+// queue-based path, which only cares about success vs failure. Outcome details
+// are discarded; callers that want them should use [ExecuteWithOutcome].
 func (h *taskExecutorImpl) Execute(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
+	_, err := h.ExecuteWithOutcome(ctx, task)
+	return err
+}
+
+// ExecuteWithOutcome handles receiving of the namespace replication task and
+// reports the outcome (Applied / Created / NoOpStale / Duplicate / NotAdmitted).
+// Used by the CHASM-based admin RPC path so the wire response can distinguish
+// "we wrote new state" from "we already had equal-or-newer state."
+func (h *taskExecutorImpl) ExecuteWithOutcome(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) (ApplyOutcome, error) {
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
-		return err
+		return OutcomeUnspecified, err
 	}
 	if hook, ok := testhooks.Get(
 		h.testHooks,
 		testhooks.NamespaceReplicationTaskInterceptor,
 		namespace.Name(task.GetInfo().GetName()),
 	); ok {
-		return hook(ctx, task, func() error {
-			return h.executeValidatedTask(ctx, task)
+		// The hook signature is fixed (returns error). Close over outcome so we
+		// can still report it while keeping the hook contract intact.
+		var outcome ApplyOutcome
+		err := hook(ctx, task, func() error {
+			var inner error
+			outcome, inner = h.executeValidatedTask(ctx, task)
+			return inner
 		})
+		return outcome, err
 	}
 	return h.executeValidatedTask(ctx, task)
 }
@@ -101,9 +153,13 @@ func (h *taskExecutorImpl) Execute(
 func (h *taskExecutorImpl) executeValidatedTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
+) (ApplyOutcome, error) {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
-		return err
+		if err != nil {
+			return OutcomeUnspecified, err
+		}
+		// shouldProcess == false && err == nil: admitter rejected the task.
+		return OutcomeNotAdmitted, nil
 	}
 
 	switch task.GetNamespaceOperation() {
@@ -112,7 +168,7 @@ func (h *taskExecutorImpl) executeValidatedTask(
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
 		return h.handleNamespaceUpdateReplicationTask(ctx, task)
 	default:
-		return ErrInvalidNamespaceOperation
+		return OutcomeUnspecified, ErrInvalidNamespaceOperation
 	}
 }
 
@@ -144,11 +200,11 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
+) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
-		return err
+		return OutcomeUnspecified, err
 	}
 
 	request := &persistence.CreateNamespaceRequest{
@@ -182,84 +238,84 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	}
 
 	_, err = h.metadataManager.CreateNamespace(ctx, request)
-	if err != nil {
-		// SQL and Cassandra handle namespace UUID collision differently
-		// here, whenever seeing a error replicating a namespace
-		// do a check if there is a name / UUID collision
-
-		recordExists := true
-		resp, getErr := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-			Name: task.Info.GetName(),
-		})
-		switch getErr.(type) {
-		case nil:
-			if resp.Namespace.Info.Id != task.GetId() {
-				h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
-					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
-					tag.String("Task Namespace Id", task.GetId()),
-					tag.String("Task Namespace Info Id", task.Info.GetId()),
-					tag.Error(err))
-				return ErrNameUUIDCollision
-			}
-		case *serviceerror.NamespaceNotFound:
-			// no check is necessary
-			recordExists = false
-		default:
-			// return the original err
-			h.logger.Error(
-				"namespace replication encountered error during NamespaceCreationReplicationTask",
-				tag.WorkflowNamespace(task.Info.GetName()),
-				tag.WorkflowNamespaceID(task.Info.GetId()),
-				tag.Error(err))
-			return err
-		}
-
-		resp, getErr = h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-			ID: task.GetId(),
-		})
-		switch getErr.(type) {
-		case nil:
-			if resp.Namespace.Info.Name != task.Info.GetName() {
-				h.logger.Error(
-					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
-					tag.WorkflowNamespace(resp.Namespace.Info.Name),
-					tag.String("Task Namespace Name", task.Info.GetName()),
-					tag.Error(err))
-				return ErrNameUUIDCollision
-			}
-		case *serviceerror.NamespaceNotFound:
-			// no check is necessary
-			recordExists = false
-		default:
-			// return the original err
-			return err
-		}
-
-		if recordExists {
-			// name -> id & id -> name check pass, this is duplication request
-			return nil
-		}
-		return err
+	if err == nil {
+		return OutcomeCreated, nil
 	}
 
-	return err
+	// SQL and Cassandra handle namespace UUID collision differently
+	// here, whenever seeing a error replicating a namespace
+	// do a check if there is a name / UUID collision
+
+	recordExists := true
+	resp, getErr := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: task.Info.GetName(),
+	})
+	switch getErr.(type) {
+	case nil:
+		if resp.Namespace.Info.Id != task.GetId() {
+			h.logger.Error("namespace replication encountered UUID collision during NamespaceCreationReplicationTask",
+				tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
+				tag.String("Task Namespace Id", task.GetId()),
+				tag.String("Task Namespace Info Id", task.Info.GetId()),
+				tag.Error(err))
+			return OutcomeUnspecified, ErrNameUUIDCollision
+		}
+	case *serviceerror.NamespaceNotFound:
+		// no check is necessary
+		recordExists = false
+	default:
+		// return the original err
+		h.logger.Error(
+			"namespace replication encountered error during NamespaceCreationReplicationTask",
+			tag.WorkflowNamespace(task.Info.GetName()),
+			tag.WorkflowNamespaceID(task.Info.GetId()),
+			tag.Error(err))
+		return OutcomeUnspecified, err
+	}
+
+	resp, getErr = h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		ID: task.GetId(),
+	})
+	switch getErr.(type) {
+	case nil:
+		if resp.Namespace.Info.Name != task.Info.GetName() {
+			h.logger.Error(
+				"namespace replication encountered name collision during NamespaceCreationReplicationTask",
+				tag.WorkflowNamespace(resp.Namespace.Info.Name),
+				tag.String("Task Namespace Name", task.Info.GetName()),
+				tag.Error(err))
+			return OutcomeUnspecified, ErrNameUUIDCollision
+		}
+	case *serviceerror.NamespaceNotFound:
+		// no check is necessary
+		recordExists = false
+	default:
+		// return the original err
+		return OutcomeUnspecified, err
+	}
+
+	if recordExists {
+		// name -> id & id -> name check pass, this is duplication request
+		return OutcomeDuplicate, nil
+	}
+	return OutcomeUnspecified, err
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
 func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
-) error {
+) (ApplyOutcome, error) {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
-		return err
+		return OutcomeUnspecified, err
 	}
 
 	// first we need to get the current notification version since we need to it for conditional update
 	metadata, err := h.metadataManager.GetMetadata(ctx)
 	if err != nil {
-		return err
+		return OutcomeUnspecified, err
 	}
 	notificationVersion := metadata.NotificationVersion
 
@@ -274,7 +330,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 			// e.g. new cluster which does not have anything
 			return h.handleNamespaceCreationReplicationTask(ctx, task)
 		}
-		return err
+		return OutcomeUnspecified, err
 	}
 
 	recordUpdated := false
@@ -329,10 +385,13 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
-		return nil
+		return OutcomeNoOpStale, nil
 	}
 
-	return h.metadataManager.UpdateNamespace(ctx, request)
+	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
+		return OutcomeUnspecified, err
+	}
+	return OutcomeApplied, nil
 }
 
 func (h *taskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {

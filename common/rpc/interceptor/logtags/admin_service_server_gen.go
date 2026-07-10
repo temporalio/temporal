@@ -21,6 +21,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.AddTasksResponse:
 		return nil
+	case *adminservice.ApplyNamespaceMutationRequest:
+		return nil
+	case *adminservice.ApplyNamespaceMutationResponse:
+		return nil
 	case *adminservice.CancelDLQJobRequest:
 		return nil
 	case *adminservice.CancelDLQJobResponse:

@@ -54,3 +54,18 @@ func (mr *MockTaskExecutorMockRecorder) Execute(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockTaskExecutor)(nil).Execute), ctx, task)
 }
+
+// ExecuteWithOutcome mocks base method.
+func (m *MockTaskExecutor) ExecuteWithOutcome(ctx context.Context, task *repication.NamespaceTaskAttributes) (ApplyOutcome, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteWithOutcome", ctx, task)
+	ret0, _ := ret[0].(ApplyOutcome)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteWithOutcome indicates an expected call of ExecuteWithOutcome.
+func (mr *MockTaskExecutorMockRecorder) ExecuteWithOutcome(ctx, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteWithOutcome", reflect.TypeOf((*MockTaskExecutor)(nil).ExecuteWithOutcome), ctx, task)
+}

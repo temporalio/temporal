@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nsrepl.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1;nsreplpb";
+
+// ApplyLocalTask is dispatched once per component, gates peer fan-out.
+// Validate checks the component is still in the expected state.
+message ApplyLocalTask {}
+
+// ApplyPeerTask is dispatched once per peer cell after ApplyLocalTask completes.
+// One task instance per peer; Validate uses TargetCell to match the right
+// peer_apply status entry on the component.
+message ApplyPeerTask {
+  // Which peer cell this task targets. Must match a key in NamespaceMutationState.peer_apply.
+  string target_cell = 1;
+  // The current attempt number for this peer. Used by Validate to gate stale retries.
+  int32 attempt = 2;
+}

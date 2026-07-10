@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nsrepl"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
@@ -50,6 +51,7 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	chasmscheduler.Module,
 	callback.Module,
+	nsrepl.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,

@@ -49,3 +49,8 @@ history.enableChasm:
   - value: true
 activity.enableStandalone:
   - value: true
+
+# Enable CHASM-based namespace replication transport for E2E POC test
+system.useCHASMNamespaceReplication:
+  - value: true
+    constraints: {}

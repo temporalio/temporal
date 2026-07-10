@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/chasm/lib/nsrepl"
+	nsreplpb "go.temporal.io/server/chasm/lib/nsrepl/gen/nsreplpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -129,11 +131,13 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(nsreplpb.NewNamespaceReplicationServiceLayeredClient),
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	callback.Module,
+	nsrepl.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -910,6 +914,7 @@ func HandlerProvider(
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	chasmNsReplClient nsreplpb.NamespaceReplicationServiceClient,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -955,6 +960,7 @@ func HandlerProvider(
 			saMapperProvider,
 			saValidator,
 		),
+		chasmNsReplClient,
 	)
 	return wfHandler
 }
