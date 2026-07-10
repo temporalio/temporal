@@ -75,6 +75,9 @@ func MergeActivityOptions(mergeInto, mergeFrom *activitypb.ActivityOptions, upda
 	}
 
 	if _, ok := updateFields["retryPolicy"]; ok {
+		if mergeFrom.GetRetryPolicy() == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
 		mergeInto.RetryPolicy = mergeFrom.GetRetryPolicy()
 	}
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -21,6 +22,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -455,6 +457,87 @@ func TestNewStandaloneActivity_UserMetadataDualWrite(t *testing.T) {
 	// Legacy location: ActivityRequestData also carries it so rolled-back code
 	// can still surface user metadata via the old field.
 	require.Same(t, md, activity.RequestData.Get(ctx).GetUserMetadata()) //nolint:staticcheck // exercising legacy field
+}
+
+func TestNewStandaloneActivity_OriginalOptionsUnaffectedBySubfieldUpdate(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:              "ns",
+		ActivityId:             "act",
+		ActivityType:           &commonpb.ActivityType{Name: "T"},
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "original-task-queue"},
+		ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+		ScheduleToStartTimeout: durationpb.New(20 * time.Second),
+		StartToCloseTimeout:    durationpb.New(10 * time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(10 * time.Second),
+			BackoffCoefficient: 2,
+			MaximumInterval:    durationpb.New(100 * time.Second),
+			MaximumAttempts:    5,
+		},
+		Priority: &commonpb.Priority{
+			FairnessKey: "original-fairness-key",
+		},
+	})
+	require.NoError(t, err)
+
+	err = activity.mergeActivityOptions(&workflowservice.UpdateActivityExecutionOptionsRequest{
+		ActivityId: "act",
+		ActivityOptions: &apiactivitypb.ActivityOptions{
+			TaskQueue: &taskqueuepb.TaskQueue{Name: "updated-task-queue"},
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(time.Second),
+			},
+			Priority: &commonpb.Priority{
+				FairnessKey: "updated-fairness-key",
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
+			"task_queue.name",
+			"retry_policy.initial_interval",
+			"priority.fairness_key",
+		}},
+	})
+	require.NoError(t, err)
+
+	originalOptions := activity.GetOriginalOptions()
+	require.Equal(t, "original-task-queue", originalOptions.GetTaskQueue().GetName())
+	require.Equal(t, 10*time.Second, originalOptions.GetRetryPolicy().GetInitialInterval().AsDuration())
+	require.Equal(t, "original-fairness-key", originalOptions.GetPriority().GetFairnessKey())
+}
+
+func TestMergeActivityOptionsRejectsInvalidMergedRetryPolicy(t *testing.T) {
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "T"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "Q"},
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(20 * time.Second),
+			StartToCloseTimeout:    durationpb.New(10 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(10 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumInterval:    durationpb.New(30 * time.Second),
+				MaximumAttempts:    5,
+			},
+		},
+	}
+
+	err := activity.mergeActivityOptions(&workflowservice.UpdateActivityExecutionOptionsRequest{
+		ActivityId: "act",
+		ActivityOptions: &apiactivitypb.ActivityOptions{
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(60 * time.Second),
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+	})
+	require.ErrorContains(t, err, "MaximumInterval cannot be less than InitialInterval")
 }
 
 // TestEffectiveUserMetadata_PrefersFrameworkLocation ensures the helper used by
