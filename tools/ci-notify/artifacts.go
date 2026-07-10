@@ -18,11 +18,14 @@ import (
 
 var trailingFailureSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
+const summaryKindOOM = "OOM"
+
 type testSummary struct {
 	Rows []summaryRow `json:"rows"`
 }
 
 type summaryRow struct {
+	Kind  string `json:"kind"`
 	Name  string `json:"name"`
 	Final bool   `json:"final,omitempty"`
 }
@@ -121,18 +124,29 @@ func failuresFromZipFile(file *zip.File) ([]string, error) {
 	if err := json.Unmarshal(data, &summary); err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
-	return finalFailures(summary.Rows), nil
+	return reportableFailures(summary.Rows), nil
 }
 
-func finalFailures(rows []summaryRow) []string {
+func reportableFailures(rows []summaryRow) []string {
 	var failures []string
 	for _, row := range rows {
-		if !row.Final {
+		if !isReportableFailure(row) {
 			continue
 		}
-		failures = append(failures, normalizeFailureName(row.Name))
+		failures = append(failures, failureName(row))
 	}
 	return failures
+}
+
+func isReportableFailure(row summaryRow) bool {
+	return row.Final || row.Kind == summaryKindOOM
+}
+
+func failureName(row summaryRow) string {
+	if row.Kind == summaryKindOOM {
+		return summaryKindOOM
+	}
+	return normalizeFailureName(row.Name)
 }
 
 func normalizeFailureName(name string) string {

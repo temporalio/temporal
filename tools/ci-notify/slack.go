@@ -45,7 +45,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	var failedJobNames []string
 	for _, job := range report.FailedJobs {
 		failedJobNames = append(failedJobNames,
-			fmt.Sprintf("• <%s|%s>", job.URL, job.Name))
+			fmt.Sprintf("<%s|%s>", job.URL, job.Name))
 	}
 
 	jobsBlock := SlackBlock{
@@ -66,10 +66,10 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 			failures = failures[:maxFailures]
 		}
 
-		var failureLines []string
-		for _, failure := range failures {
-			failureLines = append(failureLines, fmt.Sprintf("• `%s`", failure))
-		}
+			var failureLines []string
+			for _, failure := range failures {
+				failureLines = append(failureLines, fmt.Sprintf("`%s`", failure))
+			}
 		blocks = append(blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
@@ -105,14 +105,14 @@ func FormatMessageForDebug(report *FailureReport) string {
 	if len(report.Failures) > 0 {
 		fmt.Fprintf(&sb, "Failures (%d):\n", len(report.Failures))
 		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
-			fmt.Fprintf(&sb, "  • %s\n", failure)
+			fmt.Fprintf(&sb, "  %s\n", failure)
 		}
 		fmt.Fprintln(&sb)
 	}
 
 	fmt.Fprintf(&sb, "Failed jobs (%d/%d):\n", len(report.FailedJobs), report.TotalJobs)
 	for _, job := range report.FailedJobs {
-		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
+		fmt.Fprintf(&sb, "  %s\n    %s\n", job.Name, job.URL)
 	}
 	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()

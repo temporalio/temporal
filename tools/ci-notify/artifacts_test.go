@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFinalFailures(t *testing.T) {
+func TestReportableFailures(t *testing.T) {
 	rows := []summaryRow{
-		{Name: "TestHistoryWorkflow (retry 1) (final)", Final: true},
-		{Name: "TestRetryFailure (retry 1)"},
+		{Kind: "Failed", Name: "TestHistoryWorkflow (retry 1) (final)", Final: true},
+		{Kind: "Failed", Name: "TestRetryFailure (retry 1)"},
+		{Kind: summaryKindOOM, Name: "OOM prevention"},
 	}
 
-	require.Equal(t, []string{"TestHistoryWorkflow"}, finalFailures(rows))
+	require.Equal(t, []string{"TestHistoryWorkflow", "OOM"}, reportableFailures(rows))
 }
 
 func TestFailuresFromZip(t *testing.T) {
@@ -29,18 +30,22 @@ func TestFailuresFromZip(t *testing.T) {
 	require.NoError(t, err)
 	_, err = summaryFile.Write([]byte(`{
   "rows": [
-	    {
-	      "kind": "Failed",
-	      "name": "TestMatchingWorkflow (final)",
-	      "final": true
-	    }
-	  ]
-	}`))
+    {
+      "kind": "Failed",
+      "name": "TestMatchingWorkflow (final)",
+      "final": true
+    },
+    {
+      "kind": "OOM",
+      "name": "OOM prevention"
+    }
+  ]
+}`))
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	require.NoError(t, file.Close())
 
 	failures, err := failuresFromZip(zipPath)
 	require.NoError(t, err)
-	require.Equal(t, []string{"TestMatchingWorkflow"}, failures)
+	require.Equal(t, []string{"TestMatchingWorkflow", "OOM"}, failures)
 }
