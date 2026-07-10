@@ -191,8 +191,7 @@ func (b *nexusTaskHandlerBase) recordCallOutcome(
 	logCallFailure(b.logger, traceCtx, callErr, failureSource)
 }
 
-// logCallFailure logs a failed outbound Nexus call with the full set of structured call tags.
-// Worker-origin failures and below-minimum-timeout errors are expected, so they are logged at debug level.
+// logCallFailure logs a failed outbound Nexus call.
 func logCallFailure(logger log.Logger, traceCtx invocationTraceContext, callErr error, failureSource string) {
 	if callErr == nil {
 		return
