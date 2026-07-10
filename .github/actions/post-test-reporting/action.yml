@@ -21,7 +21,7 @@ runs:
     - name: Print memory snapshot
       if: always()
       shell: bash
-      run: cat .testoutput/memory/snapshot.txt || true
+      run: cat .testoutput/memory/memory-snapshot.txt || true
 
     - name: Generate crash report
       if: failure()
