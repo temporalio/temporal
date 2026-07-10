@@ -218,9 +218,9 @@ type clusterRequest struct {
 }
 
 // mustBeFresh reports whether the request requires a brand-new cluster that
-// cannot be reused, because it carries custom dynamic config or fx options.
+// cannot be reused.
 func (r clusterRequest) mustBeFresh() bool {
-	return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
