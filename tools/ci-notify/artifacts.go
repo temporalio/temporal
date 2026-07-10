@@ -20,6 +20,7 @@ import (
 
 var finalTestRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingTestSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
+var dataRaceRegex = regexp.MustCompile(`(^|\n)DATA RACE: `)
 
 func getFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
 	artifactRunID, err := artifactRunID(run, runID)
@@ -158,7 +159,7 @@ func isDataRaceFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
 		fields = append(fields, testcase.Failure.Message, testcase.Failure.Type, testcase.Failure.Data)
 	}
 	for _, field := range fields {
-		if strings.Contains(strings.ToLower(field), "data race") {
+		if dataRaceRegex.MatchString(field) {
 			return true
 		}
 	}
