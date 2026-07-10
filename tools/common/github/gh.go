@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -82,6 +83,33 @@ func RunList(ctx context.Context, opts RunListOptions, fields []string, out any)
 	}
 	if err := json.Unmarshal(output, out); err != nil {
 		return fmt.Errorf("failed to parse gh run list response: %w", err)
+	}
+	return nil
+}
+
+// RunDownloadOptions configures `gh run download`.
+type RunDownloadOptions struct {
+	Pattern string
+	Dir     string
+}
+
+// RunDownload executes `gh run download`.
+func RunDownload(ctx context.Context, runID string, opts RunDownloadOptions) error {
+	args := []string{"run", "download", runID}
+	if opts.Pattern != "" {
+		args = append(args, "--pattern", opts.Pattern)
+	}
+	if opts.Dir != "" {
+		args = append(args, "--dir", opts.Dir)
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctxTimeout, "gh", args...)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("gh %s failed: %w", strings.Join(args, " "), err)
 	}
 	return nil
 }

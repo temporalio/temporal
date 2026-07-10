@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // SlackMessage represents a Slack Block Kit message
@@ -40,7 +42,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	}
 
 	// Workflow and commit info
-	commitURL := fmt.Sprintf("https://github.com/temporalio/temporal/commit/%s", report.Commit.SHA)
+	commitURL := github.CommitURL("temporalio/temporal", report.Commit.SHA)
 	infoBlock := SlackBlock{
 		Type: "section",
 		Fields: []SlackText{

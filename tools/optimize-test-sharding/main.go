@@ -9,7 +9,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -127,11 +126,10 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	var downloaded int
 	for _, runID := range runIDs {
 		log.Printf("Downloading artifacts from run %s", runID)
-		cmd := exec.Command("gh", "run", "download", runID,
-			"--pattern", artifactPattern,
-			"--dir", filepath.Join(dir, runID))
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := github.RunDownload(context.Background(), runID, github.RunDownloadOptions{
+			Pattern: artifactPattern,
+			Dir:     filepath.Join(dir, runID),
+		}); err != nil {
 			log.Printf("Skipping run %s: %v", runID, err)
 			continue
 		}

@@ -171,11 +171,10 @@ func parseArtifactName(artifactName string) (runID string, jobID string, matrixN
 // If jobID == "unknown": https://github.com/{repo}/actions/runs/{runID}
 // Otherwise: https://github.com/{repo}/actions/runs/{runID}/job/{jobID}
 func buildGitHubURL(repo, runID, jobID string) string {
-	baseURL := fmt.Sprintf("https://github.com/%s/actions/runs/%s", repo, runID)
 	if jobID != "unknown" && jobID != "" {
-		return fmt.Sprintf("%s/job/%s", baseURL, jobID)
+		return github.JobURL(repo, runID, jobID)
 	}
-	return baseURL
+	return github.RunURL(repo, runID)
 }
 
 // fetchCommitMeta fetches commit title, author, and changed file list for a single commit SHA.
