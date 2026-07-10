@@ -1524,6 +1524,13 @@ second per poller by one physical queue manager`,
 		true,
 		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
+	MatchingEnableChasmTaskQueueUserData = NewTaskQueueBoolSetting(
+		"matching.enableChasmTaskQueueUserData",
+		false,
+		`When true, the task queue's root partition loads and stores user data through the
+CHASM tquserdata component (hosted on history shards) instead of the Astra-backed task_queue_user_data
+table. POC flag for the User Data to CHASM migration; default off.`,
+	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
