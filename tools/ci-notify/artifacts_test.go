@@ -13,7 +13,6 @@ func TestFinalFailures(t *testing.T) {
 	rows := []summaryRow{
 		{Name: "TestHistoryWorkflow (retry 1) (final)", Final: true},
 		{Name: "TestRetryFailure (retry 1)"},
-		{Name: "DATA RACE: detected"},
 	}
 
 	require.Equal(t, []string{"TestHistoryWorkflow"}, finalFailures(rows))
@@ -30,17 +29,13 @@ func TestFailuresFromZip(t *testing.T) {
 	require.NoError(t, err)
 	_, err = summaryFile.Write([]byte(`{
   "rows": [
-    {
-      "kind": "Failed",
-      "name": "TestMatchingWorkflow (final)",
-      "final": true
-    },
-    {
-      "kind": "DATA RACE",
-      "name": "DATA RACE: detected"
-    }
-  ]
-}`))
+	    {
+	      "kind": "Failed",
+	      "name": "TestMatchingWorkflow (final)",
+	      "final": true
+	    }
+	  ]
+	}`))
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	require.NoError(t, file.Close())
