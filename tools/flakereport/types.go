@@ -79,20 +79,6 @@ type WorkflowRun struct {
 	HeadSHA    string    `json:"head_sha"`
 }
 
-// WorkflowArtifact represents a downloadable artifact
-type WorkflowArtifact struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Expired   bool      `json:"expired"`
-}
-
-// ArtifactsResponse represents the GitHub API response for artifacts
-type ArtifactsResponse struct {
-	TotalCount int                `json:"total_count"`
-	Artifacts  []WorkflowArtifact `json:"artifacts"`
-}
-
 // CommitObservation holds aggregated pass/fail data for a single (test, commit) pair.
 type CommitObservation struct {
 	CommitSHA     string

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -14,15 +12,14 @@ import (
 )
 
 const (
-	minFlakyFailures     = 3
-	defaultMaxLinks      = 3
-	defaultLookbackDays  = 7
-	defaultWorkflowID    = 80591745
-	defaultRepository    = "temporalio/temporal"
-	defaultBranch        = "main"
-	defaultConcurrency   = 20
-	slackMaxListItems    = 10
-	slackFailureMaxTests = 5
+	minFlakyFailures    = 3
+	defaultMaxLinks     = 3
+	defaultLookbackDays = 7
+	defaultWorkflowID   = 80591745
+	defaultRepository   = "temporalio/temporal"
+	defaultBranch       = "main"
+	defaultConcurrency  = 20
+	slackMaxListItems   = 10
 )
 
 // NewCliApp instantiates a new instance of the CLI application
@@ -395,73 +392,8 @@ func sendFailureNotification(webhookURL, runID, refName, sha, repo string, err e
 	}
 
 	fmt.Println("Sending failure notification to Slack...")
-	failedFinalTests := fetchFailedFinalTests(context.Background(), repo, runID)
-	message := buildFailureMessage(runID, refName, sha, repo, failedFinalTests)
+	message := buildFailureMessage(runID, refName, sha, repo)
 	if sendErr := message.send(webhookURL); sendErr != nil {
 		fmt.Printf("Warning: Failed to send failure notification: %v\n", sendErr)
 	}
-}
-
-func fetchFailedFinalTests(ctx context.Context, repo, runID string) []string {
-	if runID == "" {
-		return nil
-	}
-
-	parsedRunID, err := strconv.ParseInt(runID, 10, 64)
-	if err != nil {
-		fmt.Printf("Warning: Failed to parse run ID %q for final failure lookup: %v\n", runID, err)
-		return nil
-	}
-
-	tempDir, err := os.MkdirTemp("", "flakereport-failure-*")
-	if err != nil {
-		fmt.Printf("Warning: Failed to create temp directory for final failure lookup: %v\n", err)
-		return nil
-	}
-	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			fmt.Printf("Warning: Failed to remove final failure temp directory: %v\n", err)
-		}
-	}()
-
-	artifacts, err := fetchRunArtifacts(ctx, repo, parsedRunID)
-	if err != nil {
-		fmt.Printf("Warning: Failed to fetch artifacts for final failure lookup: %v\n", err)
-		return nil
-	}
-
-	var failures []TestFailure
-	for i, artifact := range artifacts {
-		result := processArtifactJob(ctx, ArtifactJob{
-			Repo:        repo,
-			RunID:       parsedRunID,
-			Artifact:    artifact,
-			TempDir:     tempDir,
-			RunNumber:   1,
-			TotalRuns:   1,
-			ArtifactNum: i + 1,
-		}, len(artifacts))
-		failures = append(failures, result.Failures...)
-	}
-
-	return failedFinalTestNames(failures)
-}
-
-func failedFinalTestNames(failures []TestFailure) []string {
-	failedFinalTests := make(map[string]bool)
-	for _, failure := range failures {
-		if isFinalRetry(failure.Name) {
-			failedFinalTests[normalizeTestName(failure.Name)] = true
-		}
-	}
-
-	tests := make([]string, 0, len(failedFinalTests))
-	for testName := range failedFinalTests {
-		tests = append(tests, testName)
-	}
-	sort.Strings(tests)
-	if len(tests) > slackFailureMaxTests {
-		tests = tests[:slackFailureMaxTests]
-	}
-	return tests
 }
