@@ -262,8 +262,8 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
 // decision records the read, write, and target gauges with the expected values.
 func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
-	cap := s.capture.StartCapture()
-	defer s.capture.StopCapture(cap)
+	capture := s.capture.StartCapture()
+	defer s.capture.StopCapture(capture)
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NewTarget: 2})
@@ -285,7 +285,7 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 	// setState records the gauges after the ephemeral push, so poll the snapshot
 	// until the decision's values land: Read=4 (dynamic config), Write=Target=2.
 	lastValue := func(name string) (float64, bool) {
-		recs := cap.Snapshot()[name]
+		recs := capture.Snapshot()[name]
 		if len(recs) == 0 {
 			return 0, false
 		}
@@ -300,9 +300,9 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 	read, _ := lastValue(metrics.PartitionScaleRead.Name())
 	write, _ := lastValue(metrics.PartitionScaleWrite.Name())
 	target, _ := lastValue(metrics.PartitionScaleTarget.Name())
-	s.Equal(float64(4), read, "read gauge")
-	s.Equal(float64(2), write, "write gauge")
-	s.Equal(float64(2), target, "target gauge")
+	s.InDelta(float64(4), read, 0.001, "read gauge")
+	s.InDelta(float64(2), write, 0.001, "write gauge")
+	s.InDelta(float64(2), target, 0.001, "target gauge")
 }
 
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
