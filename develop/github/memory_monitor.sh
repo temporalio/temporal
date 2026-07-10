@@ -4,8 +4,8 @@
 #
 # 1. Snapshot status:
 #       Samples memory every SNAPSHOT_INTERVAL_SECONDS and writes every sample
-#       to MEMORY_HISTORY_FILE. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS
-#       and writes the highest-memory snapshot report to MEMORY_SNAPSHOT_FILE.
+#       to SNAPSHOT_HISTORY_FILE. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS
+#       and writes the highest-memory snapshot report to SNAPSHOT_FILE.
 #
 # 2. Profile capture:
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
@@ -30,24 +30,24 @@ if [[ $# -gt 1 ]]; then
   exit 1
 fi
 
-## Snapshot config.
-MEMORY_OUTPUT_DIR="${MEMORY_OUTPUT_DIR:-.testoutput/memory}"
+# Snapshot config.
+SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
 # Sample every second so short OOM ramps still leave history, but print less
 # often to keep CI logs readable.
 SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
-MEMORY_SNAPSHOT_FILE="${1:-${MEMORY_SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/memory-snapshot.txt}}"
-MEMORY_HISTORY_FILE="${MEMORY_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/memory-history.txt}"
+SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}}"
+SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
 
-## Heap profile config.
+# Heap profile config.
 HEAP_PROFILE_INTERVAL_SECONDS="${HEAP_PROFILE_INTERVAL_SECONDS:-30}"
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
 HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
-HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$MEMORY_OUTPUT_DIR/heap-profiles}"
+HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
-## OOM prevention config.
+# OOM prevention config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
 OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
@@ -62,12 +62,12 @@ HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
 ensure_snapshot_dirs() {
-  mkdir -p "$(dirname "$MEMORY_SNAPSHOT_FILE")" "$(dirname "$MEMORY_HISTORY_FILE")"
+  mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
 }
 
 # Clear history on start
 ensure_snapshot_dirs
-: > "$MEMORY_HISTORY_FILE"
+: > "$SNAPSHOT_HISTORY_FILE"
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <pprof_profile> <output_file>
@@ -89,7 +89,7 @@ pprof_top() {
 }
 
 # Print heap profile analysis.
-print_heap() {
+print_heap_profile_summary() {
   local heap_profile_file="$1"
 
   echo "--- Go Heap Profile ---"
@@ -149,12 +149,12 @@ EOF
 
 write_snapshot_report() {
   local memory_pct="$1"
-  local heap_profile_section="$2"
+  local optional_heap_profile_section="$2"
 
-  cat > "$MEMORY_SNAPSHOT_FILE" <<EOF
+  cat > "$SNAPSHOT_FILE" <<EOF
 Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${memory_pct}%)
 
-$(tail -120 "$MEMORY_HISTORY_FILE")
+$(tail -120 "$SNAPSHOT_HISTORY_FILE")
 
 --- Top Processes ---
 $(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
@@ -162,7 +162,7 @@ $(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
 --- Memory Summary ---
 $(free -m)
 
-$heap_profile_section
+$optional_heap_profile_section
 EOF
 }
 
@@ -180,16 +180,16 @@ print_snapshot_status() {
 
 capture_heap_profile() {
   local memory_pct="$1"
-  local heap_profile_path_prefix heap_profile_report
+  local heap_profile_path_prefix heap_profile_summary
 
   heap_profile_path_prefix="$HEAP_PROFILES_DIR/$(date '+%Y%m%d-%H%M%S')-${memory_pct}pct"
   mkdir -p "$(dirname "$heap_profile_path_prefix")"
   fetch_pprof "heap" "${heap_profile_path_prefix}.pb.gz" || true
-  heap_profile_report="$(print_heap "${heap_profile_path_prefix}.pb.gz")"
+  heap_profile_summary="$(print_heap_profile_summary "${heap_profile_path_prefix}.pb.gz")"
 
   cat <<EOF
 
-$heap_profile_report
+$heap_profile_summary
 EOF
 }
 
@@ -212,10 +212,9 @@ snapshot() {
   local now
   now="$(date +%s)"
 
-  # Print status.
   local status_line
   status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$memory_pct" "$memory_used_mb" "$top_processes")"
-  echo "$status_line" >> "$MEMORY_HISTORY_FILE"
+  echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
   print_snapshot_status "$now" "$status_line"
 
   should_terminate_process_group=false
@@ -223,13 +222,11 @@ snapshot() {
     should_terminate_process_group=true
   fi
 
-  if [[ "$should_terminate_process_group" == "true" && "$HAS_CAPTURED_HEAP_PROFILE" == "true" ]]; then
-    :
-  elif should_capture_heap_profile "$memory_pct" "$now"; then
+  if [[ "$should_terminate_process_group" == "true" && "$HAS_CAPTURED_HEAP_PROFILE" == "false" ]]; then
     LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
     heap_profile_section="$(capture_heap_profile "$memory_pct")"
     HAS_CAPTURED_HEAP_PROFILE=true
-  elif [[ "$should_terminate_process_group" == "true" ]]; then
+  elif [[ "$should_terminate_process_group" == "false" ]] && should_capture_heap_profile "$memory_pct" "$now"; then
     LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
     heap_profile_section="$(capture_heap_profile "$memory_pct")"
     HAS_CAPTURED_HEAP_PROFILE=true
