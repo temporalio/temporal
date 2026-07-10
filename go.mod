@@ -18,6 +18,7 @@ require (
 	github.com/aws/smithy-go v1.25.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
+	github.com/caio/go-tdigest/v5 v5.0.0
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.19.0
@@ -64,7 +65,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	go.temporal.io/api v1.63.2
+	go.temporal.io/api v1.63.3
 	go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0
@@ -72,11 +73,11 @@ require (
 	go.uber.org/mock v0.6.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
-	golang.org/x/mod v0.35.0
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976
+	golang.org/x/mod v0.37.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.20.0
-	golang.org/x/text v0.37.0
+	golang.org/x/sync v0.22.0
+	golang.org/x/text v0.40.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.276.0
 	google.golang.org/grpc v1.80.0
@@ -87,6 +88,7 @@ require (
 )
 
 require (
+	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/go-openapi/swag/cmdutils v0.26.0 // indirect
@@ -102,6 +104,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
+	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
 )
 
 require (
@@ -210,10 +213,10 @@ require (
 	go.uber.org/dig v1.19.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 	google.golang.org/genproto v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
@@ -233,3 +236,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+tool golang.org/x/perf/cmd/benchstat
