@@ -407,7 +407,7 @@ func selectTopFlakyTests(allRuns []TestRun, cfg BisectConfig) []string {
 
 // runBisectAnalysis is the top-level bisect orchestrator called from the generate command.
 // It runs bisect for the top-N flakiest tests and returns their reports.
-func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, workflowRuns []github.WorkflowRun) ([]TestBisectReport, error) {
+func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun, workflowRuns []github.Run) ([]TestBisectReport, error) {
 	// Build runID → SHA map from workflow runs
 	runToSHA := make(map[int64]string, len(workflowRuns))
 	var oldestSHA string
@@ -416,7 +416,7 @@ func runBisectAnalysis(ctx context.Context, cfg BisectConfig, allRuns []TestRun,
 		if wr.HeadSHA == "" {
 			continue
 		}
-		runToSHA[wr.ID] = wr.HeadSHA
+		runToSHA[wr.DatabaseID] = wr.HeadSHA
 		if oldestTime.IsZero() || wr.CreatedAt.Before(oldestTime) {
 			oldestTime = wr.CreatedAt
 			oldestSHA = wr.HeadSHA

@@ -143,19 +143,15 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	return dir, nil
 }
 
-type ghRun struct {
-	DatabaseID int `json:"databaseId"`
-}
-
 func findLatestRuns(workflow, branch, event string, limit int) ([]string, error) {
-	var runs []ghRun
-	if err := github.RunList(context.Background(), github.RunListOptions{
+	runs, err := github.ListRuns(context.Background(), github.RunListOptions{
 		Workflow: workflow,
 		Event:    event,
 		Branch:   branch,
 		Status:   "success",
 		Limit:    limit,
-	}, []string{"databaseId"}, &runs); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("gh run list: %w", err)
 	}
 	if len(runs) == 0 {
@@ -164,7 +160,7 @@ func findLatestRuns(workflow, branch, event string, limit int) ([]string, error)
 
 	ids := make([]string, len(runs))
 	for i, r := range runs {
-		ids[i] = strconv.Itoa(r.DatabaseID)
+		ids[i] = strconv.FormatInt(r.DatabaseID, 10)
 	}
 	return ids, nil
 }

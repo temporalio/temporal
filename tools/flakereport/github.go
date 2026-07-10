@@ -15,19 +15,21 @@ import (
 
 // fetchWorkflowRuns retrieves all completed workflow runs within a date range.
 // since is the oldest bound (inclusive); until is the newest bound (zero means open-ended).
-// Implements proper pagination to fix the 100-run limit bug.
-func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.WorkflowRun, error) {
-	var allRuns []github.WorkflowRun
-
+func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.Run, error) {
 	createdFilter := ">=" + since.Format("2006-01-02")
 	if !until.IsZero() {
 		createdFilter = since.Format("2006-01-02") + ".." + until.Format("2006-01-02")
 	}
 	fmt.Printf("Fetching workflow runs created %s...\n", createdFilter)
 
-	allRuns, err := github.ListWorkflowRuns(ctx, repo, workflowID, github.ListWorkflowRunsOptions{
-		Branch:  branch,
-		Created: createdFilter,
+	allRuns, err := github.ListRuns(ctx, github.RunListOptions{
+		Repo:     repo,
+		Branch:   branch,
+		Workflow: fmt.Sprintf("%d", workflowID),
+		Status:   "completed",
+		Created:  createdFilter,
+		Limit:    1000,
+		All:      true,
 	})
 	if err != nil {
 		return nil, err

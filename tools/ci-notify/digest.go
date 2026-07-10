@@ -10,11 +10,11 @@ import (
 )
 
 // filterCompleted removes workflow runs that are not completed
-func filterCompleted(runs []WorkflowRunSummary) []WorkflowRunSummary {
-	var completed []WorkflowRunSummary
+func filterCompleted(runs []github.Run) []github.Run {
+	var completed []github.Run
 	for _, run := range runs {
 		// Only include runs with a conclusion (success or failure)
-		if run.Conclusion == ConclusionSuccess || run.Conclusion == ConclusionFailure {
+		if run.Conclusion == github.ConclusionSuccess || run.Conclusion == github.ConclusionFailure {
 			completed = append(completed, run)
 		}
 	}
@@ -76,30 +76,20 @@ func calculatePercentUnder(durations []time.Duration, threshold time.Duration) f
 }
 
 // getWorkflowRuns fetches workflow runs for a branch within a time range.
-func getWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRunSummary, error) {
+func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Format the date as YYYY-MM-DD for gh CLI
 	sinceDate := since.Format("2006-01-02")
 
-	var runs []WorkflowRunSummary
-	if err := github.RunList(ctx, github.RunListOptions{
+	runs, err := github.ListRuns(ctx, github.RunListOptions{
 		Branch:   branch,
 		Workflow: workflowName,
 		Created:  ">=" + sinceDate,
 		Limit:    1000,
-	}, []string{
-		"conclusion",
-		"name",
-		"event",
-		"createdAt",
-		"startedAt",
-		"updatedAt",
-		"headSha",
-		"displayTitle",
-		"url",
-	}, &runs); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow runs: %w", err)
 	}
 
@@ -134,7 +124,7 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 
 	for _, run := range completedRuns {
 		switch run.Conclusion {
-		case ConclusionSuccess:
+		case github.ConclusionSuccess:
 			successCount++
 		default:
 			failureCount++

@@ -9,22 +9,12 @@ import (
 )
 
 // getWorkflowRun fetches workflow run details for failure notifications.
-func getWorkflowRun(runID string) (*WorkflowRun, error) {
+func getWorkflowRun(runID string) (*github.Run, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var run WorkflowRun
-	if err := github.RunView(ctx, runID, []string{
-		"conclusion",
-		"name",
-		"headBranch",
-		"headSha",
-		"url",
-		"displayTitle",
-		"event",
-		"createdAt",
-		"jobs",
-	}, &run); err != nil {
+	run, err := github.ViewRun(ctx, runID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow run: %w", err)
 	}
 
@@ -60,9 +50,9 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 	}
 
 	// Identify failed jobs
-	var failedJobs []Job
+	var failedJobs []github.Job
 	for _, job := range run.Jobs {
-		if job.Conclusion == ConclusionFailure {
+		if job.Conclusion == github.ConclusionFailure {
 			failedJobs = append(failedJobs, job)
 		}
 	}

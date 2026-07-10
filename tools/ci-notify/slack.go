@@ -227,7 +227,7 @@ func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
 		for _, run := range slowestRuns {
 			slowest = append(slowest, fmt.Sprintf("• <%s|%s> — %s (%s)",
 				run.URL,
-				run.shortSHA(),
+				shortSHA(run),
 				formatDuration(run.Duration),
 				run.Conclusion,
 			))
@@ -274,7 +274,7 @@ func FormatReportForDebug(report *DigestReport) string {
 			fmt.Fprintf(&sb, "  %s (%s): %s\n    %s\n",
 				formatDuration(run.Duration),
 				run.Conclusion,
-				run.shortSHA(),
+				shortSHA(run),
 				run.URL,
 			)
 		}

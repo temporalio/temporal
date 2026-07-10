@@ -6,11 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/github"
 )
 
 func TestBuildFailureMessage(t *testing.T) {
 	report := &FailureReport{
-		Workflow: WorkflowRun{
+		Workflow: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
@@ -23,7 +24,7 @@ func TestBuildFailureMessage(t *testing.T) {
 			Author:   "Test Author",
 			Message:  "Test commit message",
 		},
-		FailedJobs: []Job{
+		FailedJobs: []github.Job{
 			{
 				Name:       "test-job-1",
 				Conclusion: "failure",
@@ -51,7 +52,7 @@ func TestBuildFailureMessage(t *testing.T) {
 
 func TestFormatMessageForDebug(t *testing.T) {
 	report := &FailureReport{
-		Workflow: WorkflowRun{
+		Workflow: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
@@ -62,7 +63,7 @@ func TestFormatMessageForDebug(t *testing.T) {
 			ShortSHA: "abc1234",
 			Author:   "Test Author",
 		},
-		FailedJobs: []Job{
+		FailedJobs: []github.Job{
 			{Name: "test-job-1", Conclusion: "failure"},
 		},
 		TotalJobs: 5,
@@ -114,7 +115,7 @@ func TestShortSHA(t *testing.T) {
 
 func TestSlackMessageStructure(t *testing.T) {
 	report := &FailureReport{
-		Workflow: WorkflowRun{
+		Workflow: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890",
@@ -125,7 +126,7 @@ func TestSlackMessageStructure(t *testing.T) {
 			ShortSHA: "abc1234",
 			Author:   "Test",
 		},
-		FailedJobs: []Job{
+		FailedJobs: []github.Job{
 			{Name: "job1", URL: "http://example.com/job1"},
 		},
 		TotalJobs: 3,
@@ -145,17 +146,17 @@ func TestSlackMessageStructure(t *testing.T) {
 func TestFilterCompleted(t *testing.T) {
 	tests := []struct {
 		name     string
-		runs     []WorkflowRunSummary
+		runs     []github.Run
 		expected int
 	}{
 		{
 			name:     "empty slice",
-			runs:     []WorkflowRunSummary{},
+			runs:     []github.Run{},
 			expected: 0,
 		},
 		{
 			name: "all completed",
-			runs: []WorkflowRunSummary{
+			runs: []github.Run{
 				{Conclusion: "success"},
 				{Conclusion: "failure"},
 			},
@@ -163,7 +164,7 @@ func TestFilterCompleted(t *testing.T) {
 		},
 		{
 			name: "mixed with in-progress",
-			runs: []WorkflowRunSummary{
+			runs: []github.Run{
 				{Conclusion: "success"},
 				{Conclusion: ""}, // in-progress
 				{Conclusion: "failure"},
@@ -172,7 +173,7 @@ func TestFilterCompleted(t *testing.T) {
 		},
 		{
 			name: "with cancelled and skipped",
-			runs: []WorkflowRunSummary{
+			runs: []github.Run{
 				{Conclusion: "success"},
 				{Conclusion: "cancelled"},
 				{Conclusion: "skipped"},
@@ -182,7 +183,7 @@ func TestFilterCompleted(t *testing.T) {
 		},
 		{
 			name: "only in-progress",
-			runs: []WorkflowRunSummary{
+			runs: []github.Run{
 				{Conclusion: ""},
 				{Conclusion: ""},
 			},
@@ -200,7 +201,7 @@ func TestFilterCompleted(t *testing.T) {
 
 func TestSlowestRuns(t *testing.T) {
 	report := &DigestReport{
-		Runs: []WorkflowRunSummary{
+		Runs: []github.Run{
 			{DisplayTitle: "medium", Duration: 20 * time.Minute},
 			{DisplayTitle: "ignored", Duration: 0},
 			{DisplayTitle: "slowest", Duration: 45 * time.Minute},
