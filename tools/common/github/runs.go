@@ -38,6 +38,21 @@ type Run struct {
 	Jobs               []Job         `json:"jobs"`
 }
 
+type workflowRunResponse struct {
+	ID         int64      `json:"id"`
+	Number     int        `json:"run_number"`
+	Name       string     `json:"name"`
+	Status     string     `json:"status"`
+	Conclusion Conclusion `json:"conclusion"`
+	HeadBranch string     `json:"head_branch"`
+	HeadSHA    string     `json:"head_sha"`
+	URL        string     `json:"html_url"`
+	Event      string     `json:"event"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	WorkflowID int64      `json:"workflow_id"`
+}
+
 // Job represents a single job in a GitHub Actions workflow run returned by the gh CLI.
 type Job struct {
 	Name        string     `json:"name"`
@@ -104,6 +119,14 @@ type RunListOptions struct {
 	All      bool
 }
 
+// WorkflowRunListOptions configures paginated workflow-run listing.
+type WorkflowRunListOptions struct {
+	Repo       string
+	WorkflowID int64
+	Branch     string
+	Created    string
+}
+
 // ListRuns retrieves workflow runs through the gh CLI.
 func ListRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
 	fields := []string{
@@ -128,6 +151,62 @@ func ListRuns(ctx context.Context, opts RunListOptions) ([]Run, error) {
 		return nil, fmt.Errorf("failed to list workflow runs: %w", err)
 	}
 	return runs, nil
+}
+
+// ListWorkflowRuns retrieves all workflow runs for a workflow through the gh CLI.
+func ListWorkflowRuns(ctx context.Context, opts WorkflowRunListOptions) ([]Run, error) {
+	var allRuns []Run
+
+	page := 1
+	for {
+		var response struct {
+			WorkflowRuns []workflowRunResponse `json:"workflow_runs"`
+		}
+		path := fmt.Sprintf(
+			"/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
+			opts.Repo,
+			opts.WorkflowID,
+			opts.Branch,
+			opts.Created,
+			page,
+		)
+		if err := getJSON(ctx, path, &response); err != nil {
+			return nil, fmt.Errorf("failed to fetch workflow runs page %d: %w", page, err)
+		}
+
+		if len(response.WorkflowRuns) == 0 {
+			break
+		}
+
+		for _, run := range response.WorkflowRuns {
+			allRuns = append(allRuns, run.toRun())
+		}
+		if len(response.WorkflowRuns) < 100 {
+			break
+		}
+
+		page++
+	}
+
+	return allRuns, nil
+}
+
+func (r workflowRunResponse) toRun() Run {
+	return Run{
+		DatabaseID:         r.ID,
+		Number:             r.Number,
+		Name:               r.Name,
+		WorkflowName:       r.Name,
+		WorkflowDatabaseID: r.WorkflowID,
+		Status:             r.Status,
+		Conclusion:         r.Conclusion,
+		HeadBranch:         r.HeadBranch,
+		HeadSHA:            r.HeadSHA,
+		URL:                r.URL,
+		Event:              r.Event,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
+	}
 }
 
 func runListArgs(opts RunListOptions) []string {
