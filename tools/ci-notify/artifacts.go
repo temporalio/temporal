@@ -21,7 +21,7 @@ import (
 var finalTestRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingTestSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
-func getFinalFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
+func getFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
 	artifactRunID, err := artifactRunID(run, runID)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func getFinalFailures(ctx context.Context, run github.Run, runID string) ([]stri
 			continue
 		}
 
-		artifactFailures, err := finalFailuresFromZip(zipPath)
+		artifactFailures, err := failuresFromZip(zipPath)
 		if err != nil {
 			continue
 		}
@@ -77,7 +77,7 @@ func isJUnitArtifact(name string) bool {
 	return strings.Contains(strings.ToLower(name), "junit")
 }
 
-func finalFailuresFromZip(zipPath string) ([]string, error) {
+func failuresFromZip(zipPath string) ([]string, error) {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open artifact zip %s: %w", zipPath, err)
@@ -90,7 +90,7 @@ func finalFailuresFromZip(zipPath string) ([]string, error) {
 			continue
 		}
 
-		fileFailures, err := finalFailuresFromZipFile(file)
+		fileFailures, err := failuresFromZipFile(file)
 		if err != nil {
 			continue
 		}
@@ -99,7 +99,7 @@ func finalFailuresFromZip(zipPath string) ([]string, error) {
 	return failures, nil
 }
 
-func finalFailuresFromZipFile(file *zip.File) ([]string, error) {
+func failuresFromZipFile(file *zip.File) ([]string, error) {
 	rc, err := file.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s in artifact zip: %w", file.Name, err)
@@ -115,7 +115,7 @@ func finalFailuresFromZipFile(file *zip.File) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
-	return finalFailures(suites), nil
+	return failures(suites), nil
 }
 
 func parseJUnit(data []byte) (*junit.Testsuites, error) {
@@ -131,17 +131,38 @@ func parseJUnit(data []byte) (*junit.Testsuites, error) {
 	return &junit.Testsuites{Suites: []junit.Testsuite{suite}}, nil
 }
 
-func finalFailures(suites *junit.Testsuites) []string {
+func failures(suites *junit.Testsuites) []string {
 	var failures []string
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
-			if testcase.Failure == nil || testcase.Skipped != nil || !finalTestRegex.MatchString(testcase.Name) {
+			if testcase.Failure == nil || testcase.Skipped != nil || !isReportableFailure(suite, testcase) {
 				continue
 			}
 			failures = append(failures, normalizeTestName(testcase.Name))
 		}
 	}
 	return failures
+}
+
+func isReportableFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
+	return finalTestRegex.MatchString(testcase.Name) || isDataRaceFailure(suite, testcase)
+}
+
+func isDataRaceFailure(suite junit.Testsuite, testcase junit.Testcase) bool {
+	fields := []string{
+		suite.Name,
+		testcase.Name,
+		testcase.Classname,
+	}
+	if testcase.Failure != nil {
+		fields = append(fields, testcase.Failure.Message, testcase.Failure.Type, testcase.Failure.Data)
+	}
+	for _, field := range fields {
+		if strings.Contains(strings.ToLower(field), "data race") {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeTestName(name string) string {

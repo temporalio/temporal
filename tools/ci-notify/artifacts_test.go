@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFinalFailures(t *testing.T) {
+func TestFailures(t *testing.T) {
 	suites, err := parseJUnit([]byte(`<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
   <testsuite name="suite">
@@ -22,10 +22,15 @@ func TestFinalFailures(t *testing.T) {
     </testcase>
     <testcase classname="history" name="TestPassedFinal (final)"/>
   </testsuite>
+  <testsuite name="DATA RACE">
+    <testcase classname="race" name="DATA RACE: detected">
+      <failure message="WARNING: DATA RACE">race details</failure>
+    </testcase>
+  </testsuite>
 </testsuites>`))
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"TestHistoryWorkflow"}, finalFailures(suites))
+	require.Equal(t, []string{"TestHistoryWorkflow", "DATA RACE: detected"}, failures(suites))
 }
 
 func TestParseJUnitSingleTestsuite(t *testing.T) {
@@ -37,5 +42,5 @@ func TestParseJUnitSingleTestsuite(t *testing.T) {
 </testsuite>`))
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"TestMatchingWorkflow"}, finalFailures(suites))
+	require.Equal(t, []string{"TestMatchingWorkflow"}, failures(suites))
 }

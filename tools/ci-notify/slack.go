@@ -74,7 +74,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Final failures (%d):*\n%s",
+				Text: fmt.Sprintf("*Failures (%d):*\n%s",
 					len(report.Failures),
 					strings.Join(failureLines, "\n")),
 			},
@@ -103,7 +103,7 @@ func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
 	if len(report.Failures) > 0 {
-		fmt.Fprintf(&sb, "Final failures (%d):\n", len(report.Failures))
+		fmt.Fprintf(&sb, "Failures (%d):\n", len(report.Failures))
 		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
 			fmt.Fprintf(&sb, "  • %s\n", failure)
 		}

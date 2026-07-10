@@ -118,7 +118,7 @@ func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 
 	require.Len(t, msg.Blocks, 4)
 	require.NotNil(t, msg.Blocks[1].Text)
-	assert.Contains(t, msg.Blocks[1].Text.Text, "*Final failures (6):*")
+	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failures (6):*")
 	assert.Contains(t, msg.Blocks[1].Text.Text, "Test05")
 	assert.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
 }
