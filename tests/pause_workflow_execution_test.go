@@ -346,7 +346,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
-  3 WorkflowTaskFailed {"Cause":40,"ScheduledEventId":2,"Identity":"history-service"}
+  3 WorkflowTaskFailed {"Cause":39,"ScheduledEventId":2,"Identity":"history-service"}
   4 WorkflowExecutionPaused
   5 WorkflowExecutionUnpaused
   6 WorkflowTaskScheduled`, events)
