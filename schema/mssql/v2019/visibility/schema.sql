@@ -51,7 +51,7 @@ CREATE TABLE executions_visibility (
   -- T-SQL cannot index an inline expression, so the visibility query converter
   -- and every index below reference THIS COLUMN by name instead of inlining the
   -- COALESCE expression the way the MySQL/PostgreSQL schemas do.
-  coalesce_close_time AS ISNULL(close_time, CAST('9999-12-31 23:59:59' AS DATETIME2(6))) PERSISTED,
+  coalesce_close_time AS ISNULL(close_time, CONVERT(DATETIME2(6), '9999-12-31T23:59:59', 126)) PERSISTED,
 
   -- Each search attribute has its own computed column.
   -- Scalar attributes are PERSISTED so regular B-tree indexes can be built on
@@ -226,8 +226,9 @@ CREATE INDEX by_temporal_low_cardinality_keyword_01 ON executions_visibility (na
 -- index on row_key is the KEY INDEX required by CREATE FULLTEXT INDEX.
 CREATE UNIQUE INDEX by_row_key ON executions_visibility (row_key);
 
--- The IF NOT EXISTS guards make setup-schema --overwrite re-runs work: the
--- catalog is a database-scoped object that survives DropAllTables.
-IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = 'temporal_visibility_fts') CREATE FULLTEXT CATALOG temporal_visibility_fts AS DEFAULT;
+-- NOTE: plain CREATE (no IF guards) — Temporal's schema splitter parses IF as
+-- a PL/pgSQL block needing END IF, so T-SQL IF guards break it. To re-apply,
+-- drop and recreate the database rather than setup-schema --overwrite.
+CREATE FULLTEXT CATALOG temporal_visibility_fts AS DEFAULT;
 
-IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('executions_visibility')) CREATE FULLTEXT INDEX ON executions_visibility (Text01, Text02, Text03) KEY INDEX by_row_key ON temporal_visibility_fts;
+CREATE FULLTEXT INDEX ON executions_visibility (Text01, Text02, Text03) KEY INDEX by_row_key ON temporal_visibility_fts;
