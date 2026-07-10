@@ -389,7 +389,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
-		namespaceID,
+		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
 	)
@@ -542,6 +542,7 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 
 	if err := validateUpdateActivityExecutionOptionsRequest(
 		req,
+		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),
 	); err != nil {
 		return nil, err
