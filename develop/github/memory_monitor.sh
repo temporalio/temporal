@@ -98,13 +98,6 @@ print_heap() {
   fi
 }
 
-save_pprof_files() {
-  local prefix="$1"
-
-  mkdir -p "$(dirname "$prefix")"
-  fetch_pprof "heap" "${prefix}.heap.pb.gz" || true
-}
-
 should_capture_profile() {
   local pct="$1"
   local now="$2"
@@ -183,7 +176,8 @@ capture_profile() {
   local pprof_output profile_prefix
 
   profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
-  save_pprof_files "$profile_prefix"
+  mkdir -p "$(dirname "$profile_prefix")"
+  fetch_pprof "heap" "${profile_prefix}.heap.pb.gz" || true
   pprof_output="$(print_heap "${profile_prefix}.heap.pb.gz")"
 
   cat <<EOF
