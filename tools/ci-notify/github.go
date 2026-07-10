@@ -2,12 +2,11 @@ package cinotify
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"slices"
-	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // GetWorkflowRun fetches workflow run details using gh CLI
@@ -15,20 +14,19 @@ func GetWorkflowRun(runID string) (*WorkflowRun, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gh", "run", "view", runID, "--json",
-		"conclusion,name,headBranch,headSha,url,displayTitle,event,createdAt,jobs")
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("failed to get workflow run: %w (stderr: %s)", err, string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("failed to get workflow run: %w", err)
-	}
-
 	var run WorkflowRun
-	if err := json.Unmarshal(output, &run); err != nil {
-		return nil, fmt.Errorf("failed to parse workflow run: %w", err)
+	if err := github.RunView(ctx, runID, []string{
+		"conclusion",
+		"name",
+		"headBranch",
+		"headSha",
+		"url",
+		"displayTitle",
+		"event",
+		"createdAt",
+		"jobs",
+	}, &run); err != nil {
+		return nil, fmt.Errorf("failed to get workflow run: %w", err)
 	}
 
 	return &run, nil
@@ -39,16 +37,12 @@ func GetCommitAuthor(sha string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gh", "api",
-		fmt.Sprintf("repos/temporalio/temporal/commits/%s", sha),
-		"--jq", ".commit.author.name")
-
-	output, err := cmd.Output()
+	commit, err := github.GetCommit(ctx, "temporalio/temporal", sha)
 	if err != nil {
 		return "", fmt.Errorf("failed to get commit author: %w", err)
 	}
 
-	return strings.TrimSpace(string(output)), nil
+	return commit.Author, nil
 }
 
 // BuildFailureReport aggregates all failure information
@@ -166,24 +160,24 @@ func GetWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRu
 	// Format the date as YYYY-MM-DD for gh CLI
 	sinceDate := since.Format("2006-01-02")
 
-	cmd := exec.CommandContext(ctx, "gh", "run", "list",
-		"--branch", branch,
-		"--workflow", workflowName,
-		"--created", ">="+sinceDate,
-		"--limit", "1000",
-		"--json", "conclusion,name,event,createdAt,startedAt,updatedAt,headSha,displayTitle,url")
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("failed to get workflow runs: %w (stderr: %s)", err, string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("failed to get workflow runs: %w", err)
-	}
-
 	var runs []WorkflowRunSummary
-	if err := json.Unmarshal(output, &runs); err != nil {
-		return nil, fmt.Errorf("failed to parse workflow runs: %w", err)
+	if err := github.RunList(ctx, github.RunListOptions{
+		Branch:   branch,
+		Workflow: workflowName,
+		Created:  ">=" + sinceDate,
+		Limit:    1000,
+	}, []string{
+		"conclusion",
+		"name",
+		"event",
+		"createdAt",
+		"startedAt",
+		"updatedAt",
+		"headSha",
+		"displayTitle",
+		"url",
+	}, &runs); err != nil {
+		return nil, fmt.Errorf("failed to get workflow runs: %w", err)
 	}
 
 	// Calculate duration for each run (actual execution time, not including queue time)

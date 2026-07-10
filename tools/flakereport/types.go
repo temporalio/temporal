@@ -1,6 +1,10 @@
 package flakereport
 
-import "time"
+import (
+	"time"
+
+	"go.temporal.io/server/tools/common/github"
+)
 
 // TestFailure represents a single test failure extracted from JUnit XML
 type TestFailure struct {
@@ -114,13 +118,7 @@ type TestBisectReport struct {
 
 // CommitMeta holds changed-file info fetched from the GitHub API.
 // GET /repos/{owner}/{repo}/commits/{sha}
-type CommitMeta struct {
-	SHA         string
-	Title       string
-	Author      string
-	CommittedAt time.Time
-	Files       []string // relative paths of changed files
-}
+type CommitMeta = github.Commit
 
 // BisectConfig holds configuration for a bisect analysis run.
 type BisectConfig struct {

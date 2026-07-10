@@ -1,7 +1,7 @@
 package optimizetestsharding
 
 import (
-	"encoding/json"
+	"context"
 	"encoding/xml"
 	"errors"
 	"flag"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/github"
 )
 
 const (
@@ -149,21 +150,15 @@ type ghRun struct {
 }
 
 func findLatestRuns(workflow, branch, event string, limit int) ([]string, error) {
-	cmd := exec.Command("gh", "run", "list",
-		"--workflow="+workflow,
-		"--event="+event,
-		"--branch="+branch,
-		"--status=success",
-		"--limit="+strconv.Itoa(limit),
-		"--json=databaseId")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("gh run list: %w", err)
-	}
-
 	var runs []ghRun
-	if err := json.Unmarshal(out, &runs); err != nil {
-		return nil, fmt.Errorf("parsing gh output: %w", err)
+	if err := github.RunList(context.Background(), github.RunListOptions{
+		Workflow: workflow,
+		Event:    event,
+		Branch:   branch,
+		Status:   "success",
+		Limit:    limit,
+	}, []string{"databaseId"}, &runs); err != nil {
+		return nil, fmt.Errorf("gh run list: %w", err)
 	}
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("no successful runs found for workflow %s on %s/%s", workflow, branch, event)

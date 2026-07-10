@@ -3,11 +3,9 @@ package flakereport
 import (
 	"archive/zip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,29 +27,13 @@ func fetchWorkflowRuns(ctx context.Context, repo string, workflowID int64, branc
 
 	page := 1
 	for {
-		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-
-		cmd := exec.CommandContext(ctxTimeout, "gh", "api",
-			fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
-				repo, workflowID, branch, createdFilter, page),
-		)
-
-		output, err := cmd.Output()
-		cancel() // Cancel context immediately after command completes
-
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				return nil, fmt.Errorf("gh api failed (page %d): %w\nstderr: %s", page, err, string(exitErr.Stderr))
-			}
-			return nil, fmt.Errorf("failed to execute gh command (page %d): %w", page, err)
-		}
-
 		var response struct {
 			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
 		}
-
-		if err := json.Unmarshal(output, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse workflow runs response (page %d): %w", page, err)
+		path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=%s&created=%s&per_page=100&page=%d",
+			repo, workflowID, branch, createdFilter, page)
+		if err := github.API(ctx, path, &response); err != nil {
+			return nil, fmt.Errorf("failed to fetch workflow runs page %d: %w", page, err)
 		}
 
 		if len(response.WorkflowRuns) == 0 {
@@ -199,55 +181,5 @@ func buildGitHubURL(repo, runID, jobID string) string {
 // fetchCommitMeta fetches commit title, author, and changed file list for a single commit SHA.
 // Uses: GET /repos/{owner}/{repo}/commits/{sha}
 func fetchCommitMeta(ctx context.Context, repo, sha string) (CommitMeta, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctxTimeout, "gh", "api",
-		fmt.Sprintf("/repos/%s/commits/%s", repo, sha),
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return CommitMeta{SHA: sha}, fmt.Errorf("gh api failed for commit %s: %w\nstderr: %s", sha, err, string(exitErr.Stderr))
-		}
-		return CommitMeta{SHA: sha}, fmt.Errorf("failed to execute gh command for commit %s: %w", sha, err)
-	}
-
-	var response struct {
-		SHA    string `json:"sha"`
-		Commit struct {
-			Message string `json:"message"`
-			Author  struct {
-				Name string    `json:"name"`
-				Date time.Time `json:"date"`
-			} `json:"author"`
-		} `json:"commit"`
-		Files []struct {
-			Filename string `json:"filename"`
-		} `json:"files"`
-	}
-
-	if err := json.Unmarshal(output, &response); err != nil {
-		return CommitMeta{SHA: sha}, fmt.Errorf("failed to parse commit response for %s: %w", sha, err)
-	}
-
-	// Extract just the first line of the commit message as the title
-	title := response.Commit.Message
-	if idx := strings.IndexByte(title, '\n'); idx >= 0 {
-		title = title[:idx]
-	}
-
-	files := make([]string, 0, len(response.Files))
-	for _, f := range response.Files {
-		files = append(files, f.Filename)
-	}
-
-	return CommitMeta{
-		SHA:         sha,
-		Title:       title,
-		Author:      response.Commit.Author.Name,
-		CommittedAt: response.Commit.Author.Date,
-		Files:       files,
-	}, nil
+	return github.GetCommit(ctx, repo, sha)
 }
