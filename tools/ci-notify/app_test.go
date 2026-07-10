@@ -103,12 +103,8 @@ func TestShortSHA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			shortSHA := tt.sha
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-
-			assert.Equal(t, tt.expected, shortSHA)
+			run := github.Run{HeadSHA: tt.sha}
+			assert.Equal(t, tt.expected, run.ShortSHA())
 		})
 	}
 }

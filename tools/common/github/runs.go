@@ -38,6 +38,14 @@ type Run struct {
 	Jobs               []Job         `json:"jobs"`
 }
 
+// ShortSHA returns the first seven characters of the run's commit SHA.
+func (r Run) ShortSHA() string {
+	if len(r.HeadSHA) > 7 {
+		return r.HeadSHA[:7]
+	}
+	return r.HeadSHA
+}
+
 type workflowRunResponse struct {
 	ID         int64      `json:"id"`
 	Number     int        `json:"run_number"`

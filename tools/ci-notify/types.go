@@ -23,13 +23,6 @@ type FailureReport struct {
 	TotalJobs  int
 }
 
-func shortSHA(r github.Run) string {
-	if len(r.HeadSHA) > 7 {
-		return r.HeadSHA[:7]
-	}
-	return r.HeadSHA
-}
-
 // DigestReport aggregates success metrics for a time period
 type DigestReport struct {
 	Branch                string
