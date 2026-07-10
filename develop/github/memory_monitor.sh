@@ -30,7 +30,7 @@ if [[ $# -gt 1 ]]; then
   exit 1
 fi
 
-# Snapshot config.
+# == Snapshot config.
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-.testoutput/memory}"
 # Sample every second so short OOM ramps still leave history, but print less
 # often to keep CI logs readable.
@@ -39,7 +39,7 @@ SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
 
-# Heap profile config.
+# == Heap profile config.
 HEAP_PROFILE_INTERVAL_SECONDS="${HEAP_PROFILE_INTERVAL_SECONDS:-30}"
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
@@ -47,7 +47,7 @@ HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
 HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
-# OOM prevention config.
+# == OOM prevention config.
 # Terminate late enough to avoid masking near-finished tests, but before the
 # runner OOM killer skips post-test artifact upload.
 OOM_TERMINATION_THRESHOLD="${OOM_TERMINATION_THRESHOLD:-98}"
