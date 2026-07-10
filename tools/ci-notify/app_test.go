@@ -123,6 +123,21 @@ func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	assert.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
 }
 
+func TestIsFailedJobExcludesTestStatus(t *testing.T) {
+	require.True(t, isFailedJob(github.Job{
+		Name:       "Functional test (sqlite, shard1)",
+		Conclusion: github.ConclusionFailure,
+	}))
+	require.False(t, isFailedJob(github.Job{
+		Name:       testStatusJobName,
+		Conclusion: github.ConclusionFailure,
+	}))
+	require.False(t, isFailedJob(github.Job{
+		Name:       "Functional test (sqlite, shard1)",
+		Conclusion: github.ConclusionSuccess,
+	}))
+}
+
 func TestFilterCompleted(t *testing.T) {
 	tests := []struct {
 		name     string

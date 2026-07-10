@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
+const testStatusJobName = "Test Status"
+
 // getWorkflowRun fetches workflow run details for failure notifications.
 func getWorkflowRun(runID string) (*github.Run, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -31,7 +33,7 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 	// Identify failed jobs
 	var failedJobs []github.Job
 	for _, job := range run.Jobs {
-		if job.Conclusion == github.ConclusionFailure {
+		if isFailedJob(job) {
 			failedJobs = append(failedJobs, job)
 		}
 	}
@@ -47,4 +49,8 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		Failures:   failures,
 		TotalJobs:  len(run.Jobs),
 	}, nil
+}
+
+func isFailedJob(job github.Job) bool {
+	return job.Conclusion == github.ConclusionFailure && job.Name != testStatusJobName
 }
