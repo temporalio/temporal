@@ -59,7 +59,7 @@ type (
 	// TestCluster is a testcore struct for functional tests
 	TestCluster struct {
 		testBase *persistencetests.TestBase
-		host     *TemporalImpl
+		host     *temporalImpl
 	}
 
 	// TestClusterConfig are config for a test cluster
@@ -94,7 +94,7 @@ type (
 	}
 
 	defaultTestClusterFactory struct {
-		tbFactory PersistenceTestBaseFactory
+		tbFactory persistenceTestBaseFactory
 	}
 )
 
@@ -109,16 +109,16 @@ func (f *defaultTestClusterFactory) NewCluster(t *testing.T, clusterConfig *Test
 
 func NewTestClusterFactory() TestClusterFactory {
 	tbFactory := &defaultPersistenceTestBaseFactory{}
-	return NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory)
+	return newTestClusterFactoryWithCustomTestBaseFactory(tbFactory)
 }
 
-func NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory PersistenceTestBaseFactory) TestClusterFactory {
+func newTestClusterFactoryWithCustomTestBaseFactory(tbFactory persistenceTestBaseFactory) TestClusterFactory {
 	return &defaultTestClusterFactory{
 		tbFactory: tbFactory,
 	}
 }
 
-type PersistenceTestBaseFactory interface {
+type persistenceTestBaseFactory interface {
 	NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase
 }
 
@@ -148,7 +148,7 @@ func newClusterWithPersistenceTestBaseFactory(
 	t *testing.T,
 	clusterConfig *TestClusterConfig,
 	logger log.Logger,
-	tbFactory PersistenceTestBaseFactory,
+	tbFactory persistenceTestBaseFactory,
 ) (*TestCluster, error) {
 	// determine number of hosts per service
 	const minNodes = 1
@@ -298,41 +298,41 @@ func newClusterWithPersistenceTestBaseFactory(
 		}
 	}
 
-	temporalParams := &TemporalParams{
-		ClusterMetadataConfig:            clusterMetadataConfig,
-		PersistenceConfig:                pConfig,
-		MetadataMgr:                      testBase.MetadataManager,
-		ClusterMetadataManager:           testBase.ClusterMetadataManager,
-		ShardMgr:                         testBase.ShardMgr,
-		ExecutionManager:                 testBase.ExecutionManager,
-		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
-		AbstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
-		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
-		TaskMgr:                          testBase.TaskMgr,
-		Logger:                           logger,
-		ESConfig:                         clusterConfig.ESConfig,
-		ESClient:                         esClient,
-		ArchiverMetadata:                 archiverMetadata,
-		ArchiverProvider:                 archiverProvider,
-		FrontendConfig:                   clusterConfig.FrontendConfig,
-		HistoryConfig:                    clusterConfig.HistoryConfig,
-		MatchingConfig:                   clusterConfig.MatchingConfig,
-		WorkerConfig:                     clusterConfig.WorkerConfig,
-		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
-		DCRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
-		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
-		TLSConfigProvider:                tlsConfigProvider,
-		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
-		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverMetadata),
-		HostsByProtocolByService:         hostsByProtocolByService,
-		SpanExporters:                    clusterConfig.SpanExporters,
-		TokenProvider:                    clusterConfig.TokenProvider,
-		EnableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
+	temporalParams := &temporalParams{
+		clusterMetadataConfig:            clusterMetadataConfig,
+		persistenceConfig:                pConfig,
+		metadataMgr:                      testBase.MetadataManager,
+		clusterMetadataManager:           testBase.ClusterMetadataManager,
+		shardMgr:                         testBase.ShardMgr,
+		executionManager:                 testBase.ExecutionManager,
+		namespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
+		abstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
+		visibilityStoreFactory:           testBase.VisibilityStoreFactory,
+		taskMgr:                          testBase.TaskMgr,
+		logger:                           logger,
+		esConfig:                         clusterConfig.ESConfig,
+		esClient:                         esClient,
+		archiverMetadata:                 archiverMetadata,
+		archiverProvider:                 archiverProvider,
+		frontendConfig:                   clusterConfig.FrontendConfig,
+		historyConfig:                    clusterConfig.HistoryConfig,
+		matchingConfig:                   clusterConfig.MatchingConfig,
+		workerConfig:                     clusterConfig.WorkerConfig,
+		mockAdminClient:                  clusterConfig.MockAdminClient,
+		namespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), nsreplication.NewDefaultAdmitter(), logger, testhooks.TestHooks{}),
+		dcRedirectionPolicy:              clusterConfig.DCRedirectionPolicy,
+		dynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
+		tlsConfigProvider:                tlsConfigProvider,
+		serviceFxOptions:                 clusterConfig.ServiceFxOptions,
+		taskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverMetadata),
+		hostsByProtocolByService:         hostsByProtocolByService,
+		spanExporters:                    clusterConfig.SpanExporters,
+		tokenProvider:                    clusterConfig.TokenProvider,
+		enableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
-		temporalParams.CaptureMetricsHandler = metricstest.NewCaptureHandler()
+		temporalParams.captureMetricsHandler = metricstest.NewCaptureHandler()
 	}
 
 	err = newPProfInitializerImpl(logger, PprofTestPort).Start()
@@ -553,7 +553,7 @@ func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 }
 
 // TODO (alex): expose only needed objects from TemporalImpl.
-func (tc *TestCluster) Host() *TemporalImpl {
+func (tc *TestCluster) Host() *temporalImpl {
 	return tc.host
 }
 
