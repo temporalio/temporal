@@ -4,15 +4,14 @@
 #
 # 1. Snapshot status:
 #       Samples memory every SNAPSHOT_INTERVAL_SECONDS and writes every sample
-#       to SNAPSHOT_HISTORY_FILE. Logs status every
-#       SNAPSHOT_PRINT_INTERVAL_SECONDS, records those lines in
-#       SNAPSHOT_STATUS_HISTORY_FILE, and writes the highest-memory snapshot
-#       report to SNAPSHOT_FILE.
+#       to SNAPSHOT_HISTORY_FILE. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS
+#       and writes the highest-memory snapshot report to SNAPSHOT_FILE.
 #
 # 2. Profile capture:
-#       When usage crosses PROFILE_CAPTURE_THRESHOLD, captures a heap profile in
-#       PROFILE_OUTPUT_DIR before running analysis, then repeats every
-#       PROFILE_INTERVAL_SECONDS while usage remains above the threshold.
+#       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
+#       profile in HEAP_PROFILE_OUTPUT_DIR before running analysis, then repeats
+#       every HEAP_PROFILE_INTERVAL_SECONDS while usage remains above the
+#       threshold.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
@@ -39,14 +38,13 @@ SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 SNAPSHOT_FILE="${1:-${SNAPSHOT_FILE:-$MEMORY_OUTPUT_DIR/snapshot.txt}}"
 SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-history.txt}"
-SNAPSHOT_STATUS_HISTORY_FILE="${SNAPSHOT_STATUS_HISTORY_FILE:-$MEMORY_OUTPUT_DIR/snapshot-status-history.txt}"
 
-## Profile config.
-PROFILE_INTERVAL_SECONDS="${PROFILE_INTERVAL_SECONDS:-30}"
+## Heap profile config.
+HEAP_PROFILE_INTERVAL_SECONDS="${HEAP_PROFILE_INTERVAL_SECONDS:-30}"
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
-PROFILE_CAPTURE_THRESHOLD="${PROFILE_CAPTURE_THRESHOLD:-90}"
-PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
+HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
+HEAP_PROFILE_OUTPUT_DIR="${HEAP_PROFILE_OUTPUT_DIR:-$MEMORY_OUTPUT_DIR/profile}"
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
 ## OOM prevention config.
@@ -58,19 +56,18 @@ OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 # State.
 SNAPSHOT_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
-LAST_PROFILE_CAPTURE_TIME=0
-WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
-HAS_CAPTURED_PROFILE=false
+LAST_HEAP_PROFILE_CAPTURE_TIME=0
+WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=false
+HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
 ensure_snapshot_dirs() {
-  mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")" "$(dirname "$SNAPSHOT_STATUS_HISTORY_FILE")"
+  mkdir -p "$(dirname "$SNAPSHOT_FILE")" "$(dirname "$SNAPSHOT_HISTORY_FILE")"
 }
 
 # Clear history on start
 ensure_snapshot_dirs
 : > "$SNAPSHOT_HISTORY_FILE"
-: > "$SNAPSHOT_STATUS_HISTORY_FILE"
 
 # Fetch a pprof profile and save to file
 # Usage: fetch_pprof <profile_type> <output_file>
@@ -106,20 +103,20 @@ print_heap() {
   fi
 }
 
-should_capture_profile() {
+should_capture_heap_profile() {
   local pct="$1"
   local now="$2"
 
-  if [[ "$pct" -lt "$PROFILE_CAPTURE_THRESHOLD" ]]; then
-    WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=false
+  if [[ "$pct" -lt "$HEAP_PROFILE_CAPTURE_THRESHOLD" ]]; then
+    WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=false
     return 1
   fi
-  if [[ "$WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD" == "false" ]]; then
-    WAS_ABOVE_PROFILE_CAPTURE_THRESHOLD=true
+  if [[ "$WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD" == "false" ]]; then
+    WAS_ABOVE_HEAP_PROFILE_CAPTURE_THRESHOLD=true
     return 0
   fi
 
-  [[ $(( now - LAST_PROFILE_CAPTURE_TIME )) -ge "$PROFILE_INTERVAL_SECONDS" ]]
+  [[ $(( now - LAST_HEAP_PROFILE_CAPTURE_TIME )) -ge "$HEAP_PROFILE_INTERVAL_SECONDS" ]]
 }
 
 terminate_monitored_processes() {
@@ -150,19 +147,22 @@ write_oom_junit() {
 EOF
 }
 
-build_snapshot_report() {
+write_snapshot_report() {
   local pct="$1"
+  local heap_profile_report="$2"
 
-  cat <<EOF
+  cat > "$SNAPSHOT_FILE" <<EOF
 Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
 
-$(cat "$SNAPSHOT_STATUS_HISTORY_FILE")
+$(tail -120 "$SNAPSHOT_HISTORY_FILE")
 
 --- Top Processes ---
 $(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
 
 --- Memory Summary ---
 $(free -m)
+
+$heap_profile_report
 EOF
 }
 
@@ -175,18 +175,17 @@ print_snapshot_status() {
   fi
 
   echo "$line"
-  echo "$line" >> "$SNAPSHOT_STATUS_HISTORY_FILE"
   LAST_SNAPSHOT_PRINT_TIME="$now"
 }
 
-capture_profile() {
+capture_heap_profile() {
   local pct="$1"
-  local pprof_output profile_prefix
+  local heap_profile_prefix pprof_output
 
-  profile_prefix="$PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
-  mkdir -p "$(dirname "$profile_prefix")"
-  fetch_pprof "heap" "${profile_prefix}.heap.pb.gz" || true
-  pprof_output="$(print_heap "${profile_prefix}.heap.pb.gz")"
+  heap_profile_prefix="$HEAP_PROFILE_OUTPUT_DIR/$(date '+%Y%m%d-%H%M%S')-${pct}pct"
+  mkdir -p "$(dirname "$heap_profile_prefix")"
+  fetch_pprof "heap" "${heap_profile_prefix}.heap.pb.gz" || true
+  pprof_output="$(print_heap "${heap_profile_prefix}.heap.pb.gz")"
 
   cat <<EOF
 
@@ -195,7 +194,7 @@ EOF
 }
 
 snapshot() {
-  local memtotal_kb memavail_kb memused_kb memused_mb pct profile_report report should_terminate
+  local heap_profile_report="" memtotal_kb memavail_kb memused_kb memused_mb pct should_terminate
   ensure_snapshot_dirs
 
   memtotal_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
@@ -210,40 +209,36 @@ snapshot() {
 
   local timestamp
   timestamp="$(date '+%H:%M:%S')"
+  local now
+  now="$(date +%s)"
 
+  # Print status.
   local status_line
   status_line="$(printf "%s used=%s%% mem=%sMB procs=[%s]" "$timestamp" "$pct" "$memused_mb" "$top_procs")"
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
-
-  local now
-  now="$(date +%s)"
   print_snapshot_status "$now" "$status_line"
 
-  profile_report=""
   should_terminate=false
   if [[ "$pct" -ge "$OOM_TERMINATION_THRESHOLD" ]] && [[ "$OOM_TERMINATED" == "false" ]]; then
     should_terminate=true
   fi
 
-  if [[ "$should_terminate" == "true" && "$HAS_CAPTURED_PROFILE" == "true" ]]; then
+  if [[ "$should_terminate" == "true" && "$HAS_CAPTURED_HEAP_PROFILE" == "true" ]]; then
     :
-  elif should_capture_profile "$pct" "$now"; then
-    LAST_PROFILE_CAPTURE_TIME="$now"
-    profile_report="$(capture_profile "$pct")"
-    HAS_CAPTURED_PROFILE=true
+  elif should_capture_heap_profile "$pct" "$now"; then
+    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
+    heap_profile_report="$(capture_heap_profile "$pct")"
+    HAS_CAPTURED_HEAP_PROFILE=true
   elif [[ "$should_terminate" == "true" ]]; then
-    LAST_PROFILE_CAPTURE_TIME="$now"
-    profile_report="$(capture_profile "$pct")"
-    HAS_CAPTURED_PROFILE=true
+    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
+    heap_profile_report="$(capture_heap_profile "$pct")"
+    HAS_CAPTURED_HEAP_PROFILE=true
   fi
-
-  report="$(build_snapshot_report "$pct")"
-  report+="$profile_report"
 
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
   if [[ "$pct" -gt "$SNAPSHOT_HIGH_WATER_MARK" ]]; then
-    echo "$report" > "$SNAPSHOT_FILE"
+    write_snapshot_report "$pct" "$heap_profile_report"
     SNAPSHOT_HIGH_WATER_MARK="$pct"
   fi
 
