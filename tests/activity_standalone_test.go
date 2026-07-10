@@ -7419,6 +7419,78 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			"activity dispatched before start delay end; Reset did not honor the remaining start delay")
 	})
 
+	s.Run("ResetAfterFirstStart_ReportsResetDispatchTime", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startDelay := 1 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RetryPolicy:         defaultRetryPolicy,
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		pollResp1, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp1.GetAttempt())
+		firstAttemptDispatchTime := pollResp1.GetCurrentAttemptScheduledTime().AsTime()
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp1.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable:   false,
+						NextRetryDelay: durationpb.New(time.Hour),
+					},
+				},
+			},
+			Identity: defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, descResp.GetInfo().GetRunState())
+
+		// After the first worker pickup, reset rewinds the attempt count to 1 but must report
+		// the reset attempt's dispatch time, not the original first dispatch time.
+		resetTime := time.Now()
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+
+		pollCtx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+		pollResp2, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		pollTime := time.Now()
+		require.EqualValues(t, 1, pollResp2.GetAttempt())
+		resetAttemptDispatchTime := pollResp2.GetCurrentAttemptScheduledTime().AsTime()
+		require.NotEqual(t, firstAttemptDispatchTime, resetAttemptDispatchTime)
+		require.GreaterOrEqual(t, resetAttemptDispatchTime.Add(timerSafetyMargin).UnixNano(), resetTime.UnixNano())
+		require.LessOrEqual(t, resetAttemptDispatchTime.UnixNano(), pollTime.Add(timerSafetyMargin).UnixNano())
+	})
+
 	// If the delay window has already elapsed by the time the activity is unpaused, the activity
 	// should dispatch immediately (no leftover delay to honor).
 	s.Run("PauseDuringDelay_UnpauseAfterDelay_DispatchesImmediately", func(s *standaloneActivityTestSuite) {
