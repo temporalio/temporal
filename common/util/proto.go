@@ -48,7 +48,7 @@ func ParseFieldMask(mask *fieldmaskpb.FieldMask) map[string]struct{} {
 }
 
 func FieldMaskHasSubPath(fieldMaskPaths map[string]struct{}, path string) bool {
-	prefix := path + "."
+	prefix := strings.TrimSuffix(path, ".") + "."
 	for field := range fieldMaskPaths {
 		if strings.HasPrefix(field, prefix) {
 			return true
