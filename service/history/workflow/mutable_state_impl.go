@@ -9088,6 +9088,9 @@ func (ms *MutableStateImpl) ApplyMutation(
 	}); err != nil {
 		return err
 	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplyMutation does not matter.
 	ms.flagChasmTimeSkippingRegenIfNeeded(prevTimeSkippingVT)
 	return nil
 }
@@ -9096,9 +9099,6 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
-
-	// Capture the TimeSkippingInfo versioned transition before syncExecutionInfo overwrites it,
-	// so we can detect whether a skip transition was applied in this snapshot.
 	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
@@ -9137,6 +9137,9 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	}); err != nil {
 		return err
 	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplySnapshot does not matter.
 	ms.flagChasmTimeSkippingRegenIfNeeded(prevTimeSkippingVT)
 	return nil
 }
@@ -9150,12 +9153,15 @@ func (ms *MutableStateImpl) flagChasmTimeSkippingRegenIfNeeded(
 	prevTimeSkippingVT *persistencespb.VersionedTransition,
 ) {
 	if ms.IsWorkflow() {
+		// Workflow executions re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
 		return
 	}
 	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
-	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) > 0 {
-		ms.chasmTree.RegenerateForTimeSkippingInReplication()
+	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
+		// No skip transition was applied in this delta, so nothing to re-stamp.
+		return
 	}
+	ms.chasmTree.MarkTimeSkippingTaskRegenForReplication()
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {

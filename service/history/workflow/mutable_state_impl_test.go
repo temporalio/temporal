@@ -5857,6 +5857,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			s.NoError(err)
 			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
 			currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
+			currentMockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 			currentMS.chasmTree = currentMockChasmTree
 
 			state = s.buildWorkflowMutableState()
@@ -6002,6 +6003,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 			s.NoError(err)
 			currentMockChasmTree := historyi.NewMockChasmTree(s.controller)
+			currentMockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
 			currentMS.chasmTree = currentMockChasmTree
 
 			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
@@ -8360,4 +8362,61 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_CompletionEventBatchID() {
 	)
 	s.NoError(err)
 	s.Equal(event.GetEventId(), s.mutableState.GetExecutionInfo().CompletionEventBatchId)
+}
+
+func (s *mutableStateSuite) TestFlagChasmTimeSkippingRegenIfNeeded() {
+	timeSkippingVT := func(count int64) *persistencespb.VersionedTransition {
+		return &persistencespb.VersionedTransition{TransitionCount: count}
+	}
+
+	s.Run("NilTimeSkippingInfoIsNilSafe", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+		mockChasmTree.EXPECT().MarkTimeSkippingTaskRegenForReplication().Times(0)
+		s.mutableState.chasmTree = mockChasmTree
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+
+		s.NotPanics(func() {
+			// Mirrors the pre-sync capture done in ApplyMutation/ApplySnapshot.
+			prevTimeSkippingVT := s.mutableState.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+			s.Nil(prevTimeSkippingVT)
+			s.mutableState.flagChasmTimeSkippingRegenIfNeeded(prevTimeSkippingVT)
+		})
+	})
+
+	s.Run("UnchangedVersionedTransitionDoesNotFlag", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+		mockChasmTree.EXPECT().MarkTimeSkippingTaskRegenForReplication().Times(0)
+		s.mutableState.chasmTree = mockChasmTree
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(5),
+		}
+
+		s.mutableState.flagChasmTimeSkippingRegenIfNeeded(timeSkippingVT(5))
+	})
+
+	s.Run("AdvancedVersionedTransitionFlagsNonWorkflow", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+		mockChasmTree.EXPECT().MarkTimeSkippingTaskRegenForReplication().Times(1)
+		s.mutableState.chasmTree = mockChasmTree
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(6),
+		}
+
+		s.mutableState.flagChasmTimeSkippingRegenIfNeeded(timeSkippingVT(5))
+	})
+
+	s.Run("AdvancedVersionedTransitionSkipsWorkflow", func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+		mockChasmTree.EXPECT().MarkTimeSkippingTaskRegenForReplication().Times(0)
+		s.mutableState.chasmTree = mockChasmTree
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			LastUpdateVersionedTransition: timeSkippingVT(6),
+		}
+
+		s.mutableState.flagChasmTimeSkippingRegenIfNeeded(timeSkippingVT(5))
+	})
 }

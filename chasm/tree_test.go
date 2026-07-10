@@ -5499,12 +5499,12 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 	})
 }
 
-// TestCloseTransaction_RegenerateForTimeSkippingInReplication verifies the passive path: after a
-// skip transition is applied via replication, MutableState calls RegenerateForTimeSkippingInReplication
+// TestCloseTransaction_MarkTimeSkippingTaskRegenForReplication verifies the passive path: after a
+// skip transition is applied via replication, MutableState calls MarkTimeSkippingTaskRegenForReplication
 // so the next CloseTransaction re-stamps pending timer/pure physical tasks against the replicated
 // accumulated skip. Without the flag those already-created tasks are left untouched (nothing to do);
 // with the flag they are regenerated, and the flag is cleared afterwards.
-func (s *nodeSuite) TestCloseTransaction_RegenerateForTimeSkippingInReplication() {
+func (s *nodeSuite) TestCloseTransaction_MarkTimeSkippingTaskRegenForReplication() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	// newTree builds a root component holding one timer side-effect task and one pure task, both
@@ -5562,8 +5562,8 @@ func (s *nodeSuite) TestCloseTransaction_RegenerateForTimeSkippingInReplication(
 	s.Run("WithFlagRegeneratesTimerAndPureTasks", func() {
 		root := newTree()
 
-		root.RegenerateForTimeSkippingInReplication()
-		s.True(root.regenForTimeSkippingInReplication)
+		root.MarkTimeSkippingTaskRegenForReplication()
+		s.True(root.needsTimeSkippingTaskRegenInReplication)
 
 		_, err := root.CloseTransaction()
 		s.NoError(err)
@@ -5577,6 +5577,7 @@ func (s *nodeSuite) TestCloseTransaction_RegenerateForTimeSkippingInReplication(
 				sideEffectTimers++
 			case *tasks.ChasmTaskPure:
 				pureTimers++
+			default:
 			}
 		}
 		s.Equal(1, sideEffectTimers, "the side-effect timer physical task is regenerated")
@@ -5586,7 +5587,7 @@ func (s *nodeSuite) TestCloseTransaction_RegenerateForTimeSkippingInReplication(
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
 		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
 
-		s.False(root.regenForTimeSkippingInReplication,
+		s.False(root.needsTimeSkippingTaskRegenInReplication,
 			"the flag is reset after the transaction closes")
 	})
 }

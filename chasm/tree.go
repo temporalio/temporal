@@ -177,7 +177,7 @@ type (
 
 		needsPointerResolution bool
 
-		regenForTimeSkippingInReplication bool
+		needsTimeSkippingTaskRegenInReplication bool
 	}
 
 	taskWithAttributes struct {
@@ -2498,7 +2498,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.needsPointerResolution = false
-	n.regenForTimeSkippingInReplication = false
+	n.needsTimeSkippingTaskRegenInReplication = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -2772,7 +2772,7 @@ func (n *Node) RefreshTasks() error {
 	// times are converted against the current accumulated skip in backend.AddTasks). It
 	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
 	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
-	n.regenForTimeSkippingInReplication = false
+	n.needsTimeSkippingTaskRegenInReplication = false
 
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
@@ -2797,16 +2797,13 @@ func (n *Node) RefreshTasks() error {
 	return nil
 }
 
-// RegenerateForTimeSkippingInReplication marks the tree so the next CloseTransaction
-// re-stamps physical timer tasks against the current accumulated skip that was decided
-// on the active cluster and replicated here. Unlike the active-cluster path
-// (closeTransactionHandleTimeSkipping), it records NO new skip transition: it only
-// re-converts fire times for the already-applied skip.
-//
-// This is the passive counterpart to the workflow-only refreshTasksForTimeSkipping in
-// TaskRefresher.PartialRefresh, which skips CHASM executions.
-func (n *Node) RegenerateForTimeSkippingInReplication() {
-	n.regenForTimeSkippingInReplication = true
+// MarkTimeSkippingTaskRegenForReplication marks the tree so the next CloseTransaction
+// re-stamps physical timer tasks against the accumulated skip decided on the active cluster
+// and replicated here. It is needed on the partial-refresh replication path (reachable from
+// both ApplyMutation and ApplySnapshot), which skips CHASM. A full RefreshTasks (new workflow /
+// branch switch) instead regenerates every task at the current virtual time and clears this flag.
+func (n *Node) MarkTimeSkippingTaskRegenForReplication() {
+	n.needsTimeSkippingTaskRegenInReplication = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -3779,7 +3776,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// passive path
 	// todo@feiyang: change to transaction policy check
 	if !n.subtreeIsDirty {
-		if n.regenForTimeSkippingInReplication {
+		if n.needsTimeSkippingTaskRegenInReplication {
 			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
 				return err
 			}
