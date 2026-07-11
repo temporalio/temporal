@@ -6,112 +6,140 @@ Current state, a critical read against the goals, gap analysis, and rule invento
 
 ## Snapshot
 
-The observe → model → judge pipeline is built and green at the unit level, and every
-observable is wired from a live server emit site through to a rule:
+The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
-- **Framework** (`common/testing/umpire/`, ~1.7k LoC): registry + generation dirty-tracking,
+- **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
   safety/liveness rulebook, fact log, gRPC interceptor, OTEL span processor. Unit-tested.
 - **Domain** (`tests/umpire/`): 4 entities, 14 facts, 14 rules (5 safety, 9 liveness), each
-  fully implemented with a positive + negative unit test. All pass.
-- **All 14 facts decode from live traffic** — none test-only. 4 from gRPC requests, 1
-  request+response, 10 from OTEL span events emitted by the server.
-- **Umpire is enabled by default** on every functional-test cluster (observes everything).
+  with a positive + negative unit test.
+- **All 14 facts decode from live traffic.** Facts now carry the namespace, so entities are
+  rooted at a `Namespace` (`EntityPath.Ancestors`, root-first).
+- **Namespace-scoped, per-test enforcement is wired.** `CheckNamespace` + `PurgeNamespace`
+  let one shared umpire serve many concurrent tests. `CheckAndPurgeUmpire(t, nsID)` runs at
+  teardown — via `FunctionalTestBase.TearDownTest` for classic suites and via a `t.Cleanup`
+  registered in `NewEnv` for `TestEnv` tests — and **fails the test on any violation**, then
+  purges that namespace so nothing leaks between tests.
 
-The gap is no longer plumbing. It's whether the thing actually delivers its goals — and
-so far it hasn't demonstrated any of them.
+This flips the project's status: it is no longer "wired but never asserted." It now judges
+**every** functional test. That is a real milestone — and it moves the central risk from
+"unproven" to "unvalidated enforcement," which is more acute (below).
 
 ## Are we meeting the goals? (critical)
 
-Measured against `UMPIRE_SPEC.md`, the **architecture** faithfully implements the spec's
-design decisions, but on the **goals** the project has built the capability and proven none
-of it. Honest scorecard:
-
 | Goal | Verdict | Why |
 |---|---|---|
-| Separate actions from assertions | ✅ structure, ❌ payoff | Clean observe-only split, but the point of it — reuse across functional / nightly / canary — is blocked: the umpire is one global, non-namespace-scoped registry and can't even run across the current suite. |
-| Terse tests | ❌ and capped | No test is terser; the update suite kept every assertion. Rules express *invariants*; most functional assertions are *specific expected values* that can never become reusable rules — so the terseness ceiling is a minority of assertions. |
-| Tests as living docs | ⚠️ partial | The rulebook is a readable catalog of ~14 properties, but rule overlap muddies it and reading a *test* is unchanged. |
-| Find bugs earlier, cheap, fuzzing base | ❌ unproven, risky | No bug found (nothing asserts in the suite). "Cheap" holds except the registry never evicts (unbounded on shared clusters). Turning it on broadly today risks being net-negative (below). |
+| Separate actions from assertions | ✅ mechanism realized | Every functional test is now judged by the umpire without writing assertions; the observe/judge split is real and running. Cross-context reuse (nightly/canary) still needs the server-side emits deployed there. |
+| Terse tests | ⚠️ now possible, not yet done | The auto-check mechanism exists, but no test has actually *deleted* its hand-written assertions to rely on it. Ceiling remains: rules cover *invariants*, not the specific expected-value assertions that dominate functional tests. |
+| Tests as living docs | ⚠️ partial | The rulebook is a readable property catalog; rule overlap still muddies it. |
+| Find bugs earlier, cheap, fuzzing base | ⚠️ now active, value gated on false positives | Enforced per-PR across the suite, with per-test purge (the unbounded-growth worry is gone). Whether it *helps* now depends entirely on the false-positive rate — which is unmeasured. |
 
-### Structural risks that threaten the goals (not just "not done yet")
+### The acute risk right now: enforcement is on but unvalidated
 
-1. **False positives could make it cost time, not save it.** The model is a lossy
-   reconstruction: observation-time timestamps (`time.Now()`, not event time), an inferred
-   task FSM, workflow completion observed for only one close path. The `settleWorkflows`
-   teardown hack — synthesizing terminal facts to stop liveness rules firing — is a tell:
-   the tool can't faithfully observe termination, so it fakes it. That same suppression
-   also hides real bugs. False-positive *and* blind-spot risk attacks the bug-finding goal
-   from both sides.
-2. **Hidden production-instrumentation coupling contradicts the spec's spirit.** The spec
-   sells "observe the wire/spans, no instrumentation burden," but the wire was insufficient
-   (the update lifecycle isn't on any interceptable gRPC call), so emit sites were hand-
-   placed inside production hot paths (history update state machine, WFT-completed handler,
-   matching). Every new internal invariant likely needs another production emit. That is an
-   invasive, unbounded maintenance coupling the spec does not acknowledge.
-3. **Model fidelity is the ceiling on everything.** Every rule verdict is only as
-   trustworthy as the entity reconstruction, which today is partial (one close path,
-   approximate ordering, TaskQueue barely modeled). Sophisticated rules over an unsound
-   model produce untrustworthy verdicts.
+Enforcement (`Errorf`) is live before the rule set has been run against the whole suite. Any
+false positive now **fails a real, unrelated test**. The known false-positive vectors are
+concrete, not hypothetical:
 
-### The honest next milestone
+- **Workflow close is observed for only one path.** `WorkflowExecutionCompleted` fires only
+  from the `CompleteWorkflowExecution` command handler. A test whose workflow fails, times
+  out, is cancelled/terminated, or continues-as-new leaves its updates non-terminal in the
+  model → `LossPrevention`/`Completion`/`ContinueAsNew` fire at `CheckNamespace` → the test
+  fails for a non-bug. `settleWorkflows` only settles *tasks*, not workflows/updates.
+- **Observation-time timestamps.** Entity `…At` fields are `time.Now()` at fact processing,
+  not event time; timestamp-comparison rules (`Closure`) rely on span arrival order.
+- **Model fidelity generally.** Any behaviour the model reconstructs imperfectly can trip a
+  rule on correct behaviour.
 
-Not "more rules." **One end-to-end proof:** take a real update test, delete its hand-written
-invariant assertions, rely on the umpire, and show it (a) stays green on correct behaviour
-and (b) catches a regression you deliberately inject — with no false positives. If that
-can't be made to work, the approach needs rethinking before scaling. If it can, most risks
-above become tractable. Everything in the plan below is subordinate to this.
+Until the suite has been run under enforcement and every violation triaged, this change is
+not safe to merge on. **That triage is now the whole game.**
 
-## Gaps — missing / not working
+## Gaps
 
-1. **Nothing asserts against live traffic except one test.** `lost_task_test.go` is the
-   only functional test that calls `Check`. The `update_workflow` suite is observed but
-   never checked — 14 fully-wired rules with ~zero live validation.
-2. **The umpire can't safely `Check` on shared/pooled clusters.** One global registry, never
-   evicts entities, teardown-scoped liveness shared across concurrent tests. Safe validation
-   needs **namespace-scoping** (the entity hierarchy already has a `Namespace` root to key on).
-3. **Workflow completion observed for only one close path** (`CompleteWorkflowExecution`).
-   Fail/cancel/timeout/terminate/continue-as-new emit nothing, so three rules gated on
-   `completed`+`CompletedAt` (`Closure`, `HistoryOrdering`, `ContinueAsNew`) silently no-op
-   for those closes — including `ContinueAsNew`, whose CAN signal is never emitted.
-4. **Timestamps are observation-time, not event-time** (`time.Now()` ×15). Timestamp-
-   comparison rules rely on span arrival order, only approximately the real order.
-5. **Dead instrumentation in `cache.go`** — emits `workflow.cache.lock.*` via the global
-   tracer (never wired to the umpire) and no fact decodes it. Doubly-dead.
+**Resolved by the latest changes**
+- ~~Nothing asserts against live traffic~~ → every functional test now checks its namespace.
+- ~~Can't `Check` on shared/pooled clusters / unbounded growth~~ → `CheckNamespace` +
+  `PurgeNamespace` scope and evict per test.
+
+**Still open**
+1. **Close signals cover only `CompleteWorkflowExecution`** — fail/cancel/timeout/terminate/
+   continue-as-new emit nothing. Now a correctness *and* false-positive issue (above), and it
+   leaves `ContinueAsNew` unable to fire on its real trigger.
+2. **Observation-time, not event-time, timestamps** (`time.Now()` ×15).
+3. **Dead instrumentation in `cache.go`** — emits via the global tracer (never wired to the
+   umpire) and no fact decodes it.
+4. **`TestEnv` vs classic coverage** — verify the enforcement fires for the intended tests
+   only once (both `TearDownTest` and the `NewEnv` cleanup exist; confirm no double-check or
+   missed path).
 
 ## Complexity / cleanup
 
-- **Overlapping rules:** `HistoryOrdering` ⊂ `Closure` (merge); `Completion` (accepted-stuck)
-  ≈ `LossPrevention` (admitted-stuck) — parameterize into one stuck-state rule; the
-  admitted-stuck family (`LossPrevention`, `SpeculativeConversion`, `ContinueAsNew`,
-  `WorkerSkipped`) over-triggers because `LossPrevention` is unconditional; `SpeculativeTaskRollback`
-  ⊂ `Completion`.
+- **Overlapping rules** now mean one real defect fails a test with several violations (noisy,
+  not wrong): `HistoryOrdering` ⊂ `Closure`; `Completion` ≈ `LossPrevention`; the admitted-
+  stuck family (`LossPrevention`/`SpeculativeConversion`/`ContinueAsNew`/`WorkerSkipped`);
+  `SpeculativeTaskRollback` ⊂ `Completion`. Consolidate to reduce noise.
 - `WorkflowUpdateStateConsistency` (92 LoC, 5 branches) — could be table-driven.
-- `settleWorkflows` teardown hack (see risk #1) — masks missing real terminal signals.
-- Cosmetic, already-drifted `subscribesTo` lists on `RegisterEntity` (routing ignores them).
-- Dead/thin surface: `TaskQueue` has no FSM (only empty-poll tracking); `Namespace`/
-  `NamespaceType`/`ExecutionID`/`WorkflowID.Execution|Task|Update` unused; dormant `FaultInjector`.
+- `settleWorkflows` teardown hack — still papers over missing real terminal signals, and now
+  its incompleteness (tasks only) is a false-positive source.
+- Dead/thin surface: `TaskQueue` (no FSM), dormant `FaultInjector`, leftover ID helpers.
+
+## Design note: a shared FSM abstraction?
+
+Would one reusable FSM across entities cut per-rule effort? Not a single shared FSM — the
+lifecycles genuinely differ — but a **declarative layer on each entity's FSM plus a few
+generic rules** would. Annotate each FSM with metadata (which states are terminal, which
+transitions are legal, an optional per-state "must progress within"), then provide generic
+rules that consume it:
+
+- generic **legal-transition / monotonic** safety → subsumes `StageMonotone` and would catch
+  illegal transitions for free;
+- generic **reach-a-terminal-state** liveness → subsumes `LossPrevention`, `Completion`, and
+  the single-entity "stuck" rules;
+- generic **state ↔ marker/timestamp consistency** safety → subsumes `StateConsistency`.
+
+That collapses ~4 of the 14 rules (the single-entity, overlap-heavy ones) into generic,
+FSM-parameterised rules. The rest are genuinely **cross-entity correlations** (speculative
+task ↔ update, update ↔ its workflow's close, worker poll ↔ update) and stay bespoke — that's
+where the interesting bugs live. Trade-off: generic rules give less specific messages (carry
+the state/metadata in tags to compensate). (STAMP took the opposite route — no FSM, state as
+reactive bool markers + per-model `Verify()`; Umpire's explicit FSMs already give
+transition-legality and monotonicity, so lean on them. See `STAMP_IMPORT.md`.)
+
+**Status: built and adopted.** `common/testing/umpire/lifecycle.go` provides `Lifecycle`
+(a drop-in superset of the looplab FSM that records per-state entry times, derives terminal
+states, tracks a per-entity `MustProgress` set, and captures illegal transitions the old
+guarded `if Can(){Event()}` pattern dropped silently), plus `Lifecycled` + `ChangedLifecycles`
+for type-erased iteration. **All three entities** (`WorkflowUpdate`, `WorkflowTask`,
+`Workflow`) are migrated onto it — looplab now appears only inside `lifecycle.go`.
+
+- `EntityProgress` (liveness, generic) is **registered and replaces** `WorkflowUpdateLossPrevention`
+  + `WorkflowUpdateCompletion`, which are deleted. Parity is exact: the update declares
+  `MustProgress = {admitted, accepted}`, so it fires on exactly the states those two rules
+  did and stays silent on `unspecified`. Other entities declare no must-progress states, so
+  the rule is a safe no-op for them.
+- `EntityTransitionLegality` (safety, generic) is **built and unit-tested but not registered**:
+  "illegal transition" over-captures benign races (e.g. a duplicate accepted span, or a
+  best-effort settle), so it would false-positive under enforcement. `WorkflowUpdateStageMonotone`
+  stays registered until event-time ordering makes illegal transitions unambiguous.
+
+Remaining: fold `WorkflowUpdateStateConsistency` into the lifecycle by making per-state entry
+timestamps the single source of truth (then it holds by construction); close the close-signal
+/ event-time fidelity gaps; then register `EntityTransitionLegality` and retire `StageMonotone`.
 
 ## Plan (priority order)
 
-0. **Prove one test end-to-end** (the milestone above): delete a real update test's invariant
-   assertions, rely on the umpire, inject a regression, confirm green→red with no false
-   positives. Gate further investment on this.
-1. **Harden model fidelity before adding rules.** Event-time timestamps carried in facts;
-   remove the `settleWorkflows` hack in favour of real terminal signals; decide TaskQueue's
-   fate. Untrustworthy model ⇒ untrustworthy rules.
-2. **Namespace-scope the umpire.** Partition entities by namespace; scope `Check` +
-   settlement per test namespace. The real unlock for validating the whole suite safely on
-   shared clusters — and the prerequisite for the spec's "reuse across contexts" goal.
-3. **Broaden close signals.** Emit a "workflow closed" event for all close types (ideally one
-   emit at the mutable-state status→closed transition). Unblocks the three completed-gated
-   rules and `ContinueAsNew`.
-4. **Confront the instrumentation cost in the spec.** Either own the production-emit burden
-   explicitly (a documented, reviewed set of umpire span sites) or accept that pure wire
-   observation can't see enough — don't leave it implicit.
-5. **Consolidate overlapping rules** (Closure ∪ HistoryOrdering; Completion ∪ LossPrevention;
-   clarify the admitted-stuck family).
-6. **Housekeeping.** Remove dead `cache.go` instrumentation and unused
-   `NamespaceType`/`ExecutionID`/ID-helpers; resolve the cosmetic `subscribesTo` lists.
+0. **Run the full functional suite under enforcement and triage every violation.** This is
+   the gate. Each violation is either a real bug (great) or a false positive (fix the model,
+   not the rule). Nothing else should merge on top of enforcement until this is green or
+   every remaining violation is confirmed real.
+1. **Close the false-positive vectors** surfaced by (0), most likely:
+   - broaden close signals to all close types (ideally one emit at the mutable-state
+     status→closed transition) so updates on closed-but-not-"completed" workflows settle;
+   - carry event-time in facts for order-sound timestamp rules;
+   - make `settleWorkflows` (or its replacement) settle workflows/updates, not just tasks.
+2. **Demonstrate terseness (goal 2).** Take one real update test, delete its hand-written
+   invariant assertions, and rely on the umpire — the first concrete proof of the payoff.
+3. **Consolidate overlapping rules** so a single defect yields one clear violation.
+4. **Housekeeping.** Remove dead `cache.go` instrumentation and unused symbols; confirm the
+   teardown wiring covers each test exactly once.
 
 ## Rule inventory (14)
 
@@ -144,7 +172,11 @@ registration).
 
 ## Done recently
 
-Live update-lifecycle decoding (admitted/accepted/completed/rejected emitted from the history
-update state machine → `WorkflowUpdate` FSM); live workflow completion
-(`WorkflowExecutionCompleted` → `Workflow` FSM); duplicate dedup rule collapsed; `ActivityTask`
-and other dead scaffolding removed; umpire made default-on for all functional clusters.
+Reusable `Lifecycle` FSM primitive (entry timestamps, derived terminals, `MustProgress`,
+illegal-transition capture) adopted by all entities; generic `EntityProgress` liveness rule
+registered, replacing `LossPrevention` + `Completion`; generic `EntityTransitionLegality`
+built (unregistered).
+Namespace-scoped `CheckNamespace`/`PurgeNamespace` with per-test teardown enforcement across
+the functional suite (facts now namespace-rooted via `EntityPath.Ancestors`); live update-
+lifecycle decoding; live workflow completion (`WorkflowExecutionCompleted`); duplicate dedup
+rule collapsed; dead scaffolding removed; umpire default-on for all functional clusters.

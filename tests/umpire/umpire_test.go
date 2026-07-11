@@ -2,6 +2,7 @@ package umpire
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,10 +49,14 @@ func TestUmpire_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
 	require.Equal(t, 1, countUpdates(u, nsB))
 
 	// Checking namespace A must only surface A's stuck update, never B's.
+	// Several rules may flag the admitted update; assert (rule-agnostically) that
+	// none of the reported violations reference namespace B's entities.
 	violations := u.CheckNamespace(ctx, nsA)
-	require.NotEmpty(t, violations, "expected a loss-prevention violation for the admitted update")
+	require.NotEmpty(t, violations, "expected a violation for the admitted update in namespace A")
 	for _, v := range violations {
-		require.Equal(t, "upd-a", v.Tags["updateID"], "namespace A check leaked into another namespace")
+		tags := fmt.Sprintf("%v", v.Tags)
+		require.NotContains(t, tags, "upd-b", "namespace A check leaked into another namespace")
+		require.NotContains(t, tags, "wf-b", "namespace A check leaked into another namespace")
 	}
 
 	// Purging A drops only A's data; B is untouched.

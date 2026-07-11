@@ -6,7 +6,6 @@ import (
 	"iter"
 	"time"
 
-	"github.com/looplab/fsm"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/fact"
 )
@@ -23,6 +22,7 @@ func (t WorkflowTaskID) String() string {
 }
 
 var _ umpire.Entity = (*WorkflowTask)(nil)
+var _ umpire.Lifecycled = (*WorkflowTask)(nil)
 
 // WorkflowTask represents a workflow task entity with live Markers.
 type WorkflowTask struct {
@@ -30,7 +30,7 @@ type WorkflowTask struct {
 	WorkflowID    string
 	RunID         string
 	NamespaceID   string
-	FSM           *fsm.FSM
+	FSM           *umpire.Lifecycle
 	AddedAt       time.Time
 	PolledAt      time.Time
 	StoredAt      time.Time
@@ -49,26 +49,32 @@ func NewWorkflowTask() *WorkflowTask {
 		Polled: umpire.NewFlag("WorkflowTask:Polled"),
 		Stored: umpire.NewFlag("WorkflowTask:Stored"),
 	}
-	wt.FSM = fsm.NewFSM(
-		"created",
-		fsm.Events{
-			{Name: "add", Src: []string{"created"}, Dst: "added"},
+	wt.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
+		Initial: "created",
+		Transitions: []umpire.Transition{
+			{Event: "add", From: []string{"created"}, To: "added"},
 			// poll: task delivered to worker — valid from either "added" (sync match)
 			// or "stored" (async match after DB persistence).
-			{Name: "poll", Src: []string{"added", "stored"}, Dst: "polled"},
-			{Name: "store", Src: []string{"added"}, Dst: "stored"},
+			{Event: "poll", From: []string{"added", "stored"}, To: "polled"},
+			{Event: "store", From: []string{"added"}, To: "stored"},
 			// discard: task expired or invalidated in matching before being polled.
-			{Name: "discard", Src: []string{"added", "stored"}, Dst: "discarded"},
+			{Event: "discard", From: []string{"added", "stored"}, To: "discarded"},
 			// terminate: parent workflow reached a terminal state; task is no longer needed.
-			{Name: "terminate", Src: []string{"created", "added", "stored"}, Dst: "terminated"},
+			{Event: "terminate", From: []string{"created", "added", "stored"}, To: "terminated"},
 		},
-		fsm.Callbacks{},
-	)
+		// Task progress (added/stored → polled) is checked by WorkflowTaskStarvation,
+		// which excludes speculative tasks; not modelled as a generic must-progress here.
+	})
 	return wt
 }
 
 func (wt *WorkflowTask) Type() umpire.EntityType {
 	return WorkflowTaskType
+}
+
+// Lifecycle exposes the task's state machine to generic lifecycle rules.
+func (wt *WorkflowTask) Lifecycle() *umpire.Lifecycle {
+	return wt.FSM
 }
 
 func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
@@ -85,28 +91,28 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 				wt.WorkflowID = e.Request.GetExecution().GetWorkflowId()
 				wt.RunID = e.Request.GetExecution().GetRunId()
 			}
-			if wt.FSM.Can("add") {
-				_ = wt.FSM.Event(ctx, "add")
+			if wt.FSM.Fire(ctx, "add") {
 				wt.AddedAt = time.Now()
 				wt.Added.Set()
 			}
 		case *fact.WorkflowTaskPolled:
-			if wt.FSM.Can("poll") && e.TaskReturned {
-				_ = wt.FSM.Event(ctx, "poll")
+			if e.TaskReturned && wt.FSM.Fire(ctx, "poll") {
 				wt.PolledAt = time.Now()
 				wt.Polled.Set()
 			}
 		case *fact.WorkflowTaskStored:
-			if wt.FSM.Can("store") {
-				_ = wt.FSM.Event(ctx, "store")
+			if wt.FSM.Fire(ctx, "store") {
 				wt.StoredAt = time.Now()
 				wt.Stored.Set()
 			}
 		case *fact.WorkflowTaskDiscarded:
+			// Best-effort settle: use the guarded form so discarding an already
+			// terminal task is a no-op rather than a recorded illegal transition.
 			if wt.FSM.Can("discard") {
 				_ = wt.FSM.Event(ctx, "discard")
 			}
 		case *fact.WorkflowTerminated:
+			// Best-effort settle (broadcast to every task); guarded on purpose.
 			if wt.WorkflowID == e.WorkflowID && wt.NamespaceID == e.NamespaceID && wt.FSM.Can("terminate") {
 				_ = wt.FSM.Event(ctx, "terminate")
 			}
@@ -118,8 +124,7 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 			}
 			wt.IsSpeculative = true
 			wt.ScheduledAt = time.Now()
-			if wt.FSM.Can("add") {
-				_ = wt.FSM.Event(ctx, "add")
+			if wt.FSM.Fire(ctx, "add") {
 				wt.AddedAt = wt.ScheduledAt
 				wt.Added.Set()
 			}

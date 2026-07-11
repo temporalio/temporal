@@ -185,6 +185,26 @@ func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64, scope *E
 	return result
 }
 
+// QueryAll returns entities of every type with their registry key, applying the
+// same dirty-generation and scope filters as QueryEntities. Used by rules that
+// judge entities by a shared interface (e.g. Lifecycled) rather than one type.
+func (r *Registry) QueryAll(sinceGeneration uint64, scope *EntityID) []EntityEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []EntityEntry
+	for key, rec := range r.entities {
+		if sinceGeneration > 0 && rec.generation <= sinceGeneration {
+			continue
+		}
+		if scope != nil && rec.root != *scope {
+			continue
+		}
+		result = append(result, EntityEntry{Key: key, Entity: rec.entity})
+	}
+	return result
+}
+
 // PurgeScope removes every entity rooted at the given ancestor and returns the
 // number removed. Use it to drop all data collected for one namespace.
 func (r *Registry) PurgeScope(root EntityID) int {

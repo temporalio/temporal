@@ -6,7 +6,6 @@ import (
 	"iter"
 	"time"
 
-	"github.com/looplab/fsm"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/fact"
 )
@@ -44,12 +43,13 @@ func (e ExecutionID) String() string {
 }
 
 var _ umpire.Entity = (*Workflow)(nil)
+var _ umpire.Lifecycled = (*Workflow)(nil)
 
 // Workflow represents a workflow execution entity with live Markers.
 type Workflow struct {
 	WorkflowID  string
 	NamespaceID string
-	FSM         *fsm.FSM
+	FSM         *umpire.Lifecycle
 	StartedAt   time.Time
 	CompletedAt time.Time
 	LastSeenAt  time.Time
@@ -64,19 +64,26 @@ func NewWorkflow() *Workflow {
 		Running:     umpire.NewFlag("Workflow:Running"),
 		WfCompleted: umpire.NewFlag("Workflow:Completed"),
 	}
-	wf.FSM = fsm.NewFSM(
-		"created",
-		fsm.Events{
-			{Name: "start", Src: []string{"created"}, Dst: "started"},
-			{Name: "complete", Src: []string{"started"}, Dst: "completed"},
+	wf.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
+		Initial: "created",
+		Transitions: []umpire.Transition{
+			{Event: "start", From: []string{"created"}, To: "started"},
+			{Event: "complete", From: []string{"started"}, To: "completed"},
 		},
-		fsm.Callbacks{},
-	)
+		// "started" is not marked must-progress: not all close paths are observed
+		// yet (only CompleteWorkflowExecution), so requiring completion would
+		// false-positive. See the close-signal gap in UMPIRE_PLAN.md.
+	})
 	return wf
 }
 
 func (wf *Workflow) Type() umpire.EntityType {
 	return WorkflowType
+}
+
+// Lifecycle exposes the workflow's state machine to generic lifecycle rules.
+func (wf *Workflow) Lifecycle() *umpire.Lifecycle {
+	return wf.FSM
 }
 
 func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
@@ -87,8 +94,7 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 				wf.WorkflowID = e.Request.GetStartRequest().GetWorkflowId()
 				wf.NamespaceID = e.Request.GetNamespaceId()
 			}
-			if wf.FSM.Can("start") {
-				_ = wf.FSM.Event(ctx, "start")
+			if wf.FSM.Fire(ctx, "start") {
 				wf.StartedAt = time.Now()
 				wf.Running.Set()
 			}
@@ -97,8 +103,7 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 			if wf.WorkflowID == "" {
 				wf.WorkflowID = e.WorkflowID
 			}
-			if wf.FSM.Can("complete") {
-				_ = wf.FSM.Event(ctx, "complete")
+			if wf.FSM.Fire(ctx, "complete") {
 				wf.CompletedAt = time.Now()
 				wf.Running.Clear()
 				wf.WfCompleted.Set()

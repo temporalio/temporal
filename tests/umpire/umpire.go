@@ -54,12 +54,19 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeTaskRollback{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeConversion{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateLossPrevention{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateCompletion{} })
+	// EntityProgress subsumes the former WorkflowUpdateLossPrevention (stuck admitted)
+	// and WorkflowUpdateCompletion (stuck accepted) via the update's MustProgress states.
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.EntityProgress{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateDeduplication{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContinueAsNew{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateWorkerSkipped{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContextClear{} })
+
+	// rule.EntityTransitionLegality is a generic safety rule over any Lifecycled
+	// entity (it would subsume WorkflowUpdateStageMonotone). Left UNregistered for
+	// now: "illegal transition" over-captures benign races (e.g. a duplicate
+	// accepted span), which would false-positive under enforcement. Enable it once
+	// event-time ordering makes illegal transitions unambiguous (UMPIRE_PLAN.md).
 
 	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
 		return nil, fmt.Errorf("umpire: failed to initialize rules: %w", err)

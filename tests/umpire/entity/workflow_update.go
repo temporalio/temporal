@@ -6,7 +6,6 @@ import (
 	"iter"
 	"time"
 
-	"github.com/looplab/fsm"
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/fact"
 )
@@ -23,13 +22,14 @@ func (u WorkflowUpdateID) String() string {
 }
 
 var _ umpire.Entity = (*WorkflowUpdate)(nil)
+var _ umpire.Lifecycled = (*WorkflowUpdate)(nil)
 
 // WorkflowUpdate represents a workflow update entity with live Markers.
 type WorkflowUpdate struct {
 	UpdateID    string
 	WorkflowID  string
 	HandlerName string
-	FSM         *fsm.FSM
+	FSM         *umpire.Lifecycle
 
 	AdmittedAt    time.Time
 	AcceptedAt    time.Time
@@ -56,25 +56,32 @@ func NewWorkflowUpdate() *WorkflowUpdate {
 		Completed: umpire.NewFlag("WorkflowUpdate:Completed"),
 		Rejected:  umpire.NewFlag("WorkflowUpdate:Rejected"),
 	}
-	wu.FSM = fsm.NewFSM(
-		"unspecified",
-		fsm.Events{
-			{Name: "admit", Src: []string{"unspecified"}, Dst: "admitted"},
-			{Name: "accept", Src: []string{"admitted"}, Dst: "accepted"},
+	wu.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
+		Initial: "unspecified",
+		Transitions: []umpire.Transition{
+			{Event: "admit", From: []string{"unspecified"}, To: "admitted"},
+			{Event: "accept", From: []string{"admitted"}, To: "accepted"},
 			// complete may fire directly from admitted when a worker accepts and
 			// completes an update in the same workflow task (no separate accepted event).
-			{Name: "complete", Src: []string{"admitted", "accepted"}, Dst: "completed"},
-			{Name: "reject", Src: []string{"unspecified", "admitted", "accepted"}, Dst: "rejected"},
+			{Event: "complete", From: []string{"admitted", "accepted"}, To: "completed"},
+			{Event: "reject", From: []string{"unspecified", "admitted", "accepted"}, To: "rejected"},
 			// abort: update aborted by server (e.g., workflow closed, registry cleared).
-			{Name: "abort", Src: []string{"unspecified", "admitted", "accepted"}, Dst: "aborted"},
+			{Event: "abort", From: []string{"unspecified", "admitted", "accepted"}, To: "aborted"},
 		},
-		fsm.Callbacks{},
-	)
+		// Once admitted or accepted, an update must progress to a terminal state;
+		// "unspecified" (requested but not admitted) is an acceptable resting point.
+		MustProgress: []string{"admitted", "accepted"},
+	})
 	return wu
 }
 
 func (wu *WorkflowUpdate) Type() umpire.EntityType {
 	return WorkflowUpdateType
+}
+
+// Lifecycle exposes the update's state machine to generic lifecycle rules.
+func (wu *WorkflowUpdate) Lifecycle() *umpire.Lifecycle {
+	return wu.FSM
 }
 
 func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
@@ -99,14 +106,12 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			if wu.UpdateID == "" {
 				wu.UpdateID = e.UpdateID
 			}
-			if wu.FSM.Can("admit") {
-				_ = wu.FSM.Event(ctx, "admit")
+			if wu.FSM.Fire(ctx, "admit") {
 				wu.AdmittedAt = time.Now()
 				wu.Admitted.Set()
 			}
 		case *fact.WorkflowUpdateAccepted:
-			if wu.FSM.Can("accept") {
-				_ = wu.FSM.Event(ctx, "accept")
+			if wu.FSM.Fire(ctx, "accept") {
 				wu.AcceptedAt = time.Now()
 				wu.Accepted.Set()
 			}
@@ -114,8 +119,7 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			if wu.UpdateID == "" {
 				wu.UpdateID = e.UpdateID
 			}
-			if wu.FSM.Can("complete") {
-				_ = wu.FSM.Event(ctx, "complete")
+			if wu.FSM.Fire(ctx, "complete") {
 				wu.CompletedAt = time.Now()
 				wu.Completed.Set()
 				if e.IsSuccess() {
@@ -125,15 +129,12 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				}
 			}
 		case *fact.WorkflowUpdateAborted:
-			if wu.FSM.Can("abort") {
-				_ = wu.FSM.Event(ctx, "abort")
-			}
+			wu.FSM.Fire(ctx, "abort")
 		case *fact.WorkflowUpdateRejected:
 			if wu.UpdateID == "" {
 				wu.UpdateID = e.UpdateID
 			}
-			if wu.FSM.Can("reject") {
-				_ = wu.FSM.Event(ctx, "reject")
+			if wu.FSM.Fire(ctx, "reject") {
 				wu.RejectedAt = time.Now()
 				wu.Rejected.Set()
 			}
