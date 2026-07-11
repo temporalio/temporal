@@ -4794,7 +4794,10 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 // TestMirroredIncludeExcludeSpec sets identical interval and exclusion
 // specifications that match every 1s, effectively cancelling each other out.
 func TestMirroredIncludeExcludeSpec(t *testing.T) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	// A tiny compute bound trips the mirrored spec near-instantly; the default (~1.2M candidate
+	// scans per GetNextTime) makes this test burn seconds of CPU on every scheduler code path.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
+	s := testcore.NewEnv(t, opts...)
 
 	sid := testcore.RandomizeStr("sched-cancelling-spec")
 	wid := testcore.RandomizeStr("sched-cancelling-spec-wf")
@@ -4825,7 +4828,9 @@ func TestMirroredIncludeExcludeSpec(t *testing.T) {
 // TestMirroredIncludeExcludeSpecOnUpdate is like TestMirroredIncludeExcludeSpec but reaches the
 // mirrored spec via UpdateSchedule, exercising the spec-recompile path on an existing schedule.
 func TestMirroredIncludeExcludeSpecOnUpdate(t *testing.T) {
-	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+	// A tiny compute bound trips the mirrored spec near-instantly (see TestMirroredIncludeExcludeSpec).
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
+	s := testcore.NewEnv(t, opts...)
 
 	sid := testcore.RandomizeStr("sched-cancelling-update")
 	wid := testcore.RandomizeStr("sched-cancelling-update-wf")
