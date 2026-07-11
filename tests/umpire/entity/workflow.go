@@ -11,10 +11,7 @@ import (
 	"go.temporal.io/server/tests/umpire/fact"
 )
 
-const (
-	WorkflowType          = fact.WorkflowType
-	WorkflowExecutionType = fact.WorkflowExecutionType
-)
+const WorkflowType = fact.WorkflowType
 
 type WorkflowID struct {
 	parent NamespaceID

@@ -57,7 +57,6 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateLossPreventionRule{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateCompletionRule{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateDeduplicationRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateDedupProgressRule{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateContinueAsNewRule{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateWorkerSkippedRule{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateContextClearRule{} })

@@ -28,7 +28,7 @@ func (m *WorkflowUpdateDeduplicationRule) CheckLiveness(c *umpire.LivenessContex
 			continue
 		}
 		c.Pending(r.Key, umpire.Violation{
-			Message: "duplicate update requests received but update not resolved",
+			Message: fmt.Sprintf("deduplicated update (requested %d times) stuck in %q — duplicate request not resolved, dedup may be blocking progress", wu.RequestCount, state),
 			Tags: map[string]string{
 				"workflowID":   wu.WorkflowID,
 				"updateID":     wu.UpdateID,
