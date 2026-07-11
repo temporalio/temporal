@@ -10,8 +10,8 @@ The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
   safety/liveness rulebook, fact log, gRPC interceptor, OTEL span processor. Unit-tested.
-- **Domain** (`tests/umpire/`): 4 entities, 14 facts, 14 rules (5 safety, 9 liveness), each
-  with a positive + negative unit test.
+- **Domain** (`tests/umpire/`): 4 entities, 14 facts, 12 registered rules (4 safety,
+  8 liveness) + 1 generic rule built-but-unregistered, each with a positive + negative test.
 - **All 14 facts decode from live traffic.** Facts now carry the namespace, so entities are
   rooted at a `Namespace` (`EntityPath.Ancestors`, root-first).
 - **Namespace-scoped, per-test enforcement is wired.** `CheckNamespace` + `PurgeNamespace`
@@ -120,9 +120,10 @@ for type-erased iteration. **All three entities** (`WorkflowUpdate`, `WorkflowTa
   best-effort settle), so it would false-positive under enforcement. `WorkflowUpdateStageMonotone`
   stays registered until event-time ordering makes illegal transitions unambiguous.
 
-Remaining: fold `WorkflowUpdateStateConsistency` into the lifecycle by making per-state entry
-timestamps the single source of truth (then it holds by construction); close the close-signal
-/ event-time fidelity gaps; then register `EntityTransitionLegality` and retire `StageMonotone`.
+`WorkflowUpdateStateConsistency` is **deleted**: the update's `*At` accessors are now derived
+from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp set" holds by
+construction — there is nothing left to check. Remaining: close the close-signal / event-time
+fidelity gaps, then register `EntityTransitionLegality` and retire `StageMonotone`.
 
 ## Plan (priority order)
 
@@ -141,7 +142,7 @@ timestamps the single source of truth (then it holds by construction); close the
 4. **Housekeeping.** Remove dead `cache.go` instrumentation and unused symbols; confirm the
    teardown wiring covers each test exactly once.
 
-## Rule inventory (14)
+## Rule inventory (12 registered + 1 built-unregistered)
 
 Naming: struct drops the `Rule` suffix; `Name()` returns struct name + `"Rule"` (enforced at
 registration).
@@ -151,31 +152,39 @@ registration).
 | Rule | Invariant | Notes |
 |---|---|---|
 | `SpeculativeTaskCreation` | a speculative task must not coexist with a pending normal task for the same workflow | groups by `workflowID:runID` |
-| `WorkflowUpdateStateConsistency` | FSM state agrees with which of Accepted/Completed/Rejected timestamps are set | largest rule (5 checks) |
 | `WorkflowUpdateHistoryOrdering` | update not in `accepted` after workflow completed | subset of `Closure` |
 | `WorkflowUpdateClosure` | no update accepted/completed after workflow `CompletedAt` | needs live workflow completion |
-| `WorkflowUpdateStageMonotone` | update stage never regresses | only stateful rule (`highWater`) |
+| `WorkflowUpdateStageMonotone` | update stage never regresses | stateful (`highWater`); superseded by `EntityTransitionLegality` once ordering is sound |
 
 ### Liveness — must eventually hold; unresolved at teardown ⇒ violation
 
 | Rule | Invariant | Notes |
 |---|---|---|
+| `EntityProgress` (generic) | a lifecycle entity must leave its `MustProgress` states | replaces LossPrevention (admitted) + Completion (accepted) for `WorkflowUpdate` |
 | `WorkflowTaskStarvation` | a non-speculative task added/stored is eventually polled | task-loss / worker starvation |
-| `SpeculativeTaskRollback` | an update accepted on a polled speculative task eventually completes | specialization of `Completion` |
+| `SpeculativeTaskRollback` | an update accepted on a polled speculative task eventually completes | specialization of the progress invariant |
 | `SpeculativeConversion` | update not left `admitted` after its speculative task converts to normal | admitted-stuck family |
-| `WorkflowUpdateLossPrevention` | update in `admitted` is eventually accepted | fires unconditionally on `admitted` |
-| `WorkflowUpdateCompletion` | update in `accepted` eventually completes | mirror of LossPrevention |
 | `WorkflowUpdateDeduplication` | a deduplicated update (`RequestCount>1`) doesn't stall non-terminal | |
 | `WorkflowUpdateContinueAsNew` | update not left `admitted` on a completed workflow (should retry on new run) | needs CAN close signal (missing) |
 | `WorkflowUpdateWorkerSkipped` | update not left `admitted` after a task was polled post-admit | admitted-stuck family |
 | `WorkflowUpdateContextClear` | non-terminal update not stranded with no pending task (workflow not completed) | defers completed case to `Closure` |
 
+### Built but not registered
+
+| Rule | Invariant | Why gated |
+|---|---|---|
+| `EntityTransitionLegality` (generic safety) | no lifecycle entity observes an illegal transition | over-captures benign races (duplicate spans) until event-time ordering lands |
+
+Removed by consolidation: `WorkflowUpdateLossPrevention`, `WorkflowUpdateCompletion` (→ `EntityProgress`),
+`WorkflowUpdateStateConsistency` (now structural via derived `*At` accessors).
+
 ## Done recently
 
 Reusable `Lifecycle` FSM primitive (entry timestamps, derived terminals, `MustProgress`,
 illegal-transition capture) adopted by all entities; generic `EntityProgress` liveness rule
-registered, replacing `LossPrevention` + `Completion`; generic `EntityTransitionLegality`
-built (unregistered).
+registered, replacing `LossPrevention` + `Completion`; `WorkflowUpdateStateConsistency`
+deleted (now structural — `*At` accessors derived from lifecycle entry times); generic
+`EntityTransitionLegality` built (unregistered).
 Namespace-scoped `CheckNamespace`/`PurgeNamespace` with per-test teardown enforcement across
 the functional suite (facts now namespace-rooted via `EntityPath.Ancestors`); live update-
 lifecycle decoding; live workflow completion (`WorkflowExecutionCompleted`); duplicate dedup

@@ -31,10 +31,6 @@ type WorkflowUpdate struct {
 	HandlerName string
 	FSM         *umpire.Lifecycle
 
-	AdmittedAt    time.Time
-	AcceptedAt    time.Time
-	CompletedAt   time.Time
-	RejectedAt    time.Time
 	IsSpeculative bool
 	Outcome       string
 
@@ -84,6 +80,14 @@ func (wu *WorkflowUpdate) Lifecycle() *umpire.Lifecycle {
 	return wu.FSM
 }
 
+// The *At accessors are derived from the lifecycle's per-state entry times, so
+// "state reached ⇔ timestamp set" holds by construction (no separate fields to
+// drift — this is why there is no state/timestamp-consistency rule).
+func (wu *WorkflowUpdate) AdmittedAt() time.Time  { t, _ := wu.FSM.EnteredAt("admitted"); return t }
+func (wu *WorkflowUpdate) AcceptedAt() time.Time  { t, _ := wu.FSM.EnteredAt("accepted"); return t }
+func (wu *WorkflowUpdate) CompletedAt() time.Time { t, _ := wu.FSM.EnteredAt("completed"); return t }
+func (wu *WorkflowUpdate) RejectedAt() time.Time  { t, _ := wu.FSM.EnteredAt("rejected"); return t }
+
 func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
 	if wu.WorkflowID == "" && ident != nil {
 		if parent := ident.Parent(); parent != nil && parent.EntityID.Type == WorkflowType {
@@ -107,12 +111,10 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "admit") {
-				wu.AdmittedAt = time.Now()
 				wu.Admitted.Set()
 			}
 		case *fact.WorkflowUpdateAccepted:
 			if wu.FSM.Fire(ctx, "accept") {
-				wu.AcceptedAt = time.Now()
 				wu.Accepted.Set()
 			}
 		case *fact.WorkflowUpdateCompleted:
@@ -120,7 +122,6 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "complete") {
-				wu.CompletedAt = time.Now()
 				wu.Completed.Set()
 				if e.IsSuccess() {
 					wu.Outcome = "success"
@@ -135,7 +136,6 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "reject") {
-				wu.RejectedAt = time.Now()
 				wu.Rejected.Set()
 			}
 		}

@@ -45,7 +45,8 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 
 	// Safety rules — checked on every observation.
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateStateConsistency{} })
+	// (state/timestamp consistency is now structural: WorkflowUpdate's *At accessors
+	// are derived from the lifecycle's entry times, so they cannot drift.)
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateStageMonotone{} })

@@ -48,7 +48,7 @@ func (m *WorkflowUpdateHistoryOrdering) CheckSafety(c *umpire.SafetyContext) {
 			Tags: map[string]string{
 				"workflowID":    wu.WorkflowID,
 				"updateID":      wu.UpdateID,
-				"acceptedAt":    wu.AcceptedAt.Format(time.RFC3339),
+				"acceptedAt":    wu.AcceptedAt().Format(time.RFC3339),
 				"wfCompletedAt": closedAt.Format(time.RFC3339),
 			},
 		})

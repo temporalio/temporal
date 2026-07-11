@@ -32,7 +32,7 @@ func (m *SpeculativeTaskRollback) CheckLiveness(c *umpire.LivenessContext) {
 		if wu.UpdateID == "" || wu.WorkflowID == "" {
 			continue
 		}
-		if wu.FSM.Current() != "accepted" || wu.AcceptedAt.IsZero() {
+		if wu.FSM.Current() != "accepted" || wu.AcceptedAt().IsZero() {
 			c.Resolve(r.Key)
 			continue
 		}

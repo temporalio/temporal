@@ -38,7 +38,7 @@ func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 			continue
 		}
 		// Only care about updates stuck in admitted.
-		if wu.FSM.Current() != "admitted" || wu.AdmittedAt.IsZero() {
+		if wu.FSM.Current() != "admitted" || wu.AdmittedAt().IsZero() {
 			c.Resolve(r.Key)
 			continue
 		}
@@ -47,7 +47,7 @@ func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 			continue
 		}
 		// Worker polled a task after the update was admitted but didn't process it.
-		if polledAt.Before(wu.AdmittedAt) {
+		if polledAt.Before(wu.AdmittedAt()) {
 			continue
 		}
 

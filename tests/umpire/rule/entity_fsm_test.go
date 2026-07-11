@@ -24,7 +24,7 @@ func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
 	if wu.FSM.Current() != "admitted" {
 		t.Fatalf("expected 'admitted', got %s", wu.FSM.Current())
 	}
-	if wu.AdmittedAt.IsZero() {
+	if wu.AdmittedAt().IsZero() {
 		t.Fatal("AdmittedAt should be set")
 	}
 	if !wu.Admitted.IsTrue() {
@@ -44,7 +44,7 @@ func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
 	if wu.FSM.Current() != "completed" {
 		t.Fatalf("expected 'completed', got %s", wu.FSM.Current())
 	}
-	if wu.CompletedAt.IsZero() {
+	if wu.CompletedAt().IsZero() {
 		t.Fatal("CompletedAt should be set")
 	}
 }

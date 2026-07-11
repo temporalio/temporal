@@ -38,7 +38,7 @@ func (m *SpeculativeConversion) CheckLiveness(c *umpire.LivenessContext) {
 			continue
 		}
 		// Only care about updates stuck in admitted.
-		if wu.FSM.Current() != "admitted" || wu.AdmittedAt.IsZero() {
+		if wu.FSM.Current() != "admitted" || wu.AdmittedAt().IsZero() {
 			c.Resolve(r.Key)
 			continue
 		}

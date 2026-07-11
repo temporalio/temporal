@@ -36,7 +36,7 @@ func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 			continue
 		}
 		// Only care about updates still admitted on a completed workflow.
-		if wu.FSM.Current() != "admitted" || wu.AdmittedAt.IsZero() {
+		if wu.FSM.Current() != "admitted" || wu.AdmittedAt().IsZero() {
 			c.Resolve(r.Key)
 			continue
 		}

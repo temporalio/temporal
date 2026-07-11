@@ -39,7 +39,7 @@ func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 		}
 		violated := false
 		// Check if update accepted after workflow closed.
-		if !wu.AcceptedAt.IsZero() && wu.AcceptedAt.After(closedAt) {
+		if !wu.AcceptedAt().IsZero() && wu.AcceptedAt().After(closedAt) {
 			violated = true
 			c.Eval(r.Key+":accepted-after-close", false, umpire.Violation{
 				Message: "workflow update accepted after workflow closed",
@@ -47,12 +47,12 @@ func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 					"workflowID": wu.WorkflowID,
 					"updateID":   wu.UpdateID,
 					"closedAt":   closedAt.Format(time.RFC3339),
-					"acceptedAt": wu.AcceptedAt.Format(time.RFC3339),
+					"acceptedAt": wu.AcceptedAt().Format(time.RFC3339),
 				},
 			})
 		}
 		// Check if update completed after workflow closed.
-		if !wu.CompletedAt.IsZero() && wu.CompletedAt.After(closedAt) {
+		if !wu.CompletedAt().IsZero() && wu.CompletedAt().After(closedAt) {
 			violated = true
 			c.Eval(r.Key+":completed-after-close", false, umpire.Violation{
 				Message: "workflow update completed after workflow closed",
@@ -60,7 +60,7 @@ func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 					"workflowID":  wu.WorkflowID,
 					"updateID":    wu.UpdateID,
 					"closedAt":    closedAt.Format(time.RFC3339),
-					"completedAt": wu.CompletedAt.Format(time.RFC3339),
+					"completedAt": wu.CompletedAt().Format(time.RFC3339),
 				},
 			})
 		}
