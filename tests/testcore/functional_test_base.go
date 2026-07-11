@@ -320,6 +320,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	}
 
 	var err error
+
+	// The umpire (property-based test observer) is enabled by default on every
+	// cluster: it observes gRPC calls and OTEL spans and validates property rules.
+	// Access it via GetUmpire().
 	s.umpire, err = umpiretest.NewUmpire(s.Logger)
 	s.Require().NoError(err)
 
