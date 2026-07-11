@@ -125,12 +125,38 @@ from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp 
 construction — there is nothing left to check. Remaining: close the close-signal / event-time
 fidelity gaps, then register `EntityTransitionLegality` and retire `StageMonotone`.
 
+## Gate run (priority 0) — first result
+
+Ran the umpire's own functional suite (`tests/lost_task_test.go`, `FunctionalTestBase` +
+enforcement) under a live in-process cluster. **All three tests fail — the umpire detects
+0 violations where it expects one.** Root cause (not a regression from the consolidation;
+these commits don't touch that test, and the rule's unit tests pass):
+
+- **`settleWorkflows` masks `WorkflowTaskStarvation`.** `Check(final)` runs `settleWorkflows`
+  *before* the rules; it broadcasts `WorkflowTerminated` to every task, so a stuck task
+  transitions `stored`/`added → terminated`, and `WorkflowTaskStarvation`'s `default` branch
+  then `Resolve`s it. No rule reads the `terminated`/`discarded` task state or
+  `WorkflowTerminated`, so this settle serves no rule — it only suppresses detection.
+- The **tension**: settle appears intended to suppress false positives for tasks legitimately
+  in-flight at teardown, but it over-suppresses and defeats true detection. Since the only
+  producer of a task `terminated` state is settle itself, `current == terminated && never
+  polled` is in fact an exact "was stuck at teardown" signal — a candidate fix is to flag
+  that in `WorkflowTaskStarvation` (using `Lifecycle.Reached("polled")`). But enabling it
+  will fire for *any* never-polled task across the enforced suite, so it needs the fidelity
+  work (real close/terminal signals) to distinguish "test ended in-flight" from "stuck".
+- `TestStuckWorkflowDetectionWithSDK` expects detection of a workflow stuck in `Await` (its
+  tasks *were* polled) — that's **workflow-completion liveness**, not task starvation, and
+  needs `Workflow.MustProgress = {started}`, which is deliberately off pending close signals.
+
+This is the priority-0 triage in action: the blocker is the settle-vs-detect design and the
+missing close-signal fidelity, not the rules themselves.
+
 ## Plan (priority order)
 
-0. **Run the full functional suite under enforcement and triage every violation.** This is
-   the gate. Each violation is either a real bug (great) or a false positive (fix the model,
-   not the rule). Nothing else should merge on top of enforcement until this is green or
-   every remaining violation is confirmed real.
+0. **Resolve settle-vs-detect, then re-run the gate.** Decide how teardown settling should
+   interact with task/workflow liveness (the finding above), fix `WorkflowTaskStarvation`
+   accordingly, and confirm the umpire's own suite goes green — before trusting enforcement
+   across the broad functional suite.
 1. **Close the false-positive vectors** surfaced by (0), most likely:
    - broaden close signals to all close types (ideally one emit at the mutable-state
      status→closed transition) so updates on closed-but-not-"completed" workflows settle;
