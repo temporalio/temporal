@@ -15,7 +15,7 @@ import (
 
 // CheckSafetyRule is a test helper that runs a single safety rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible.
-func CheckSafetyRule(ctx context.Context, m SafetyRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
+func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		reportTTL:    defaultReportTTL,
@@ -28,16 +28,16 @@ func CheckSafetyRule(ctx context.Context, m SafetyRule, registry *Registry, logg
 			Logger:   logger,
 			Config:   config,
 			state:    st,
-			ruleName: m.Name(),
+			ruleName: rule.Name(),
 		},
 	}
-	m.CheckSafety(rc)
+	rule.CheckSafety(rc)
 	return rc.violations
 }
 
 // CheckLivenessRule is a test helper that runs a single liveness rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible, then collects pending items.
-func CheckLivenessRule(ctx context.Context, m LivenessRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
+func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		pending:      make(map[string]Violation),
@@ -51,10 +51,10 @@ func CheckLivenessRule(ctx context.Context, m LivenessRule, registry *Registry, 
 			Logger:   logger,
 			Config:   config,
 			state:    st,
-			ruleName: m.Name(),
+			ruleName: rule.Name(),
 		},
 	}
-	m.CheckLiveness(rc)
+	rule.CheckLiveness(rc)
 	// Collect pending items as violations (simulates teardown).
 	for _, v := range st.pending {
 		rc.violations = append(rc.violations, v)

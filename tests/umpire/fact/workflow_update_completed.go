@@ -11,15 +11,15 @@ type WorkflowUpdateCompleted struct {
 	UpdateID   string
 	WorkflowID string
 	Success    bool
-	Identity   *umpire.Identity
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowUpdateCompleted) Name() string {
 	return telemetry.EventWorkflowUpdateCompleted
 }
 
-func (e *WorkflowUpdateCompleted) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowUpdateCompleted) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowUpdateCompleted) IsSuccess() bool {
@@ -27,7 +27,7 @@ func (e *WorkflowUpdateCompleted) IsSuccess() bool {
 }
 
 func (e *WorkflowUpdateCompleted) ImportSpanEvent(attrs attribute.Set) bool {
-	e.UpdateID, e.WorkflowID, e.Identity = importUpdateSpanEvent(attrs)
+	e.UpdateID, e.WorkflowID, e.EntityPath = importUpdateSpanEvent(attrs)
 	if v, ok := attrs.Value(telemetry.AttrUpdateOutcome); ok {
 		e.Success = v.AsString() == telemetry.UpdateOutcomeSuccess
 	}

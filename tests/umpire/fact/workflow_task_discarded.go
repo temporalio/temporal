@@ -12,15 +12,15 @@ type WorkflowTaskDiscarded struct {
 	WorkflowID string
 	RunID      string
 	TaskQueue  string
-	Identity   *umpire.Identity
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowTaskDiscarded) Name() string {
 	return telemetry.EventWorkflowTaskDiscarded
 }
 
-func (e *WorkflowTaskDiscarded) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowTaskDiscarded) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowTaskDiscarded) ImportSpanEvent(attrs attribute.Set) bool {
@@ -38,6 +38,6 @@ func (e *WorkflowTaskDiscarded) ImportSpanEvent(attrs attribute.Set) bool {
 	}
 	wtID := umpire.NewEntityID(WorkflowTaskType, e.TaskQueue+":"+e.WorkflowID+":"+e.RunID)
 	tqID := umpire.NewEntityID(TaskQueueType, e.TaskQueue)
-	e.Identity = &umpire.Identity{EntityID: wtID, ParentID: &tqID}
+	e.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
 	return true
 }

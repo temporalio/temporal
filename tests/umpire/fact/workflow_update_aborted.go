@@ -12,15 +12,15 @@ type WorkflowUpdateAborted struct {
 	UpdateID    string
 	WorkflowID  string
 	AbortReason string
-	Identity    *umpire.Identity
+	EntityPath  *umpire.EntityPath
 }
 
 func (e *WorkflowUpdateAborted) Name() string {
 	return telemetry.EventWorkflowUpdateAborted
 }
 
-func (e *WorkflowUpdateAborted) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowUpdateAborted) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowUpdateAborted) ImportSpanEvent(attrs attribute.Set) bool {
@@ -42,6 +42,6 @@ func (e *WorkflowUpdateAborted) ImportSpanEvent(attrs attribute.Set) bool {
 		id := umpire.NewEntityID(WorkflowType, e.WorkflowID)
 		parentID = &id
 	}
-	e.Identity = &umpire.Identity{EntityID: updateID, ParentID: parentID}
+	e.EntityPath = &umpire.EntityPath{EntityID: updateID, ParentID: parentID}
 	return true
 }

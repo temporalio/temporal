@@ -77,7 +77,7 @@ func (wu *WorkflowUpdate) Type() umpire.EntityType {
 	return WorkflowUpdateType
 }
 
-func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.Identity, events iter.Seq[umpire.Fact]) error {
+func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
 	if wu.WorkflowID == "" && ident != nil && ident.ParentID != nil &&
 		ident.ParentID.Type == WorkflowType {
 		wu.WorkflowID = ident.ParentID.ID

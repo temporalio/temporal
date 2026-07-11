@@ -7,16 +7,16 @@ import (
 
 // WorkflowStarted represents a workflow being started.
 type WorkflowStarted struct {
-	Request  *historyservice.StartWorkflowExecutionRequest
-	Identity *umpire.Identity
+	Request    *historyservice.StartWorkflowExecutionRequest
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowStarted) Name() string {
 	return "WorkflowStarted"
 }
 
-func (e *WorkflowStarted) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowStarted) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowStarted) ImportRequest(request any) bool {
@@ -26,6 +26,6 @@ func (e *WorkflowStarted) ImportRequest(request any) bool {
 	}
 	e.Request = req
 	wfID := umpire.NewEntityID(WorkflowType, req.GetStartRequest().GetWorkflowId())
-	e.Identity = &umpire.Identity{EntityID: wfID}
+	e.EntityPath = &umpire.EntityPath{EntityID: wfID}
 	return true
 }

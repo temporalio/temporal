@@ -77,7 +77,7 @@ func fromResponse(req, resp any) umpire.Fact {
 		if tqName != "" && wfID != "" {
 			wtID := umpire.NewEntityID(WorkflowTaskType, tqName+":"+wfID+":"+runID)
 			tqID := umpire.NewEntityID(TaskQueueType, tqName)
-			m.Identity = &umpire.Identity{EntityID: wtID, ParentID: &tqID}
+			m.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
 		}
 		return m
 	default:

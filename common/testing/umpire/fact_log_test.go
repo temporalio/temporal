@@ -8,21 +8,21 @@ import (
 
 type testFact struct {
 	factType string
-	target   *Identity
+	target   *EntityPath
 }
 
-func (m *testFact) Name() string            { return m.factType }
-func (m *testFact) TargetEntity() *Identity { return m.target }
+func (m *testFact) Name() string              { return m.factType }
+func (m *testFact) TargetEntity() *EntityPath { return m.target }
 
 func newTestFact(factType string, entityType EntityType, id string) *testFact {
 	eid := NewEntityID(entityType, id)
-	return &testFact{factType: factType, target: &Identity{EntityID: eid}}
+	return &testFact{factType: factType, target: &EntityPath{EntityID: eid}}
 }
 
 func newTestFactWithParent(factType string, entityType EntityType, id string, parentType EntityType, parentID string) *testFact {
 	eid := NewEntityID(entityType, id)
 	pid := NewEntityID(parentType, parentID)
-	return &testFact{factType: factType, target: &Identity{EntityID: eid, ParentID: &pid}}
+	return &testFact{factType: factType, target: &EntityPath{EntityID: eid, ParentID: &pid}}
 }
 
 // ── Add / All ─────────────────────────────────────────────────────────────────

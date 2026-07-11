@@ -11,7 +11,7 @@ Two packages. The **framework** is generic; the **domain** is Temporal-specific.
 
 ```
 common/testing/umpire/          # framework (generic, reusable)
-├── entity.go                   # Fact / BroadcastFact / Entity / Identity / EntityID
+├── entity.go                   # Fact / BroadcastFact / Entity / EntityPath / EntityID
 ├── registry.go                 # entity store, fact routing, generation-based dirty tracking
 ├── rulebook.go                 # SafetyRule / LivenessRule, contexts, Pending/Resolve, Check
 ├── fact_log.go                 # queryable log of all observed facts
@@ -24,7 +24,7 @@ tests/umpire/                   # Temporal domain
 ├── entity_key.go               # entity-key path builder (Workflow(id).Update(id) / .Task(...))
 ├── entity/                     # Workflow, WorkflowTask, WorkflowUpdate, TaskQueue FSMs + decoder
 ├── fact/                       # fact types (request-, response-, span-, history-event-derived)
-└── rulebook/                   # 15 rules (5 safety, 10 liveness) + unit tests
+└── rule/                       # 15 rules (5 safety, 10 liveness) + unit tests
 ```
 
 ## How it works
@@ -48,7 +48,7 @@ tests/umpire/                   # Temporal domain
   In a live run the `WorkflowUpdate` FSM can't advance past `admitted`, so the 10 update
   rules effectively can't fire against real traffic. This is the main thing keeping the
   tool test-only.
-- `WorkflowTaskCompleted` never sets an `Identity` and `Workflow` isn't registered for it,
+- `WorkflowTaskCompleted` never sets an `EntityPath` and `Workflow` isn't registered for it,
   so the workflow `→completed` transition never fires live (tests only).
 - Only one production instrumentation site exists (workflow cache lock).
 

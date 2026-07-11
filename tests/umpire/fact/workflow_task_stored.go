@@ -9,7 +9,7 @@ import (
 // WorkflowTaskStored represents a workflow task being stored to persistence.
 type WorkflowTaskStored struct {
 	TaskQueue  string
-	Identity   *umpire.Identity
+	EntityPath *umpire.EntityPath
 	WorkflowID string
 	RunID      string
 }
@@ -18,8 +18,8 @@ func (e *WorkflowTaskStored) Name() string {
 	return telemetry.EventWorkflowTaskStored
 }
 
-func (e *WorkflowTaskStored) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowTaskStored) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowTaskStored) ImportSpanEvent(attrs attribute.Set) bool {
@@ -37,6 +37,6 @@ func (e *WorkflowTaskStored) ImportSpanEvent(attrs attribute.Set) bool {
 	}
 	wtID := umpire.NewEntityID(WorkflowTaskType, e.TaskQueue+":"+e.WorkflowID+":"+e.RunID)
 	tqID := umpire.NewEntityID(TaskQueueType, e.TaskQueue)
-	e.Identity = &umpire.Identity{EntityID: wtID, ParentID: &tqID}
+	e.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
 	return true
 }

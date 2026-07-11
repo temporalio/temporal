@@ -13,15 +13,15 @@ type SpeculativeWorkflowTaskScheduled struct {
 	RunID       string
 	NamespaceID string
 	TaskQueue   string
-	Identity    *umpire.Identity
+	EntityPath  *umpire.EntityPath
 }
 
 func (e *SpeculativeWorkflowTaskScheduled) Name() string {
 	return telemetry.EventSpeculativeWorkflowTaskScheduled
 }
 
-func (e *SpeculativeWorkflowTaskScheduled) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *SpeculativeWorkflowTaskScheduled) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *SpeculativeWorkflowTaskScheduled) ImportSpanEvent(attrs attribute.Set) bool {
@@ -42,7 +42,7 @@ func (e *SpeculativeWorkflowTaskScheduled) ImportSpanEvent(attrs attribute.Set) 
 	}
 	wfID := umpire.NewEntityID(WorkflowType, e.WorkflowID)
 	wtID := umpire.NewEntityID(WorkflowTaskType, e.TaskQueue+":"+e.WorkflowID+":"+e.RunID)
-	e.Identity = &umpire.Identity{
+	e.EntityPath = &umpire.EntityPath{
 		EntityID: wtID,
 		ParentID: &wfID,
 	}

@@ -11,15 +11,15 @@ import (
 type WorkflowExecutionCompleted struct {
 	WorkflowID string
 	RunID      string
-	Identity   *umpire.Identity
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowExecutionCompleted) Name() string {
 	return telemetry.EventWorkflowExecutionCompleted
 }
 
-func (e *WorkflowExecutionCompleted) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowExecutionCompleted) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowExecutionCompleted) ImportSpanEvent(attrs attribute.Set) bool {
@@ -33,6 +33,6 @@ func (e *WorkflowExecutionCompleted) ImportSpanEvent(attrs attribute.Set) bool {
 		return false
 	}
 	wfID := umpire.NewEntityID(WorkflowType, e.WorkflowID)
-	e.Identity = &umpire.Identity{EntityID: wfID}
+	e.EntityPath = &umpire.EntityPath{EntityID: wfID}
 	return true
 }

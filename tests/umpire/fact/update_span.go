@@ -10,7 +10,7 @@ import (
 // entity identity (WorkflowUpdate keyed under its parent Workflow) shared by
 // all update-lifecycle span facts. Returns an empty updateID when the event
 // carries no update ID, in which case the fact should be discarded.
-func importUpdateSpanEvent(attrs attribute.Set) (updateID, workflowID string, ident *umpire.Identity) {
+func importUpdateSpanEvent(attrs attribute.Set) (updateID, workflowID string, ident *umpire.EntityPath) {
 	if v, ok := attrs.Value(telemetry.AttrUpdateID); ok {
 		updateID = v.AsString()
 	}
@@ -26,5 +26,5 @@ func importUpdateSpanEvent(attrs attribute.Set) (updateID, workflowID string, id
 		id := umpire.NewEntityID(WorkflowType, workflowID)
 		parentID = &id
 	}
-	return updateID, workflowID, &umpire.Identity{EntityID: uid, ParentID: parentID}
+	return updateID, workflowID, &umpire.EntityPath{EntityID: uid, ParentID: parentID}
 }

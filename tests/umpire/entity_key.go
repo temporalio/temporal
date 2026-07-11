@@ -18,7 +18,7 @@ func Workflow(workflowID string) WorkflowPath {
 // Update returns the registry key for a workflow update entity.
 func (p WorkflowPath) Update(updateID string) string {
 	parentID := umpirefw.NewEntityID(fact.WorkflowType, p.workflowID)
-	return umpirefw.IdentityKey(&umpirefw.Identity{
+	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
 		EntityID: umpirefw.NewEntityID(fact.WorkflowUpdateType, updateID),
 		ParentID: &parentID,
 	})
@@ -27,7 +27,7 @@ func (p WorkflowPath) Update(updateID string) string {
 // Task returns the registry key for a workflow task entity.
 func (p WorkflowPath) Task(taskQueue, runID string) string {
 	tqID := umpirefw.NewEntityID(fact.TaskQueueType, taskQueue)
-	return umpirefw.IdentityKey(&umpirefw.Identity{
+	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
 		EntityID: umpirefw.NewEntityID(fact.WorkflowTaskType, taskQueue+":"+p.workflowID+":"+runID),
 		ParentID: &tqID,
 	})

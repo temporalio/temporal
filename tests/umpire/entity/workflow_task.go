@@ -70,7 +70,7 @@ func (wt *WorkflowTask) Type() umpire.EntityType {
 	return WorkflowTaskType
 }
 
-func (wt *WorkflowTask) OnFact(ctx context.Context, _ *umpire.Identity, events iter.Seq[umpire.Fact]) error {
+func (wt *WorkflowTask) OnFact(ctx context.Context, _ *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
 	for ev := range events {
 		switch e := ev.(type) {
 		case *fact.WorkflowTaskAdded:

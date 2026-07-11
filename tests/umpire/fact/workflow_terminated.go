@@ -18,7 +18,7 @@ func (e *WorkflowTerminated) Name() string {
 	return telemetry.EventWorkflowTerminated
 }
 
-func (e *WorkflowTerminated) TargetEntity() *umpire.Identity {
+func (e *WorkflowTerminated) TargetEntity() *umpire.EntityPath {
 	return nil
 }
 

@@ -26,7 +26,7 @@ func TestUpdateSpanFacts_ImportSpanEvent(t *testing.T) {
 	require.Equal(t, "wf1", admitted.WorkflowID)
 	require.Equal(t, telemetry.EventWorkflowUpdateAdmitted, admitted.Name())
 
-	// Identity routes the update under its parent workflow.
+	// EntityPath routes the update under its parent workflow.
 	ident := admitted.TargetEntity()
 	require.NotNil(t, ident)
 	require.Equal(t, WorkflowUpdateType, ident.EntityID.Type)

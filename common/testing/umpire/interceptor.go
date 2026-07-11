@@ -6,14 +6,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-// FactRecorder records gRPC request events.
+// FactRecorder records gRPC request facts.
 type FactRecorder interface {
 	RecordFact(context.Context, any)
 }
 
 // FaultInjector injects faults into gRPC calls.
 type FaultInjector interface {
-	MakePlay(ctx context.Context, targetType any, request any) error
+	Inject(ctx context.Context, info any, request any) error
 }
 
 // ResponseRecorder is an optional extension of FactRecorder that also
@@ -36,7 +36,7 @@ func NewUnaryServerInterceptor(rec FactRecorder, inj FaultInjector) grpc.UnarySe
 			rec.RecordFact(ctx, req)
 		}
 		if inj != nil {
-			if err := inj.MakePlay(ctx, req, req); err != nil {
+			if err := inj.Inject(ctx, req, req); err != nil {
 				return nil, err
 			}
 		}

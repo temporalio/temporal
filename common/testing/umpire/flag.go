@@ -5,8 +5,8 @@ import (
 	"sync"
 )
 
-// Flag is a named boolean observable condition on an entity.
-// Set by entity FSM transitions via the observer package.
+// Flag is a named boolean observable condition on an entity,
+// set and cleared by entity FSM transitions.
 type Flag struct {
 	mu    sync.RWMutex
 	value bool
@@ -18,28 +18,28 @@ func NewFlag(label string) *Flag {
 	return &Flag{label: label}
 }
 
-func (m *Flag) Set() {
-	m.mu.Lock()
-	m.value = true
-	m.mu.Unlock()
+func (f *Flag) Set() {
+	f.mu.Lock()
+	f.value = true
+	f.mu.Unlock()
 }
 
-func (m *Flag) Clear() {
-	m.mu.Lock()
-	m.value = false
-	m.mu.Unlock()
+func (f *Flag) Clear() {
+	f.mu.Lock()
+	f.value = false
+	f.mu.Unlock()
 }
 
-func (m *Flag) IsTrue() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.value
+func (f *Flag) IsTrue() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.value
 }
 
-func (m *Flag) IsFalse() bool { return !m.IsTrue() }
+func (f *Flag) IsFalse() bool { return !f.IsTrue() }
 
-func (m *Flag) Label() string { return m.label }
+func (f *Flag) Label() string { return f.label }
 
-func (m *Flag) String() string {
-	return fmt.Sprintf("Flag{%s=%v}", m.label, m.IsTrue())
+func (f *Flag) String() string {
+	return fmt.Sprintf("Flag{%s=%v}", f.label, f.IsTrue())
 }

@@ -7,16 +7,16 @@ import (
 
 // WorkflowTaskAdded represents a workflow task being added to matching.
 type WorkflowTaskAdded struct {
-	Request  *matchingservice.AddWorkflowTaskRequest
-	Identity *umpire.Identity
+	Request    *matchingservice.AddWorkflowTaskRequest
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowTaskAdded) Name() string {
 	return "WorkflowTaskAdded"
 }
 
-func (e *WorkflowTaskAdded) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowTaskAdded) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowTaskAdded) ImportRequest(request any) bool {
@@ -31,7 +31,7 @@ func (e *WorkflowTaskAdded) ImportRequest(request any) bool {
 	if wfID != "" && runID != "" {
 		wtID := umpire.NewEntityID(WorkflowTaskType, tqName+":"+wfID+":"+runID)
 		tqID := umpire.NewEntityID(TaskQueueType, tqName)
-		e.Identity = &umpire.Identity{EntityID: wtID, ParentID: &tqID}
+		e.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
 	}
 	return true
 }

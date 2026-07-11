@@ -11,18 +11,18 @@ import (
 type WorkflowUpdateAdmitted struct {
 	UpdateID   string
 	WorkflowID string
-	Identity   *umpire.Identity
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowUpdateAdmitted) Name() string {
 	return telemetry.EventWorkflowUpdateAdmitted
 }
 
-func (e *WorkflowUpdateAdmitted) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowUpdateAdmitted) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowUpdateAdmitted) ImportSpanEvent(attrs attribute.Set) bool {
-	e.UpdateID, e.WorkflowID, e.Identity = importUpdateSpanEvent(attrs)
+	e.UpdateID, e.WorkflowID, e.EntityPath = importUpdateSpanEvent(attrs)
 	return e.UpdateID != ""
 }

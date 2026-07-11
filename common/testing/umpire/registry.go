@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 )
 
-// Registry manages entities and routes events to them.
+// Registry manages entities and routes facts to them.
 type Registry struct {
 	mu         sync.RWMutex
 	factories  map[string]EntityFactory
@@ -73,48 +73,48 @@ func (r *Registry) RegisterFact(probes ...Fact) {
 	}
 }
 
-// RouteFacts routes a batch of events to the appropriate entities.
+// RouteFacts routes a batch of facts to the appropriate entities.
 func (r *Registry) RouteFacts(ctx context.Context, facts []Fact) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	eventsByKey := make(map[string][]Fact)
+	factsByKey := make(map[string][]Fact)
 	recordByKey := make(map[string]*entityRecord)
-	identByKey := make(map[string]*Identity)
+	pathByKey := make(map[string]*EntityPath)
 
-	for _, ev := range facts {
+	for _, f := range facts {
 		// Broadcast facts are delivered to all existing entities of a given type.
-		if bf, ok := ev.(BroadcastFact); ok {
+		if bf, ok := f.(BroadcastFact); ok {
 			et := bf.BroadcastType()
 			for key, rec := range r.entities {
 				if rec.entity.Type() != et {
 					continue
 				}
-				eventsByKey[key] = append(eventsByKey[key], ev)
+				factsByKey[key] = append(factsByKey[key], f)
 				recordByKey[key] = rec
-				// identByKey not set for broadcast — OnFact receives nil identity.
+				// pathByKey not set for broadcast — OnFact receives a nil path.
 			}
 			continue
 		}
-		ident := ev.TargetEntity()
-		rec, err := r.getOrCreateRecord(ident)
+		path := f.TargetEntity()
+		rec, err := r.getOrCreateRecord(path)
 		if err != nil {
 			continue
 		}
 		if rec == nil {
 			continue
 		}
-		key := identityKey(ident)
-		eventsByKey[key] = append(eventsByKey[key], ev)
+		key := entityPathKey(path)
+		factsByKey[key] = append(factsByKey[key], f)
 		recordByKey[key] = rec
-		identByKey[key] = ident
+		pathByKey[key] = path
 	}
 
 	var errs []error
-	for key, evs := range eventsByKey {
+	for key, fs := range factsByKey {
 		rec := recordByKey[key]
-		ident := identByKey[key]
-		if err := rec.entity.OnFact(ctx, ident, slices.Values(evs)); err != nil {
+		path := pathByKey[key]
+		if err := rec.entity.OnFact(ctx, path, slices.Values(fs)); err != nil {
 			errs = append(errs, fmt.Errorf("entity %s: %w", key, err))
 		}
 		// Bump generation so rules know this entity changed.
@@ -124,35 +124,35 @@ func (r *Registry) RouteFacts(ctx context.Context, facts []Fact) error {
 	return errors.Join(errs...)
 }
 
-// getOrCreateRecord finds or creates an entity record for the given identity.
+// getOrCreateRecord finds or creates an entity record for the given path.
 // Must be called with r.mu held.
-func (r *Registry) getOrCreateRecord(ident *Identity) (*entityRecord, error) {
-	if ident == nil {
+func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
+	if path == nil {
 		return nil, nil
 	}
 
-	key := identityKey(ident)
+	key := entityPathKey(path)
 	if rec, ok := r.entities[key]; ok {
 		return rec, nil
 	}
 
-	if ident.ParentID != nil {
-		parentIdent := &Identity{EntityID: *ident.ParentID}
-		if _, err := r.getOrCreateRecord(parentIdent); err != nil {
+	if path.ParentID != nil {
+		parentPath := &EntityPath{EntityID: *path.ParentID}
+		if _, err := r.getOrCreateRecord(parentPath); err != nil {
 			return nil, fmt.Errorf("create parent entity: %w", err)
 		}
 	}
 
-	factory, ok := r.factories[string(ident.EntityID.Type)]
+	factory, ok := r.factories[string(path.EntityID.Type)]
 	if !ok {
-		return nil, fmt.Errorf("no factory for entity type %s", ident.EntityID.Type)
+		return nil, fmt.Errorf("no factory for entity type %s", path.EntityID.Type)
 	}
 
 	rec := &entityRecord{entity: factory()}
 	r.entities[key] = rec
 
-	if ident.ParentID != nil {
-		pKey := entityIDKey(ident.ParentID)
+	if path.ParentID != nil {
+		pKey := entityIDKey(path.ParentID)
 		r.children[pKey] = append(r.children[pKey], key)
 	}
 
@@ -189,18 +189,18 @@ type EntityEntry struct {
 	Entity Entity
 }
 
-// IdentityKey returns the canonical registry key for an entity identity.
-func IdentityKey(ident *Identity) string {
-	return identityKey(ident)
+// EntityPathKey returns the canonical registry key for an entity path.
+func EntityPathKey(path *EntityPath) string {
+	return entityPathKey(path)
 }
 
-func identityKey(ident *Identity) string {
-	if ident == nil {
+func entityPathKey(path *EntityPath) string {
+	if path == nil {
 		return ""
 	}
-	key := fmt.Sprintf("%s:%s", ident.EntityID.Type, ident.EntityID.ID)
-	if ident.ParentID != nil {
-		key = fmt.Sprintf("%s@%s:%s", key, ident.ParentID.Type, ident.ParentID.ID)
+	key := fmt.Sprintf("%s:%s", path.EntityID.Type, path.EntityID.ID)
+	if path.ParentID != nil {
+		key = fmt.Sprintf("%s@%s:%s", key, path.ParentID.Type, path.ParentID.ID)
 	}
 	return key
 }

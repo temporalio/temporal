@@ -21,16 +21,16 @@ func NewEntityID(entityType EntityType, id string) EntityID {
 	return EntityID{Type: entityType, ID: id}
 }
 
-// Identity represents the full identity of an entity with optional parent.
-type Identity struct {
+// EntityPath identifies the entity a fact targets, optionally qualified by its parent.
+type EntityPath struct {
 	EntityID EntityID
 	ParentID *EntityID
 }
 
-// Event is the interface that all events must implement.
+// Fact is the interface that all facts must implement.
 type Fact interface {
 	Name() string
-	TargetEntity() *Identity
+	TargetEntity() *EntityPath
 }
 
 // BroadcastFact is a fact that is delivered to all entities of a given type,
@@ -44,7 +44,7 @@ type BroadcastFact interface {
 // Entity is the interface that all entities must implement.
 type Entity interface {
 	Type() EntityType
-	OnFact(ctx context.Context, identity *Identity, facts iter.Seq[Fact]) error
+	OnFact(ctx context.Context, path *EntityPath, facts iter.Seq[Fact]) error
 }
 
 // EntityFactory creates a new entity instance.

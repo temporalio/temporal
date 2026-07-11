@@ -8,7 +8,7 @@ import (
 // WorkflowTaskPolled represents a workflow task being polled.
 type WorkflowTaskPolled struct {
 	Request      *matchingservice.PollWorkflowTaskQueueRequest
-	Identity     *umpire.Identity
+	EntityPath   *umpire.EntityPath
 	TaskReturned bool
 }
 
@@ -16,8 +16,8 @@ func (e *WorkflowTaskPolled) Name() string {
 	return "WorkflowTaskPolled"
 }
 
-func (e *WorkflowTaskPolled) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowTaskPolled) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowTaskPolled) ImportRequest(request any) bool {
@@ -27,6 +27,6 @@ func (e *WorkflowTaskPolled) ImportRequest(request any) bool {
 	}
 	e.Request = req
 	tqID := umpire.NewEntityID(TaskQueueType, req.GetPollRequest().GetTaskQueue().GetName())
-	e.Identity = &umpire.Identity{EntityID: tqID}
+	e.EntityPath = &umpire.EntityPath{EntityID: tqID}
 	return true
 }

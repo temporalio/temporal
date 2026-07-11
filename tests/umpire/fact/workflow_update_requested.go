@@ -8,16 +8,16 @@ import (
 
 // WorkflowUpdateRequested represents a workflow update request.
 type WorkflowUpdateRequested struct {
-	Request  *historyservice.UpdateWorkflowExecutionRequest
-	Identity *umpire.Identity
+	Request    *historyservice.UpdateWorkflowExecutionRequest
+	EntityPath *umpire.EntityPath
 }
 
 func (e *WorkflowUpdateRequested) Name() string {
 	return "WorkflowUpdateRequested"
 }
 
-func (e *WorkflowUpdateRequested) TargetEntity() *umpire.Identity {
-	return e.Identity
+func (e *WorkflowUpdateRequested) TargetEntity() *umpire.EntityPath {
+	return e.EntityPath
 }
 
 func (e *WorkflowUpdateRequested) ImportRequest(request any) bool {
@@ -44,7 +44,7 @@ func (e *WorkflowUpdateRequested) ImportRequest(request any) bool {
 		id := umpire.NewEntityID(WorkflowType, wfID)
 		parentID = &id
 	}
-	e.Identity = &umpire.Identity{EntityID: updateID, ParentID: parentID}
+	e.EntityPath = &umpire.EntityPath{EntityID: updateID, ParentID: parentID}
 	return true
 }
 

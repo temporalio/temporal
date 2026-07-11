@@ -12,7 +12,7 @@ import (
 type TypeA struct{ received []Fact }
 
 func (e *TypeA) Type() EntityType { return "TypeA" }
-func (e *TypeA) OnFact(_ context.Context, _ *Identity, facts iter.Seq[Fact]) error {
+func (e *TypeA) OnFact(_ context.Context, _ *EntityPath, facts iter.Seq[Fact]) error {
 	for m := range facts {
 		e.received = append(e.received, m)
 	}
@@ -22,7 +22,7 @@ func (e *TypeA) OnFact(_ context.Context, _ *Identity, facts iter.Seq[Fact]) err
 type TypeB struct{ received []Fact }
 
 func (e *TypeB) Type() EntityType { return "TypeB" }
-func (e *TypeB) OnFact(_ context.Context, _ *Identity, facts iter.Seq[Fact]) error {
+func (e *TypeB) OnFact(_ context.Context, _ *EntityPath, facts iter.Seq[Fact]) error {
 	for m := range facts {
 		e.received = append(e.received, m)
 	}
@@ -61,7 +61,7 @@ func newFactoryB(t *testing.T, created *[]*TypeB) EntityFactory {
 
 func newFact(factType string, entityType EntityType, id string) *testFact {
 	eid := NewEntityID(entityType, id)
-	return &testFact{factType: factType, target: &Identity{EntityID: eid}}
+	return &testFact{factType: factType, target: &EntityPath{EntityID: eid}}
 }
 
 // ── RouteFacts creates entities on demand ────────────────────────────────────
@@ -190,7 +190,7 @@ func TestRegistry_RouteFacts_CreatesParentEntity(t *testing.T) {
 	childEID := NewEntityID("TypeA", "child1")
 	childFact := &testFact{
 		factType: "event",
-		target:   &Identity{EntityID: childEID, ParentID: &parentID},
+		target:   &EntityPath{EntityID: childEID, ParentID: &parentID},
 	}
 
 	_ = r.RouteFacts(context.Background(), []Fact{childFact})
@@ -210,8 +210,8 @@ func TestRegistry_RouteFacts_BatchedMovesDeliveredInOrder(t *testing.T) {
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
-	m1 := &testFact{factType: "first", target: &Identity{EntityID: NewEntityID("TypeA", "id1")}}
-	m2 := &testFact{factType: "second", target: &Identity{EntityID: NewEntityID("TypeA", "id1")}}
+	m1 := &testFact{factType: "first", target: &EntityPath{EntityID: NewEntityID("TypeA", "id1")}}
+	m2 := &testFact{factType: "second", target: &EntityPath{EntityID: NewEntityID("TypeA", "id1")}}
 	_ = r.RouteFacts(context.Background(), []Fact{m1, m2})
 
 	if len(created) != 1 {
