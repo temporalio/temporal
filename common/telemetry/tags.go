@@ -16,16 +16,26 @@ const (
 	BusinessIDKey = "temporalBusinessID"
 	RunIDKey      = "temporalRunID"
 
-	AttrWorkflowID  attribute.Key = "workflow.id"
-	AttrRunID       attribute.Key = "workflow.run_id"
-	AttrNamespaceID attribute.Key = "namespace.id"
-	AttrTaskQueue   attribute.Key = "task.queue"
-	AttrUpdateID    attribute.Key = "update.id"
-	AttrAbortReason attribute.Key = "abort.reason"
+	AttrWorkflowID    attribute.Key = "workflow.id"
+	AttrRunID         attribute.Key = "workflow.run_id"
+	AttrNamespaceID   attribute.Key = "namespace.id"
+	AttrTaskQueue     attribute.Key = "task.queue"
+	AttrUpdateID      attribute.Key = "update.id"
+	AttrAbortReason   attribute.Key = "abort.reason"
+	AttrUpdateOutcome attribute.Key = "update.outcome"
 
 	EventSpeculativeWorkflowTaskScheduled = "SpeculativeWorkflowTaskScheduled"
 	EventWorkflowTaskStored               = "WorkflowTaskStored"
 	EventWorkflowTaskDiscarded            = "WorkflowTaskDiscarded"
 	EventWorkflowUpdateAborted            = "WorkflowUpdateAborted"
+	EventWorkflowUpdateAdmitted           = "WorkflowUpdateAdmitted"
+	EventWorkflowUpdateAccepted           = "WorkflowUpdateAccepted"
+	EventWorkflowUpdateCompleted          = "WorkflowUpdateCompleted"
+	EventWorkflowUpdateRejected           = "WorkflowUpdateRejected"
+	EventWorkflowExecutionCompleted       = "WorkflowExecutionCompleted"
 	EventWorkflowTerminated               = "WorkflowTerminated"
+
+	// UpdateOutcomeSuccess / UpdateOutcomeFailure are values for AttrUpdateOutcome.
+	UpdateOutcomeSuccess = "success"
+	UpdateOutcomeFailure = "failure"
 )

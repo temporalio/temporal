@@ -61,7 +61,9 @@ func NewWorkflowUpdate() *WorkflowUpdate {
 		fsm.Events{
 			{Name: "admit", Src: []string{"unspecified"}, Dst: "admitted"},
 			{Name: "accept", Src: []string{"admitted"}, Dst: "accepted"},
-			{Name: "complete", Src: []string{"accepted"}, Dst: "completed"},
+			// complete may fire directly from admitted when a worker accepts and
+			// completes an update in the same workflow task (no separate accepted event).
+			{Name: "complete", Src: []string{"admitted", "accepted"}, Dst: "completed"},
 			{Name: "reject", Src: []string{"unspecified", "admitted", "accepted"}, Dst: "rejected"},
 			// abort: update aborted by server (e.g., workflow closed, registry cleared).
 			{Name: "abort", Src: []string{"unspecified", "admitted", "accepted"}, Dst: "aborted"},
@@ -94,8 +96,7 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.Identity, ev
 			wu.LastSeenAt = time.Now()
 		case *fact.WorkflowUpdateAdmitted:
 			if wu.UpdateID == "" {
-				wu.UpdateID = e.UpdateID()
-				wu.HandlerName = e.HandlerName()
+				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Can("admit") {
 				_ = wu.FSM.Event(ctx, "admit")
@@ -110,7 +111,7 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.Identity, ev
 			}
 		case *fact.WorkflowUpdateCompleted:
 			if wu.UpdateID == "" {
-				wu.UpdateID = e.UpdateID()
+				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Can("complete") {
 				_ = wu.FSM.Event(ctx, "complete")
@@ -128,7 +129,7 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.Identity, ev
 			}
 		case *fact.WorkflowUpdateRejected:
 			if wu.UpdateID == "" {
-				wu.UpdateID = e.UpdateID()
+				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Can("reject") {
 				_ = wu.FSM.Event(ctx, "reject")

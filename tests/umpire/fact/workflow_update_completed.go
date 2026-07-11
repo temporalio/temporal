@@ -1,30 +1,35 @@
 package fact
 
 import (
-	historyv1 "go.temporal.io/api/history/v1"
-	updatev1 "go.temporal.io/api/update/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
 )
 
 // WorkflowUpdateCompleted represents a workflow update being completed.
 type WorkflowUpdateCompleted struct {
-	Attributes *historyv1.WorkflowExecutionUpdateCompletedEventAttributes
+	UpdateID   string
+	WorkflowID string
+	Success    bool
 	Identity   *umpire.Identity
 }
 
 func (e *WorkflowUpdateCompleted) Name() string {
-	return "WorkflowUpdateCompleted"
+	return telemetry.EventWorkflowUpdateCompleted
 }
 
 func (e *WorkflowUpdateCompleted) TargetEntity() *umpire.Identity {
 	return e.Identity
 }
 
-func (e *WorkflowUpdateCompleted) UpdateID() string {
-	return e.Attributes.GetMeta().GetUpdateId()
+func (e *WorkflowUpdateCompleted) IsSuccess() bool {
+	return e.Success
 }
 
-func (e *WorkflowUpdateCompleted) IsSuccess() bool {
-	_, ok := e.Attributes.GetOutcome().GetValue().(*updatev1.Outcome_Success)
-	return ok
+func (e *WorkflowUpdateCompleted) ImportSpanEvent(attrs attribute.Set) bool {
+	e.UpdateID, e.WorkflowID, e.Identity = importUpdateSpanEvent(attrs)
+	if v, ok := attrs.Value(telemetry.AttrUpdateOutcome); ok {
+		e.Success = v.AsString() == telemetry.UpdateOutcomeSuccess
+	}
+	return e.UpdateID != ""
 }

@@ -9,15 +9,13 @@ import (
 func RegisterDefaultEntities(r *umpire.Registry) {
 	r.RegisterFact(
 		&fact.WorkflowStarted{},
+		&fact.WorkflowExecutionCompleted{},
 		&fact.WorkflowTaskAdded{},
 		&fact.WorkflowTaskPolled{},
-		&fact.WorkflowTaskCompleted{},
 		&fact.WorkflowTaskStored{},
 		&fact.WorkflowTaskDiscarded{},
 		&fact.WorkflowTerminated{},
 		&fact.SpeculativeWorkflowTaskScheduled{},
-		&fact.ActivityTaskAdded{},
-		&fact.ActivityTaskPolled{},
 		&fact.WorkflowUpdateRequested{},
 		&fact.WorkflowUpdateAdmitted{},
 		&fact.WorkflowUpdateAccepted{},
@@ -29,14 +27,13 @@ func RegisterDefaultEntities(r *umpire.Registry) {
 	r.RegisterEntity(
 		func() umpire.Entity { return NewWorkflow() },
 		&fact.WorkflowStarted{},
+		&fact.WorkflowExecutionCompleted{},
 	)
 
 	r.RegisterEntity(
 		func() umpire.Entity { return NewTaskQueue() },
 		&fact.WorkflowTaskAdded{},
 		&fact.WorkflowTaskPolled{},
-		&fact.ActivityTaskAdded{},
-		&fact.ActivityTaskPolled{},
 	)
 
 	r.RegisterEntity(

@@ -93,8 +93,10 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.Identity, events iter.
 				wf.Running.Set()
 			}
 			wf.LastSeenAt = time.Now()
-		case *fact.WorkflowTaskCompleted:
-			_ = e
+		case *fact.WorkflowExecutionCompleted:
+			if wf.WorkflowID == "" {
+				wf.WorkflowID = e.WorkflowID
+			}
 			if wf.FSM.Can("complete") {
 				_ = wf.FSM.Event(ctx, "complete")
 				wf.CompletedAt = time.Now()

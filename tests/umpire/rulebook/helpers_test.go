@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	commonpb "go.temporal.io/api/common/v1"
-	historyv1 "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatev1 "go.temporal.io/api/update/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
@@ -115,13 +114,9 @@ func makeWorkflowUpdateAdmitted(workflowID, updateID string) *fact.WorkflowUpdat
 	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
 	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateAdmitted{
-		Attributes: &historyv1.WorkflowExecutionUpdateAdmittedEventAttributes{
-			Request: &updatev1.Request{
-				Meta:  &updatev1.Meta{UpdateId: updateID},
-				Input: &updatev1.Input{Name: "handler"},
-			},
-		},
-		Identity: &umpire.Identity{EntityID: updID, ParentID: &wfID},
+		UpdateID:   updateID,
+		WorkflowID: workflowID,
+		Identity:   &umpire.Identity{EntityID: updID, ParentID: &wfID},
 	}
 }
 
@@ -129,7 +124,8 @@ func makeWorkflowUpdateAccepted(workflowID, updateID string) *fact.WorkflowUpdat
 	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
 	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateAccepted{
-		Attributes: &historyv1.WorkflowExecutionUpdateAcceptedEventAttributes{},
+		UpdateID:   updateID,
+		WorkflowID: workflowID,
 		Identity:   &umpire.Identity{EntityID: updID, ParentID: &wfID},
 	}
 }
@@ -138,11 +134,10 @@ func makeWorkflowUpdateCompleted(workflowID, updateID string) *fact.WorkflowUpda
 	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
 	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateCompleted{
-		Attributes: &historyv1.WorkflowExecutionUpdateCompletedEventAttributes{
-			Meta:    &updatev1.Meta{UpdateId: updateID},
-			Outcome: &updatev1.Outcome{Value: &updatev1.Outcome_Success{}},
-		},
-		Identity: &umpire.Identity{EntityID: updID, ParentID: &wfID},
+		UpdateID:   updateID,
+		WorkflowID: workflowID,
+		Success:    true,
+		Identity:   &umpire.Identity{EntityID: updID, ParentID: &wfID},
 	}
 }
 
@@ -150,12 +145,9 @@ func makeWorkflowUpdateRejected(workflowID, updateID string) *fact.WorkflowUpdat
 	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
 	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateRejected{
-		Attributes: &historyv1.WorkflowExecutionUpdateRejectedEventAttributes{
-			RejectedRequest: &updatev1.Request{
-				Meta: &updatev1.Meta{UpdateId: updateID},
-			},
-		},
-		Identity: &umpire.Identity{EntityID: updID, ParentID: &wfID},
+		UpdateID:   updateID,
+		WorkflowID: workflowID,
+		Identity:   &umpire.Identity{EntityID: updID, ParentID: &wfID},
 	}
 }
 
@@ -188,9 +180,10 @@ func makeWorkflowStarted(workflowID string) *fact.WorkflowStarted {
 	}
 }
 
-func makeWorkflowCompleted(workflowID string) *fact.WorkflowTaskCompleted {
+func makeWorkflowCompleted(workflowID string) *fact.WorkflowExecutionCompleted {
 	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	return &fact.WorkflowTaskCompleted{
-		Identity: &umpire.Identity{EntityID: wfID},
+	return &fact.WorkflowExecutionCompleted{
+		WorkflowID: workflowID,
+		Identity:   &umpire.Identity{EntityID: wfID},
 	}
 }

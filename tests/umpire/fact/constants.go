@@ -7,6 +7,5 @@ const (
 	WorkflowTaskType      umpire.EntityType = "WorkflowTask"
 	TaskQueueType         umpire.EntityType = "TaskQueue"
 	WorkflowUpdateType    umpire.EntityType = "WorkflowUpdate"
-	ActivityTaskType      umpire.EntityType = "ActivityTask"
 	NamespaceType         umpire.EntityType = "Namespace"
 )

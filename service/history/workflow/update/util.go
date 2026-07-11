@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -19,6 +20,11 @@ type (
 		metrics   metrics.Handler
 		tracer    trace.Tracer
 		namespace string
+
+		// Workflow execution info for OTEL events observed by the umpire test observer.
+		workflowID string
+		runID      string
+		taskQueue  string
 	}
 )
 
@@ -125,6 +131,20 @@ func (i *instrumentation) emitAbortEvents(workflowID string, updateIDs []string,
 			),
 		)
 	}
+}
+
+// emitUpdateLifecycleEvent emits an OTEL span event for an update state
+// transition so the umpire test observer can drive its WorkflowUpdate FSM.
+// eventName is one of the telemetry.EventWorkflowUpdate* constants.
+func (i *instrumentation) emitUpdateLifecycleEvent(eventName, updateID string, extra ...attribute.KeyValue) {
+	_, span := i.tracer.Start(context.Background(), "update.lifecycle")
+	defer span.End()
+	attrs := []attribute.KeyValue{
+		telemetry.AttrUpdateID.String(updateID),
+		telemetry.AttrWorkflowID.String(i.workflowID),
+		telemetry.AttrRunID.String(i.runID),
+	}
+	span.AddEvent(eventName, trace.WithAttributes(append(attrs, extra...)...))
 }
 
 // emitWorkflowTerminatedEvent emits an OTEL span event so the umpire test

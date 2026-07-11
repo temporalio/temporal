@@ -176,6 +176,9 @@ func WithWorkflowExecution(workflowID, runID, taskQueue string) Option {
 		r.workflowID = workflowID
 		r.runID = runID
 		r.taskQueue = taskQueue
+		r.instrumentation.workflowID = workflowID
+		r.instrumentation.runID = runID
+		r.instrumentation.taskQueue = taskQueue
 	}
 }
 

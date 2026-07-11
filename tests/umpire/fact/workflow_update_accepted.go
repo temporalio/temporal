@@ -1,20 +1,27 @@
 package fact
 
 import (
-	historyv1 "go.temporal.io/api/history/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
 )
 
 // WorkflowUpdateAccepted represents a workflow update being accepted by a worker.
 type WorkflowUpdateAccepted struct {
-	Attributes *historyv1.WorkflowExecutionUpdateAcceptedEventAttributes
+	UpdateID   string
+	WorkflowID string
 	Identity   *umpire.Identity
 }
 
 func (e *WorkflowUpdateAccepted) Name() string {
-	return "WorkflowUpdateAccepted"
+	return telemetry.EventWorkflowUpdateAccepted
 }
 
 func (e *WorkflowUpdateAccepted) TargetEntity() *umpire.Identity {
 	return e.Identity
+}
+
+func (e *WorkflowUpdateAccepted) ImportSpanEvent(attrs attribute.Set) bool {
+	e.UpdateID, e.WorkflowID, e.Identity = importUpdateSpanEvent(attrs)
+	return e.UpdateID != ""
 }

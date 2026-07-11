@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -357,6 +358,7 @@ func (u *Update) Admit(
 		}
 		u.setState(stateAdmitted)
 		u.admittedTime = time.Now().UTC()
+		u.instrumentation.emitUpdateLifecycleEvent(telemetry.EventWorkflowUpdateAdmitted, u.id)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyAdmitted {
@@ -692,6 +694,7 @@ func (u *Update) onAcceptanceMsg(
 		}
 		u.setState(stateAccepted)
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+		u.instrumentation.emitUpdateLifecycleEvent(telemetry.EventWorkflowUpdateAccepted, u.id)
 	})
 	eventStore.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyAccepted {
@@ -758,6 +761,7 @@ func (u *Update) reject(
 		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rejectionFailure, nil)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
 		u.onComplete()
+		u.instrumentation.emitUpdateLifecycleEvent(telemetry.EventWorkflowUpdateRejected, u.id)
 	})
 	effects.OnAfterRollback(func(context.Context) {
 		if u.state != stateProvisionallyCompleted {
@@ -793,6 +797,12 @@ func (u *Update) onResponseMsg(
 		}
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
+		updateOutcome := telemetry.UpdateOutcomeSuccess
+		if res.GetOutcome().GetFailure() != nil {
+			updateOutcome = telemetry.UpdateOutcomeFailure
+		}
+		u.instrumentation.emitUpdateLifecycleEvent(telemetry.EventWorkflowUpdateCompleted, u.id,
+			telemetry.AttrUpdateOutcome.String(updateOutcome))
 		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
 			// If the Update is accepted *and* completed in the same WFT,
 			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.

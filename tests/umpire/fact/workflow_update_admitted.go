@@ -1,28 +1,28 @@
 package fact
 
 import (
-	historyv1 "go.temporal.io/api/history/v1"
+	"go.opentelemetry.io/otel/attribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/umpire"
 )
 
-// WorkflowUpdateAdmitted represents a workflow update being admitted.
+// WorkflowUpdateAdmitted represents a workflow update being admitted to the
+// history update registry.
 type WorkflowUpdateAdmitted struct {
-	Attributes *historyv1.WorkflowExecutionUpdateAdmittedEventAttributes
+	UpdateID   string
+	WorkflowID string
 	Identity   *umpire.Identity
 }
 
 func (e *WorkflowUpdateAdmitted) Name() string {
-	return "WorkflowUpdateAdmitted"
+	return telemetry.EventWorkflowUpdateAdmitted
 }
 
 func (e *WorkflowUpdateAdmitted) TargetEntity() *umpire.Identity {
 	return e.Identity
 }
 
-func (e *WorkflowUpdateAdmitted) UpdateID() string {
-	return e.Attributes.GetRequest().GetMeta().GetUpdateId()
-}
-
-func (e *WorkflowUpdateAdmitted) HandlerName() string {
-	return e.Attributes.GetRequest().GetInput().GetName()
+func (e *WorkflowUpdateAdmitted) ImportSpanEvent(attrs attribute.Set) bool {
+	e.UpdateID, e.WorkflowID, e.Identity = importUpdateSpanEvent(attrs)
+	return e.UpdateID != ""
 }

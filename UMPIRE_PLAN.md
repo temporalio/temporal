@@ -27,11 +27,6 @@ tests/umpire/                   # Temporal domain
 └── rulebook/                   # 15 rules (5 safety, 10 liveness) + unit tests
 ```
 
-Terminology note: an earlier design used a baseball metaphor (`pitcher`, `scorebook`,
-`lineup`, `moves` under `tools/umpire/`). That layout is gone. Current names:
-scorebook → `FactLog`, lineup → `Registry`/`entity`, moves → **facts**, models → **rules**,
-pitcher → `FaultInjector`.
-
 ## How it works
 
 1. `functional_test_base.go` builds the `Umpire`, installs its gRPC interceptor, and
@@ -46,17 +41,6 @@ pitcher → `FaultInjector`.
 
 ## Status
 
-### Working
-- Framework builds clean; `registry_test.go` and `fact_log_test.go` pass.
-- All 15 rules implemented (no stubs/TODOs), each with a positive + negative unit test;
-  rulebook unit tests pass.
-- Dirty tracking (generation counter, `ChangedEntities`, `Pending`/`Resolve` watermark)
-  fully implemented per the original dirty-tracking plan.
-- `WorkflowTask` and `WorkflowUpdate` entities are richly modeled (real FSMs).
-- Live wiring exists: interceptor + span processor installed in the functional test base;
-  `service/history/workflow/cache/cache.go` emits real instrumentation spans;
-  `tests/lost_task_test.go` is an end-to-end functional test asserting detection.
-
 ### Gaps
 - **Decoder is the critical gap.** The four update-lifecycle facts
   (`WorkflowUpdateAdmitted/Accepted/Completed/Rejected`) have no importer — no
@@ -66,8 +50,6 @@ pitcher → `FaultInjector`.
   tool test-only.
 - `WorkflowTaskCompleted` never sets an `Identity` and `Workflow` isn't registered for it,
   so the workflow `→completed` transition never fires live (tests only).
-- `ActivityTask` is dead: facts (`ActivityTaskAdded/Polled`) exist and decode, but there is
-  no ActivityTask entity and `TaskQueue.OnFact` ignores them.
 - Only one production instrumentation site exists (workflow cache lock).
 
 ### Cleanup / redundancy
@@ -91,8 +73,7 @@ pitcher → `FaultInjector`.
 2. **Fix `WorkflowTaskCompleted`** identity + registration so the Workflow FSM completes live.
 3. **Consolidate rules:** collapse the two dedup rules; resolve the Loss-vs-specific
    overlap; reconcile Closure vs. HistoryOrdering.
-4. **Decide ActivityTask's fate:** add the entity + rules, or remove the facts and constants.
-5. **Housekeeping:** rename `workflow_task_stale_token.go` to match its type; drop unused
+4. **Housekeeping:** rename `workflow_task_stale_token.go` to match its type; drop unused
    `WorkflowExecutionType` / `ExecutionID`.
 
 ## Rule inventory
