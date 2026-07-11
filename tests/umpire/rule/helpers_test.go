@@ -45,7 +45,7 @@ func makeWorkflowTaskAdded(taskQueue, workflowID, runID string) *fact.WorkflowTa
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		},
-		EntityPath: &umpire.EntityPath{EntityID: wtID, ParentID: &tqID},
+		EntityPath: &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{tqID}},
 	}
 }
 
@@ -56,7 +56,7 @@ func makeWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.WorkflowT
 		TaskQueue:  taskQueue,
 		WorkflowID: workflowID,
 		RunID:      runID,
-		EntityPath: &umpire.EntityPath{EntityID: wtID, ParentID: &tqID},
+		EntityPath: &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{tqID}},
 	}
 }
 
@@ -67,7 +67,7 @@ func makeSpecWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.Workf
 		TaskQueue:  taskQueue,
 		WorkflowID: workflowID,
 		RunID:      runID,
-		EntityPath: &umpire.EntityPath{EntityID: wtID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -78,7 +78,7 @@ func makeSpeculativeScheduled(taskQueue, workflowID, runID string) *fact.Specula
 		WorkflowID: workflowID,
 		RunID:      runID,
 		TaskQueue:  taskQueue,
-		EntityPath: &umpire.EntityPath{EntityID: wtID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -91,7 +91,7 @@ func makeWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturned bo
 				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			},
 		},
-		EntityPath:   &umpire.EntityPath{EntityID: wtID, ParentID: &tqID},
+		EntityPath:   &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{tqID}},
 		TaskReturned: taskReturned,
 	}
 }
@@ -105,7 +105,7 @@ func makeSpecWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturne
 				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			},
 		},
-		EntityPath:   &umpire.EntityPath{EntityID: wtID, ParentID: &wfID},
+		EntityPath:   &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{wfID}},
 		TaskReturned: taskReturned,
 	}
 }
@@ -116,7 +116,7 @@ func makeWorkflowUpdateAdmitted(workflowID, updateID string) *fact.WorkflowUpdat
 	return &fact.WorkflowUpdateAdmitted{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -126,7 +126,7 @@ func makeWorkflowUpdateAccepted(workflowID, updateID string) *fact.WorkflowUpdat
 	return &fact.WorkflowUpdateAccepted{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -137,7 +137,7 @@ func makeWorkflowUpdateCompleted(workflowID, updateID string) *fact.WorkflowUpda
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
 		Success:    true,
-		EntityPath: &umpire.EntityPath{EntityID: updID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -147,7 +147,7 @@ func makeWorkflowUpdateRejected(workflowID, updateID string) *fact.WorkflowUpdat
 	return &fact.WorkflowUpdateRejected{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 
@@ -164,7 +164,7 @@ func makeWorkflowUpdateRequested(workflowID, updateID string) *fact.WorkflowUpda
 				},
 			},
 		},
-		EntityPath: &umpire.EntityPath{EntityID: updID, ParentID: &wfID},
+		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 

@@ -9,9 +9,10 @@ import (
 // WorkflowTerminated represents a workflow reaching a terminal state.
 // Broadcast to all WorkflowTask entities so they can transition to a terminal state.
 type WorkflowTerminated struct {
-	WorkflowID string
-	RunID      string
-	TaskQueue  string
+	WorkflowID  string
+	RunID       string
+	TaskQueue   string
+	NamespaceID string
 }
 
 func (e *WorkflowTerminated) Name() string {
@@ -35,6 +36,9 @@ func (e *WorkflowTerminated) ImportSpanEvent(attrs attribute.Set) bool {
 	}
 	if v, ok := attrs.Value(telemetry.AttrTaskQueue); ok {
 		e.TaskQueue = v.AsString()
+	}
+	if v, ok := attrs.Value(telemetry.AttrNamespaceID); ok {
+		e.NamespaceID = v.AsString()
 	}
 	return e.WorkflowID != ""
 }

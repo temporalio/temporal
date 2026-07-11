@@ -16,14 +16,14 @@ type Registry struct {
 	factories  map[string]EntityFactory
 	facts      map[string]bool
 	entities   map[string]*entityRecord
-	children   map[string][]string
 	generation atomic.Uint64
 }
 
-// entityRecord wraps an entity with its change generation.
+// entityRecord wraps an entity with its change generation and scoping root.
 type entityRecord struct {
 	entity     Entity
-	generation uint64 // bumped each time RouteFacts delivers facts to this entity
+	generation uint64   // bumped each time RouteFacts delivers facts to this entity
+	root       EntityID // outermost ancestor (e.g. the namespace); used to scope Check/Purge
 }
 
 // NewRegistry creates a new in-memory entity registry.
@@ -32,7 +32,6 @@ func NewRegistry() *Registry {
 		factories: make(map[string]EntityFactory),
 		facts:     make(map[string]bool),
 		entities:  make(map[string]*entityRecord),
-		children:  make(map[string][]string),
 	}
 }
 
@@ -124,7 +123,10 @@ func (r *Registry) RouteFacts(ctx context.Context, facts []Fact) error {
 	return errors.Join(errs...)
 }
 
-// getOrCreateRecord finds or creates an entity record for the given path.
+// getOrCreateRecord finds or creates an entity record for the given path,
+// creating any ancestor records that themselves have a registered factory.
+// Ancestor types without a factory (e.g. the namespace root) are keying-only:
+// they appear in the key and scoping root but hold no entity record.
 // Must be called with r.mu held.
 func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
 	if path == nil {
@@ -136,10 +138,11 @@ func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
 		return rec, nil
 	}
 
-	if path.ParentID != nil {
-		parentPath := &EntityPath{EntityID: *path.ParentID}
-		if _, err := r.getOrCreateRecord(parentPath); err != nil {
-			return nil, fmt.Errorf("create parent entity: %w", err)
+	if parent := path.Parent(); parent != nil {
+		if _, ok := r.factories[string(parent.EntityID.Type)]; ok {
+			if _, err := r.getOrCreateRecord(parent); err != nil {
+				return nil, fmt.Errorf("create parent entity: %w", err)
+			}
 		}
 	}
 
@@ -148,13 +151,8 @@ func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
 		return nil, fmt.Errorf("no factory for entity type %s", path.EntityID.Type)
 	}
 
-	rec := &entityRecord{entity: factory()}
+	rec := &entityRecord{entity: factory(), root: path.Root()}
 	r.entities[key] = rec
-
-	if path.ParentID != nil {
-		pKey := entityIDKey(path.ParentID)
-		r.children[pKey] = append(r.children[pKey], key)
-	}
 
 	return rec, nil
 }
@@ -164,9 +162,10 @@ func (r *Registry) Generation() uint64 {
 	return r.generation.Load()
 }
 
-// QueryEntities returns all entities of the given type with their entity ID.
+// QueryEntities returns all entities of the given type with their registry key.
 // If sinceGeneration > 0, only entities changed after that generation are returned.
-func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64) []EntityEntry {
+// If scope is non-nil, only entities rooted at that ancestor are returned.
+func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64, scope *EntityID) []EntityEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -178,9 +177,28 @@ func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64) []Entity
 		if sinceGeneration > 0 && rec.generation <= sinceGeneration {
 			continue
 		}
+		if scope != nil && rec.root != *scope {
+			continue
+		}
 		result = append(result, EntityEntry{Key: key, Entity: rec.entity})
 	}
 	return result
+}
+
+// PurgeScope removes every entity rooted at the given ancestor and returns the
+// number removed. Use it to drop all data collected for one namespace.
+func (r *Registry) PurgeScope(root EntityID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var removed int
+	for key, rec := range r.entities {
+		if rec.root == root {
+			delete(r.entities, key)
+			removed++
+		}
+	}
+	return removed
 }
 
 // EntityEntry pairs an entity with its registry key.
@@ -189,7 +207,8 @@ type EntityEntry struct {
 	Entity Entity
 }
 
-// EntityPathKey returns the canonical registry key for an entity path.
+// EntityPathKey returns the canonical registry key for an entity path,
+// ordered root-first (e.g. "namespace:ns@Workflow:wf@WorkflowUpdate:upd").
 func EntityPathKey(path *EntityPath) string {
 	return entityPathKey(path)
 }
@@ -198,16 +217,9 @@ func entityPathKey(path *EntityPath) string {
 	if path == nil {
 		return ""
 	}
-	key := fmt.Sprintf("%s:%s", path.EntityID.Type, path.EntityID.ID)
-	if path.ParentID != nil {
-		key = fmt.Sprintf("%s@%s:%s", key, path.ParentID.Type, path.ParentID.ID)
+	key := ""
+	for _, a := range path.Ancestors {
+		key += fmt.Sprintf("%s:%s@", a.Type, a.ID)
 	}
-	return key
-}
-
-func entityIDKey(id *EntityID) string {
-	if id == nil {
-		return ""
-	}
-	return fmt.Sprintf("%s:%s", id.Type, id.ID)
+	return key + fmt.Sprintf("%s:%s", path.EntityID.Type, path.EntityID.ID)
 }

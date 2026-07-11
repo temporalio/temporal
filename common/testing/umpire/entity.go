@@ -21,10 +21,42 @@ func NewEntityID(entityType EntityType, id string) EntityID {
 	return EntityID{Type: entityType, ID: id}
 }
 
-// EntityPath identifies the entity a fact targets, optionally qualified by its parent.
+// EntityPath identifies the entity a fact targets: the entity's own EntityID plus
+// its ancestors, ordered root-first (Ancestors[0] is the outermost, e.g. the namespace).
 type EntityPath struct {
-	EntityID EntityID
-	ParentID *EntityID
+	EntityID  EntityID
+	Ancestors []EntityID
+}
+
+// Root returns the outermost ancestor — the scoping root, e.g. the namespace —
+// or the entity's own ID when it has no ancestors.
+func (p *EntityPath) Root() EntityID {
+	if len(p.Ancestors) > 0 {
+		return p.Ancestors[0]
+	}
+	return p.EntityID
+}
+
+// Parent returns the path of the immediate parent, or nil at the root.
+func (p *EntityPath) Parent() *EntityPath {
+	n := len(p.Ancestors)
+	if n == 0 {
+		return nil
+	}
+	return &EntityPath{EntityID: p.Ancestors[n-1], Ancestors: p.Ancestors[:n-1]}
+}
+
+// Contains reports whether id is the entity itself or one of its ancestors.
+func (p *EntityPath) Contains(id EntityID) bool {
+	if p.EntityID == id {
+		return true
+	}
+	for _, a := range p.Ancestors {
+		if a == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Fact is the interface that all facts must implement.

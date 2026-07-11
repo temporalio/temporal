@@ -5,30 +5,60 @@ import (
 	"go.temporal.io/server/tests/umpire/fact"
 )
 
-// WorkflowPath builds entity keys rooted at a workflow.
-type WorkflowPath struct {
-	workflowID string
+// NamespacePath builds entity keys rooted at a namespace.
+type NamespacePath struct {
+	namespaceID string
 }
 
-// Workflow starts building an entity key path rooted at a workflow ID.
-func Workflow(workflowID string) WorkflowPath {
-	return WorkflowPath{workflowID: workflowID}
+// Namespace starts building an entity key path rooted at a namespace ID.
+func Namespace(namespaceID string) NamespacePath {
+	return NamespacePath{namespaceID: namespaceID}
 }
 
-// Update returns the registry key for a workflow update entity.
-func (p WorkflowPath) Update(updateID string) string {
-	parentID := umpirefw.NewEntityID(fact.WorkflowType, p.workflowID)
+func (p NamespacePath) ancestors() []umpirefw.EntityID {
+	if p.namespaceID == "" {
+		return nil
+	}
+	return []umpirefw.EntityID{umpirefw.NewEntityID(fact.NamespaceType, p.namespaceID)}
+}
+
+// Workflow descends to a workflow rooted at the namespace.
+func (p NamespacePath) Workflow(workflowID string) WorkflowPath {
+	return WorkflowPath{namespaceID: p.namespaceID, workflowID: workflowID}
+}
+
+// TaskQueue returns the registry key for a task queue entity.
+func (p NamespacePath) TaskQueue(name string) string {
 	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
-		EntityID: umpirefw.NewEntityID(fact.WorkflowUpdateType, updateID),
-		ParentID: &parentID,
+		EntityID:  umpirefw.NewEntityID(fact.TaskQueueType, name),
+		Ancestors: p.ancestors(),
 	})
 }
 
-// Task returns the registry key for a workflow task entity.
-func (p WorkflowPath) Task(taskQueue, runID string) string {
-	tqID := umpirefw.NewEntityID(fact.TaskQueueType, taskQueue)
+// WorkflowPath builds entity keys rooted at a workflow within a namespace.
+type WorkflowPath struct {
+	namespaceID string
+	workflowID  string
+}
+
+// Update returns the registry key for a workflow update entity
+// (keyed under its parent workflow).
+func (p WorkflowPath) Update(updateID string) string {
+	ancestors := Namespace(p.namespaceID).ancestors()
+	ancestors = append(ancestors, umpirefw.NewEntityID(fact.WorkflowType, p.workflowID))
 	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
-		EntityID: umpirefw.NewEntityID(fact.WorkflowTaskType, taskQueue+":"+p.workflowID+":"+runID),
-		ParentID: &tqID,
+		EntityID:  umpirefw.NewEntityID(fact.WorkflowUpdateType, updateID),
+		Ancestors: ancestors,
+	})
+}
+
+// Task returns the registry key for a workflow task entity
+// (keyed under its task queue).
+func (p WorkflowPath) Task(taskQueue, runID string) string {
+	ancestors := Namespace(p.namespaceID).ancestors()
+	ancestors = append(ancestors, umpirefw.NewEntityID(fact.TaskQueueType, taskQueue))
+	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
+		EntityID:  umpirefw.NewEntityID(fact.WorkflowTaskType, taskQueue+":"+p.workflowID+":"+runID),
+		Ancestors: ancestors,
 	})
 }

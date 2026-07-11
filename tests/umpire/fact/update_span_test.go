@@ -31,9 +31,10 @@ func TestUpdateSpanFacts_ImportSpanEvent(t *testing.T) {
 	require.NotNil(t, ident)
 	require.Equal(t, WorkflowUpdateType, ident.EntityID.Type)
 	require.Equal(t, "upd1", ident.EntityID.ID)
-	require.NotNil(t, ident.ParentID)
-	require.Equal(t, WorkflowType, ident.ParentID.Type)
-	require.Equal(t, "wf1", ident.ParentID.ID)
+	parent := ident.Parent()
+	require.NotNil(t, parent)
+	require.Equal(t, WorkflowType, parent.EntityID.Type)
+	require.Equal(t, "wf1", parent.EntityID.ID)
 
 	accepted := &WorkflowUpdateAccepted{}
 	require.True(t, accepted.ImportSpanEvent(attrs))

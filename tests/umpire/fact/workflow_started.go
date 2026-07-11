@@ -26,6 +26,6 @@ func (e *WorkflowStarted) ImportRequest(request any) bool {
 	}
 	e.Request = req
 	wfID := umpire.NewEntityID(WorkflowType, req.GetStartRequest().GetWorkflowId())
-	e.EntityPath = &umpire.EntityPath{EntityID: wfID}
+	e.EntityPath = nsPath(req.GetNamespaceId(), wfID)
 	return true
 }

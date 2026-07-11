@@ -1231,7 +1231,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
-			update.WithWorkflowExecution(wfKey.WorkflowID, wfKey.RunID, c.MutableState.CurrentTaskQueue().GetName()),
+			update.WithWorkflowExecution(wfKey.NamespaceID, wfKey.WorkflowID, wfKey.RunID, c.MutableState.CurrentTaskQueue().GetName()),
 			update.WithInFlightLimit(
 				func() int {
 					return c.config.WorkflowExecutionMaxInFlightUpdates(nsName)

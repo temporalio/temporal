@@ -11,6 +11,7 @@ import (
 type WorkflowUpdateAborted struct {
 	UpdateID    string
 	WorkflowID  string
+	NamespaceID string
 	AbortReason string
 	EntityPath  *umpire.EntityPath
 }
@@ -33,15 +34,17 @@ func (e *WorkflowUpdateAborted) ImportSpanEvent(attrs attribute.Set) bool {
 	if v, ok := attrs.Value(telemetry.AttrAbortReason); ok {
 		e.AbortReason = v.AsString()
 	}
+	if v, ok := attrs.Value(telemetry.AttrNamespaceID); ok {
+		e.NamespaceID = v.AsString()
+	}
 	if e.UpdateID == "" {
 		return false
 	}
 	updateID := umpire.NewEntityID(WorkflowUpdateType, e.UpdateID)
-	var parentID *umpire.EntityID
+	var parents []umpire.EntityID
 	if e.WorkflowID != "" {
-		id := umpire.NewEntityID(WorkflowType, e.WorkflowID)
-		parentID = &id
+		parents = append(parents, umpire.NewEntityID(WorkflowType, e.WorkflowID))
 	}
-	e.EntityPath = &umpire.EntityPath{EntityID: updateID, ParentID: parentID}
+	e.EntityPath = nsPath(e.NamespaceID, updateID, parents...)
 	return true
 }

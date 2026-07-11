@@ -29,6 +29,7 @@ type WorkflowTask struct {
 	TaskQueue     string
 	WorkflowID    string
 	RunID         string
+	NamespaceID   string
 	FSM           *fsm.FSM
 	AddedAt       time.Time
 	PolledAt      time.Time
@@ -70,7 +71,12 @@ func (wt *WorkflowTask) Type() umpire.EntityType {
 	return WorkflowTaskType
 }
 
-func (wt *WorkflowTask) OnFact(ctx context.Context, _ *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
+func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
+	if wt.NamespaceID == "" && path != nil {
+		if root := path.Root(); root.Type == NamespaceType {
+			wt.NamespaceID = root.ID
+		}
+	}
 	for ev := range events {
 		switch e := ev.(type) {
 		case *fact.WorkflowTaskAdded:
@@ -101,7 +107,7 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, _ *umpire.EntityPath, events
 				_ = wt.FSM.Event(ctx, "discard")
 			}
 		case *fact.WorkflowTerminated:
-			if wt.WorkflowID == e.WorkflowID && wt.FSM.Can("terminate") {
+			if wt.WorkflowID == e.WorkflowID && wt.NamespaceID == e.NamespaceID && wt.FSM.Can("terminate") {
 				_ = wt.FSM.Event(ctx, "terminate")
 			}
 		case *fact.SpeculativeWorkflowTaskScheduled:

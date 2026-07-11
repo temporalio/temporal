@@ -42,9 +42,6 @@ func (e *SpeculativeWorkflowTaskScheduled) ImportSpanEvent(attrs attribute.Set) 
 	}
 	wfID := umpire.NewEntityID(WorkflowType, e.WorkflowID)
 	wtID := umpire.NewEntityID(WorkflowTaskType, e.TaskQueue+":"+e.WorkflowID+":"+e.RunID)
-	e.EntityPath = &umpire.EntityPath{
-		EntityID: wtID,
-		ParentID: &wfID,
-	}
+	e.EntityPath = nsPath(e.NamespaceID, wtID, wfID)
 	return true
 }

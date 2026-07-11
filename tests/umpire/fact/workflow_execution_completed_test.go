@@ -23,7 +23,7 @@ func TestWorkflowExecutionCompleted_ImportSpanEvent(t *testing.T) {
 	require.NotNil(t, ident)
 	require.Equal(t, WorkflowType, ident.EntityID.Type)
 	require.Equal(t, "wf1", ident.EntityID.ID)
-	require.Nil(t, ident.ParentID)
+	require.Nil(t, ident.Parent())
 }
 
 func TestWorkflowExecutionCompleted_DiscardedWithoutWorkflowID(t *testing.T) {

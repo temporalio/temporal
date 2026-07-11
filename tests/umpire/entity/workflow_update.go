@@ -78,9 +78,10 @@ func (wu *WorkflowUpdate) Type() umpire.EntityType {
 }
 
 func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
-	if wu.WorkflowID == "" && ident != nil && ident.ParentID != nil &&
-		ident.ParentID.Type == WorkflowType {
-		wu.WorkflowID = ident.ParentID.ID
+	if wu.WorkflowID == "" && ident != nil {
+		if parent := ident.Parent(); parent != nil && parent.EntityID.Type == WorkflowType {
+			wu.WorkflowID = parent.EntityID.ID
+		}
 	}
 
 	for ev := range events {

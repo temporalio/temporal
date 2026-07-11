@@ -19,7 +19,7 @@ func TestWorkflowUpdateStageMonotoneRule_DetectsRegression(t *testing.T) {
 	}
 
 	// Force the FSM back to "admitted" to simulate a regression.
-	for _, entry := range reg.QueryEntities(entity.WorkflowUpdateType, 0) {
+	for _, entry := range reg.QueryEntities(entity.WorkflowUpdateType, 0, nil) {
 		wu := entry.Entity.(*entity.WorkflowUpdate)
 		wu.FSM.SetState("admitted")
 	}

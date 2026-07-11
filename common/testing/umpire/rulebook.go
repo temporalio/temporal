@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -109,7 +110,8 @@ type ruleContext struct {
 	Registry        *Registry
 	Logger          log.Logger
 	Config          RuleConfig
-	sinceGeneration uint64 // only query entities changed after this generation
+	sinceGeneration uint64    // only query entities changed after this generation
+	scope           *EntityID // if set, only query entities rooted at this ancestor (e.g. a namespace)
 
 	state      *ruleState
 	ruleName   string
@@ -177,14 +179,14 @@ func (c *LivenessContext) Resolve(key string) {
 // dirtyQuerier is implemented by both SafetyContext and LivenessContext,
 // allowing ChangedEntities to accept either context type.
 type dirtyQuerier interface {
-	dirtyQuery() (context.Context, *Registry, uint64)
+	dirtyQuery() (context.Context, *Registry, uint64, *EntityID)
 }
 
-func (c *SafetyContext) dirtyQuery() (context.Context, *Registry, uint64) {
-	return c.Context, c.Registry, c.sinceGeneration
+func (c *SafetyContext) dirtyQuery() (context.Context, *Registry, uint64, *EntityID) {
+	return c.Context, c.Registry, c.sinceGeneration, c.scope
 }
-func (c *LivenessContext) dirtyQuery() (context.Context, *Registry, uint64) {
-	return c.Context, c.Registry, c.sinceGeneration
+func (c *LivenessContext) dirtyQuery() (context.Context, *Registry, uint64, *EntityID) {
+	return c.Context, c.Registry, c.sinceGeneration, c.scope
 }
 
 // EntityResult pairs a registry key with a typed entity pointer.
@@ -196,10 +198,10 @@ type EntityResult[T any] struct {
 // ChangedEntities returns entities of type T that received facts since this rule's last check.
 // Iteration stops early if the context is cancelled.
 func ChangedEntities[T any](c dirtyQuerier) iter.Seq[EntityResult[T]] {
-	ctx, reg, since := c.dirtyQuery()
+	ctx, reg, since, scope := c.dirtyQuery()
 	return func(yield func(EntityResult[T]) bool) {
 		et := EntityType(reflect.TypeOf((*T)(nil)).Elem().Name())
-		for _, e := range reg.QueryEntities(et, since) {
+		for _, e := range reg.QueryEntities(et, since, scope) {
 			if ctx.Err() != nil {
 				return
 			}
@@ -330,7 +332,7 @@ func (r *Rulebook) InitRules(registry *Registry, logger log.Logger, config RuleC
 // run on every call (only on dirty entities). Liveness rules run on every call
 // (only on dirty entities) to update their pending set. When final is true,
 // unresolved pending items are collected as violations.
-func (r *Rulebook) Check(ctx context.Context, final bool) []Violation {
+func (r *Rulebook) Check(ctx context.Context, final bool, scope *EntityID) []Violation {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -349,6 +351,7 @@ func (r *Rulebook) Check(ctx context.Context, final bool) []Violation {
 			Logger:          r.logger,
 			Config:          r.config,
 			sinceGeneration: st.lastGeneration,
+			scope:           scope,
 			state:           st,
 			ruleName:        entry.name,
 		}
@@ -362,10 +365,15 @@ func (r *Rulebook) Check(ctx context.Context, final bool) []Violation {
 			rc := &LivenessContext{ruleContext: base}
 			entry.liveness.CheckLiveness(rc)
 			allViolations = append(allViolations, rc.violations...)
-			// At teardown, collect all unresolved pending items as violations.
+			// At teardown, collect unresolved pending items (in scope) as
+			// violations, and drop them so they aren't re-reported when another
+			// scope tears down.
 			if final {
-				for _, v := range st.pending {
-					allViolations = append(allViolations, v)
+				for key, v := range st.pending {
+					if keyInScope(key, scope) {
+						allViolations = append(allViolations, v)
+						delete(st.pending, key)
+					}
 				}
 			}
 		}
@@ -376,6 +384,39 @@ func (r *Rulebook) Check(ctx context.Context, final bool) []Violation {
 	}
 
 	return allViolations
+}
+
+// keyInScope reports whether a registry key falls under the given scope root.
+// A nil scope matches every key (global check).
+func keyInScope(key string, scope *EntityID) bool {
+	if scope == nil {
+		return true
+	}
+	prefix := fmt.Sprintf("%s:%s", scope.Type, scope.ID)
+	return key == prefix || strings.HasPrefix(key, prefix+"@")
+}
+
+// PurgeScope drops all per-rule state (pending, dedup, passed keys) for entities
+// rooted at the given ancestor, so a torn-down namespace leaves nothing behind.
+func (r *Rulebook) PurgeScope(root EntityID) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	scope := &root
+	for _, st := range r.states {
+		st.mu.Lock()
+		for k := range st.pending {
+			if keyInScope(k, scope) {
+				delete(st.pending, k)
+			}
+		}
+		for k := range st.lastReported {
+			if keyInScope(k, scope) {
+				delete(st.lastReported, k)
+			}
+		}
+		st.passedKeys = slices.DeleteFunc(st.passedKeys, func(k string) bool { return keyInScope(k, scope) })
+		st.mu.Unlock()
+	}
 }
 
 // RuleCount returns the count of initialized rules by kind.

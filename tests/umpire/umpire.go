@@ -135,9 +135,9 @@ func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
 	if f {
 		// At teardown, broadcast WorkflowTerminated for all workflows so
 		// child entities (WorkflowTask) settle to terminal state.
-		u.settleWorkflows(ctx)
+		u.settleWorkflows(ctx, nil)
 	}
-	violations := u.rulebook.Check(ctx, f)
+	violations := u.rulebook.Check(ctx, f, nil)
 	result := make([]any, len(violations))
 	for i, v := range violations {
 		result[i] = v
@@ -145,18 +145,45 @@ func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
 	return result
 }
 
+// CheckNamespace runs a final check scoped to a single namespace: only entities
+// rooted at that namespace are evaluated, and their unresolved liveness
+// conditions are promoted to violations. Use it to validate one test's namespace
+// at teardown, then PurgeNamespace to drop the collected data.
+func (u *Umpire) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
+	root := u.namespaceRoot(namespaceID)
+	u.settleWorkflows(ctx, &root)
+	return u.rulebook.Check(ctx, true, &root)
+}
+
+// PurgeNamespace removes all entities, facts, and rule state collected for the
+// given namespace, so a shared umpire carries nothing between tests.
+func (u *Umpire) PurgeNamespace(namespaceID string) {
+	root := u.namespaceRoot(namespaceID)
+	u.registry.PurgeScope(root)
+	u.factLog.PurgeScope(root)
+	u.rulebook.PurgeScope(root)
+}
+
+func (u *Umpire) namespaceRoot(namespaceID string) umpirefw.EntityID {
+	return umpirefw.NewEntityID(entity.NamespaceType, namespaceID)
+}
+
 // settleWorkflows broadcasts WorkflowTerminated facts for each unique
-// workflowID seen across WorkflowTask entities, allowing them to transition
-// to terminal states at test teardown.
-func (u *Umpire) settleWorkflows(ctx context.Context) {
+// (namespace, workflowID) seen across WorkflowTask entities, allowing them to
+// transition to terminal states at test teardown. When scope is non-nil, only
+// tasks in that namespace are settled. The terminated facts carry the namespace
+// so tasks in other namespaces ignore the broadcast.
+func (u *Umpire) settleWorkflows(ctx context.Context, scope *umpirefw.EntityID) {
 	seen := make(map[string]bool)
 	var facts []umpirefw.Fact
-	for _, e := range u.registry.QueryEntities(entity.WorkflowTaskType, 0) {
+	for _, e := range u.registry.QueryEntities(entity.WorkflowTaskType, 0, scope) {
 		if wt, ok := e.Entity.(*entity.WorkflowTask); ok && wt.WorkflowID != "" {
-			if !seen[wt.WorkflowID] {
-				seen[wt.WorkflowID] = true
+			key := wt.NamespaceID + "/" + wt.WorkflowID
+			if !seen[key] {
+				seen[key] = true
 				facts = append(facts, &fact.WorkflowTerminated{
-					WorkflowID: wt.WorkflowID,
+					WorkflowID:  wt.WorkflowID,
+					NamespaceID: wt.NamespaceID,
 				})
 			}
 		}

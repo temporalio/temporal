@@ -41,18 +41,14 @@ func (l *FactLog) QueryByType(entityID EntityID, factType string) []Fact {
 		if path == nil {
 			continue
 		}
-		if matchesEntityID(path.EntityID, entityID) {
-			result = append(result, f)
-			continue
-		}
-		if path.ParentID != nil && matchesEntityID(*path.ParentID, entityID) {
+		if path.Contains(entityID) {
 			result = append(result, f)
 		}
 	}
 	return result
 }
 
-// QueryByID returns facts targeting the given entity ID (or its children).
+// QueryByID returns facts targeting the given entity ID (or one of its ancestors).
 func (l *FactLog) QueryByID(entityID EntityID) []Fact {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -63,11 +59,7 @@ func (l *FactLog) QueryByID(entityID EntityID) []Fact {
 		if path == nil {
 			continue
 		}
-		if matchesEntityID(path.EntityID, entityID) {
-			result = append(result, f)
-			continue
-		}
-		if path.ParentID != nil && matchesEntityID(*path.ParentID, entityID) {
+		if path.Contains(entityID) {
 			result = append(result, f)
 		}
 	}
@@ -90,7 +82,21 @@ func (l *FactLog) Clear() {
 	l.facts = make([]Fact, 0)
 }
 
-// matchesEntityID checks if a matches b (exact match on Type and ID).
-func matchesEntityID(a, b EntityID) bool {
-	return a.Type == b.Type && a.ID == b.ID
+// PurgeScope removes every fact rooted at the given ancestor and returns the
+// number removed. Use it to drop all facts collected for one namespace.
+func (l *FactLog) PurgeScope(root EntityID) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	kept := l.facts[:0]
+	var removed int
+	for _, f := range l.facts {
+		if path := f.TargetEntity(); path != nil && path.Root() == root {
+			removed++
+			continue
+		}
+		kept = append(kept, f)
+	}
+	l.facts = kept
+	return removed
 }

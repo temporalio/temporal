@@ -9,10 +9,11 @@ import (
 // WorkflowTaskDiscarded represents a workflow task being discarded by matching
 // (e.g., expired in memory before being polled).
 type WorkflowTaskDiscarded struct {
-	WorkflowID string
-	RunID      string
-	TaskQueue  string
-	EntityPath *umpire.EntityPath
+	WorkflowID  string
+	RunID       string
+	TaskQueue   string
+	NamespaceID string
+	EntityPath  *umpire.EntityPath
 }
 
 func (e *WorkflowTaskDiscarded) Name() string {
@@ -33,11 +34,14 @@ func (e *WorkflowTaskDiscarded) ImportSpanEvent(attrs attribute.Set) bool {
 	if v, ok := attrs.Value(telemetry.AttrTaskQueue); ok {
 		e.TaskQueue = v.AsString()
 	}
+	if v, ok := attrs.Value(telemetry.AttrNamespaceID); ok {
+		e.NamespaceID = v.AsString()
+	}
 	if e.WorkflowID == "" {
 		return false
 	}
 	wtID := umpire.NewEntityID(WorkflowTaskType, e.TaskQueue+":"+e.WorkflowID+":"+e.RunID)
 	tqID := umpire.NewEntityID(TaskQueueType, e.TaskQueue)
-	e.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
+	e.EntityPath = nsPath(e.NamespaceID, wtID, tqID)
 	return true
 }

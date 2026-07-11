@@ -1,7 +1,6 @@
 package fact
 
 import (
-	workflowservice "go.temporal.io/api/workflowservice/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/testing/umpire"
 )
@@ -21,30 +20,21 @@ func (e *WorkflowUpdateRequested) TargetEntity() *umpire.EntityPath {
 }
 
 func (e *WorkflowUpdateRequested) ImportRequest(request any) bool {
-	switch req := request.(type) {
-	case *historyservice.UpdateWorkflowExecutionRequest:
-		if req.GetRequest().GetRequest().GetMeta().GetUpdateId() == "" {
-			return false
-		}
-		e.Request = req
-	case *workflowservice.UpdateWorkflowExecutionRequest:
-		if req.GetRequest().GetMeta().GetUpdateId() == "" {
-			return false
-		}
-		e.Request = &historyservice.UpdateWorkflowExecutionRequest{
-			NamespaceId: req.Namespace,
-			Request:     req,
-		}
-	default:
+	// Only the internal historyservice request carries the namespace ID (a UUID)
+	// that roots the entity consistently with the update-lifecycle span facts.
+	// The frontend workflowservice request carries only the namespace name, so
+	// observing it would split the update into a second, differently-rooted entity.
+	req, ok := request.(*historyservice.UpdateWorkflowExecutionRequest)
+	if !ok || req.GetRequest().GetRequest().GetMeta().GetUpdateId() == "" {
 		return false
 	}
+	e.Request = req
 	updateID := umpire.NewEntityID(WorkflowUpdateType, e.UpdateID())
-	var parentID *umpire.EntityID
+	var parents []umpire.EntityID
 	if wfID := e.WorkflowID(); wfID != "" {
-		id := umpire.NewEntityID(WorkflowType, wfID)
-		parentID = &id
+		parents = append(parents, umpire.NewEntityID(WorkflowType, wfID))
 	}
-	e.EntityPath = &umpire.EntityPath{EntityID: updateID, ParentID: parentID}
+	e.EntityPath = nsPath(e.Request.GetNamespaceId(), updateID, parents...)
 	return true
 }
 

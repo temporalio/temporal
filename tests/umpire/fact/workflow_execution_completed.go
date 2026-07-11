@@ -9,9 +9,10 @@ import (
 // WorkflowExecutionCompleted represents a workflow execution closing via a
 // CompleteWorkflowExecution command.
 type WorkflowExecutionCompleted struct {
-	WorkflowID string
-	RunID      string
-	EntityPath *umpire.EntityPath
+	WorkflowID  string
+	RunID       string
+	NamespaceID string
+	EntityPath  *umpire.EntityPath
 }
 
 func (e *WorkflowExecutionCompleted) Name() string {
@@ -29,10 +30,13 @@ func (e *WorkflowExecutionCompleted) ImportSpanEvent(attrs attribute.Set) bool {
 	if v, ok := attrs.Value(telemetry.AttrRunID); ok {
 		e.RunID = v.AsString()
 	}
+	if v, ok := attrs.Value(telemetry.AttrNamespaceID); ok {
+		e.NamespaceID = v.AsString()
+	}
 	if e.WorkflowID == "" {
 		return false
 	}
 	wfID := umpire.NewEntityID(WorkflowType, e.WorkflowID)
-	e.EntityPath = &umpire.EntityPath{EntityID: wfID}
+	e.EntityPath = nsPath(e.NamespaceID, wfID)
 	return true
 }

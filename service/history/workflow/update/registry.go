@@ -171,11 +171,12 @@ func WithTracerProvider(t trace.TracerProvider) Option {
 }
 
 // WithWorkflowExecution sets the workflow execution info used for OTEL events.
-func WithWorkflowExecution(workflowID, runID, taskQueue string) Option {
+func WithWorkflowExecution(namespaceID, workflowID, runID, taskQueue string) Option {
 	return func(r *registry) {
 		r.workflowID = workflowID
 		r.runID = runID
 		r.taskQueue = taskQueue
+		r.instrumentation.namespaceID = namespaceID
 		r.instrumentation.workflowID = workflowID
 		r.instrumentation.runID = runID
 		r.instrumentation.taskQueue = taskQueue

@@ -31,7 +31,7 @@ func (e *WorkflowTaskAdded) ImportRequest(request any) bool {
 	if wfID != "" && runID != "" {
 		wtID := umpire.NewEntityID(WorkflowTaskType, tqName+":"+wfID+":"+runID)
 		tqID := umpire.NewEntityID(TaskQueueType, tqName)
-		e.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
+		e.EntityPath = nsPath(req.GetNamespaceId(), wtID, tqID)
 	}
 	return true
 }

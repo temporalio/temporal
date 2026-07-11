@@ -22,7 +22,7 @@ func newTestFact(factType string, entityType EntityType, id string) *testFact {
 func newTestFactWithParent(factType string, entityType EntityType, id string, parentType EntityType, parentID string) *testFact {
 	eid := NewEntityID(entityType, id)
 	pid := NewEntityID(parentType, parentID)
-	return &testFact{factType: factType, target: &EntityPath{EntityID: eid, ParentID: &pid}}
+	return &testFact{factType: factType, target: &EntityPath{EntityID: eid, Ancestors: []EntityID{pid}}}
 }
 
 // ── Add / All ─────────────────────────────────────────────────────────────────

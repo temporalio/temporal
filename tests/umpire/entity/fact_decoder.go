@@ -77,7 +77,11 @@ func fromResponse(req, resp any) umpire.Fact {
 		if tqName != "" && wfID != "" {
 			wtID := umpire.NewEntityID(WorkflowTaskType, tqName+":"+wfID+":"+runID)
 			tqID := umpire.NewEntityID(TaskQueueType, tqName)
-			m.EntityPath = &umpire.EntityPath{EntityID: wtID, ParentID: &tqID}
+			ancestors := []umpire.EntityID{tqID}
+			if nsID := req.GetNamespaceId(); nsID != "" {
+				ancestors = []umpire.EntityID{umpire.NewEntityID(fact.NamespaceType, nsID), tqID}
+			}
+			m.EntityPath = &umpire.EntityPath{EntityID: wtID, Ancestors: ancestors}
 		}
 		return m
 	default:

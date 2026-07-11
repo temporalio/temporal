@@ -27,6 +27,6 @@ func (e *WorkflowTaskPolled) ImportRequest(request any) bool {
 	}
 	e.Request = req
 	tqID := umpire.NewEntityID(TaskQueueType, req.GetPollRequest().GetTaskQueue().GetName())
-	e.EntityPath = &umpire.EntityPath{EntityID: tqID}
+	e.EntityPath = nsPath(req.GetNamespaceId(), tqID)
 	return true
 }

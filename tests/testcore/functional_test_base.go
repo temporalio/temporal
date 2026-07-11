@@ -507,11 +507,27 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	if s.umpire != nil {
+		s.checkUmpire()
 		if err := s.umpire.Shutdown(context.Background()); err != nil {
 			s.T().Logf("umpire shutdown error: %v", err)
 		}
 	}
 	s.tearDownSdk()
+}
+
+// checkUmpire runs the property rules against this test's namespace, then purges
+// the collected data so a shared cluster's umpire carries nothing into the next
+// test. Violations are logged (not fatal) until the rule set is validated across
+// the whole suite; change s.T().Logf to s.T().Errorf to enforce them.
+func (s *FunctionalTestBase) checkUmpire() {
+	nsID := s.namespaceID.String()
+	if nsID == "" {
+		return
+	}
+	for _, v := range s.umpire.CheckNamespace(context.Background(), nsID) {
+		s.T().Logf("umpire violation [%s]: %s %v", v.Rule, v.Message, v.Tags)
+	}
+	s.umpire.PurgeNamespace(nsID)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.

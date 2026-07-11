@@ -12,7 +12,7 @@ func TestWorkflowUpdateStateConsistencyRule_DetectsAcceptedAtMismatch(t *testing
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
 	// Force AcceptedAt while FSM is still "admitted" — inconsistent state.
-	for _, entry := range reg.QueryEntities(entity.WorkflowUpdateType, 0) {
+	for _, entry := range reg.QueryEntities(entity.WorkflowUpdateType, 0, nil) {
 		wu := entry.Entity.(*entity.WorkflowUpdate)
 		wu.AcceptedAt = time.Now()
 	}

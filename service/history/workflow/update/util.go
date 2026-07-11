@@ -22,9 +22,10 @@ type (
 		namespace string
 
 		// Workflow execution info for OTEL events observed by the umpire test observer.
-		workflowID string
-		runID      string
-		taskQueue  string
+		namespaceID string
+		workflowID  string
+		runID       string
+		taskQueue   string
 	}
 )
 
@@ -127,6 +128,7 @@ func (i *instrumentation) emitAbortEvents(workflowID string, updateIDs []string,
 			trace.WithAttributes(
 				telemetry.AttrUpdateID.String(updateID),
 				telemetry.AttrWorkflowID.String(workflowID),
+				telemetry.AttrNamespaceID.String(i.namespaceID),
 				telemetry.AttrAbortReason.String(reason.String()),
 			),
 		)
@@ -143,6 +145,7 @@ func (i *instrumentation) emitUpdateLifecycleEvent(eventName, updateID string, e
 		telemetry.AttrUpdateID.String(updateID),
 		telemetry.AttrWorkflowID.String(i.workflowID),
 		telemetry.AttrRunID.String(i.runID),
+		telemetry.AttrNamespaceID.String(i.namespaceID),
 	}
 	span.AddEvent(eventName, trace.WithAttributes(append(attrs, extra...)...))
 }
@@ -156,6 +159,7 @@ func (i *instrumentation) emitWorkflowTerminatedEvent(workflowID, runID, taskQue
 		trace.WithAttributes(
 			telemetry.AttrWorkflowID.String(workflowID),
 			telemetry.AttrRunID.String(runID),
+			telemetry.AttrNamespaceID.String(i.namespaceID),
 			telemetry.AttrTaskQueue.String(taskQueue),
 		),
 	)

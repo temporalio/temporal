@@ -120,7 +120,7 @@ func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
 	}
 
 	// First non-final check: rule runs, records pending.
-	v1 := rb.Check(context.Background(), false)
+	v1 := rb.Check(context.Background(), false, nil)
 	if len(v1) != 0 {
 		t.Fatalf("non-final check should not return violations, got %d", len(v1))
 	}
@@ -129,7 +129,7 @@ func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
 	// Second check: rule sees dirty entity, calls Resolve.
-	v2 := rb.Check(context.Background(), true)
+	v2 := rb.Check(context.Background(), true, nil)
 	if len(v2) != 0 {
 		t.Fatalf("expected 0 violations after poll resolved starvation, got %d", len(v2))
 	}
@@ -146,10 +146,10 @@ func TestWorkflowTaskStarvationRule_UnresolvedAtTeardown(t *testing.T) {
 	}
 
 	// Non-final check: records pending.
-	rb.Check(context.Background(), false)
+	rb.Check(context.Background(), false, nil)
 
 	// Final check without resolution: pending becomes violation.
-	v := rb.Check(context.Background(), true)
+	v := rb.Check(context.Background(), true, nil)
 	if len(v) != 1 {
 		t.Fatalf("expected 1 violation for unresolved starvation at teardown, got %d", len(v))
 	}

@@ -156,11 +156,11 @@ func TestRegistry_QueryEntities_ReturnsAllOfType(t *testing.T) {
 		newFact("ev", "TypeB", "b1"),
 	})
 
-	results := r.QueryEntities("TypeA", 0)
+	results := r.QueryEntities("TypeA", 0, nil)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 TypeA entities, got %d", len(results))
 	}
-	resultsB := r.QueryEntities("TypeB", 0)
+	resultsB := r.QueryEntities("TypeB", 0, nil)
 	if len(resultsB) != 1 {
 		t.Fatalf("expected 1 TypeB entity, got %d", len(resultsB))
 	}
@@ -170,7 +170,7 @@ func TestRegistry_QueryEntities_EmptyRegistry(t *testing.T) {
 	r := NewRegistry()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
-	results := r.QueryEntities("TypeA", 0)
+	results := r.QueryEntities("TypeA", 0, nil)
 	if len(results) != 0 {
 		t.Fatalf("expected empty result for fresh registry, got %d", len(results))
 	}
@@ -190,7 +190,7 @@ func TestRegistry_RouteFacts_CreatesParentEntity(t *testing.T) {
 	childEID := NewEntityID("TypeA", "child1")
 	childFact := &testFact{
 		factType: "event",
-		target:   &EntityPath{EntityID: childEID, ParentID: &parentID},
+		target:   &EntityPath{EntityID: childEID, Ancestors: []EntityID{parentID}},
 	}
 
 	_ = r.RouteFacts(context.Background(), []Fact{childFact})
@@ -200,6 +200,53 @@ func TestRegistry_RouteFacts_CreatesParentEntity(t *testing.T) {
 	}
 	if len(createdB) != 1 {
 		t.Fatalf("expected 1 parent entity auto-created, got %d", len(createdB))
+	}
+}
+
+// ── Scoped query + purge ──────────────────────────────────────────────────────
+
+func TestRegistry_QueryEntities_ScopeFiltersByRoot(t *testing.T) {
+	r := NewRegistry()
+	var created []*TypeA
+	r.RegisterEntity(newFactoryA(t, &created))
+
+	// Two TypeA entities rooted under different (factory-less) TypeB roots.
+	rootX := NewEntityID("TypeB", "x")
+	rootY := NewEntityID("TypeB", "y")
+	factX := &testFact{factType: "ev", target: &EntityPath{EntityID: NewEntityID("TypeA", "a"), Ancestors: []EntityID{rootX}}}
+	factY := &testFact{factType: "ev", target: &EntityPath{EntityID: NewEntityID("TypeA", "b"), Ancestors: []EntityID{rootY}}}
+	_ = r.RouteFacts(context.Background(), []Fact{factX, factY})
+
+	if got := len(r.QueryEntities("TypeA", 0, nil)); got != 2 {
+		t.Fatalf("unscoped: expected 2, got %d", got)
+	}
+	scoped := r.QueryEntities("TypeA", 0, &rootX)
+	if len(scoped) != 1 {
+		t.Fatalf("scoped to rootX: expected 1, got %d", len(scoped))
+	}
+}
+
+func TestRegistry_PurgeScope_RemovesOnlyMatchingRoot(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
+
+	rootX := NewEntityID("TypeB", "x")
+	rootY := NewEntityID("TypeB", "y")
+	factX := &testFact{factType: "ev", target: &EntityPath{EntityID: NewEntityID("TypeA", "a"), Ancestors: []EntityID{rootX}}}
+	factY := &testFact{factType: "ev", target: &EntityPath{EntityID: NewEntityID("TypeA", "b"), Ancestors: []EntityID{rootY}}}
+	_ = r.RouteFacts(context.Background(), []Fact{factX, factY})
+
+	if removed := r.PurgeScope(rootX); removed != 1 {
+		t.Fatalf("expected to purge 1 entity, got %d", removed)
+	}
+	if got := len(r.QueryEntities("TypeA", 0, nil)); got != 1 {
+		t.Fatalf("after purge: expected 1 surviving entity, got %d", got)
+	}
+	if got := len(r.QueryEntities("TypeA", 0, &rootY)); got != 1 {
+		t.Fatalf("rootY entity should survive, got %d", got)
+	}
+	if got := len(r.QueryEntities("TypeA", 0, &rootX)); got != 0 {
+		t.Fatalf("rootX entities should be gone, got %d", got)
 	}
 }
 
@@ -257,13 +304,13 @@ func TestRegistry_QueryEntities_SinceGeneration_FiltersDirty(t *testing.T) {
 	_ = r.RouteFacts(context.Background(), []Fact{newFact("ev", "TypeA", "a2")})
 
 	// Query all: both visible.
-	all := r.QueryEntities("TypeA", 0)
+	all := r.QueryEntities("TypeA", 0, nil)
 	if len(all) != 2 {
 		t.Fatalf("expected 2 entities with sinceGeneration=0, got %d", len(all))
 	}
 
 	// Query since genAfterA: only B visible (changed after A).
-	dirty := r.QueryEntities("TypeA", genAfterA)
+	dirty := r.QueryEntities("TypeA", genAfterA, nil)
 	if len(dirty) != 1 {
 		t.Fatalf("expected 1 dirty entity since gen %d, got %d", genAfterA, len(dirty))
 	}
@@ -281,7 +328,7 @@ func TestRegistry_QueryEntities_SinceGeneration_UpdatedEntityBecomesDirty(t *tes
 	genAfterBoth := r.Generation()
 
 	// No dirty entities.
-	dirty := r.QueryEntities("TypeA", genAfterBoth)
+	dirty := r.QueryEntities("TypeA", genAfterBoth, nil)
 	if len(dirty) != 0 {
 		t.Fatalf("expected 0 dirty entities, got %d", len(dirty))
 	}
@@ -290,7 +337,7 @@ func TestRegistry_QueryEntities_SinceGeneration_UpdatedEntityBecomesDirty(t *tes
 	_ = r.RouteFacts(context.Background(), []Fact{newFact("ev", "TypeA", "a1")})
 
 	// Only a1 is dirty.
-	dirty = r.QueryEntities("TypeA", genAfterBoth)
+	dirty = r.QueryEntities("TypeA", genAfterBoth, nil)
 	if len(dirty) != 1 {
 		t.Fatalf("expected 1 dirty entity after update, got %d", len(dirty))
 	}

@@ -534,6 +534,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 				trace.WithAttributes(
 					telemetry.AttrWorkflowID.String(task.event.Data.GetWorkflowId()),
 					telemetry.AttrRunID.String(task.event.Data.GetRunId()),
+					telemetry.AttrNamespaceID.String(task.event.Data.GetNamespaceId()),
 					telemetry.AttrTaskQueue.String(c.queue.TaskQueueFamily().Name()),
 				),
 			)
