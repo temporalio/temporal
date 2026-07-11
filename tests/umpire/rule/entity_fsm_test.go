@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ func TestWorkflowUpdateContinueAsNewRule_DetectsStuckOnCompletedWorkflow(t *test
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNewRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNew{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for admitted update on completed workflow, got %d", len(violations))
 	}
@@ -23,7 +23,7 @@ func TestWorkflowUpdateContinueAsNewRule_NoViolation_UpdateAccepted(t *testing.T
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNewRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNew{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for accepted update, got %d", len(violations))
 	}
@@ -34,7 +34,7 @@ func TestWorkflowUpdateContinueAsNewRule_NoViolation_WorkflowNotCompleted(t *tes
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNewRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContinueAsNew{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations when workflow is not completed, got %d", len(violations))
 	}

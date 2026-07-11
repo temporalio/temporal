@@ -1,20 +1,20 @@
-package rulebook
+package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// SpeculativeTaskCreationRule detects when a speculative workflow task is
+// SpeculativeTaskCreation detects when a speculative workflow task is
 // created while a normal (non-speculative) task already exists for the same
 // workflow. The update should be delivered on the existing normal task instead.
-type SpeculativeTaskCreationRule struct{}
+type SpeculativeTaskCreation struct{}
 
-func (m *SpeculativeTaskCreationRule) Name() string {
+func (m *SpeculativeTaskCreation) Name() string {
 	return "SpeculativeTaskCreationRule"
 }
 
-func (m *SpeculativeTaskCreationRule) CheckSafety(c *umpire.SafetyContext) {
+func (m *SpeculativeTaskCreation) CheckSafety(c *umpire.SafetyContext) {
 	// Group workflow tasks by (workflowID, runID).
 	type taskPair struct {
 		hasNormal      bool

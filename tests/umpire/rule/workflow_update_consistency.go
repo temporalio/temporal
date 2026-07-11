@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,14 +7,14 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateStateConsistencyRule ensures FSM state matches timestamp fields.
-type WorkflowUpdateStateConsistencyRule struct{}
+// WorkflowUpdateStateConsistency ensures FSM state matches timestamp fields.
+type WorkflowUpdateStateConsistency struct{}
 
-func (m *WorkflowUpdateStateConsistencyRule) Name() string {
+func (m *WorkflowUpdateStateConsistency) Name() string {
 	return "WorkflowUpdateStateConsistencyRule"
 }
 
-func (m *WorkflowUpdateStateConsistencyRule) CheckSafety(c *umpire.SafetyContext) {
+func (m *WorkflowUpdateStateConsistency) CheckSafety(c *umpire.SafetyContext) {
 	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.UpdateID == "" {

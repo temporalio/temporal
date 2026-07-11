@@ -12,7 +12,7 @@ import (
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 	"go.temporal.io/server/tests/umpire/fact"
-	"go.temporal.io/server/tests/umpire/rulebook"
+	"go.temporal.io/server/tests/umpire/rule"
 	"google.golang.org/grpc"
 )
 
@@ -44,22 +44,22 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	rb := umpirefw.NewRulebook()
 
 	// Safety rules — checked on every observation.
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rulebook.SpeculativeTaskCreationRule{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rulebook.WorkflowUpdateStateConsistencyRule{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rulebook.WorkflowUpdateHistoryOrderingRule{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rulebook.WorkflowUpdateClosureRule{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rulebook.WorkflowUpdateStageMonotoneRule{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateStateConsistency{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateStageMonotone{} })
 
 	// Liveness rules — checked at test teardown.
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowTaskStarvationRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.SpeculativeTaskRollbackRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.SpeculativeConversionRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateLossPreventionRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateCompletionRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateDeduplicationRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateContinueAsNewRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateWorkerSkippedRule{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rulebook.WorkflowUpdateContextClearRule{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeTaskRollback{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeConversion{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateLossPrevention{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateCompletion{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateDeduplication{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContinueAsNew{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateWorkerSkipped{} })
+	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContextClear{} })
 
 	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
 		return nil, fmt.Errorf("umpire: failed to initialize rules: %w", err)

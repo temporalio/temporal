@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -13,7 +13,7 @@ func TestWorkflowUpdateClosureRule_DetectsAcceptedAfterClose(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateClosureRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateClosure{})
 	if len(violations) == 0 {
 		t.Fatal("expected violation for update accepted after workflow closed")
 	}
@@ -27,7 +27,7 @@ func TestWorkflowUpdateClosureRule_DetectsCompletedAfterClose(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateClosureRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateClosure{})
 	if len(violations) == 0 {
 		t.Fatal("expected violation for update completed after workflow closed")
 	}
@@ -39,7 +39,7 @@ func TestWorkflowUpdateClosureRule_NoViolation_WorkflowNotClosed(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateClosureRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateClosure{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations when workflow is not closed, got %d", len(violations))
 	}
@@ -54,7 +54,7 @@ func TestWorkflowUpdateClosureRule_NoViolation_UpdateBeforeClose(t *testing.T) {
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateClosureRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateClosure{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for update completed before close, got %d", len(violations))
 	}

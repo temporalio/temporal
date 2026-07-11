@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ func TestWorkflowUpdateWorkerSkippedRule_DetectsSkippedUpdate(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkippedRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkipped{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for skipped update, got %d", len(violations))
 	}
@@ -24,7 +24,7 @@ func TestWorkflowUpdateWorkerSkippedRule_NoViolation_UpdateAccepted(t *testing.T
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkippedRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkipped{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for accepted update, got %d", len(violations))
 	}
@@ -34,7 +34,7 @@ func TestWorkflowUpdateWorkerSkippedRule_NoViolation_NoPolls(t *testing.T) {
 	reg := newTestRegistry()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkippedRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkipped{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations without polled tasks, got %d", len(violations))
 	}

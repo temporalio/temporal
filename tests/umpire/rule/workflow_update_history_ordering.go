@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,18 +7,18 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateHistoryOrderingRule verifies that when a workflow
+// WorkflowUpdateHistoryOrdering verifies that when a workflow
 // completes on the same task that carries an update, the update reaches a
 // terminal state (completed or rejected) before or at the time of workflow
 // completion. An update left in accepted state after workflow closure indicates
 // inconsistent history ordering.
-type WorkflowUpdateHistoryOrderingRule struct{}
+type WorkflowUpdateHistoryOrdering struct{}
 
-func (m *WorkflowUpdateHistoryOrderingRule) Name() string {
+func (m *WorkflowUpdateHistoryOrdering) Name() string {
 	return "WorkflowUpdateHistoryOrderingRule"
 }
 
-func (m *WorkflowUpdateHistoryOrderingRule) CheckSafety(c *umpire.SafetyContext) {
+func (m *WorkflowUpdateHistoryOrdering) CheckSafety(c *umpire.SafetyContext) {
 	// Build set of completed workflows.
 	completedWorkflows := make(map[string]time.Time)
 	for r := range umpire.ChangedEntities[entity.Workflow](c) {

@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func TestWorkflowTaskStarvationRule_NonSpeculative_ViaImporter(t *testing.T) {
 
 	routeFact(t, reg, mv)
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation: non-speculative task stuck in 'added', got %d", len(violations))
 	}
@@ -47,7 +47,7 @@ func TestWorkflowTaskStarvationRule_DetectsStuckTask(t *testing.T) {
 	reg := newTestRegistry()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for stuck task, got %d", len(violations))
 	}
@@ -64,7 +64,7 @@ func TestWorkflowTaskStarvationRule_DetectsStoredTask(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskStored("tq", "wf1", "run1"))
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for stored task, got %d", len(violations))
 	}
@@ -82,7 +82,7 @@ func TestWorkflowTaskStarvationRule_NoViolation_StoredThenPolled(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskStored("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for polled task, got %d", len(violations))
 	}
@@ -93,7 +93,7 @@ func TestWorkflowTaskStarvationRule_NoViolation_TaskPolled(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for polled task, got %d", len(violations))
 	}
@@ -103,7 +103,7 @@ func TestWorkflowTaskStarvationRule_NoViolation_SpeculativeTask(t *testing.T) {
 	reg := newTestRegistry()
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 
-	violations := checkLivenessRule(reg, &WorkflowTaskStarvationRule{})
+	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for speculative task, got %d", len(violations))
 	}
@@ -114,7 +114,7 @@ func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
 	rb := umpire.NewRulebook()
-	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvationRule{} })
+	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
 	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestWorkflowTaskStarvationRule_UnresolvedAtTeardown(t *testing.T) {
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
 	rb := umpire.NewRulebook()
-	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvationRule{} })
+	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
 	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)
 	}

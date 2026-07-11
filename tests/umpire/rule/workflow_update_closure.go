@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,15 +7,15 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateClosureRule checks that no update transitions occur after
+// WorkflowUpdateClosure checks that no update transitions occur after
 // the parent workflow has reached a terminal state.
-type WorkflowUpdateClosureRule struct{}
+type WorkflowUpdateClosure struct{}
 
-func (m *WorkflowUpdateClosureRule) Name() string {
+func (m *WorkflowUpdateClosure) Name() string {
 	return "WorkflowUpdateClosureRule"
 }
 
-func (m *WorkflowUpdateClosureRule) CheckSafety(c *umpire.SafetyContext) {
+func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 	// Build set of completed workflow IDs with their completion times.
 	completedWorkflows := make(map[string]time.Time)
 	for r := range umpire.ChangedEntities[entity.Workflow](c) {

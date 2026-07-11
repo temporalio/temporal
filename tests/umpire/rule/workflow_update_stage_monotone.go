@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"fmt"
@@ -7,9 +7,9 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateStageMonotoneRule checks that update FSM states only move
+// WorkflowUpdateStageMonotone checks that update FSM states only move
 // forward (admitted → accepted → completed/rejected), never backwards.
-type WorkflowUpdateStageMonotoneRule struct {
+type WorkflowUpdateStageMonotone struct {
 	// highWater tracks the highest observed FSM state per update.
 	highWater map[string]int
 }
@@ -24,11 +24,11 @@ var workflowUpdateStageOrder = map[string]int{
 	"aborted":     3, // terminal, same level as completed
 }
 
-func (m *WorkflowUpdateStageMonotoneRule) Name() string {
+func (m *WorkflowUpdateStageMonotone) Name() string {
 	return "WorkflowUpdateStageMonotoneRule"
 }
 
-func (m *WorkflowUpdateStageMonotoneRule) CheckSafety(c *umpire.SafetyContext) {
+func (m *WorkflowUpdateStageMonotone) CheckSafety(c *umpire.SafetyContext) {
 	if m.highWater == nil {
 		m.highWater = make(map[string]int)
 	}

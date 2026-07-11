@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ func TestWorkflowUpdateLossPreventionRule_DetectsStuckUpdate(t *testing.T) {
 	reg := newTestRegistry()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateLossPreventionRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateLossPrevention{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation, got %d", len(violations))
 	}
@@ -22,7 +22,7 @@ func TestWorkflowUpdateLossPreventionRule_NoViolation_UpdateAccepted(t *testing.
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateLossPreventionRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateLossPrevention{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for accepted update, got %d", len(violations))
 	}

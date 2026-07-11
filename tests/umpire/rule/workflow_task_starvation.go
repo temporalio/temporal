@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,14 +7,14 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowTaskStarvationRule detects workflow tasks added but never delivered.
-type WorkflowTaskStarvationRule struct{}
+// WorkflowTaskStarvation detects workflow tasks added but never delivered.
+type WorkflowTaskStarvation struct{}
 
-func (m *WorkflowTaskStarvationRule) Name() string {
+func (m *WorkflowTaskStarvation) Name() string {
 	return "WorkflowTaskStarvationRule"
 }
 
-func (m *WorkflowTaskStarvationRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowTaskStarvation) CheckLiveness(c *umpire.LivenessContext) {
 	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
 		wt := r.Entity
 		if wt.WorkflowID == "" || wt.IsSpeculative {

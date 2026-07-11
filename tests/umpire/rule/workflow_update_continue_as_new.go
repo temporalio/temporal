@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,17 +7,17 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateContinueAsNewRule detects updates that remain admitted
+// WorkflowUpdateContinueAsNew detects updates that remain admitted
 // on a completed workflow. In a continue-as-new scenario, the SDK should
 // retry the update on the new run. If the update stays admitted on the old
 // (completed) run, the retry mechanism may have failed.
-type WorkflowUpdateContinueAsNewRule struct{}
+type WorkflowUpdateContinueAsNew struct{}
 
-func (m *WorkflowUpdateContinueAsNewRule) Name() string {
+func (m *WorkflowUpdateContinueAsNew) Name() string {
 	return "WorkflowUpdateContinueAsNewRule"
 }
 
-func (m *WorkflowUpdateContinueAsNewRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 	// Build set of completed workflows.
 	completedWorkflows := make(map[string]time.Time)
 	for r := range umpire.ChangedEntities[entity.Workflow](c) {

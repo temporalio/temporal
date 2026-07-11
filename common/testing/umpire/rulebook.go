@@ -271,9 +271,9 @@ func (r *Rulebook) RegisterLiveness(factory func() LivenessRule) {
 
 func validateRuleName(probe any, name string) string {
 	name = strings.TrimSpace(name)
-	typeName := reflect.TypeOf(probe).Elem().Name()
-	if name != typeName {
-		panic(fmt.Sprintf("rule %T: Name() returned %q, expected %q (must match struct name)", probe, name, typeName))
+	expected := reflect.TypeOf(probe).Elem().Name() + "Rule"
+	if name != expected {
+		panic(fmt.Sprintf("rule %T: Name() returned %q, expected %q (must be struct name + \"Rule\")", probe, name, expected))
 	}
 	return name
 }

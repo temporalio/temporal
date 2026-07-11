@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ func TestWorkflowUpdateContextClearRule_DetectsStrandedUpdate(t *testing.T) {
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContextClearRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContextClear{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for stranded update, got %d", len(violations))
 	}
@@ -25,7 +25,7 @@ func TestWorkflowUpdateContextClearRule_DetectsStrandedAcceptedUpdate(t *testing
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContextClearRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContextClear{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for stranded accepted update, got %d", len(violations))
 	}
@@ -38,7 +38,7 @@ func TestWorkflowUpdateContextClearRule_NoViolation_PendingTaskExists(t *testing
 	// Pending task exists.
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContextClearRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContextClear{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations when pending task exists, got %d", len(violations))
 	}
@@ -51,7 +51,7 @@ func TestWorkflowUpdateContextClearRule_NoViolation_WorkflowCompleted(t *testing
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
 
 	// Workflow completed — closure rule handles this, not context clear.
-	violations := checkLivenessRule(reg, &WorkflowUpdateContextClearRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContextClear{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for completed workflow, got %d", len(violations))
 	}
@@ -64,7 +64,7 @@ func TestWorkflowUpdateContextClearRule_NoViolation_UpdateCompleted(t *testing.T
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &WorkflowUpdateContextClearRule{})
+	violations := checkLivenessRule(reg, &WorkflowUpdateContextClear{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for completed update, got %d", len(violations))
 	}

@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ func TestWorkflowUpdateStageMonotoneRule_DetectsRegression(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
 	// Run rule once to record highWater at "accepted" (stage 2).
-	rule := &WorkflowUpdateStageMonotoneRule{}
+	rule := &WorkflowUpdateStageMonotone{}
 	violations := checkSafetyRule(reg, rule)
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations initially, got %d", len(violations))
@@ -36,7 +36,7 @@ func TestWorkflowUpdateStageMonotoneRule_NoViolation_NormalProgression(t *testin
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStageMonotoneRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStageMonotone{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for normal forward progression, got %d", len(violations))
 	}
@@ -47,7 +47,7 @@ func TestWorkflowUpdateStageMonotoneRule_NoViolation_Rejection(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateRejected("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStageMonotoneRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStageMonotone{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for rejection, got %d", len(violations))
 	}

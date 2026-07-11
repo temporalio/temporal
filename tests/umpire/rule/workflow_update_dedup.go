@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"fmt"
@@ -7,14 +7,14 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateDeduplicationRule detects duplicate update requests not resolved.
-type WorkflowUpdateDeduplicationRule struct{}
+// WorkflowUpdateDeduplication detects duplicate update requests not resolved.
+type WorkflowUpdateDeduplication struct{}
 
-func (m *WorkflowUpdateDeduplicationRule) Name() string {
+func (m *WorkflowUpdateDeduplication) Name() string {
 	return "WorkflowUpdateDeduplicationRule"
 }
 
-func (m *WorkflowUpdateDeduplicationRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateDeduplication) CheckLiveness(c *umpire.LivenessContext) {
 	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.UpdateID == "" || wu.RequestCount <= 1 {

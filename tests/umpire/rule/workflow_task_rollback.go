@@ -1,18 +1,18 @@
-package rulebook
+package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// SpeculativeTaskRollbackRule detects updates accepted on speculative tasks but never completed.
-type SpeculativeTaskRollbackRule struct{}
+// SpeculativeTaskRollback detects updates accepted on speculative tasks but never completed.
+type SpeculativeTaskRollback struct{}
 
-func (m *SpeculativeTaskRollbackRule) Name() string {
+func (m *SpeculativeTaskRollback) Name() string {
 	return "SpeculativeTaskRollbackRule"
 }
 
-func (m *SpeculativeTaskRollbackRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *SpeculativeTaskRollback) CheckLiveness(c *umpire.LivenessContext) {
 	speculativePolled := make(map[string]bool)
 	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
 		wt := r.Entity

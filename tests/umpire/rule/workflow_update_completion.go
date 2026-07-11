@@ -1,18 +1,18 @@
-package rulebook
+package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateCompletionRule detects updates stuck in "accepted" state.
-type WorkflowUpdateCompletionRule struct{}
+// WorkflowUpdateCompletion detects updates stuck in "accepted" state.
+type WorkflowUpdateCompletion struct{}
 
-func (m *WorkflowUpdateCompletionRule) Name() string {
+func (m *WorkflowUpdateCompletion) Name() string {
 	return "WorkflowUpdateCompletionRule"
 }
 
-func (m *WorkflowUpdateCompletionRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateCompletion) CheckLiveness(c *umpire.LivenessContext) {
 	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.UpdateID == "" {

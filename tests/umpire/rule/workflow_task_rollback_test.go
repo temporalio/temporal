@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ func TestSpeculativeTaskRollbackRule_DetectsRollback(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeTaskRollbackRule{})
+	violations := checkLivenessRule(reg, &SpeculativeTaskRollback{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 rollback violation, got %d", len(violations))
 	}
@@ -32,7 +32,7 @@ func TestSpeculativeTaskRollbackRule_NoViolation_UpdateCompleted(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeTaskRollbackRule{})
+	violations := checkLivenessRule(reg, &SpeculativeTaskRollback{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for completed update, got %d", len(violations))
 	}
@@ -43,7 +43,7 @@ func TestSpeculativeTaskRollbackRule_NoViolation_NoSpeculativeTask(t *testing.T)
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeTaskRollbackRule{})
+	violations := checkLivenessRule(reg, &SpeculativeTaskRollback{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations without speculative task, got %d", len(violations))
 	}

@@ -1,18 +1,18 @@
-package rulebook
+package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateLossPreventionRule detects updates stuck in "admitted" state.
-type WorkflowUpdateLossPreventionRule struct{}
+// WorkflowUpdateLossPrevention detects updates stuck in "admitted" state.
+type WorkflowUpdateLossPrevention struct{}
 
-func (m *WorkflowUpdateLossPreventionRule) Name() string {
+func (m *WorkflowUpdateLossPrevention) Name() string {
 	return "WorkflowUpdateLossPreventionRule"
 }
 
-func (m *WorkflowUpdateLossPreventionRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateLossPrevention) CheckLiveness(c *umpire.LivenessContext) {
 	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.UpdateID == "" {

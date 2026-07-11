@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func TestWorkflowUpdateStateConsistencyRule_DetectsAcceptedAtMismatch(t *testing
 		wu.AcceptedAt = time.Now()
 	}
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistencyRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistency{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for AcceptedAt/state mismatch, got %d", len(violations))
 	}
@@ -29,7 +29,7 @@ func TestWorkflowUpdateStateConsistencyRule_NoViolation_NormalTransitions(t *tes
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistencyRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistency{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for consistent state, got %d", len(violations))
 	}
@@ -40,7 +40,7 @@ func TestWorkflowUpdateStateConsistencyRule_NoViolation_Rejected(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateRejected("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistencyRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistency{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for rejected update, got %d", len(violations))
 	}
@@ -50,7 +50,7 @@ func TestWorkflowUpdateStateConsistencyRule_NoViolation_AdmittedOnly(t *testing.
 	reg := newTestRegistry()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistencyRule{})
+	violations := checkSafetyRule(reg, &WorkflowUpdateStateConsistency{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for admitted-only update, got %d", len(violations))
 	}

@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"time"
@@ -7,17 +7,17 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateWorkerSkippedRule detects updates that remain admitted
+// WorkflowUpdateWorkerSkipped detects updates that remain admitted
 // while workflow tasks for the same workflow have been polled by workers.
 // This indicates the worker is ignoring the update, and the server should
 // eventually reject it.
-type WorkflowUpdateWorkerSkippedRule struct{}
+type WorkflowUpdateWorkerSkipped struct{}
 
-func (m *WorkflowUpdateWorkerSkippedRule) Name() string {
+func (m *WorkflowUpdateWorkerSkipped) Name() string {
 	return "WorkflowUpdateWorkerSkippedRule"
 }
 
-func (m *WorkflowUpdateWorkerSkippedRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 	// Build map of workflow→latest polled time.
 	latestPoll := make(map[string]time.Time)
 	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {

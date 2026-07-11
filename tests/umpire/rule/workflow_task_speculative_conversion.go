@@ -1,21 +1,21 @@
-package rulebook
+package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// SpeculativeConversionRule detects updates that remain stuck in admitted
+// SpeculativeConversion detects updates that remain stuck in admitted
 // state after a speculative workflow task was converted to normal (stored).
 // The conversion should not lose the update — it should still progress to
 // accepted/completed/rejected.
-type SpeculativeConversionRule struct{}
+type SpeculativeConversion struct{}
 
-func (m *SpeculativeConversionRule) Name() string {
+func (m *SpeculativeConversion) Name() string {
 	return "SpeculativeConversionRule"
 }
 
-func (m *SpeculativeConversionRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *SpeculativeConversion) CheckLiveness(c *umpire.LivenessContext) {
 	// Find workflows where a speculative task was converted (stored).
 	converted := make(map[string]bool)
 	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {

@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"fmt"
@@ -7,17 +7,17 @@ import (
 	"go.temporal.io/server/tests/umpire/entity"
 )
 
-// WorkflowUpdateContextClearRule detects updates stranded in a
+// WorkflowUpdateContextClear detects updates stranded in a
 // non-terminal state when no pending workflow task exists to drive them forward.
 // This covers both stale-token scenarios and context-clear scenarios
 // where the update registry is lost and no new task is scheduled.
-type WorkflowUpdateContextClearRule struct{}
+type WorkflowUpdateContextClear struct{}
 
-func (m *WorkflowUpdateContextClearRule) Name() string {
+func (m *WorkflowUpdateContextClear) Name() string {
 	return "WorkflowUpdateContextClearRule"
 }
 
-func (m *WorkflowUpdateContextClearRule) CheckLiveness(c *umpire.LivenessContext) {
+func (m *WorkflowUpdateContextClear) CheckLiveness(c *umpire.LivenessContext) {
 	// Build set of workflows that have a pending (non-polled) task.
 	workflowsWithPendingTask := make(map[string]bool)
 	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {

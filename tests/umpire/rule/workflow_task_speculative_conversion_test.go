@@ -1,4 +1,4 @@
-package rulebook
+package rule
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ func TestSpeculativeConversionRule_DetectsStuckAfterConversion(t *testing.T) {
 	// Update admitted but stuck.
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeConversionRule{})
+	violations := checkLivenessRule(reg, &SpeculativeConversion{})
 	if len(violations) != 1 {
 		t.Fatalf("expected 1 violation for stuck update after conversion, got %d", len(violations))
 	}
@@ -25,7 +25,7 @@ func TestSpeculativeConversionRule_NoViolation_UpdateAccepted(t *testing.T) {
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeConversionRule{})
+	violations := checkLivenessRule(reg, &SpeculativeConversion{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations for accepted update, got %d", len(violations))
 	}
@@ -35,7 +35,7 @@ func TestSpeculativeConversionRule_NoViolation_NoConversion(t *testing.T) {
 	reg := newTestRegistry()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
-	violations := checkLivenessRule(reg, &SpeculativeConversionRule{})
+	violations := checkLivenessRule(reg, &SpeculativeConversion{})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations without speculative conversion, got %d", len(violations))
 	}
