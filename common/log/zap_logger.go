@@ -19,8 +19,9 @@ const (
 	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
 
 	// Console output (testing.T.Log):
-	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // "console" (default) or "json"
-	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // min level written to console (default: debug)
+	TestLogFormatEnvVar          = "TEMPORAL_TEST_LOG_FORMAT"           // "console" (default) or "json"
+	TestLogLevelEnvVar           = "TEMPORAL_TEST_LOG_LEVEL"            // min level written to console (default: debug)
+	TestLogStacktraceLevelEnvVar = "TEMPORAL_TEST_LOG_STACKTRACE_LEVEL" // min level that attaches a stack trace (default: error); set to "off" to disable
 
 	// File output (written once per process to a shared file):
 	TestLogFileEnvVar       = "TEMPORAL_TEST_LOG_FILE"        // path to log file; empty disables file logging

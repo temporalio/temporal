@@ -267,6 +267,21 @@ func getGlobalFileCore() zapcore.Core {
 	return globalFileCore
 }
 
+// stacktraceLevel is the minimum log level at which zap attaches a stack trace.
+// Defaults to Error (matching zap's usual test behavior); TEMPORAL_TEST_LOG_STACKTRACE_LEVEL
+// overrides it, and "off" disables stack traces entirely. All values are case-insensitive.
+func stacktraceLevel() zapcore.Level {
+	v := os.Getenv(log.TestLogStacktraceLevelEnvVar)
+	switch {
+	case v == "":
+		return zapcore.ErrorLevel
+	case strings.EqualFold(v, "off"):
+		return zapcore.FatalLevel + 1
+	default:
+		return log.ParseZapLevel(v)
+	}
+}
+
 // NewTestLogger creates a new TestLogger that logs to the provided testing.T.
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
 func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
@@ -310,7 +325,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 
 		zapOptions := []zap.Option{
 			zap.ErrorOutput(writer.WithMarkFailed(true)),
-			zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
+			zap.AddStacktrace(stacktraceLevel()), // only include stack traces at/above this level
 			zap.WithCaller(tl.state.logCaller),
 		}
 
