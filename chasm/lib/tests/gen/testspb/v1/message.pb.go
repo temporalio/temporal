@@ -31,6 +31,7 @@ type TestPayloadStore struct {
 	ExpirationTimes map[string]*timestamppb.Timestamp `protobuf:"bytes,3,rep,name=expiration_times,json=expirationTimes,proto3" json:"expiration_times,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Closed          bool                              `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
 	Canceled        bool                              `protobuf:"varint,5,opt,name=canceled,proto3" json:"canceled,omitempty"`
+	Paused          bool                              `protobuf:"varint,6,opt,name=paused,proto3" json:"paused,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -96,6 +97,13 @@ func (x *TestPayloadStore) GetClosed() bool {
 func (x *TestPayloadStore) GetCanceled() bool {
 	if x != nil {
 		return x.Canceled
+	}
+	return false
+}
+
+func (x *TestPayloadStore) GetPaused() bool {
+	if x != nil {
+		return x.Paused
 	}
 	return false
 }
@@ -192,7 +200,7 @@ var File_temporal_server_chasm_lib_tests_proto_v1_message_proto protoreflect.Fil
 
 const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe2\x02\n" +
+	"6temporal/server/chasm/lib/tests/proto/v1/message.proto\x12(temporal.server.chasm.lib.tests.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x02\n" +
 	"\x10TestPayloadStore\x12\x1f\n" +
 	"\vtotal_count\x18\x01 \x01(\x03R\n" +
 	"totalCount\x12\x1d\n" +
@@ -200,7 +208,8 @@ const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12z\n" +
 	"\x10expiration_times\x18\x03 \x03(\v2O.temporal.server.chasm.lib.tests.proto.v1.TestPayloadStore.ExpirationTimesEntryR\x0fexpirationTimes\x12\x16\n" +
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x12\x1a\n" +
-	"\bcanceled\x18\x05 \x01(\bR\bcanceled\x1a^\n" +
+	"\bcanceled\x18\x05 \x01(\bR\bcanceled\x12\x16\n" +
+	"\x06paused\x18\x06 \x01(\bR\x06paused\x1a^\n" +
 	"\x14ExpirationTimesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
 	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01\"9\n" +

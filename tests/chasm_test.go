@@ -1119,4 +1119,56 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 	})
 }
 
-// TODO: More tests here...
+// TestPauseUnpauseInfo verifies that ctx.PauseInfo(component) correctly tracks pause state
+// across transactions loaded from the database.
+func (s *ChasmSuite) TestPauseUnpauseInfo() {
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
+		tv := testvars.New(ss.T())
+
+		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+		defer cancel()
+
+		storeID := tv.Any().String()
+
+		_, err := tests.NewPayloadStoreHandler(ctx, tests.NewPayloadStoreRequest{
+			NamespaceID:      cenv.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		})
+		ss.NoError(err)
+
+		// Baseline: no pause info before any pause.
+		pi, err := tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+		ss.Nil(pi.PausedSince)
+		ss.Zero(pi.PastPausedDuration)
+
+		// Pause the component.
+		err = tests.PausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+
+		// While paused: PausedSince should be set, accumulated should be zero.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+		ss.Require().NotNil(pi.PausedSince, "PausedSince must be set while paused")
+		ss.Zero(pi.PastPausedDuration)
+		pausedSince := *pi.PausedSince
+
+		// Second read while still paused: PausedSince must remain the same.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+		ss.Require().NotNil(pi.PausedSince)
+		ss.Equal(pausedSince, *pi.PausedSince)
+
+		// Unpause.
+		err = tests.UnpausePayloadStoreHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+
+		// After unpause: PausedSince is nil, PastPausedDuration is positive.
+		pi, err = tests.GetPauseInfoHandler(ctx, cenv.NamespaceID(), storeID)
+		ss.NoError(err)
+		ss.Nil(pi.PausedSince)
+		ss.Positive(pi.PastPausedDuration)
+	})
+}
