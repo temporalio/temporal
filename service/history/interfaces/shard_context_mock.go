@@ -35,6 +35,7 @@ import (
 	pingable "go.temporal.io/server/common/pingable"
 	quotas "go.temporal.io/server/common/quotas"
 	searchattribute "go.temporal.io/server/common/searchattribute"
+	wideevents "go.temporal.io/server/common/wideevents"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
@@ -382,6 +383,20 @@ func (m *MockShardContext) GetEventLogger() log.Logger {
 func (mr *MockShardContextMockRecorder) GetEventLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockShardContext)(nil).GetEventLogger))
+}
+
+// GetReplicationDetailer mocks base method.
+func (m *MockShardContext) GetReplicationDetailer() wideevents.ReplicationDetailer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationDetailer")
+	ret0, _ := ret[0].(wideevents.ReplicationDetailer)
+	return ret0
+}
+
+// GetReplicationDetailer indicates an expected call of GetReplicationDetailer.
+func (mr *MockShardContextMockRecorder) GetReplicationDetailer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationDetailer", reflect.TypeOf((*MockShardContext)(nil).GetReplicationDetailer))
 }
 
 // GetEventsCache mocks base method.
@@ -1227,6 +1242,20 @@ func (m *MockControllableContext) GetEventLogger() log.Logger {
 func (mr *MockControllableContextMockRecorder) GetEventLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockControllableContext)(nil).GetEventLogger))
+}
+
+// GetReplicationDetailer mocks base method.
+func (m *MockControllableContext) GetReplicationDetailer() wideevents.ReplicationDetailer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationDetailer")
+	ret0, _ := ret[0].(wideevents.ReplicationDetailer)
+	return ret0
+}
+
+// GetReplicationDetailer indicates an expected call of GetReplicationDetailer.
+func (mr *MockControllableContextMockRecorder) GetReplicationDetailer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationDetailer", reflect.TypeOf((*MockControllableContext)(nil).GetReplicationDetailer))
 }
 
 // GetEventsCache mocks base method.

@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	otellog "go.opentelemetry.io/otel/log"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -432,6 +434,14 @@ func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
 		payload.PopulateParentInfo(info)
 	}
 
+	if detailer := r.shardContext.GetReplicationDetailer(); detailer != nil {
+		if extra := detailer.ReplicationDetails(payload.NamespaceID, payload.Namespace, payload.WorkflowID, payload.RunID); len(extra) > 0 {
+			if payload.Details == nil {
+				payload.Details = make(map[string]any, len(extra))
+			}
+			maps.Copy(payload.Details, extra)
+		}
+	}
 	wideevents.Emit(r.eventLogger, payload)
 }
 

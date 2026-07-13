@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	otellog "go.opentelemetry.io/otel/log"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -57,7 +59,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -90,6 +91,7 @@ type (
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
 		eventLogger         otellog.Logger
+		replicationDetailer wideevents.ReplicationDetailer
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -2054,6 +2056,7 @@ func newContext(
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
 	eventLogger otellog.Logger,
+	replicationDetailer wideevents.ReplicationDetailer,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2092,6 +2095,7 @@ func newContext(
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
 		eventLogger:             eventLogger,
+		replicationDetailer:     replicationDetailer,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2205,6 +2209,10 @@ func (s *ContextImpl) GetEventLogger() otellog.Logger {
 		return wideevents.NoopLogger()
 	}
 	return s.eventLogger
+}
+
+func (s *ContextImpl) GetReplicationDetailer() wideevents.ReplicationDetailer {
+	return s.replicationDetailer
 }
 
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {

@@ -2,6 +2,8 @@ package shard
 
 import (
 	otellog "go.opentelemetry.io/otel/log"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
@@ -17,12 +19,12 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.uber.org/fx"
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
@@ -49,6 +51,7 @@ type (
 		Logger                      log.Logger
 		MetricsHandler              metrics.Handler
 		EventLogger                 otellog.Logger
+		ReplicationDetailer         wideevents.ReplicationDetailer
 		NamespaceRegistry           namespace.Registry
 		PayloadSerializer           serialization.Serializer
 		PersistenceExecutionManager persistence.ExecutionManager
@@ -95,6 +98,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.HistoryClient,
 		c.MetricsHandler,
 		c.EventLogger,
+		c.ReplicationDetailer,
 		c.PayloadSerializer,
 		c.TimeSource,
 		c.NamespaceRegistry,

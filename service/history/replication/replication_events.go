@@ -2,6 +2,7 @@ package replication
 
 import (
 	"errors"
+	"maps"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -63,6 +65,7 @@ func emitReplicationExecuting(
 	if items := task.GetVerifyVersionedTransitionTaskAttributes().GetEventVersionHistory(); len(items) > 0 {
 		payload.EventVersionHistory = versionHistoryEntries(items)
 	}
+	applyReplicationDetails(shardContext, &payload)
 	wideevents.Emit(logger, payload)
 }
 
@@ -96,13 +99,14 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:       wideevents.ReplicationSent,
-		TaskType:    taskType,
-		Shard:       s.serverShardKey.ShardID,
-		Namespace:   nsName.String(),
-		NamespaceID: nsID,
-		WorkflowID:  item.GetWorkflowID(),
-		RunID:       item.GetRunID(),
+		Phase:        wideevents.ReplicationSent,
+		TaskType:     taskType,
+		Shard:        s.serverShardKey.ShardID,
+		Namespace:    nsName.String(),
+		NamespaceID:  nsID,
+		WorkflowID:   item.GetWorkflowID(),
+		RunID:        item.GetRunID(),
+		SourceTaskID: item.GetTaskID(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
@@ -130,6 +134,7 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	// only). The verify task ships no mutable state, so it contributes no parent info here.
 	populateSentParentInfo(&payload, task)
 
+	applyReplicationDetails(s.shardContext, &payload)
 	wideevents.Emit(logger, payload)
 }
 
@@ -219,6 +224,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	}
 	payload.Details = details
 
+	applyReplicationDetails(shardContext, &payload)
 	wideevents.Emit(logger, payload)
 }
 
@@ -246,6 +252,24 @@ func actualState(ms *persistencespb.WorkflowMutableState) map[string]any {
 		actual["event_version_history"] = versionHistoryEntries(currentHistory.GetItems())
 	}
 	return actual
+}
+
+// applyReplicationDetails merges deployment-specific details from the shard's ReplicationDetailer
+// (if configured) into the payload's Details before it is emitted. A nil detailer or empty result
+// is a no-op.
+func applyReplicationDetails(shardContext historyi.ShardContext, payload *wideevents.ReplicationLifecyclePayload) {
+	detailer := shardContext.GetReplicationDetailer()
+	if detailer == nil {
+		return
+	}
+	extra := detailer.ReplicationDetails(payload.NamespaceID, payload.Namespace, payload.WorkflowID, payload.RunID)
+	if len(extra) == 0 {
+		return
+	}
+	if payload.Details == nil {
+		payload.Details = make(map[string]any, len(extra))
+	}
+	maps.Copy(payload.Details, extra)
 }
 
 func versionedTransitionEntry(vt *persistencespb.VersionedTransition) wideevents.VersionedTransitionEntry {

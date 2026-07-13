@@ -19,6 +19,11 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -59,10 +64,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
-	expmaps "golang.org/x/exp/maps"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -129,6 +130,7 @@ type (
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
 		EventLoggerProvider   otellog.LoggerProvider
+		ReplicationDetailer   wideevents.ReplicationDetailer
 	}
 )
 
@@ -327,6 +329,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
 		EventLoggerProvider:   eventLoggerProvider,
+		ReplicationDetailer:   so.replicationDetailer,
 	}, nil
 }
 
@@ -373,6 +376,7 @@ type (
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
 		EventLoggerProvider             otellog.LoggerProvider
+		ReplicationDetailer             wideevents.ReplicationDetailer
 		EsClient                        esclient.Client
 		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
@@ -468,6 +472,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() otellog.Logger {
 				return wideevents.NewLogger(params.EventLoggerProvider, string(serviceName))
+			},
+			func() wideevents.ReplicationDetailer {
+				return params.ReplicationDetailer
 			},
 			func() esclient.Client {
 				return params.EsClient

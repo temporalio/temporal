@@ -5,6 +5,7 @@ import (
 	"time"
 
 	otellog "go.opentelemetry.io/otel/log"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -48,6 +50,7 @@ type (
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler
 		GetEventLogger() otellog.Logger
+		GetReplicationDetailer() wideevents.ReplicationDetailer
 		GetTimeSource() clock.TimeSource
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)

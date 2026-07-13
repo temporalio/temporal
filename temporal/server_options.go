@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	otellog "go.opentelemetry.io/otel/log"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -22,7 +24,7 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/grpc"
+	"go.temporal.io/server/common/wideevents"
 )
 
 type (
@@ -61,6 +63,7 @@ type (
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
 		eventLoggerProvider             otellog.LoggerProvider
+		replicationDetailer             wideevents.ReplicationDetailer
 		tokenProvider                   auth.TokenProvider
 	}
 )
