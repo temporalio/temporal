@@ -808,6 +808,8 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		baseEventVersion,
 		task.getFirstEvent().GetEventId(),
 		task.getVersion(),
+		baseWorkflowInfo.GetStartRequestId(),
+		baseWorkflowInfo.GetResetRequestId(),
 	)
 	if err != nil {
 		task.getLogger().Error(

@@ -21,6 +21,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -997,8 +998,10 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	//  4. WorkflowTaskStarted
 	//  5. WorkflowTaskCompleted
 
-	// Reset workflow execution
-	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	// Reset workflow execution and atomically inject a new signal.
+	postResetSignalName := "post-reset-signal"
+	postResetSignalInput := payloads.EncodeString("post-reset-signal-input")
+	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -1007,10 +1010,24 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		Reason:                    "reset execution from test",
 		WorkflowTaskFinishEventId: 4, // before WorkflowTaskStarted
 		RequestId:                 uuid.NewString(),
-	})
+		Identity:                  "reset-requester",
+		PostResetOperations: []*workflowpb.PostResetOperation{{
+			Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+				SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+					SignalName: postResetSignalName,
+					Input:      postResetSignalInput,
+				},
+			},
+		}},
+	}
+	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), resetRequest)
 	s.NoError(err)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	retryResetResp, err := client1.ResetWorkflowExecution(testcore.NewContext(), resetRequest)
+	s.NoError(err)
+	s.Equal(resetResp.GetRunId(), retryResetResp.GetRunId())
 
 	_, err = poller1.PollAndProcessWorkflowTask()
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -1035,10 +1052,12 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
   3 v1 WorkflowExecutionSignaled
   4 v1 WorkflowTaskStarted
   5 v1 WorkflowTaskFailed
-  6 v1 WorkflowTaskScheduled
-  7 v2 WorkflowTaskStarted
-  8 v2 WorkflowTaskCompleted
-  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  6 v1 WorkflowExecutionSignaled
+  7 v1 WorkflowTaskScheduled
+  8 v2 WorkflowTaskStarted
+  9 v2 WorkflowTaskCompleted
+ 10 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+	client0History := getHistoryResp.History
 
 	getHistoryResp, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 	s.NoError(err)
@@ -1048,10 +1067,27 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
   3 v1 WorkflowExecutionSignaled
   4 v1 WorkflowTaskStarted
   5 v1 WorkflowTaskFailed
-  6 v1 WorkflowTaskScheduled
-  7 v2 WorkflowTaskStarted
-  8 v2 WorkflowTaskCompleted
-  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  6 v1 WorkflowExecutionSignaled
+  7 v1 WorkflowTaskScheduled
+  8 v2 WorkflowTaskStarted
+  9 v2 WorkflowTaskCompleted
+ 10 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
+
+	for _, history := range []*historypb.History{client0History, getHistoryResp.History} {
+		var postResetSignalEvents []*historypb.HistoryEvent
+		for _, event := range history.GetEvents() {
+			if event.GetWorkflowExecutionSignaledEventAttributes().GetSignalName() == postResetSignalName {
+				postResetSignalEvents = append(postResetSignalEvents, event)
+			}
+		}
+		s.Len(postResetSignalEvents, 1)
+		if len(postResetSignalEvents) != 1 {
+			continue
+		}
+		attributes := postResetSignalEvents[0].GetWorkflowExecutionSignaledEventAttributes()
+		s.Equal("reset-requester", attributes.GetIdentity())
+		s.ProtoEqual(postResetSignalInput, attributes.GetInput())
+	}
 }
 
 func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {

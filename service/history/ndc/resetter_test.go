@@ -124,6 +124,8 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	baseVersion := version
 	incomingFirstEventID := baseEventID + 12
 	incomingVersion := baseVersion + 3
+	startRequestID := "start-request-id"
+	resetRequestID := "reset-request-id"
 
 	rebuildStats := RebuildStats{
 		HistorySize:          9999,
@@ -167,8 +169,10 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 			s.newRunID,
 		),
 		newBranchToken,
-		gomock.Any(),
+		startRequestID,
 	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
+	s.mockRebuiltMutableState.EXPECT().SetBaseWorkflow(s.baseRunID, baseEventID, baseVersion)
+	s.mockRebuiltMutableState.EXPECT().SetResetRequestID(resetRequestID)
 	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
 	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
 	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
@@ -192,6 +196,8 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		baseVersion,
 		incomingFirstEventID,
 		incomingVersion,
+		startRequestID,
+		resetRequestID,
 	)
 	s.NoError(err)
 	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
@@ -238,6 +244,8 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 		baseVersion,
 		incomingFirstEventID,
 		incomingFirstEventVersion,
+		"",
+		"",
 	)
 	s.Error(err)
 	s.ErrorAs(err, new(*serviceerrors.RetryReplication))

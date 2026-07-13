@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	historyapi "go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -59,6 +60,8 @@ type (
 			baseRebuildLastEventVersion int64,
 			baseNextEventID int64,
 			resetRunID string,
+			resetRequestID string,
+			resetRequestIdentity string,
 			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
@@ -114,6 +117,8 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	baseNextEventID int64,
 	resetRunID string,
+	resetRequestID string,
+	resetRequestIdentity string,
 	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
@@ -250,6 +255,9 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
+	if resetRequestID != "" {
+		resetMS.SetResetRequestID(resetRequestID)
+	}
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
@@ -257,7 +265,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	if err := r.performPostResetOperations(ctx, resetMS, postResetOperations); err != nil {
+	if err := r.performPostResetOperations(ctx, resetMS, resetRequestIdentity, postResetOperations); err != nil {
 		return err
 	}
 
@@ -1354,15 +1362,50 @@ func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[en
 }
 
 // performPostResetOperations performs the optional post reset operations on the reset workflow.
-func (r *workflowResetterImpl) performPostResetOperations(ctx context.Context, resetMS historyi.MutableState, postResetOperations []*workflowpb.PostResetOperation) error {
+func (r *workflowResetterImpl) performPostResetOperations(
+	ctx context.Context,
+	resetMS historyi.MutableState,
+	resetRequestIdentity string,
+	postResetOperations []*workflowpb.PostResetOperation,
+) error {
 	for _, operation := range postResetOperations {
 		switch op := operation.GetVariant().(type) {
+		case *workflowpb.PostResetOperation_SignalWorkflow_:
+			if op.SignalWorkflow == nil {
+				return serviceerror.NewInvalidArgument("post reset signal workflow operation is not set")
+			}
+			signal := op.SignalWorkflow
+			if err := historyapi.ValidateSignal(
+				ctx,
+				r.shardContext,
+				resetMS,
+				signal.GetInput().Size(),
+				signal.GetHeader().Size(),
+				"ResetWorkflowExecution",
+			); err != nil {
+				return err
+			}
+			if _, err := resetMS.AddWorkflowExecutionSignaledEvent(
+				signal.GetSignalName(),
+				signal.GetInput(),
+				resetRequestIdentity,
+				signal.GetHeader(),
+				nil,
+				"",
+				signal.GetLinks(),
+			); err != nil {
+				return err
+			}
 		case *workflowpb.PostResetOperation_UpdateWorkflowOptions_:
-			// TODO(carlydf): Put the reset requester in the event so that with state-based replication this code will run on the passive side.
-			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask(), "")
+			if op.UpdateWorkflowOptions == nil {
+				return serviceerror.NewInvalidArgument("post reset update workflow options operation is not set")
+			}
+			_, _, err := updateworkflowoptions.MergeAndApply(resetMS, op.UpdateWorkflowOptions.GetWorkflowExecutionOptions(), op.UpdateWorkflowOptions.GetUpdateMask(), resetRequestIdentity)
 			if err != nil {
 				return err
 			}
+		default:
+			return serviceerror.NewInvalidArgumentf("unsupported post reset operation: %T", op)
 		}
 	}
 	return nil
