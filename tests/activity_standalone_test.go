@@ -7846,6 +7846,52 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 				},
 				expectedErr: "invalid run id",
 			},
+			{
+				name: "EmptyUpdateMask",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      activityID,
+					RunId:           runID,
+					ActivityOptions: validOptions,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{}},
+				},
+				expectedErr: "UpdateMask",
+			},
+			{
+				name: "UnknownPath",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      activityID,
+					RunId:           runID,
+					ActivityOptions: validOptions,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"definitely_not_an_activity_option"}},
+				},
+				expectedErr: "definitely_not_an_activity_option",
+			},
+			{
+				name: "UnsupportedRootPath",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:  ns,
+					ActivityId: activityID,
+					RunId:      runID,
+					ActivityOptions: &activitypb.ActivityOptions{
+						TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+					},
+					UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"task_queue"}},
+				},
+				expectedErr: "task_queue",
+			},
+			{
+				name: "WildcardPath",
+				req: &workflowservice.UpdateActivityExecutionOptionsRequest{
+					Namespace:       ns,
+					ActivityId:      activityID,
+					RunId:           runID,
+					ActivityOptions: validOptions,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"*"}},
+				},
+				expectedErr: "*",
+			},
 		}
 
 		for _, tc := range testCases {
