@@ -439,6 +439,7 @@ jobs:
           TEST_ARGS: "${{ matrix.test_args }}"
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
+          TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
