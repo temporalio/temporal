@@ -125,6 +125,7 @@ func newRunner() *runner {
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
+		// TODO: Remove gotestsumPathFlag once downstream services no longer pass it.
 		if arg == "--" || strings.HasPrefix(arg, gotestsumPathFlag) {
 			continue
 		}
