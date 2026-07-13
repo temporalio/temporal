@@ -207,6 +207,25 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	if numTargetSelectors > 1 {
 		return serviceerror.NewInvalidArgument("visibility query, executions, and archetype executions are mutually exclusive")
 	}
+	if archetypeExecutions := params.GetArchetypeExecutions(); len(archetypeExecutions) > 0 {
+		// TerminateActivitiesOperation/DeleteActivitiesOperation/CancelActivitiesOperation
+		// target standalone activity executions; every other operation targets workflow
+		// executions. Reject archetype executions that do not match the operation.
+		expectedType := enumspb.EXECUTION_TYPE_WORKFLOW
+		switch params.GetOperation().(type) {
+		case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
+			*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+			expectedType = enumspb.EXECUTION_TYPE_ACTIVITY
+		}
+		for i, execution := range archetypeExecutions {
+			if execution.GetType() != expectedType {
+				return serviceerror.NewInvalidArgumentf(
+					"archetype_executions[%d] has type %v, but operation %T requires %v",
+					i, execution.GetType(), params.GetOperation(), expectedType)
+			}
+		}
+	}
 	if len(params.GetReason()) == 0 {
 		return serviceerror.NewInvalidArgument("Reason is not set on request.")
 	}

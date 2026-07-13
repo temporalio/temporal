@@ -207,6 +207,39 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 	}
 }
 
+// TestActivityBatchTerminate_ArchetypeExecutionTypeMismatch verifies that an
+// activity-targeting batch operation (terminate activity) rejects
+// ArchetypeExecutions whose Type is EXECUTION_TYPE_WORKFLOW instead of
+// silently misinterpreting the workflow's business_id/run_id as an activity
+// execution and no-oping.
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_ArchetypeExecutionTypeMismatch() {
+	env := newStandaloneActivityBatchEnv(s.T())
+	ctx := env.Context()
+
+	req := &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: "batch-terminator",
+				Reason:   "test",
+			},
+		},
+		JobId:  uuid.NewString(),
+		Reason: "test",
+		ArchetypeExecutions: []*commonpb.Execution{
+			{
+				Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+				BusinessId: "some-workflow-id",
+				RunId:      uuid.NewString(),
+			},
+		},
+	}
+
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
+	s.Error(err)
+	s.Contains(err.Error(), "archetype_executions[0]")
+}
+
 // TestActivityBatchTerminate_ExcludesNonRunning verifies that a batch terminate
 // query omitting `ExecutionStatus = 'Running'` still only targets the running
 // activity: the server must add the filter automatically (adjustQueryBatchTypeEnum)

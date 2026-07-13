@@ -584,6 +584,17 @@ func (a *activities) startTaskProcessor(
 	}
 }
 
+// deterministicRequestID derives a stable request ID from the batch job and
+// the identifying fields of the target of a single call. Deriving the request ID
+// lets the server's idempotency checks collapse retries of the same call.
+func deterministicRequestID(jobID string, parts ...string) string {
+	key := jobID
+	for _, part := range parts {
+		key += ":" + part
+	}
+	return uuid.NewSHA1(uuid.Nil, []byte(key)).String()
+}
+
 // processSingleTask processes a single batch task, bounding its execution with a
 // per-task timeout so that one hung operation cannot block the task processor.
 // nolint:revive,cognitive-complexity
@@ -613,19 +624,20 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
 		err = processArchetypeTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
-				_, err = frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				_, err := frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 					Namespace:  namespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
 					Identity:   operation.TerminateActivitiesOperation.GetIdentity(),
 					Reason:     operation.TerminateActivitiesOperation.GetReason(),
+					RequestId:  deterministicRequestID(batchOperation.Request.GetJobId(), "terminate-activity", execution.GetBusinessId(), execution.GetRunId()),
 				})
 				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation:
 		err = processArchetypeTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
-				_, err = frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+				_, err := frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
 					Namespace:  namespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
@@ -635,12 +647,13 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
 		err = processArchetypeTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
-				_, err = frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				_, err := frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 					Namespace:  namespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
 					Identity:   operation.CancelActivitiesOperation.GetIdentity(),
 					Reason:     operation.CancelActivitiesOperation.GetReason(),
+					RequestId:  deterministicRequestID(batchOperation.Request.GetJobId(), "cancel-activity", execution.GetBusinessId(), execution.GetRunId()),
 				})
 				return err
 			})
@@ -657,12 +670,14 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				_, err = frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+				_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 					Namespace:         namespace,
 					WorkflowExecution: executionInfo.Execution,
 					SignalName:        operation.SignalOperation.GetSignal(),
 					Input:             operation.SignalOperation.GetInput(),
 					Identity:          operation.SignalOperation.GetIdentity(),
+					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "signal",
+						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId(), operation.SignalOperation.GetSignal()),
 				})
 				return err
 			})
@@ -703,10 +718,11 @@ func (a *activities) processSingleTask(
 					return err
 				}
 				_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-					Namespace:                 namespace,
-					WorkflowExecution:         executionInfo.Execution,
-					Reason:                    batchOperation.Request.Reason,
-					RequestId:                 uuid.NewString(),
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					Reason:            batchOperation.Request.Reason,
+					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "reset",
+						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId()),
 					WorkflowTaskFinishEventId: eventID,
 					ResetReapplyType:          resetReapplyType,
 					ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
@@ -738,15 +754,14 @@ func (a *activities) processSingleTask(
 					return fmt.Errorf("unknown activity type: %v", operation.UnpauseActivitiesOperation.GetActivity())
 				}
 
-				_, err = frontendClient.UnpauseActivity(ctx, unpauseRequest)
+				_, err := frontendClient.UnpauseActivity(ctx, unpauseRequest)
 				return err
 			})
 
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				var err error
-				_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+				_, err := frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 					Namespace:                namespace,
 					WorkflowExecution:        executionInfo.Execution,
 					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
@@ -777,7 +792,7 @@ func (a *activities) processSingleTask(
 					return fmt.Errorf("unknown activity type: %v", operation.ResetActivitiesOperation.GetActivity())
 				}
 
-				_, err = frontendClient.ResetActivity(ctx, resetRequest)
+				_, err := frontendClient.ResetActivity(ctx, resetRequest)
 				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation:
@@ -801,7 +816,7 @@ func (a *activities) processSingleTask(
 				}
 
 				updateRequest.ActivityOptions = operation.UpdateActivityOptionsOperation.GetActivityOptions()
-				_, err = frontendClient.UpdateActivityOptions(ctx, updateRequest)
+				_, err := frontendClient.UpdateActivityOptions(ctx, updateRequest)
 				return err
 			})
 	default:

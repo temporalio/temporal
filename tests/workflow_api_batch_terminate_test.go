@@ -222,3 +222,35 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 		})
 	}
 }
+
+// TestWorkflowBatchTerminate_ArchetypeExecutionTypeMismatch verifies that a
+// workflow-targeting batch operation (e.g. terminate workflow) rejects
+// ArchetypeExecutions whose Type is EXECUTION_TYPE_ACTIVITY instead of
+// silently misinterpreting the activity's business_id/run_id as a workflow
+// execution and no-oping.
+func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_ArchetypeExecutionTypeMismatch() {
+	env := newWorkflowBatchEnv(s.T())
+	ctx := env.Context()
+
+	req := &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{
+				Identity: "batch-terminator",
+			},
+		},
+		JobId:  uuid.NewString(),
+		Reason: "test",
+		ArchetypeExecutions: []*commonpb.Execution{
+			{
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: "some-activity-id",
+				RunId:      uuid.NewString(),
+			},
+		},
+	}
+
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
+	s.Error(err)
+	s.Contains(err.Error(), "archetype_executions[0]")
+}
