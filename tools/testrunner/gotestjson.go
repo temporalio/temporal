@@ -51,7 +51,7 @@ func (o *goTestJSONOutput) String() string {
 func (o *goTestJSONOutput) writeLine(line string) {
 	var event goTestEvent
 	if err := o.decodeLine(line, &event); err != nil {
-		fmt.Fprintln(o.stdout, line)
+		_, _ = fmt.Fprintln(o.stdout, line)
 		o.output.WriteString(line)
 		o.output.WriteByte('\n')
 		return
@@ -59,7 +59,7 @@ func (o *goTestJSONOutput) writeLine(line string) {
 	o.input.WriteString(line)
 	o.input.WriteByte('\n')
 	if event.Output != "" {
-		fmt.Fprint(o.stdout, event.Output)
+		_, _ = fmt.Fprint(o.stdout, event.Output)
 		o.output.WriteString(event.Output)
 	}
 }
