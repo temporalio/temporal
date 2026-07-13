@@ -27,7 +27,6 @@ type goTestJSONOutput struct {
 }
 
 type goTestPackage struct {
-	name    string
 	output  strings.Builder
 	tests   map[string]*goTestCase
 	order   []string
@@ -36,7 +35,6 @@ type goTestPackage struct {
 }
 
 type goTestCase struct {
-	name    string
 	output  strings.Builder
 	action  string
 	elapsed float64
@@ -84,12 +82,22 @@ func (o *goTestJSONOutput) writeLine(line string) {
 }
 
 func (o *goTestJSONOutput) record(event goTestEvent) {
-	pkg := o.packageFor(event.Package)
+	pkg := o.packages[event.Package]
+	if pkg == nil {
+		pkg = &goTestPackage{tests: make(map[string]*goTestCase)}
+		o.packages[event.Package] = pkg
+		o.order = append(o.order, event.Package)
+	}
 	if event.Output != "" {
 		pkg.output.WriteString(event.Output)
 	}
 	if event.Test != "" {
-		test := pkg.testFor(event.Test)
+		test := pkg.tests[event.Test]
+		if test == nil {
+			test = &goTestCase{}
+			pkg.tests[event.Test] = test
+			pkg.order = append(pkg.order, event.Test)
+		}
 		if event.Output != "" {
 			test.output.WriteString(event.Output)
 		}
@@ -104,37 +112,12 @@ func (o *goTestJSONOutput) record(event goTestEvent) {
 	}
 }
 
-func (o *goTestJSONOutput) packageFor(name string) *goTestPackage {
-	pkg, ok := o.packages[name]
-	if ok {
-		return pkg
-	}
-	pkg = &goTestPackage{
-		name:  name,
-		tests: make(map[string]*goTestCase),
-	}
-	o.packages[name] = pkg
-	o.order = append(o.order, name)
-	return pkg
-}
-
-func (p *goTestPackage) testFor(name string) *goTestCase {
-	test, ok := p.tests[name]
-	if ok {
-		return test
-	}
-	test = &goTestCase{name: name}
-	p.tests[name] = test
-	p.order = append(p.order, name)
-	return test
-}
-
 func (o *goTestJSONOutput) junitReport() *junitReport {
 	report := &junitReport{}
 	for _, pkgName := range o.order {
 		pkg := o.packages[pkgName]
 		suite := junit.Testsuite{
-			Name: pkg.name,
+			Name: pkgName,
 			ID:   len(report.Suites),
 		}
 		if pkg.elapsed > 0 {
@@ -149,8 +132,8 @@ func (o *goTestJSONOutput) junitReport() *junitReport {
 				continue
 			}
 			tc := junit.Testcase{
-				Name:      test.name,
-				Classname: pkg.name,
+				Name:      testName,
+				Classname: pkgName,
 			}
 			if test.elapsed > 0 {
 				tc.Time = fmt.Sprintf("%.6f", test.elapsed)
@@ -166,8 +149,8 @@ func (o *goTestJSONOutput) junitReport() *junitReport {
 		}
 		if pkg.failed && failedTests == 0 {
 			suite.AddTestcase(junit.Testcase{
-				Name:      pkg.name,
-				Classname: pkg.name,
+				Name:      pkgName,
+				Classname: pkgName,
 				Failure:   generateFailure(failureTypeFailed, pkg.output.String()),
 			})
 		}
