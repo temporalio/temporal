@@ -88,7 +88,7 @@ func newCancellationInvocationTaskHandler(opts cancellationInvocationTaskHandler
 func (h *cancellationInvocationTaskHandler) Validate(
 	_ chasm.Context,
 	cancellation *Cancellation,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *nexusoperationpb.CancellationTask,
 ) (bool, error) {
 	return cancellation.Status == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED &&
@@ -213,7 +213,7 @@ func newCancellationBackoffTaskHandler(opts commonTaskHandlerOptions) *cancellat
 func (h *cancellationBackoffTaskHandler) Validate(
 	_ chasm.Context,
 	cancellation *Cancellation,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *nexusoperationpb.CancellationBackoffTask,
 ) (bool, error) {
 	isValid := cancellation.Status == nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF && cancellation.GetAttempt() == task.GetAttempt()

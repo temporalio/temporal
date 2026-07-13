@@ -2130,7 +2130,7 @@ func (n *Node) deserializeComponentTask(
 // This method assumes component value is already hydrated.
 func (n *Node) validateTask(
 	validateContext Context,
-	taskAttributes TaskAttributes,
+	taskInvocation TaskInvocation,
 	taskInstance any,
 ) (_ bool, retErr error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
@@ -2155,7 +2155,7 @@ func (n *Node) validateTask(
 	return registableTask.validateFn(
 		validateContext,
 		n.value,
-		taskAttributes,
+		taskInvocation,
 		taskInstance,
 		n.registry,
 	)
@@ -2176,9 +2176,11 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			TaskAttributes{
-				ScheduledTime: existingTask.ScheduledTime.AsTime(),
-				Destination:   existingTask.Destination,
+			TaskInvocation{
+				TaskAttributes: TaskAttributes{
+					ScheduledTime: existingTask.ScheduledTime.AsTime(),
+					Destination:   existingTask.Destination,
+				},
 			},
 			existingTaskInstance,
 		)
@@ -2258,7 +2260,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			newTask.attributes,
+			TaskInvocation{TaskAttributes: newTask.attributes},
 			newTask.task,
 		)
 		if err != nil {
@@ -3513,7 +3515,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(validationContext, taskAttributes, taskInstance)
+	valid, err := n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
 	if err != nil {
 		return false, err
 	}
@@ -3672,9 +3674,12 @@ func (n *Node) ValidateSideEffectTask(
 
 	isValidByComponent, retErr = node.validateTask(
 		validateCtx,
-		TaskAttributes{
-			ScheduledTime: chasmTask.GetVisibilityTime(),
-			Destination:   chasmTask.Destination,
+		TaskInvocation{
+			TaskAttributes: TaskAttributes{
+				ScheduledTime: chasmTask.GetVisibilityTime(),
+				Destination:   chasmTask.Destination,
+			},
+			Attempt: chasmTask.Attempt,
 		},
 		chasmTask.DeserializedTask.Interface(),
 	)
@@ -3787,7 +3792,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's handler.
-		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
+		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
 	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
@@ -3828,6 +3833,7 @@ func (n *Node) ComponentByPath(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
+	attempt int,
 	taskAttributes TaskAttributes,
 	taskValue reflect.Value,
 ) func(NodeBackend, Context, Component, *Registry) error {
@@ -3845,7 +3851,7 @@ func makeValidationFn(
 		valid, err := registrableTask.validateFn(
 			ctx,
 			component,
-			taskAttributes,
+			TaskInvocation{TaskAttributes: taskAttributes, Attempt: attempt},
 			taskValue.Interface(),
 			registry,
 		)
