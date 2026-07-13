@@ -972,23 +972,6 @@ func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
 	return input, nil
 }
 
-// CaNChainSignalWorkflow builds a three-run continue-as-new chain: run A (count 0) continues-as-new
-// immediately, run B (count 1) waits for a "reapply-me" signal before continuing-as-new, and run C
-// (count 2) completes. The signal recorded on the surviving intermediate run B is what a reset of
-// run A must reapply once the current run has been deleted.
-func CaNChainSignalWorkflow(ctx workflow.Context, count int) (string, error) {
-	switch count {
-	case 0:
-		return "", workflow.NewContinueAsNewError(ctx, CaNChainSignalWorkflow, 1)
-	case 1:
-		var val string
-		workflow.GetSignalChannel(ctx, "reapply-me").Receive(ctx, &val)
-		return "", workflow.NewContinueAsNewError(ctx, CaNChainSignalWorkflow, 2)
-	default:
-		return "done", nil
-	}
-}
-
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	env := testcore.NewEnv(s.T())
 
@@ -1028,6 +1011,23 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
+}
+
+// CaNChainSignalWorkflow builds a three-run continue-as-new chain: run A (count 0) continues-as-new
+// immediately, run B (count 1) waits for a "reapply-me" signal before continuing-as-new, and run C
+// (count 2) completes. The signal recorded on the surviving intermediate run B is what a reset of
+// run A must reapply once the current run has been deleted.
+func CaNChainSignalWorkflow(ctx workflow.Context, count int) (string, error) {
+	switch count {
+	case 0:
+		return "", workflow.NewContinueAsNewError(ctx, CaNChainSignalWorkflow, 1)
+	case 1:
+		var val string
+		workflow.GetSignalChannel(ctx, "reapply-me").Receive(ctx, &val)
+		return "", workflow.NewContinueAsNewError(ctx, CaNChainSignalWorkflow, 2)
+	default:
+		return "done", nil
+	}
 }
 
 // TestResetWorkflowByRunID_CurrentExecutionMissing resets by an explicit runId when the workflow has
