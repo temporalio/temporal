@@ -893,12 +893,15 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		return nil, serviceerror.NewFailedPrecondition("cannot pause an activity with a pending cancellation")
 	}
+	// Deduplicate a replay of a request that already paused this activity, even if the
+	// activity has since been unpaused. Without this check, a delayed replay of an old
+	// Pause request would silently re-pause an activity that a later Unpause resumed.
+	newReqID := req.GetFrontendRequest().GetRequestId()
+	if newReqID != "" && a.LastPauseState.GetRequestId() == newReqID {
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+
 	if a.isPaused() {
-		newReqID := req.GetFrontendRequest().GetRequestId()
-		existingReqID := a.LastPauseState.GetRequestId()
-		if newReqID != "" && existingReqID == newReqID {
-			return &activitypb.PauseActivityExecutionResponse{}, nil
-		}
 		return nil, serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
