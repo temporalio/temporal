@@ -41,6 +41,7 @@ readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-hi
 # Capture before the termination threshold so the diagnostic profile is usually
 # available even if the runner kills the job before our termination path runs.
 readonly HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
+readonly HEAP_PROFILE_REFRESH_INTERVAL_SECONDS="${HEAP_PROFILE_REFRESH_INTERVAL_SECONDS:-30}"
 readonly HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
 readonly PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
@@ -53,6 +54,8 @@ readonly OOM_JUNIT_FILE="${OOM_JUNIT_FILE:-.testoutput/junit.oom.xml}"
 # State.
 MEMORY_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
+LAST_HEAP_PROFILE_CAPTURE_TIME=0
+HEAP_PROFILE_SECTION=""
 HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
@@ -161,8 +164,29 @@ capture_heap_profile() {
   printf '\n%s\n' "$heap_profile_summary"
 }
 
+should_capture_heap_profile() {
+  local now="$1"
+  local memory_pct="$2"
+  local is_new_high="$3"
+  local should_terminate_process_group="$4"
+
+  if [[ "$should_terminate_process_group" == "true" ]] && [[ "$HAS_CAPTURED_HEAP_PROFILE" == "false" ]]; then
+    return 0
+  fi
+
+  if [[ "$is_new_high" != "true" ]] || [[ "$memory_pct" -lt "$HEAP_PROFILE_CAPTURE_THRESHOLD" ]]; then
+    return 1
+  fi
+
+  if [[ $(( now - LAST_HEAP_PROFILE_CAPTURE_TIME )) -lt "$HEAP_PROFILE_REFRESH_INTERVAL_SECONDS" ]]; then
+    return 1
+  fi
+
+  return 0
+}
+
 snapshot() {
-  local heap_profile_section="" memory_total_kb memory_available_kb memory_used_kb memory_used_mb memory_pct should_terminate_process_group
+  local memory_total_kb memory_available_kb memory_used_kb memory_used_mb memory_pct is_new_high should_terminate_process_group
 
   memory_total_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memory_available_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
@@ -185,21 +209,26 @@ snapshot() {
   echo "$status_line" >> "$SNAPSHOT_HISTORY_FILE"
   print_snapshot_status "$now" "$status_line"
 
+  is_new_high=false
+  if [[ "$memory_pct" -gt "$MEMORY_HIGH_WATER_MARK" ]]; then
+    is_new_high=true
+  fi
+
   should_terminate_process_group=false
   if [[ "$memory_pct" -ge "$OOM_TERMINATION_THRESHOLD" ]] && [[ "$OOM_TERMINATED" == "false" ]]; then
     should_terminate_process_group=true
   fi
 
-  if [[ "$HAS_CAPTURED_HEAP_PROFILE" == "false" ]] &&
-    [[ "$memory_pct" -ge "$HEAP_PROFILE_CAPTURE_THRESHOLD" || "$should_terminate_process_group" == "true" ]]; then
-    heap_profile_section="$(capture_heap_profile "$memory_pct")"
+  if should_capture_heap_profile "$now" "$memory_pct" "$is_new_high" "$should_terminate_process_group"; then
+    HEAP_PROFILE_SECTION="$(capture_heap_profile "$memory_pct")"
+    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
     HAS_CAPTURED_HEAP_PROFILE=true
   fi
 
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
-  if [[ "$memory_pct" -gt "$MEMORY_HIGH_WATER_MARK" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
-    write_snapshot_report "$memory_pct" "$heap_profile_section"
+  if [[ "$is_new_high" == "true" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
+    write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
     MEMORY_HIGH_WATER_MARK="$memory_pct"
   fi
 
