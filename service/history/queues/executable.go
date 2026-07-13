@@ -929,10 +929,11 @@ func (e *CircuitBreakerExecutable) Execute() error {
 		// and does not go to the DLQ.
 		return fmt.Errorf(
 			"%w: %w",
-			serviceerror.NewResourceExhausted(
-				enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
-				"circuit breaker rejection",
-			),
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "circuit breaker rejection",
+			},
 			err,
 		)
 	}
