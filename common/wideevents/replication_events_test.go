@@ -1,6 +1,7 @@
 package wideevents
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,41 @@ func attrMap(kvs []log.KeyValue) map[string]log.Value {
 	for _, kv := range kvs {
 		m[kv.Key] = kv.Value
 	}
+	return m
+}
+
+// valueToAny decodes an OTEL log.Value into a comparable Go value for value-level assertions.
+func valueToAny(v log.Value) any {
+	switch v.Kind() {
+	case log.KindString:
+		return v.AsString()
+	case log.KindInt64:
+		return v.AsInt64()
+	case log.KindFloat64:
+		return v.AsFloat64()
+	case log.KindBool:
+		return v.AsBool()
+	case log.KindBytes:
+		return v.AsBytes()
+	default:
+		return v.String()
+	}
+}
+
+// valueMap decodes a payload's emitted attributes into a key -> Go value map.
+func valueMap(kvs []log.KeyValue) map[string]any {
+	m := make(map[string]any, len(kvs))
+	for _, kv := range kvs {
+		m[kv.Key] = valueToAny(kv.Value)
+	}
+	return m
+}
+
+// mergeFields returns base with extra overlaid, without mutating either.
+func mergeFields(base, extra map[string]any) map[string]any {
+	m := make(map[string]any, len(base)+len(extra))
+	maps.Copy(m, base)
+	maps.Copy(m, extra)
 	return m
 }
 
@@ -146,32 +182,62 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 // consumers depend on. If this test fails you have added, removed, or renamed an emitted field:
 // do so deliberately, get the change reviewed, and then update `want` to match.
 func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
-	want := []string{
-		"phase", "task_type", "shard", "namespace", "namespace_id", "workflow_id", "run_id",
-		"failover_version", "transition_count",
-		"parent_workflow_id", "parent_run_id", "parent_initiated_id",
-		"details",
-		"new_run_id", "is_first_sync", "first_event_id", "next_event_id",
-		"attempt",
-		"event_version_history",
-		"outcome", "error", "state", "status", "applied_next_event_id",
-		"transition_history", "last_event_id", "last_event_version",
-		"new_execution_run_id", "reset_run_id",
-		"signal_count", "activity_count", "user_timer_count", "child_execution_count", "update_count",
+	// base pins the phase-independent fields (and values) every phase emits. Composite fields
+	// (details, event_version_history, transition_history) are emitted as compact JSON strings.
+	base := map[string]any{
+		"task_type":             ReplTaskSyncVersionedTransition,
+		"shard":                 int64(1),
+		"namespace":             "ns",
+		"namespace_id":          "ns-id",
+		"workflow_id":           "wf-id",
+		"run_id":                "run-id",
+		"failover_version":      int64(5),
+		"transition_count":      int64(7),
+		"parent_workflow_id":    "p-wf",
+		"parent_run_id":         "p-run",
+		"parent_initiated_id":   int64(3),
+		"details":               `{"k":"v"}`,
+		"event_version_history": `[{"event_id":9,"version":5}]`,
+	}
+	// want pins each phase's complete emitted field set AND values — the published wire contract.
+	// If this fails you have added, removed, renamed, or changed the value of an emitted field:
+	// do so deliberately, get it reviewed, then update `want`.
+	want := map[ReplicationPhase]map[string]any{
+		ReplicationSent: mergeFields(base, map[string]any{
+			"phase":          "sent",
+			"new_run_id":     "new-run",
+			"is_first_sync":  true,
+			"first_event_id": int64(1),
+			"next_event_id":  int64(8),
+		}),
+		ReplicationExecuting: mergeFields(base, map[string]any{
+			"phase":   "executing",
+			"attempt": int64(2),
+		}),
+		ReplicationApplied: mergeFields(base, map[string]any{
+			"phase":                 "applied",
+			"outcome":               "applied",
+			"error":                 "boom",
+			"state":                 "Running",
+			"status":                "Unspecified",
+			"applied_next_event_id": int64(10),
+			"transition_history":    `[{"failover_version":5,"transition_count":7}]`,
+			"last_event_id":         int64(9),
+			"last_event_version":    int64(5),
+			"new_execution_run_id":  "ne-run",
+			"reset_run_id":          "reset-run",
+			"signal_count":          int64(6),
+			"activity_count":        int64(4),
+			"user_timer_count":      int64(3),
+			"child_execution_count": int64(2),
+			"update_count":          int64(1),
+		}),
 	}
 
-	got := make(map[string]struct{})
-	for _, phase := range []ReplicationPhase{ReplicationSent, ReplicationExecuting, ReplicationApplied} {
-		for _, kv := range fullyPopulatedReplication(phase).Attributes() {
-			got[kv.Key] = struct{}{}
-		}
+	for phase, wantFields := range want {
+		require.Equal(t, wantFields, valueMap(fullyPopulatedReplication(phase).Attributes()),
+			"ReplicationLifecycle %q emitted field set or values changed; this alters the event's "+
+				"published wire contract. Make the change deliberately, get it reviewed, then "+
+				"update `want`.", phase)
 	}
-	gotKeys := make([]string, 0, len(got))
-	for k := range got {
-		gotKeys = append(gotKeys, k)
-	}
-
-	require.ElementsMatch(t, want, gotKeys,
-		"ReplicationLifecycle emitted-field set changed; this alters the event's published wire "+
-			"contract. Make the change deliberately, get it reviewed, then update `want`.")
 }

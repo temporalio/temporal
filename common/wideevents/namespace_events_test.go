@@ -15,21 +15,23 @@ func TestNamespaceLifecycleEventName(t *testing.T) {
 // this test fails you have added, removed, or renamed an emitted field: do so deliberately, get
 // the change reviewed, and then update `want` to match.
 func TestNamespaceLifecycleFieldSetLocked(t *testing.T) {
-	want := []string{"phase", "namespace", "namespace_id", "details"}
+	// want pins both the field set and the emitted values (the published wire contract).
+	// Composite fields (details) are emitted as a compact JSON string.
+	want := map[string]any{
+		"phase":        "route_computed",
+		"namespace":    "ns",
+		"namespace_id": "ns-id",
+		"details":      `{"k":"v"}`,
+	}
 
-	attrs := NamespaceLifecyclePayload{
+	got := valueMap(NamespaceLifecyclePayload{
 		Phase:       "route_computed",
 		Namespace:   "ns",
 		NamespaceID: "ns-id",
 		Details:     map[string]any{"k": "v"},
-	}.Attributes()
+	}.Attributes())
 
-	gotKeys := make([]string, 0, len(attrs))
-	for _, kv := range attrs {
-		gotKeys = append(gotKeys, kv.Key)
-	}
-
-	require.ElementsMatch(t, want, gotKeys,
-		"NamespaceLifecycle emitted-field set changed; this alters the event's published wire "+
-			"contract. Make the change deliberately, get it reviewed, then update `want`.")
+	require.Equal(t, want, got,
+		"NamespaceLifecycle emitted field set or values changed; this alters the event's published "+
+			"wire contract. Make the change deliberately, get it reviewed, then update `want`.")
 }

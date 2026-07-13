@@ -60,10 +60,8 @@ func emitReplicationExecuting(
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
 		payload.TransitionCount = vt.GetTransitionCount()
 	}
-	if attr := task.GetVerifyVersionedTransitionTaskAttributes(); attr != nil {
-		if items := attr.GetEventVersionHistory(); len(items) > 0 {
-			payload.EventVersionHistory = versionHistoryEntries(items)
-		}
+	if items := task.GetVerifyVersionedTransitionTaskAttributes().GetEventVersionHistory(); len(items) > 0 {
+		payload.EventVersionHistory = versionHistoryEntries(items)
 	}
 	wideevents.Emit(logger, payload)
 }
@@ -215,18 +213,18 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	// summary. When verify triggers a resend, the state replicator emits its own applied event with
 	// the full summary, so repeating it here would only duplicate. "expected" is what the task
 	// requires the passive to have; "actual" is what the inspected mutable state currently has.
-	details := map[string]any{"expected": e.verifyExpected()}
+	details := map[string]any{"expected": e.expectedState()}
 	if ms != nil {
-		details["actual"] = verifyActual(ms)
+		details["actual"] = actualState(ms)
 	}
 	payload.Details = details
 
 	wideevents.Emit(logger, payload)
 }
 
-// verifyExpected describes what the verify task requires the passive to have: the target versioned
+// expectedState describes what the verify task requires the passive to have: the target versioned
 // transition, next event id, and expected event version history.
-func (e *ExecutableVerifyVersionedTransitionTask) verifyExpected() map[string]any {
+func (e *ExecutableVerifyVersionedTransitionTask) expectedState() map[string]any {
 	expected := map[string]any{"next_event_id": e.taskAttr.GetNextEventId()}
 	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {
 		expected["versioned_transition"] = versionedTransitionEntry(vt)
@@ -237,8 +235,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyExpected() map[string]an
 	return expected
 }
 
-// verifyActual describes what the passive's inspected mutable state currently has.
-func verifyActual(ms *persistencespb.WorkflowMutableState) map[string]any {
+// actualState describes what the passive's inspected mutable state currently has.
+func actualState(ms *persistencespb.WorkflowMutableState) map[string]any {
 	info := ms.GetExecutionInfo()
 	actual := map[string]any{"next_event_id": ms.GetNextEventId()}
 	if th := info.GetTransitionHistory(); len(th) > 0 {
