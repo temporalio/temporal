@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/tools/common/github"
 )
@@ -37,18 +36,18 @@ func TestBuildFailureMessage(t *testing.T) {
 	msg := BuildFailureMessage(report)
 
 	require.NotNil(t, msg, "BuildFailureMessage returned nil")
-	assert.Contains(t, msg.Text, "CI Failed")
-	assert.NotEmpty(t, msg.Blocks, "Message should have at least one block")
+	require.Contains(t, msg.Text, "CI Failed")
+	require.NotEmpty(t, msg.Blocks, "Message should have at least one block")
 
 	// Check that the first block contains the header
 	require.NotNil(t, msg.Blocks[0].Text)
-	assert.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
+	require.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
 	require.NotNil(t, msg.Blocks[1].Text)
-	assert.Contains(t, msg.Blocks[1].Text.Text, "TestHistoryWorkflow")
-	assert.Contains(t, msg.Blocks[1].Text.Text, "TestMatchingWorkflow")
-	assert.Contains(t, msg.Blocks[1].Text.Text, "`TestHistoryWorkflow`, `TestMatchingWorkflow`")
-	assert.NotContains(t, msg.Blocks[1].Text.Text, "•")
-	assert.NotContains(t, msg.Blocks[1].Text.Text, "\n")
+	require.Contains(t, msg.Blocks[1].Text.Text, "TestHistoryWorkflow")
+	require.Contains(t, msg.Blocks[1].Text.Text, "TestMatchingWorkflow")
+	require.Contains(t, msg.Blocks[1].Text.Text, "`TestHistoryWorkflow`, `TestMatchingWorkflow`")
+	require.NotContains(t, msg.Blocks[1].Text.Text, "•")
+	require.NotContains(t, msg.Blocks[1].Text.Text, "\n")
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
@@ -66,12 +65,12 @@ func TestFormatMessageForDebug(t *testing.T) {
 
 	output := FormatMessageForDebug(report)
 
-	assert.Contains(t, output, "CI Failed")
-	assert.NotContains(t, output, "Workflow:")
-	assert.NotContains(t, output, "Branch:")
-	assert.NotContains(t, output, "Commit:")
-	assert.Contains(t, output, "test-job-1")
-	assert.Contains(t, output, "TestHistoryWorkflow")
+	require.Contains(t, output, "CI Failed")
+	require.NotContains(t, output, "Workflow:")
+	require.NotContains(t, output, "Branch:")
+	require.NotContains(t, output, "Commit:")
+	require.Contains(t, output, "test-job-1")
+	require.Contains(t, output, "TestHistoryWorkflow")
 }
 
 func TestSlackMessageStructure(t *testing.T) {
@@ -92,13 +91,13 @@ func TestSlackMessageStructure(t *testing.T) {
 
 	// Verify we have the expected number of blocks
 	// Header, Jobs List, Link = 3 blocks
-	assert.Len(t, msg.Blocks, 3)
+	require.Len(t, msg.Blocks, 3)
 
 	require.NotNil(t, msg.Blocks[1].Text)
-	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
-	assert.Contains(t, msg.Blocks[1].Text.Text, "<http://example.com/job1|job1>")
-	assert.NotContains(t, msg.Blocks[1].Text.Text, "•")
-	assert.NotContains(t, msg.Blocks[1].Text.Text, "\n")
+	require.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
+	require.Contains(t, msg.Blocks[1].Text.Text, "<http://example.com/job1|job1>")
+	require.NotContains(t, msg.Blocks[1].Text.Text, "•")
+	require.NotContains(t, msg.Blocks[1].Text.Text, "\n")
 }
 
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
@@ -124,9 +123,9 @@ func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 
 	require.Len(t, msg.Blocks, 4)
 	require.NotNil(t, msg.Blocks[1].Text)
-	assert.Contains(t, msg.Blocks[1].Text.Text, "*Failures (6):*")
-	assert.Contains(t, msg.Blocks[1].Text.Text, "Test05")
-	assert.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
+	require.Contains(t, msg.Blocks[1].Text.Text, "*Failures (6):*")
+	require.Contains(t, msg.Blocks[1].Text.Text, "Test05")
+	require.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
 }
 
 func TestIsFailedJobExcludesTestStatus(t *testing.T) {
@@ -195,7 +194,7 @@ func TestFilterCompleted(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := filterCompleted(tt.runs)
-			assert.Len(t, result, tt.expected)
+			require.Len(t, result, tt.expected)
 		})
 	}
 }
