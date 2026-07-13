@@ -127,6 +127,17 @@ type (
 		// terminated as part of a delete operation. Like terminated, this is in-memory only
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
+
+		// subtreeIsDirty is true if this node, any ancestor, or any descendant was mutated
+		// in the current transaction (valueState >= valueStateNeedSerialize), or if
+		// ExecutePureTask ran on this node or any such relative.
+		//
+		// markSubtreeDirty propagates the flag both upward (to ancestors) and downward (to
+		// all descendants) at mutation time, so CloseTransaction can skip task validation
+		// for nodes whose entire lineage is clean with a single O(1) flag check.
+		//
+		// This is a per-node field (not in nodeBase) and is reset after each transaction.
+		subtreeIsDirty bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -160,17 +171,6 @@ type (
 		valueToNode map[any]*Node
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
-
-		// isActiveStateDirty is true if any user data is mutated.
-		// NOTE: this only captures active cluster's user data mutation.
-		// Replication logic (ApplySnapshot/Mutation) will not set this field.
-		//
-		// This flag in a CHASM tree level, while valueState is on node level.
-		// Tracking this flag on tree level avoids traversing the whole tree every time
-		// we want to know if something is updated.
-		//
-		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
-		isActiveStateDirty bool
 
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
@@ -252,6 +252,11 @@ type (
 		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
+
+// IsEmpty reports whether the mutation contains no node updates or deletions.
+func (m NodesMutation) IsEmpty() bool {
+	return len(m.UpdatedNodes) == 0 && len(m.DeletedNodes) == 0
+}
 
 // NewTreeFromDB creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 // This method should only be used when loading an existing CHASM tree from database.
@@ -414,7 +419,23 @@ func (n *Node) setValue(value any) {
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
 	if state >= valueStateNeedSerialize {
-		n.isActiveStateDirty = true
+		n.markSubtreeDirty()
+	}
+}
+
+// markSubtreeDirty sets subtreeIsDirty on this node and propagates upward to all ancestors.
+// This ensures that ancestor nodes know their subtree contains a dirty node, which is used
+// during CloseTransaction to skip task validation for completely unrelated subtrees.
+// markSubtreeDirty marks this node and its entire lineage (ancestors and descendants)
+// as dirty so that CloseTransaction knows to validate their tasks.
+func (n *Node) markSubtreeDirty() {
+	// Propagate upward to ancestors.
+	for cur := n; cur != nil && !cur.subtreeIsDirty; cur = cur.parent {
+		cur.subtreeIsDirty = true
+	}
+	// Propagate downward to descendants.
+	for _, desc := range n.andAllChildren() {
+		desc.subtreeIsDirty = true
 	}
 }
 
@@ -1698,7 +1719,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if n.isActiveStateDirty {
+	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1996,9 +2017,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
 		// - child component state update
 		// - parent component closing (access rule)
-		// - a pointer field pointing to an updated component
-		// As a result, we need to validate existing tasks for all components if we are in active cluster.
-		if n.isActiveStateDirty {
+		// - a pointer field pointing to an updated component (pointers are ancestors-only)
+		// markSubtreeDirty propagates to both ancestors and descendants at mutation time,
+		// so we skip validation only for nodes with no dirty node anywhere in their lineage.
+		if node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
 				return err
@@ -2183,6 +2205,36 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	return cleanedUp, nil
 }
 
+// applySingletonMode enforces singleton semantics for tasks registered with [WithSingletonTask].
+// It is called after task validation, so only valid new tasks reach this point.
+// Returns true if the new task should be skipped (SingletonTaskModeIgnore with existing task).
+func (n *Node) applySingletonMode(
+	rt *RegistrableTask,
+	taskList *[]*persistencespb.ChasmComponentAttributes_Task,
+) (skip bool) {
+	if rt.singletonMode == 0 {
+		return false
+	}
+
+	idx := slices.IndexFunc(*taskList, func(t *persistencespb.ChasmComponentAttributes_Task) bool {
+		return t.TypeId == rt.taskTypeID
+	})
+	if idx == -1 {
+		return false
+	}
+
+	switch rt.singletonMode {
+	case SingletonTaskModeReplace:
+		delete(n.taskValueCache, (*taskList)[idx].Data)
+		*taskList = slices.Delete(*taskList, idx, idx+1)
+		return false
+	case SingletonTaskModeIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) closeTransactionHandleNewTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 	validateContext Context,
@@ -2240,9 +2292,15 @@ func (n *Node) closeTransactionHandleNewTasks(
 		}
 
 		if registrableTask.isPureTask {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.PureTasks); skip {
+				continue
+			}
 			componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
 			sortPureTasks = true
 		} else {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.SideEffectTasks); skip {
+				continue
+			}
 			componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
 		}
 
@@ -2436,8 +2494,12 @@ func (n *Node) cleanupTransaction() {
 		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	}
 
-	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
+
+	// Reset per-node subtreeIsDirty on all nodes in the tree.
+	for _, node := range n.andAllChildren() {
+		node.subtreeIsDirty = false
+	}
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -2482,6 +2544,121 @@ func (n *Node) snapshotInternal(
 			nodes,
 		)
 	}
+}
+
+// PartitionedSnapshot returns the tree's state split into two parts:
+//   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
+//     upload to object storage or replicate to another cluster.
+//   - A ChasmLocalState capturing the extracted cluster-local fields, keyed by encoded
+//     node path. Only nodes that carry such metadata are present.
+//
+// The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
+// zeroes field values, it never adds or removes nodes. The live in-memory tree is left
+// untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
+// Snapshot returns the tree's live node references.
+//
+// The returned ChasmLocalState has an empty Nodes map when no node carries cluster-local
+// fields; MergeClusterLocalState treats an empty (or nil) state as a no-op.
+func (n *Node) PartitionedSnapshot(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (NodesSnapshot, *persistencespb.ChasmLocalState) {
+	snapshot := n.Snapshot(exclusiveMinVT)
+	localState := &persistencespb.ChasmLocalState{
+		Nodes: make(map[string]*persistencespb.ChasmNodeLocalState),
+	}
+	for path, node := range snapshot.Nodes {
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		if len(componentAttr.SideEffectTasks)+len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
+		// read-only in a snapshot, so share its pointer rather than copying component payloads.
+		clean := &persistencespb.ChasmNode{Metadata: proto.CloneOf(node.GetMetadata()), Data: node.GetData()}
+		cleanAttr := clean.GetMetadata().GetComponentAttributes()
+		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
+			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
+			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
+		}
+		snapshot.Nodes[path] = clean
+	}
+	return snapshot, localState
+}
+
+// extractAndZeroTaskStatuses records each task's physical task status in order and zeroes
+// it in place. The caller must pass tasks from a node copy, not the live tree.
+func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task) []int32 {
+	if len(taskList) == 0 {
+		return nil
+	}
+	statuses := make([]int32, len(taskList))
+	for i, t := range taskList {
+		statuses[i] = t.PhysicalTaskStatus
+		t.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return statuses
+}
+
+// ClusterLocalStateMergeResult reports, per direction, how many nodes had a task/status count
+// mismatch during MergeClusterLocalState. The two directions differ in significance, so they are
+// tracked separately rather than as a single count.
+type ClusterLocalStateMergeResult struct {
+	// NodesWithUncoveredTasks counts nodes that had more tasks than stored statuses. The extra
+	// tasks keep their zeroed status (physicalTaskStatusNone) and get a physical task created on
+	// the next transaction. Benign and self-healing — typically the writer's captured state was
+	// slightly behind the authoritative snapshot.
+	NodesWithUncoveredTasks int
+	// NodesWithExtraStatuses counts nodes that had more stored statuses than tasks. The surplus
+	// statuses have no task to apply to and are dropped. Suspicious: the stored state referenced
+	// tasks absent from the authoritative snapshot, which can indicate cluster divergence (e.g.
+	// split-brain). Detecting and resolving true divergence belongs to the replication conflict
+	// path; this count is a diagnostic signal, not the resolution.
+	NodesWithExtraStatuses int
+}
+
+// MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
+// extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
+// state are updated; nodes in the state but not the snapshot are silently skipped (the node
+// may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
+// only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
+// match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
+// stale-data) merge and escalate the suspicious direction.
+//
+// The merge performs no version/ordering checks; callers must apply it only against a final local
+// tree (e.g. defer until the execution is completed and its close version has caught up to the
+// source), so a length mismatch signals real divergence rather than normal replication lag.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
+	var result ClusterLocalStateMergeResult
+	for path, nodeState := range state.GetNodes() {
+		node, ok := s.Nodes[path]
+		if !ok {
+			continue
+		}
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		seDiff := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureDiff := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seDiff > 0 || pureDiff > 0 {
+			result.NodesWithUncoveredTasks++
+		}
+		if seDiff < 0 || pureDiff < 0 {
+			result.NodesWithExtraStatuses++
+		}
+	}
+	return result
+}
+
+// mergeTaskStatuses applies statuses to tasks by position and returns len(taskList) - len(statuses)
+// (>0: extra tasks left zeroed; <0: surplus statuses dropped).
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) int {
+	for i := 0; i < len(taskList) && i < len(statuses); i++ {
+		taskList[i].PhysicalTaskStatus = statuses[i]
+	}
+	return len(taskList) - len(statuses)
 }
 
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
@@ -2874,7 +3051,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	return n.isActiveStateDirty ||
+	return n.subtreeIsDirty ||
 		len(n.mutation.UpdatedNodes) > 0 ||
 		len(n.mutation.DeletedNodes) > 0
 }
@@ -3312,9 +3489,9 @@ func (n *Node) ExecutePureTask(
 ) (_ bool, retErr error) {
 	defer func() {
 		if retErr == nil {
-			// Mark the tree state to dirty so it will force the transaction to clean up
-			// invalid tasks (including the current one).
-			n.isActiveStateDirty = true
+			// Mark this node dirty so CloseTransaction cleans up invalid tasks,
+			// including the current one, even if the handler made no state mutations.
+			n.markSubtreeDirty()
 		}
 	}()
 

@@ -1289,7 +1289,7 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, request.GetClusterName()); err != nil {
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
 		return nil, err
 	}
 

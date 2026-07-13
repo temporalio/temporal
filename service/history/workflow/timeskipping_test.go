@@ -11,6 +11,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/components/nexusoperations"
@@ -171,7 +172,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 
 	s.Run("child workflow propagation can be turned off", func() {
 		src := newSource()
-		src.TimeSkippingInfo.Config.DisableChildPropagation = true
+		src.TimeSkippingInfo.Config.DisablePropagation = true
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
@@ -190,7 +191,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		s.Nil(propagatedState.GetFastForwardTargetTime())
 	})
 
-	s.Run("disableChildPropagation still propagates virtual time", func() {
+	s.Run("disablePropagation still propagates virtual time", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.Enabled = false
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
@@ -396,9 +397,9 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		eventID := int64(1)
 
 		cfg := &commonpb.TimeSkippingConfig{
-			Enabled:                 true,
-			FastForward:             durationpb.New(fastForward),
-			DisableChildPropagation: true,
+			Enabled:            true,
+			FastForward:        durationpb.New(fastForward),
+			DisablePropagation: true,
 		}
 		propagation := &commonpb.TimeSkippingStatePropagation{
 			InitialSkippedDuration: durationpb.New(hasSkipped),
@@ -469,9 +470,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
 		// new config
 		newConfig := &commonpb.TimeSkippingConfig{
-			Enabled:                 true,
-			FastForward:             durationpb.New(2 * time.Hour),
-			DisableChildPropagation: true,
+			Enabled:            true,
+			FastForward:        durationpb.New(2 * time.Hour),
+			DisablePropagation: true,
 		}
 		newEventID := int64(8)
 		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig, newEventID))
@@ -922,28 +923,48 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	})
 }
 
-// TestCloseTransactionHandleWorkflowTimeSkipping verifies the skippability gate is wired into the
-// active-policy path: even when a valid skip target exists (a user timer), a non-skippable workflow
-// (here, nil time-skipping config) must not skip — needRegenTasks is false and no state changes.
 func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 	// A valid skip target exists: a user timer one hour in the (virtual) future.
 	s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
 		TimerId:    "t1",
 		ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
 	}
-	// ...but time skipping is not enabled (nil config), so the workflow is not skippable.
-	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
-	s.mutableState.timeSkippingInfoUpdated = false
-
-	// Make the intent explicit: the target is real, but the gate must reject the workflow.
 	s.Require().True(s.mutableState.findNextSkipTarget().IsValid(), "the user timer is a valid skip target")
-	s.Require().False(s.mutableState.isWorkflowSkippable(), "nil config means not skippable")
 
-	needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
-		context.Background(), historyi.TransactionPolicyActive)
+	s.Run("NilConfig", func() {
+		// Time skipping is not enabled (nil config), so the workflow is not skippable.
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{Config: nil}
+		s.mutableState.timeSkippingInfoUpdated = false
+		s.Require().False(s.mutableState.isWorkflowSkippable(), "nil config means not skippable")
 
-	s.False(needRegen, "the gate must prevent skipping even though a valid target exists")
-	s.False(s.mutableState.timeSkippingInfoUpdated, "a gated-out transaction must not change state")
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen, "the gate must prevent skipping even though a valid target exists")
+		s.False(s.mutableState.timeSkippingInfoUpdated, "a gated-out transaction must not change state")
+	})
+
+	s.Run("NonWorkflow", func() {
+		// Enable time skipping so the only thing rejecting the skip is the non-workflow archetype.
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(activity.ArchetypeID).AnyTimes()
+		s.mutableState.chasmTree = mockChasmTree
+		s.Require().False(s.mutableState.IsWorkflow(), "a non-workflow archetype must not report as a workflow")
+
+		for _, policy := range []historyi.TransactionPolicy{
+			historyi.TransactionPolicyActive,
+			historyi.TransactionPolicyPassive,
+		} {
+			needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(context.Background(), policy)
+			s.False(needRegen, "a non-workflow must never skip time (policy %v)", policy)
+			s.False(s.mutableState.timeSkippingInfoUpdated, "a non-workflow must not change state (policy %v)", policy)
+		}
+	})
 }
 
 // TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
