@@ -21,6 +21,7 @@ import (
 const (
 	codeCoverageExtension = ".cover.out"
 	maxAttemptsFlag       = "--max-attempts="
+	gotestsumPathFlag     = "--gotestsum-path="
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
 	junitGlobFlag         = "--junit-glob="
@@ -124,6 +125,10 @@ func newRunner() *runner {
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
+		if arg == "--" || strings.HasPrefix(arg, gotestsumPathFlag) {
+			continue
+		}
+
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
 			var err error
 			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])

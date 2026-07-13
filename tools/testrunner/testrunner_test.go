@@ -49,6 +49,31 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Contains(t, args, "-timeout=35m")
 	})
 
+	t.Run("LegacyGotestsumArgs", func(t *testing.T) {
+		r := newRunner()
+		args, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/tmp/gotestsum",
+			"--junitfile=test.xml",
+			"--max-attempts=3",
+			"--",
+			"-tags",
+			"test_dep",
+			"-coverprofile=test.cover.out",
+			"./...",
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{
+			"--junitfile=test.xml",
+			"-tags",
+			"test_dep",
+			"-coverprofile=test.cover.out",
+			"./...",
+		}, args)
+		require.Equal(t, "test.xml", r.junitOutputPath)
+		require.Equal(t, 3, r.maxAttempts)
+		require.Equal(t, "test.cover.out", r.coverProfilePath)
+	})
+
 	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
