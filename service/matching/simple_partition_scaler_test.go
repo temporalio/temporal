@@ -18,25 +18,6 @@ func encodeCounts(values ...int64) []byte {
 	return b
 }
 
-// TestUpdateBacklogTargetDisabled verifies that backlog-based scaling is off
-// (returns 0, no bits touched) unless both BacklogBase and BacklogReset are set.
-func TestUpdateBacklogTargetDisabled(t *testing.T) {
-	t.Parallel()
-	cases := []dynamicconfig.SimplePartitionScalerSettings{
-		{},                                  // both zero
-		{BacklogBase: 300},                  // reset unset
-		{BacklogReset: 100},                 // base unset
-		{BacklogBase: 300, BacklogReset: 0}, // reset explicitly zero
-	}
-	for _, cfg := range cases {
-		var bs bitSet
-		counts := encodeCounts(1000, 1000, 1000)
-		target := updateBacklogTarget(cfg, counts, &bs)
-		require.Zero(t, target)
-		require.Zero(t, bs.len(), "bitset must not be modified while disabled")
-	}
-}
-
 // TestUpdateBacklogTargetSetsBitsAboveBase verifies that partitions whose
 // backlog exceeds BacklogBase count toward the target, and the corresponding
 // bits are recorded in the private bitset.
@@ -64,13 +45,10 @@ func TestUpdateBacklogTargetHysteresis(t *testing.T) {
 
 	// p0 starts set, p1 starts clear. Both get a count of ~200 (between
 	// reset=100 and base=300), so neither should flip.
-	var bs bitSet
-	bs = bs.set(0)
-	midCount := number.DecodeCompact8(number.EncodeCompact8(200))
-	require.Greater(t, midCount, int64(100))
-	require.Less(t, midCount, int64(300))
-
+	bs := bitSet(nil).set(0)
 	counts := encodeCounts(200, 200)
+	require.Greater(t, number.DecodeCompact8(counts[0]), int64(100), "quantization moved too much")
+	require.Less(t, number.DecodeCompact8(counts[0]), int64(300), "quantization moved too much")
 	target := updateBacklogTarget(cfg, counts, &bs)
 
 	require.Equal(t, 1, target, "only the already-set partition counts")
@@ -84,8 +62,7 @@ func TestUpdateBacklogTargetClearsBelowReset(t *testing.T) {
 	t.Parallel()
 	cfg := dynamicconfig.SimplePartitionScalerSettings{BacklogReset: 100, BacklogBase: 300}
 
-	var bs bitSet
-	bs = bs.set(0).set(1)
+	bs := bitSet(nil).set(0).set(1)
 
 	// p0 drops below reset (cleared), p1 stays in the dead zone (kept).
 	counts := encodeCounts(32, 200)

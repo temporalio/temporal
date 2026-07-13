@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1222,7 +1223,7 @@ func backlogDescribeResponse(count int64, drained bool) *matchingservice.Describ
 // partitions are preserved.
 func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
 	s.settings.BackgroundInterval = 50 * time.Millisecond
-	s.settings.DrainBufferTime = time.Hour // disable drain; isolate the backlog-count path
+	s.settings.DrainBufferTime = time.Hour // disable drain
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
@@ -1235,9 +1236,9 @@ func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
 			writes <- dbWrite{common.CloneProto(state), sync}
 		}).
 		Return(nil)
-	pushes := make(chan *taskqueuespb.PartitionScaleInfo, 4)
+	var latestScaleInfo atomic.Pointer[taskqueuespb.PartitionScaleInfo]
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
-		Do(func(info *taskqueuespb.PartitionScaleInfo) { pushes <- common.CloneProto(info) }).AnyTimes()
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { latestScaleInfo.Store(common.CloneProto(info)) }).AnyTimes()
 
 	initial := &persistencespb.PartitionScaleState{
 		Target:       2,
@@ -1250,19 +1251,16 @@ func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
 	w := waitRecv(s, writes, "backlog update never wrote")
 	s.False(w.sync, "backlog-count-only update must not force a synchronous DB write")
 	s.Equal(int32(2), w.state.Target, "target must not change on a backlog-count update")
-	s.Equal([]byte{number.EncodeCompact8(500), number.EncodeCompact8(500)}, w.state.BacklogCounts)
+	c500 := number.EncodeCompact8(500)
+	s.Equal([]byte{c500, c500}, w.state.BacklogCounts)
 	s.Equal(int32(2), bitSet(w.state.BacklogState).len(), "read partitions preserved (no drain)")
 
-	// The DB write above happens before setState applies the state in memory and
-	// pushes the new ephemeral data. Synchronize on that push (rather than reading
-	// s.sm.scaleState, which would race the worker) to confirm the counts were
-	// applied and propagated to clients via scaleStateToInfo.
-	var info *taskqueuespb.PartitionScaleInfo
-	for info.GetBacklogCounts() == nil {
-		info = waitRecv(s, pushes, "no ephemeral push carrying the new backlog counts")
-	}
-	s.Equal([]byte{number.EncodeCompact8(500), number.EncodeCompact8(500)}, info.BacklogCounts)
-	s.Equal(int32(2), info.Write, "target unchanged in pushed info")
+	// verify pushed to ephemeral data also
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		info := latestScaleInfo.Load()
+		require.Equal(t, []byte{c500, c500}, info.BacklogCounts)
+		require.Equal(t, int32(2), info.Write, "target unchanged in pushed info")
+	}, 2*time.Second, time.Millisecond, "no ephemeral push carrying the new backlog counts")
 }
 
 // TestNoWriteWhenBacklogUnchanged verifies that when the sampled backlog counts
@@ -1278,18 +1276,17 @@ func (s *ScaleManagerSuite) TestNoWriteWhenBacklogUnchanged() {
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(*persistencespb.PartitionScaleState, bool) error {
+		Do(func(*persistencespb.PartitionScaleState, bool) {
 			dbWrites.Add(1)
-			return nil
-		}).AnyTimes()
+		}).Return(nil).AnyTimes()
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
 
-	c8 := number.EncodeCompact8(500)
+	c500 := number.EncodeCompact8(500)
 	initial := &persistencespb.PartitionScaleState{
 		Target:        2,
 		MaxTarget:     2,
 		BacklogState:  bitSet(nil).set(0).set(1),
-		BacklogCounts: []byte{c8, c8}, // already equal to what describe reports
+		BacklogCounts: []byte{c500, c500}, // already equal to what describe reports
 	}
 	s.startManager(4, initial)
 	s.fireBackgroundTimer()
@@ -1362,9 +1359,9 @@ func (s *ScaleManagerSuite) TestBacklogCapChangePersists() {
 		}).
 		Return(nil)
 
-	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	var latestScaleInfo atomic.Pointer[taskqueuespb.PartitionScaleInfo]
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
-		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { latestScaleInfo.Store(common.CloneProto(info)) }).AnyTimes()
 
 	// Current target is already 3, so only the backlog cap differs from the decision.
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 3, MaxTarget: 3})
@@ -1374,17 +1371,15 @@ func (s *ScaleManagerSuite) TestBacklogCapChangePersists() {
 	s.Equal(int32(3), state.Target, "target unchanged; the cap change alone must trigger the write")
 	s.Equal(int32(number.EncodeCompact8(1000)), state.BacklogCap)
 
-	waitRecv(s, scaleInfos, "start push missing")
-	info := waitRecv(s, scaleInfos, "cap push missing")
-	s.Equal(int32(number.EncodeCompact8(1000)), info.BacklogCap, "cap must propagate to ephemeral data")
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		require.Equal(t, int32(number.EncodeCompact8(1000)), latestScaleInfo.Load().GetBacklogCap())
+	}, 2*time.Second, time.Millisecond, "cap must propagate to ephemeral data")
 }
 
 // TestSameTargetAndCapSkipsWrite verifies that a decision matching both the
 // current target and the current backlog cap is short-circuited (no write), and
 // that the stored backlog counts are fed into the scaler input.
 func (s *ScaleManagerSuite) TestSameTargetAndCapSkipsWrite() {
-	c8 := number.EncodeCompact8(500)
-
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -1392,23 +1387,23 @@ func (s *ScaleManagerSuite) TestSameTargetAndCapSkipsWrite() {
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(*persistencespb.PartitionScaleState, bool) error {
+		Do(func(*persistencespb.PartitionScaleState, bool) {
 			dbWrites.Add(1)
-			return nil
-		}).AnyTimes()
+		}).Return(nil).AnyTimes()
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
 
+	c500 := number.EncodeCompact8(500)
 	initial := &persistencespb.PartitionScaleState{
 		Target:        3,
 		MaxTarget:     3,
 		BacklogCap:    int32(number.EncodeCompact8(1000)),
-		BacklogCounts: []byte{c8, c8, c8},
+		BacklogCounts: []byte{c500, c500, c500},
 	}
 	s.startManager(4, initial)
 
 	s.sm.AddedTasks(1)
 	in := waitRecv(s, inputs, "scaler never called")
-	s.Equal([]byte{c8, c8, c8}, in.BacklogCounts, "stored backlog counts must be fed to the scaler")
+	s.Equal([]byte{c500, c500, c500}, in.BacklogCounts, "stored backlog counts must be fed to the scaler")
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "no write when both target and cap are unchanged")
