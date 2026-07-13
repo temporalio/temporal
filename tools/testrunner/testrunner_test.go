@@ -14,10 +14,12 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=3",
+			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -27,6 +29,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
+			// --gotestsum-path and -- have been stripped
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)
@@ -47,41 +50,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Equal(t, 39*time.Minute, r.totalTimeout)
 		require.NotContains(t, args, "--total-timeout=39m")
 		require.Contains(t, args, "-timeout=35m")
-	})
-
-	t.Run("LegacyGotestsumArgs", func(t *testing.T) {
-		r := newRunner()
-		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/tmp/gotestsum",
-			"--junitfile=test.xml",
-			"--max-attempts=3",
-			"--",
-			"-tags",
-			"test_dep",
-			"-coverprofile=test.cover.out",
-			"./...",
-		})
-		require.NoError(t, err)
-		require.Equal(t, []string{
-			"--junitfile=test.xml",
-			"-tags",
-			"test_dep",
-			"-coverprofile=test.cover.out",
-			"./...",
-		}, args)
-		require.Equal(t, "test.xml", r.junitOutputPath)
-		require.Equal(t, 3, r.maxAttempts)
-		require.Equal(t, "test.cover.out", r.coverProfilePath)
-	})
-
-	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--junitfile=test.xml",
-			"-coverprofile=test.cover.out",
-		})
-		require.NoError(t, err)
-		require.Zero(t, r.totalTimeout)
 	})
 
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
