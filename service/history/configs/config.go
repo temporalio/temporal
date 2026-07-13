@@ -13,6 +13,7 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
 	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
 	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
@@ -42,13 +43,15 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog            dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS            dynamicconfig.IntPropertyFn
-	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange      dynamicconfig.DurationPropertyFn
-	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                        dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                  dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                        dynamicconfig.IntPropertyFn
+	EnableStickyQuery                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                  dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay             dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -442,6 +445,7 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
+		EmitReplicationLifecycleEvents:                dynamicconfig.EmitReplicationLifecycleEvents.Get(dc),
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
@@ -817,6 +821,10 @@ func NewConfig(
 		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+
+		// Workflow task completion pagination
+		EnableWorkflowTaskCompletionPagination: dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:  dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 	}
 
 	return cfg

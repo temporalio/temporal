@@ -89,8 +89,8 @@ type (
 		// and will panic if called.
 		isShared bool
 	}
-	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
-	TestClusterParams struct {
+	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
+	testClusterParams struct {
 		DCRedirectionPolicy             config.DCRedirectionPolicy
 		DynamicConfigOverrides          map[dynamicconfig.Key]any
 		ArchivalEnabled                 bool
@@ -104,7 +104,7 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 	}
-	TestClusterOption func(params *TestClusterParams)
+	TestClusterOption func(params *testClusterParams)
 )
 
 func init() {
@@ -115,13 +115,13 @@ func init() {
 }
 
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.DCRedirectionPolicy = policy
 	}
 }
 
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		if params.DynamicConfigOverrides == nil {
 			params.DynamicConfigOverrides = overrides
 		} else {
@@ -131,31 +131,31 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 }
 
 func WithArchivalEnabled() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.ArchivalEnabled = true
 	}
 }
 
 func withMTLS() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableMTLS = true
 	}
 }
 
 func withWorkerService(enabled bool) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableWorkerService = enabled
 	}
 }
 
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
 	}
 }
 
 func WithNumHistoryShards(n int32) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.NumHistoryShards = n
 	}
 }
@@ -163,31 +163,31 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 // WithClusterLogger sets a custom logger for the test cluster, used instead of
 // the default test logger. Useful for intercepting server log output.
 func WithClusterLogger(logger log.Logger) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.Logger = logger
 	}
 }
 
 func WithClusterHistoryTaskRecorder() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableHistoryTaskRecorder = true
 	}
 }
 
 func WithSharedCluster() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.SharedCluster = true
 	}
 }
 
 func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.CustomHistoryArchiverFactory = factory
 	}
 }
 
 func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.CustomVisibilityArchiverFactory = factory
 	}
 }
@@ -386,8 +386,8 @@ func (s *FunctionalTestBase) checkTestShard() {
 	checkTestShard(s.T())
 }
 
-func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
-	params := TestClusterParams{
+func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
+	params := testClusterParams{
 		EnableWorkerService: true,
 	}
 	for _, opt := range options {
