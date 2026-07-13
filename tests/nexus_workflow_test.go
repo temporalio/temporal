@@ -2060,6 +2060,118 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	s.RequireHistoryEvent(resetHist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
 
+// TestNexusOperationAsyncCompletionAfterFrameworkFlip asserts that an async completion whose
+// callback token was minted for one framework (HSM or CHASM) still completes the operation after a
+// rebuild re-created it in the other framework.
+//
+// A rebuild picks the framework by the nexusoperation.enableChasmWorkflowOperations flag at rebuild
+// time (an intentional escape hatch to roll operations back to HSM or forward to CHASM). The
+// callback token, minted at schedule time, then addresses the wrong framework: the completion
+// dispatcher tries the token's framework, gets NotFound, converts the token to the other framework,
+// and completes there. If the conversion did not happen the operation would never complete and the
+// reset run would hang — so the NexusOperationCompleted assertion is load-bearing.
+//
+// This exercises the reset rebuild's cross-tree routing, so like TestNexusOperationSurvivesResetCrossTree
+// it drives the flag explicitly and runs once via the HSM suite.
+func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFrameworkFlip(chasmEnabled bool) {
+	if chasmEnabled {
+		s.T().Skip("framework-flip test controls the flag explicitly; run once via the HSM suite")
+	}
+
+	testCases := []struct {
+		name string
+		// enableChasmWorkflowOperations value at schedule time (true -> operation minted under CHASM,
+		// false -> under HSM). The flag is flipped before the reset so the rebuild re-creates the
+		// operation in the other framework, leaving the callback token addressing the original one.
+		enableChasmAtSchedule bool
+	}{
+		{name: "ChasmTokenCompletesHsmOpAfterDowngrade", enableChasmAtSchedule: true},
+		{name: "HsmTokenCompletesChasmOpAfterUpgrade", enableChasmAtSchedule: false},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *NexusWorkflowTestSuite) {
+			env := s.newTestEnv(true)
+			ctx := s.Context()
+			taskQueue := testcore.RandomizeStr(s.T().Name())
+			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, tc.enableChasmAtSchedule)
+
+			var callbackToken, publicCallbackURL string
+			h := nexustest.Handler{
+				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+					publicCallbackURL = options.CallbackURL
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+				},
+			}
+			endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+			callerWF := func(ctx workflow.Context) (string, error) {
+				c := workflow.NewNexusClient(endpointName, "service")
+				fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+				var result string
+				return result, fut.Get(ctx, &result)
+			}
+
+			w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+			w.RegisterWorkflow(callerWF)
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
+			s.NoError(err)
+			wfExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+
+			// Wait for the NexusOperationStarted event (captures the callback token) and find the WFT
+			// completed after it to use as the reset point.
+			var wftCompletedEventID int64
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				hr := historyrequire.New(t)
+				hist := env.GetHistory(env.Namespace().String(), wfExec)
+				opStartedEvent := hr.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+				if opStartedEvent == nil {
+					return
+				}
+				wftCompletedIdx := slices.IndexFunc(hist, func(e *historypb.HistoryEvent) bool {
+					return e.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED && e.EventId > opStartedEvent.EventId
+				})
+				require.Positive(t, wftCompletedIdx, "expected WorkflowTaskCompleted after NexusOperationStarted")
+				wftCompletedEventID = hist[wftCompletedIdx].EventId
+			}, time.Second*10, time.Millisecond*200)
+
+			// Flip the framework flag, then reset: the rebuild re-creates the operation in the other
+			// framework, so the callback token captured above now addresses the wrong one.
+			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
+
+			resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+				Namespace:                 env.Namespace().String(),
+				WorkflowExecution:         wfExec,
+				Reason:                    "test",
+				RequestId:                 uuid.NewString(),
+				WorkflowTaskFinishEventId: wftCompletedEventID,
+			})
+			s.NoError(err)
+
+			resetExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId}
+			s.RequireHistoryEvent(env.GetHistory(env.Namespace().String(), resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+
+			// Deliver the stale completion. The dispatcher tries the token's original framework, gets
+			// NotFound (the operation now lives in the other framework), converts the token, and completes.
+			completion := nexusrpc.CompleteOperationOptions{
+				Result: testcore.MustToPayload(s.T(), "result"),
+				Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+			}
+			s.NoError(s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion))
+
+			var result string
+			resetRun := env.SdkClient().GetWorkflow(ctx, run.GetID(), resetResp.RunId)
+			s.NoError(resetRun.Get(ctx, &result))
+			s.Equal("result", result)
+			s.RequireHistoryEvent(env.GetHistory(env.Namespace().String(), resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+		})
+	}
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled bool) {
 	if chasmEnabled {
 		s.T().Skip("Blocked on CHASM Nexus async completion with nil IO support")
