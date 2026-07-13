@@ -141,18 +141,20 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	// user-facing reset API path; all other callers pass a concrete current run.
 	currentExecutionMissing := currentWorkflow == nil
 	if currentExecutionMissing {
-		// Nothing to terminate. Reapply only the base run's own post-reset events; do NOT follow
-		// the continue-as-new chain, since the runs it points to may have been deleted.
+		// No current run to terminate. Reapply along the continue-as-new chain as far as it survives.
 		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
-			_, err := r.reapplyEventsFromBranch(
+			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
+				nil,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
 				baseRebuildLastEventID+1,
 				baseNextEventID,
-				baseBranchToken,
 				resetReapplyExcludeTypes,
 				allowResetWithPendingChildren,
-				make(map[string]*persistencespb.ResetChildInfo),
 			)
 			return err
 		}
@@ -760,7 +762,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		var wfCtx historyi.WorkflowContext
 		var err error
 
-		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+		// currentWorkflow is nil when resetting a workflow with no current run; load every run from the cache.
+		if currentWorkflow != nil && runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
 			wfCtx = currentWorkflow.GetContext()
 		} else {
 			var release historyi.ReleaseWorkflowContextFunc
@@ -796,11 +799,17 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// Second, for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
-		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
 		if err != nil {
+			// A deleted run truncates the chain; other errors must fail the reset so a retry
+			// can reapply the full surviving chain, since reset is one-shot.
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				break
+			}
 			return "", err
 		}
+		lastVisitedRunID = nextRunID
 
 		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
