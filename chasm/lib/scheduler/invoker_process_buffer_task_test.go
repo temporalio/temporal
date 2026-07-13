@@ -39,7 +39,7 @@ func TestProcessBufferTask_Validate(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			invoker.LastProcessedTime = c.lastProcessedTime
-			valid, err := handler.Validate(env.MutableContext(), invoker, chasm.TaskAttributes{ScheduledTime: c.scheduledTime}, &schedulerpb.InvokerProcessBufferTask{})
+			valid, err := handler.Validate(env.MutableContext(), invoker, chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: c.scheduledTime}}, &schedulerpb.InvokerProcessBufferTask{})
 			require.NoError(t, err)
 			require.Equal(t, c.expectedValid, valid)
 		})

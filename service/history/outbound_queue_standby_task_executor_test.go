@@ -173,7 +173,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 			expectedError:       consts.ErrTaskRetry.Error(),
 		},
 		{
-			name: "in tree but component invalid (e.g. code-deployment) - retries",
+			name: "in tree but component invalid (e.g. code-deployment) - drop physical task",
 			setupMocks: func(task *tasks.ChasmTask) {
 				s.mockWorkflowCache.EXPECT().
 					GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any()).
@@ -191,8 +191,8 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 					ValidateSideEffectTask(gomock.Any(), gomock.Any()).
 					Return(true, false, nil)
 			},
-			expectHandlerCalled: true,
-			expectedError:       consts.ErrTaskRetry.Error(),
+			expectHandlerCalled: false,
+			expectedError:       "",
 		},
 		{
 			name: "not in tree - replication removed it, drop physical task",
@@ -250,6 +250,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask() {
 
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+			s.mockExecutable.EXPECT().Attempt().Return(1).AnyTimes()
 			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
@@ -311,6 +312,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_PreValidationFails()
 			task := tc.setupTask()
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task)
+			s.mockExecutable.EXPECT().Attempt().Return(1).AnyTimes()
 			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
@@ -367,6 +369,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 
 		executable := queues.NewMockExecutable(s.controller)
 		executable.EXPECT().GetTask().Return(task).AnyTimes()
+		executable.EXPECT().Attempt().Return(1).AnyTimes()
 		executable.EXPECT().GetWorkflowID().Return(task.WorkflowKey.WorkflowID).AnyTimes()
 
 		executor := newOutboundQueueStandbyTaskExecutor(

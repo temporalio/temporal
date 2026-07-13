@@ -86,7 +86,7 @@ func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOption
 func (h *operationInvocationTaskHandler) Validate(
 	_ chasm.Context,
 	op *Operation,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *nexusoperationpb.InvocationTask,
 ) (bool, error) {
 	isValid := op.Status == nexusoperationpb.OPERATION_STATUS_SCHEDULED && op.GetAttempt() == task.GetAttempt()
@@ -353,7 +353,7 @@ func newOperationBackoffTaskHandler(opts operationTaskHandlerOptions) *operation
 func (h *operationBackoffTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) (bool, error) {
 	return op.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF && op.GetAttempt() == task.GetAttempt(), nil
@@ -387,7 +387,7 @@ func newOperationScheduleToStartTimeoutTaskHandler(opts operationTaskHandlerOpti
 func (h *operationScheduleToStartTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	task *nexusoperationpb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
 	return TransitionStarted.Possible(op), nil
@@ -428,7 +428,7 @@ func newOperationStartToCloseTimeoutTaskHandler(opts operationTaskHandlerOptions
 func (h *operationStartToCloseTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) (bool, error) {
 	return op.Status == nexusoperationpb.OPERATION_STATUS_STARTED, nil
@@ -469,7 +469,7 @@ func newOperationScheduleToCloseTimeoutTaskHandler(opts operationTaskHandlerOpti
 func (h *operationScheduleToCloseTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	op *Operation,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
 	return TransitionTimedOut.Possible(op), nil
