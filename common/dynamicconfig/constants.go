@@ -250,6 +250,22 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
 	)
+	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.historyHealthSignalLatencyWindowCount",
+		10,
+		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.historyHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	// TODO: This should be removed once percentiles are the default.
+	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
+		"system.historyHealthSignalUsePercentiles",
+		false,
+		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
+	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
@@ -1727,6 +1743,18 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
+		"history.enableWorkflowTaskCompletionPagination",
+		false,
+		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
+		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
+	)
+	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
+		"history.workflowTaskCompletionBufferSizeLimit",
+		40*1024*1024,
+		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
+		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
