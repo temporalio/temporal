@@ -60,9 +60,11 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
-	reportErr := a.finishReport(output)
+	report, reportErr := output.junitReport()
 	if reportErr != nil {
 		err = reportErr
+	} else {
+		a.junitReport = report
 	}
 	return stdout, err
 }
@@ -86,15 +88,6 @@ func (a *attempt) goTestArgs(args []string) []string {
 		// --junitfile is consumed by the runner; go test does not understand it.
 		return strings.HasPrefix(arg, junitReportFlag)
 	})
-}
-
-func (a *attempt) finishReport(output *goTestJSONOutput) error {
-	report, err := output.junitReport()
-	if err != nil {
-		return err
-	}
-	a.junitReport = report
-	return nil
 }
 
 type runner struct {
