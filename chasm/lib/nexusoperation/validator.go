@@ -30,12 +30,30 @@ var ValidatorModule = validation.Module(
 	newDeleteNexusOperationExecutionRequestValidator,
 )
 
+func newUserMetadataValidator(config *Config) userMetadataFieldValidators {
+	return userMetadataFieldValidators{
+		Summary: func(ns string, _ *sdkpb.UserMetadata, fieldName string, summary *commonpb.Payload) error {
+			if summary.Size() > config.MaxUserMetadataSummarySize(ns) {
+				return serviceerror.NewInvalidArgumentf("%s exceeds size limit", fieldName)
+			}
+			return nil
+		},
+		Details: func(ns string, _ *sdkpb.UserMetadata, fieldName string, details *commonpb.Payload) error {
+			if details.Size() > config.MaxUserMetadataDetailsSize(ns) {
+				return serviceerror.NewInvalidArgumentf("%s exceeds size limit", fieldName)
+			}
+			return nil
+		},
+	}
+}
+
 func newStartNexusOperationExecutionRequestValidator(
 	config *Config,
 	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) startNexusOperationExecutionRequestFieldValidators {
+	userMetadataValidators := newUserMetadataValidator(config)
 	return startNexusOperationExecutionRequestFieldValidators{
 		Namespace: func(*workflowservice.StartNexusOperationExecutionRequest, string, string) error {
 			return nil
@@ -92,8 +110,10 @@ func newStartNexusOperationExecutionRequestValidator(
 			return nil
 		},
 		SearchAttributes: startNexusValidateSearchAttributes(saMapperProvider, saValidator),
-		NexusHeader:      startNexusValidateNexusHeader(config),
-		UserMetadata:     startNexusValidateUserMetadata(config),
+		NexusHeader: startNexusValidateNexusHeader(config),
+		UserMetadata: func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, userMetadata *sdkpb.UserMetadata) error {
+			return userMetadataValidators.ValidateAndNormalize(req.GetNamespace(), userMetadata)
+		},
 	}
 }
 
@@ -137,18 +157,6 @@ func startNexusValidateStartToCloseTimeout() func(*workflowservice.StartNexusOpe
 	}
 }
 
-func startNexusValidateUserMetadata(config *Config) func(*workflowservice.StartNexusOperationExecutionRequest, string, *sdkpb.UserMetadata) error {
-	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, userMetadata *sdkpb.UserMetadata) error {
-		ns := req.GetNamespace()
-		if summarySize := userMetadata.GetSummary().Size(); summarySize > config.MaxUserMetadataSummarySize(ns) {
-			return serviceerror.NewInvalidArgumentf("%s.summary exceeds size limit", fieldName)
-		}
-		if detailsSize := userMetadata.GetDetails().Size(); detailsSize > config.MaxUserMetadataDetailsSize(ns) {
-			return serviceerror.NewInvalidArgumentf("%s.details exceeds size limit", fieldName)
-		}
-		return nil
-	}
-}
 
 func startNexusValidateInput(config *Config, logger log.Logger) func(*workflowservice.StartNexusOperationExecutionRequest, string, *commonpb.Payload) error {
 	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, input *commonpb.Payload) error {

@@ -35,6 +35,8 @@ type templateData struct {
 	ImportPath  string
 	TypeName    string
 	Prefix      string
+	SelfAlias   string // import alias for the package containing TypeName
+	Nested      bool   // true for nested proto types (use NestedFieldValidator)
 	Fields      []field
 	Imports     map[string]string
 }
@@ -72,6 +74,11 @@ func run(messageFlag, messagesFileFlag, outFlag string) error {
 
 	var allData []templateData
 	for _, message := range messages {
+		nested := strings.HasPrefix(message, "nested:")
+		if nested {
+			message = strings.TrimPrefix(message, "nested:")
+		}
+
 		importPath, typeName, err := splitMessage(message)
 		if err != nil {
 			return err
@@ -92,6 +99,8 @@ func run(messageFlag, messagesFileFlag, outFlag string) error {
 			ImportPath:  importPath,
 			TypeName:    typeName,
 			Prefix:      unexported(typeName),
+			SelfAlias:   selfAliasForImport(importPath, nested),
+			Nested:      nested,
 			Fields:      fields,
 			Imports:     imports,
 		})
@@ -235,6 +244,14 @@ func packageNameForOut(out string) (string, error) {
 	return names[0], nil
 }
 
+func selfAliasForImport(importPath string, nested bool) string {
+	if !nested {
+		// Top-level RPC messages are always from workflowservice; keep the existing alias.
+		return "workflowservice"
+	}
+	return outputImportAlias(importPath, "v1")
+}
+
 func render(allData []templateData) ([]byte, error) {
 	if len(allData) == 0 {
 		return nil, errors.New("no messages specified")
@@ -245,7 +262,7 @@ func render(allData []templateData) ([]byte, error) {
 	fmt.Fprint(&b, "import (\n")
 	imports := make(map[string]string)
 	for _, data := range allData {
-		imports["workflowservice"] = data.ImportPath
+		imports[data.SelfAlias] = data.ImportPath
 		for alias, path := range data.Imports {
 			imports[alias] = path
 		}
@@ -256,7 +273,11 @@ func render(allData []templateData) ([]byte, error) {
 	fmt.Fprint(&b, "\t\"go.temporal.io/server/common/validation\"\n")
 	fmt.Fprint(&b, ")\n\n")
 	for _, data := range allData {
-		renderValidator(&b, data)
+		if data.Nested {
+			renderNestedValidator(&b, data)
+		} else {
+			renderValidator(&b, data)
+		}
 	}
 
 	src, err := format.Source(b.Bytes())
@@ -269,10 +290,10 @@ func render(allData []templateData) ([]byte, error) {
 func renderValidator(b *bytes.Buffer, data templateData) {
 	fmt.Fprintf(b, "type %sFieldValidators struct {\n", data.Prefix)
 	for _, f := range data.Fields {
-		fmt.Fprintf(b, "\t%s validation.FieldValidator[workflowservice.%s, %s]\n", f.GoName, data.TypeName, f.Type)
+		fmt.Fprintf(b, "\t%s validation.FieldValidator[%s.%s, %s]\n", f.GoName, data.SelfAlias, data.TypeName, f.Type)
 	}
 	fmt.Fprint(b, "}\n")
-	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(req *workflowservice.%s) error {\n", data.Prefix, data.TypeName)
+	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
 	for _, f := range data.Fields {
 		fmt.Fprintf(b, "\tif err := v.%s(req, %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
 		fmt.Fprint(b, "\t\treturn err\n")
@@ -281,7 +302,23 @@ func renderValidator(b *bytes.Buffer, data templateData) {
 	fmt.Fprint(b, "\treturn nil\n")
 	fmt.Fprint(b, "}\n")
 	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {\n", data.Prefix)
-	fmt.Fprintf(b, "\treturn validation.RegisterValidator[workflowservice.%s](registry, v)\n", data.TypeName)
+	fmt.Fprintf(b, "\treturn validation.RegisterValidator[%s.%s](registry, v)\n", data.SelfAlias, data.TypeName)
+	fmt.Fprint(b, "}\n")
+}
+
+func renderNestedValidator(b *bytes.Buffer, data templateData) {
+	fmt.Fprintf(b, "type %sFieldValidators struct {\n", data.Prefix)
+	for _, f := range data.Fields {
+		fmt.Fprintf(b, "\t%s validation.NestedFieldValidator[%s.%s, %s]\n", f.GoName, data.SelfAlias, data.TypeName, f.Type)
+	}
+	fmt.Fprint(b, "}\n")
+	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(ns string, req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
+	for _, f := range data.Fields {
+		fmt.Fprintf(b, "\tif err := v.%s(ns, req, %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
+		fmt.Fprint(b, "\t\treturn err\n")
+		fmt.Fprint(b, "\t}\n")
+	}
+	fmt.Fprint(b, "\treturn nil\n")
 	fmt.Fprint(b, "}\n")
 }
 

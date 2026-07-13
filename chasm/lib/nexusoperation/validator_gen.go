@@ -240,3 +240,18 @@ func (v deleteNexusOperationExecutionRequestFieldValidators) ValidateAndNormaliz
 func (v deleteNexusOperationExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
 	return validation.RegisterValidator[workflowservice.DeleteNexusOperationExecutionRequest](registry, v)
 }
+
+type userMetadataFieldValidators struct {
+	Summary validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]
+	Details validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]
+}
+
+func (v userMetadataFieldValidators) ValidateAndNormalize(ns string, req *sdkpb.UserMetadata) error {
+	if err := v.Summary(ns, req, "summary", req.GetSummary()); err != nil {
+		return err
+	}
+	if err := v.Details(ns, req, "details", req.GetDetails()); err != nil {
+		return err
+	}
+	return nil
+}
