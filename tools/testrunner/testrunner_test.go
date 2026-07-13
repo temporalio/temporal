@@ -15,19 +15,17 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
-			"-foo",
-			"bar",
 			"--max-attempts=3",
 			"--",
+			"-foo",
+			"bar",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-foo",
 			"bar",
-			// max-attempts has been stripped
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)
@@ -65,7 +63,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, []string{
-			"--junitfile=test.xml",
 			"-tags",
 			"test_dep",
 			"-coverprofile=test.cover.out",
@@ -96,6 +93,29 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.ErrorContains(t, err, `missing required argument "--"`)
 	})
 
+	t.Run("GoTestArgBeforeSeparator", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--junitfile=test.xml",
+			"-run",
+			"TestFoo",
+			"--",
+			"-coverprofile=test.cover.out",
+		})
+		require.ErrorContains(t, err, `argument "-run" must appear after "--"`)
+	})
+
+	t.Run("RunnerArgAfterSeparator", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--junitfile=test.xml",
+			"--",
+			"-coverprofile=test.cover.out",
+			"--max-attempts=3",
+		})
+		require.ErrorContains(t, err, `argument "--max-attempts=3" must appear before "--"`)
+	})
+
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
@@ -111,8 +131,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
-			"-foo",
-			"bar",
 			"--max-attempts=0", // invalid!
 			"--",
 			"-coverprofile=test.cover.out",
@@ -125,8 +143,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
-			"-foo",
-			"bar",
 			"--max-attempts=invalid", // invalid!
 			"--",
 			"-coverprofile=test.cover.out",
@@ -140,8 +156,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			// missing:
 			// "--junitfile=test.xml"
-			"-foo",
-			"bar",
 			"--max-attempts=3",
 			"--",
 			"-coverprofile=test.cover.out",
@@ -154,8 +168,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
-			"-foo",
-			"bar",
 			"--max-attempts=3",
 			"--",
 			// missing:
