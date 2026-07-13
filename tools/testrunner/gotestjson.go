@@ -77,6 +77,7 @@ func (o *goTestJSONOutput) junitReport() (*junitReport, error) {
 		tests := report.Packages[i].Tests
 		report.Packages[i].Tests = tests[:0]
 		for _, test := range tests {
+			// Incomplete tests from a runner abort have run/pause output but no terminal result.
 			if test.Result != gtr.Unknown {
 				report.Packages[i].Tests = append(report.Packages[i].Tests, test)
 			}

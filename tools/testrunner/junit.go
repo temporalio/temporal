@@ -327,11 +327,11 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 				// Failure.Type carries the canonical kind in merged JUnit.
 				if testCase.Failure != nil {
-					if suite.Name == alertsSuiteName {
+					if preservesFailureType(suite.Name) {
 						if testCase.Failure.Type == "" {
 							testCase.Failure.Type = testCase.Failure.Message
 						}
-					} else if suite.Name != "testrunner" || testCase.Failure.Type == "" {
+					} else {
 						testCase.Failure.Type = string(failureTypeFailed)
 					}
 				}
@@ -346,6 +346,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
+}
+
+func preservesFailureType(suiteName string) bool {
+	return suiteName == alertsSuiteName || suiteName == "testrunner"
 }
 
 type node struct {
