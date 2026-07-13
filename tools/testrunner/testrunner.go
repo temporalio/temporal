@@ -70,8 +70,12 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
 	reportPath := a.junitReport.path
-	a.junitReport = output.junitReport()
+	var reportErr error
+	a.junitReport, reportErr = output.junitReport()
 	a.junitReport.path = reportPath
+	if reportErr != nil {
+		err = reportErr
+	}
 	if writeErr := a.junitReport.write(); writeErr != nil && err == nil {
 		err = writeErr
 	}
