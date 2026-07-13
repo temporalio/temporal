@@ -252,7 +252,7 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	tests := []struct {
+	testCases := []struct {
 		name         string
 		kind         enumspb.TaskQueueKind
 		expectedKind enumspb.TaskQueueKind
@@ -274,7 +274,7 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			token, _ := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
 				NamespaceId:   s.testNamespaceID.String(),
