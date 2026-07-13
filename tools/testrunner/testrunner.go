@@ -61,9 +61,9 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
 	report, reportErr := output.junitReport()
-	if reportErr != nil {
+	if reportErr != nil && err == nil {
 		err = reportErr
-	} else {
+	} else if reportErr == nil {
 		a.junitReport = report
 	}
 	return stdout, err
