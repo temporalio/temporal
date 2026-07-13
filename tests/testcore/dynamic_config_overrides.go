@@ -31,6 +31,9 @@ var (
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		// Test reactivation cache for all versioning tests.
 		dynamicconfig.EnableVersionReactivationSignals.Key():                    true,
+		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():                       4,
+		dynamicconfig.ReachabilityCacheOpenWFsTTL.Key():                         3 * time.Millisecond,
+		dynamicconfig.ReachabilityCacheClosedWFsTTL.Key():                       6 * time.Millisecond,
 		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key():                    1000000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
@@ -66,6 +69,7 @@ var (
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
 		dynamicconfig.NumPendingSignalsLimitError.Key():                     ClientSuiteLimit,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
+		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():       true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
