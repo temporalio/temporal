@@ -48,38 +48,53 @@ type attempt struct {
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
-	if !slices.Contains(args, "-json") {
-		args = append([]string{"-json"}, args...)
-	}
-	for i, arg := range args {
-		if strings.HasPrefix(arg, coverProfileFlag) {
-			args[i] = coverProfileFlag + a.coverProfilePath
-		}
-	}
-	args = slices.DeleteFunc(args, func(arg string) bool {
-		return arg == "--" || strings.HasPrefix(arg, junitReportFlag)
-	})
+	args = a.goTestArgs(args)
 	log.Printf("starting test attempt #%d: %v %v",
 		a.number, "go test", strings.Join(args, " "))
+
 	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
 	output := newGoTestJSONOutput()
 	var stderr strings.Builder
 	cmd.Stdout = output
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	cmd.Stdin = os.Stdin
+
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
-	reportPath := a.junitReport.path
-	var reportErr error
-	a.junitReport, reportErr = output.junitReport()
-	a.junitReport.path = reportPath
+	reportErr, writeErr := a.finishReport(output)
 	if reportErr != nil {
 		err = reportErr
-	}
-	if writeErr := a.junitReport.write(); writeErr != nil && err == nil {
+	} else if writeErr != nil && err == nil {
 		err = writeErr
 	}
 	return stdout, err
+}
+
+func (a *attempt) goTestArgs(args []string) []string {
+	args = slices.Clone(args)
+	if !slices.Contains(args, "-json") {
+		args = append([]string{"-json"}, args...)
+	}
+	for i, arg := range args {
+		if strings.HasPrefix(arg, coverProfileFlag) {
+			// Each attempt writes a separate coverage profile for later merging.
+			args[i] = coverProfileFlag + a.coverProfilePath
+		}
+	}
+	return slices.DeleteFunc(args, func(arg string) bool {
+		// --junitfile is consumed by the runner; go test does not understand it.
+		return arg == "--" || strings.HasPrefix(arg, junitReportFlag)
+	})
+}
+
+func (a *attempt) finishReport(output *goTestJSONOutput) (parseErr error, writeErr error) {
+	reportPath := a.junitReport.path
+	a.junitReport, parseErr = output.junitReport()
+	a.junitReport.path = reportPath
+	if parseErr != nil {
+		return parseErr, nil
+	}
+	return nil, a.junitReport.write()
 }
 
 type runner struct {
