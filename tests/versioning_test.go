@@ -65,9 +65,6 @@ func versioningSuiteGlobalDynamicConfig() map[dynamicconfig.Key]any {
 		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():             4,
 		dynamicconfig.ReachabilityCacheOpenWFsTTL.Key():               testReachabilityCacheOpenWFsTTL,
 		dynamicconfig.ReachabilityCacheClosedWFsTTL.Key():             testReachabilityCacheClosedWFsTTL,
-
-		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 	}
 }
 
