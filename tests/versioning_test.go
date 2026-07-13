@@ -46,6 +46,9 @@ const (
 	longPollTime        = 5 * time.Second
 	// use > 2 pollers by default to expose more timing situations
 	numPollers = 4
+	// These TTLs need to be greater than the time it takes for a workflow execution status change to show up in visibility
+	testReachabilityCacheOpenWFsTTL   = 3 * time.Millisecond
+	testReachabilityCacheClosedWFsTTL = 6 * time.Millisecond
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
@@ -91,6 +94,13 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
+}
+
+func (s *VersioningIntegSuite) reachabilityCacheTTLOptions() []testcore.TestOption {
+	return []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheOpenWFsTTL, testReachabilityCacheOpenWFsTTL),
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheClosedWFsTTL, testReachabilityCacheClosedWFsTTL),
+	}
 }
 
 func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcore.TestEnv, *VersioningIntegSuite)) {
@@ -3946,7 +3956,7 @@ func (s *VersioningIntegSuite) validateBuildIDAfterReset(
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_ReachabilityCache() {
-	env := s.setupEnv()
+	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	// 1. Add assignment rule A and start workflow with build id A
@@ -4004,7 +4014,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
-	env := s.setupEnv()
+	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	s.getBuildIDReachability(env, tq, nil, map[string]enumspb.BuildIdTaskReachability{
@@ -4215,7 +4225,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 
-	buildIDs := []string{"A", "B", "C", "D"}
+	buildIDs := []string{"A", "B", "C", "D", "E"}
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace:              env.Namespace().String(),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4228,7 +4238,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	buildIDs = []string{"A", "B", "C", "D", "E"}
+	buildIDs = []string{"A", "B", "C", "D", "E", "F"}
 	resp, err = env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace:              env.Namespace().String(),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},

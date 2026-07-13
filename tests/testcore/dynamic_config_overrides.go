@@ -31,7 +31,6 @@ var (
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key(): 1000,
 		// Test reactivation cache for all versioning tests.
 		dynamicconfig.EnableVersionReactivationSignals.Key():                    true,
-		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():                       4,
 		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key():                    1000000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
 		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
@@ -50,10 +49,6 @@ var (
 		dynamicconfig.TaskQueueScannerEnabled.Key():                             false,
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
-
-		// These TTLs need to be greater than the time it takes for a workflow execution status change to show up in visibility
-		dynamicconfig.ReachabilityCacheOpenWFsTTL.Key():   3 * time.Millisecond,
-		dynamicconfig.ReachabilityCacheClosedWFsTTL.Key(): 6 * time.Millisecond,
 
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
