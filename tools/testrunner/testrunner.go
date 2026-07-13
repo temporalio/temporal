@@ -19,12 +19,12 @@ import (
 const (
 	codeCoverageExtension = ".cover.out"
 	maxAttemptsFlag       = "--max-attempts="
-	gotestsumPathFlag     = "--gotestsum-path="
 	coverProfileFlag      = "-coverprofile="
 	junitReportFlag       = "--junitfile="
 	junitGlobFlag         = "--junit-glob="
 	summaryOutputDirFlag  = "--summary-output-dir="
 	crashReportNameFlag   = "--crashreportname="
+	gotestsumPathFlag     = "--gotestsum-path="
 	totalTimeoutFlag      = "--total-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
