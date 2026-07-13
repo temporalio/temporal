@@ -271,6 +271,11 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	// Reserve a slot from the dedicated test cluster pool.
 	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
+	clusterRequest{
+		kind:              clusterKindDedicated,
+		dedicatedReason:   "legacy-suite",
+		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+	}.recordCreation(s.T())
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
