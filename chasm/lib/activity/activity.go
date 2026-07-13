@@ -201,14 +201,10 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 		return nil, err
 	}
 
-	key := ctx.ExecutionKey()
-
+	// Note: No need to set the vector clock here, as the components track version conflicts for read/write
+	// TODO: Need to fill in VersionDirective once we decide how to handle versioning for standalone activities
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId: namespaceID,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: key.BusinessID,
-			RunId:      key.RunID,
-		},
+		NamespaceId:            namespaceID,
 		ScheduleToStartTimeout: a.ScheduleToStartTimeout,
 		TaskQueue:              a.GetTaskQueue(),
 		Priority:               a.GetPriority(),
@@ -221,12 +217,9 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 // The token must match what was sent to the worker in the poll response.
 func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
 	attempt := a.LastAttempt.Get(ctx)
-	key := ctx.ExecutionKey()
 
 	token := tasktoken.NewStandaloneActivityTaskToken(
-		key.NamespaceID,
-		key.BusinessID, // activityID
-		key.RunID,
+		activityRef.NamespaceID,
 		a.GetActivityType().GetName(),
 		attempt.GetCount(),
 		attempt.GetComponentRef(),

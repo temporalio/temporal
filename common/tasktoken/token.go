@@ -31,20 +31,19 @@ func NewWorkflowTaskToken(
 }
 
 // NewStandaloneActivityTaskToken builds a task token for a standalone activity.
-// For standalone activities, the activity ID is used as both the workflow ID and activity ID
-// in the token. Standalone activities don't use ScheduledEventId, Clock, Version, or StartVersion.
+// Standalone activities don't use WorkflowId, RunId, ScheduledEventId, Clock, Version, or
+// StartVersion. The ComponentRef is the sole identifier for routing responses.
 func NewStandaloneActivityTaskToken(
 	namespaceID string,
-	activityID string,
-	runID string,
 	activityType string,
 	attempt int32,
 	componentRef []byte,
 ) *tokenspb.Task {
 	return NewActivityTaskToken(
-		namespaceID, activityID, runID,
-		0, // scheduledEventId
-		activityID, activityType, attempt,
+		namespaceID, "", "",
+		0,  // scheduledEventId
+		"", // activityId
+		activityType, attempt,
 		nil, // clock
 		0,   // version
 		0,   // startVersion
