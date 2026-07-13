@@ -123,6 +123,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
