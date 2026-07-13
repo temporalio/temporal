@@ -28,13 +28,13 @@ import (
 )
 
 const (
-	// CompletionServiceName is the well-known Nexus service name that worker completion callbacks are
+	// NotificationServiceName is the well-known Nexus service name that worker completion callbacks are
 	// dispatched to. The completion worker registers a Nexus service with this name to receive
 	// operation-completion notifications.
-	CompletionServiceName = "temporal.nexus.v1.CompletionService"
-	// CompletionOperationName is the well-known Nexus operation invoked on CompletionServiceName to deliver
+	NotificationServiceName = "temporal.notificationservice.v1.NotificationService"
+	// OnCompleteOperationName is the well-known Nexus operation invoked on NotificationService to deliver
 	// a source operation's completion to the worker.
-	CompletionOperationName = "OnComplete"
+	OnCompleteOperationName = "OnComplete"
 )
 
 // invocableNexusWorker is an invocable that delivers a completion callback to a Nexus service worker by
@@ -156,8 +156,8 @@ func (n invocableNexusWorker) Invoke(
 			Header: map[string]string{},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
-					Service:   CompletionServiceName,
-					Operation: CompletionOperationName,
+					Service:   NotificationServiceName,
+					Operation: OnCompleteOperationName,
 					RequestId: n.requestID,
 					Payload:   inputPayload,
 				},

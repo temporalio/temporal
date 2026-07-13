@@ -20,7 +20,7 @@ server-side in `chasm/lib/callback/invocable_nexusworker.go`):
 
 | | Value | Constant |
 |---|---|---|
-| Service | `temporal.nexus.v1.CompletionService` | `callback.CompletionServiceName` |
+| Service | `temporal.nexus.v1.NotificationService` | `callback.NotificationServiceName` |
 | Operation | `OnComplete` | `callback.CompletionOperationName` |
 
 The operation input is a `nexuspb.OnCompleteHandlerInput`
@@ -40,7 +40,7 @@ The operation input is a `nexuspb.OnCompleteHandlerInput`
 | `chasm/lib/callback/` | The callback CHASM component + state machine. `invocable_nexusworker.go` holds the `NexusWorker` variant logic: it builds the `OnCompleteHandlerInput` (`buildCompletionInput`) and dispatches via matching (`Invoke`). |
 | `tests/nexusworkercallbacks/` | This integration test and its helpers. |
 | `tests/nexusworkercallbacks/fauxsdk/` | Stand-in for SDK API that does not exist yet: `AttachWorkerCallback` builds the `commonpb.Callback` and appends it to `StartNexusOperationOptions.HackRawCompletionCallbacks`. |
-| `tests/nexusworkercallbacks/caller/` | The "caller" worker. Registers the `CompletionService`/`OnComplete` handler that receives the callback and records what it got. |
+| `tests/nexusworkercallbacks/caller/` | The "caller" worker. Registers the `NotificationService`/`OnComplete` handler that receives the callback and records what it got. |
 | `tests/nexusworkercallbacks/handler/` | The "handler" worker. Implements the actual SANO (`add`) that the caller invokes. |
 
 ## Data flow
@@ -59,7 +59,7 @@ ExecuteOperation(add) ─────▶  nexusoperation.Operation (SANO)
                                 (invocableNexusWorker.Invoke)
                                         │
                                 DispatchNexusTask ────────────────▶  OnComplete handler runs
-                                (temporal.nexus.v1.CompletionService)   (records the outcome)
+                                (temporal.nexus.v1.NotificationService)   (records the outcome)
 ```
 
 1. **User attaches the worker callback.** At the SANO callsite the caller specifies which task
@@ -91,7 +91,7 @@ ExecuteOperation(add) ─────▶  nexusoperation.Operation (SANO)
 
 6. **MatchingService dispatches the Nexus task.** `Invoke` calls
    `MatchingService.DispatchNexusTask` with the callback's `taskqueue_name`, a `StartOperation`
-   request for `CompletionService`/`OnComplete`, and the encoded input. Matching blocks until a
+   request for `NotificationService`/`OnComplete`, and the encoded input. Matching blocks until a
    worker sync-matches the task and its `Start` handler returns, then returns the outcome.
 
    - **Timeout:** the whole dispatch is bounded by `callback.request.timeout` (default **10s**,
@@ -104,7 +104,7 @@ ExecuteOperation(add) ─────▶  nexusoperation.Operation (SANO)
      Permanent failures (e.g. an `OperationError` from the worker) fail the callback terminally.
 
 7. **The worker receives the Nexus task.** The caller worker's SDK runtime receives the task and
-   routes it to the registered `CompletionService`/`OnComplete` handler
+   routes it to the registered `NotificationService`/`OnComplete` handler
    (`tests/nexusworkercallbacks/caller/nexus.go`).
 
 8. **The worker callback runs.** The `OnComplete` handler is invoked with the decoded

@@ -38,7 +38,7 @@ func MustGetWorkerCallbackResult(idx int) *ReceivedCallback {
 	return receivedCallbacks[idx]
 }
 
-const NexusCompletionServiceName = "temporal.nexus.v1.CompletionService"
+const NexusNotificationServiceName = "temporal.notificationservice.v1.NotificationService"
 
 const OnCompleteOperationName = "OnComplete"
 
@@ -47,7 +47,7 @@ type OnCompleteCallContext struct {
 	Message string
 }
 
-// Completion handler using the raw service contract for the CompletionService (the nexuspb.OnCompleteHandlerInput) parameter.
+// Completion handler using the raw service contract for the NotificationService (the nexuspb.OnCompleteHandlerInput) parameter.
 var completionHandler = nexus.NewSyncOperation(
 	OnCompleteOperationName,
 	func(ctx context.Context, input *notificationservicepb.OnCompleteHandlerRequest, options nexus.StartOperationOptions) (*notificationservicepb.OnCompleteHandlerResponse, error) {
