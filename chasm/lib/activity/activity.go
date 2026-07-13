@@ -1570,7 +1570,10 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	}
 }
 
-func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
+func (a *Activity) buildActivityExecutionInfo(
+	ctx chasm.Context,
+	request *workflowservice.DescribeActivityExecutionRequest,
+) *apiactivitypb.ActivityExecutionInfo {
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
 
@@ -1606,12 +1609,10 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
 		Header:                  requestData.GetHeader(),
-		HeartbeatDetails:        heartbeat.GetDetails(),
 		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
 		Links:                   ctx.Links(a),
 		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
 		LastAttemptCompleteTime: attempt.GetCompleteTime(),
-		LastFailure:             attempt.GetLastFailureDetails().GetFailure(),
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
@@ -1634,6 +1635,12 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		TaskQueue:               a.GetTaskQueue().GetName(),
 		UserMetadata:            a.effectiveUserMetadata(ctx),
 	}
+	if request.GetIncludeHeartbeatDetails() {
+		info.HeartbeatDetails = heartbeat.GetDetails()
+	}
+	if request.GetIncludeLastFailure() {
+		info.LastFailure = attempt.GetLastFailureDetails().GetFailure()
+	}
 
 	return info
 }
@@ -1649,7 +1656,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 		return nil, err
 	}
 
-	info := a.buildActivityExecutionInfo(ctx)
+	info := a.buildActivityExecutionInfo(ctx, request)
 
 	var input *commonpb.Payloads
 	if request.GetIncludeInput() {
