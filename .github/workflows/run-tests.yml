@@ -495,7 +495,7 @@ jobs:
 
       - name: Print memory snapshot
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
+        run: cat .testoutput/memory/memory-snapshot.txt || true
 
       - name: Print current server logs
         if: always()
