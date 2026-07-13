@@ -18,6 +18,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=3",
+			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -40,6 +41,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--total-timeout=39m",
+			"--",
 			"-timeout=35m",
 			"-coverprofile=test.cover.out",
 		})
@@ -78,10 +80,20 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
+			"--",
 			"-coverprofile=test.cover.out",
 		})
 		require.NoError(t, err)
 		require.Zero(t, r.totalTimeout)
+	})
+
+	t.Run("SeparatorMissing", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--junitfile=test.xml",
+			"-coverprofile=test.cover.out",
+		})
+		require.ErrorContains(t, err, `missing required argument "--"`)
 	})
 
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
@@ -89,6 +101,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--total-timeout=invalid",
+			"--",
 			"-coverprofile=test.cover.out",
 		})
 		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
@@ -101,6 +114,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=0", // invalid!
+			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -114,6 +128,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=invalid", // invalid!
+			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -128,6 +143,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=3",
+			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -141,6 +157,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=3",
+			"--",
 			// missing:
 			// "-coverprofile=test.cover.out",
 			"baz",
