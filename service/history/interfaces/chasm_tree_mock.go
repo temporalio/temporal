@@ -244,16 +244,16 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
-// MarkSkipDurationUpdateInPassive mocks base method.
-func (m *MockChasmTree) MarkSkipDurationUpdateInPassive() {
+// MarkTotalTimeSkippedUpdatedInPassive mocks base method.
+func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MarkSkipDurationUpdateInPassive")
+	m.ctrl.Call(m, "MarkTotalTimeSkippedUpdatedInPassive")
 }
 
-// MarkSkipDurationUpdateInPassive indicates an expected call of MarkSkipDurationUpdateInPassive.
-func (mr *MockChasmTreeMockRecorder) MarkSkipDurationUpdateInPassive() *gomock.Call {
+// MarkTotalTimeSkippedUpdatedInPassive indicates an expected call of MarkTotalTimeSkippedUpdatedInPassive.
+func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkSkipDurationUpdateInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkSkipDurationUpdateInPassive))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTotalTimeSkippedUpdatedInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkTotalTimeSkippedUpdatedInPassive))
 }
 
 // RefreshTasks mocks base method.

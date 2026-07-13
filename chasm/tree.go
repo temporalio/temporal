@@ -177,7 +177,7 @@ type (
 
 		needsPointerResolution bool
 
-		skipDurationUpdateInPassive bool
+		totalTimeSkippedUpdatedInPassive bool
 	}
 
 	taskWithAttributes struct {
@@ -2498,7 +2498,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.needsPointerResolution = false
-	n.skipDurationUpdateInPassive = false
+	n.totalTimeSkippedUpdatedInPassive = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -2772,7 +2772,7 @@ func (n *Node) RefreshTasks() error {
 	// times are converted against the current accumulated skip in backend.AddTasks). It
 	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
 	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
-	n.skipDurationUpdateInPassive = false
+	n.totalTimeSkippedUpdatedInPassive = false
 
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
@@ -2797,8 +2797,8 @@ func (n *Node) RefreshTasks() error {
 	return nil
 }
 
-func (n *Node) MarkSkipDurationUpdateInPassive() {
-	n.skipDurationUpdateInPassive = true
+func (n *Node) MarkTotalTimeSkippedUpdatedInPassive() {
+	n.totalTimeSkippedUpdatedInPassive = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -3771,7 +3771,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// passive path
 	// todo@feiyang: change to transaction policy check
 	if !n.subtreeIsDirty {
-		if n.skipDurationUpdateInPassive {
+		if n.totalTimeSkippedUpdatedInPassive {
 			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
 				return err
 			}

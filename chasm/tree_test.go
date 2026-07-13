@@ -5499,12 +5499,12 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 	})
 }
 
-// TestCloseTransaction_MarkSkipDurationUpdateInPassive verifies the passive path: after a
-// skip transition is applied via replication, MutableState calls MarkSkipDurationUpdateInPassive
+// TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive verifies the passive path: after a
+// skip transition is applied via replication, MutableState calls MarkTotalTimeSkippedUpdatedInPassive
 // so the next CloseTransaction re-stamps pending timer/pure physical tasks against the replicated
 // accumulated skip. Without the flag those already-created tasks are left untouched (nothing to do);
 // with the flag they are regenerated, and the flag is cleared afterwards.
-func (s *nodeSuite) TestCloseTransaction_MarkSkipDurationUpdateInPassive() {
+func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	// newTree builds a root component holding one timer side-effect task and one pure task, both
@@ -5562,8 +5562,8 @@ func (s *nodeSuite) TestCloseTransaction_MarkSkipDurationUpdateInPassive() {
 	s.Run("WithFlagRegeneratesTimerAndPureTasks", func() {
 		root := newTree()
 
-		root.MarkSkipDurationUpdateInPassive()
-		s.True(root.skipDurationUpdateInPassive)
+		root.MarkTotalTimeSkippedUpdatedInPassive()
+		s.True(root.totalTimeSkippedUpdatedInPassive)
 
 		_, err := root.CloseTransaction()
 		s.NoError(err)
@@ -5587,7 +5587,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkSkipDurationUpdateInPassive() {
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
 		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
 
-		s.False(root.skipDurationUpdateInPassive,
+		s.False(root.totalTimeSkippedUpdatedInPassive,
 			"the flag is reset after the transaction closes")
 	})
 }

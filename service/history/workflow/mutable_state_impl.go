@@ -9168,7 +9168,7 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
 		return
 	}
-	ms.chasmTree.MarkSkipDurationUpdateInPassive()
+	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
