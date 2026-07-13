@@ -332,11 +332,38 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
+			now := mctx.Now(c)
+			nextAttempt := task.GetAttempt() + 1
+
+			// Retriable failure: keep the peer PENDING and reschedule with capped
+			// exponential backoff until the total retry budget (measured from the
+			// first failed attempt) is exhausted. This lets the mutation converge
+			// once a temporarily-unreachable peer recovers. Only after the budget
+			// is spent do we give up as FAILED_TERMINAL so the component can still
+			// complete.
+			if outcome == nsreplpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
+				peer := c.GetPeerApply()[task.GetTargetCell()]
+				firstAt := now
+				if peer.GetFirstAttemptAt() != nil {
+					firstAt = peer.GetFirstAttemptAt().AsTime()
+				}
+				if now.Sub(firstAt) < peerRetryBudget {
+					return nil, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
+						Time:       now,
+						TargetCell: task.GetTargetCell(),
+						Attempt:    nextAttempt,
+						Err:        execErr,
+					})
+				}
+				// Budget exhausted: fall through and record a terminal failure.
+				outcome = nsreplpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+			}
+
 			if err := TransitionPeerCompleted.Apply(c, mctx, EventPeerCompleted{
-				Time:       mctx.Now(c),
+				Time:       now,
 				TargetCell: task.GetTargetCell(),
 				Outcome:    outcome,
-				Attempts:   task.GetAttempt() + 1,
+				Attempts:   nextAttempt,
 				Err:        execErr,
 			}); err != nil {
 				return nil, err
@@ -354,22 +381,14 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 		},
 		nil,
 	)
-	if updErr != nil {
-		return updErr
-	}
-	if execErr != nil && outcome == nsreplpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
-		// Returning an error lets CHASM schedule a retry via its task framework.
-		// Terminal failures intentionally don't return an error: they end the
-		// task and the structured failure log is the operator's signal to act.
-		return wrapPeerError(task.GetTargetCell(), execErr)
-	}
-	return nil
+	return updErr
 }
 
 // classifyPeerErr maps an admin RPC error to the appropriate peer apply outcome.
 // Transient errors (peer unavailable, resource exhausted, deadline) are
-// retriable. Argument validation and not-found errors are terminal — retrying
-// won't help. Unknown errors default to retriable (safer: apply-if-higher makes
+// retriable. Argument validation, not-found, and unimplemented (peer binary too
+// old to serve ApplyNamespaceMutation) errors are terminal — retrying won't
+// help. Unknown errors default to retriable (safer: apply-if-higher makes
 // duplicate writes no-ops).
 func classifyPeerErr(err error) nsreplpb.PeerApplyOutcome {
 	switch err.(type) {
@@ -378,7 +397,8 @@ func classifyPeerErr(err error) nsreplpb.PeerApplyOutcome {
 		*serviceerror.DeadlineExceeded:
 		return nsreplpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 	case *serviceerror.InvalidArgument,
-		*serviceerror.NotFound:
+		*serviceerror.NotFound,
+		*serviceerror.Unimplemented:
 		return nsreplpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
 	default:
 		return nsreplpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
@@ -453,11 +473,4 @@ func buildNamespaceTaskAttributes(
 		attrs.ReplicationConfig.State = replConfig.GetState()
 	}
 	return attrs
-}
-
-func wrapPeerError(targetCell string, err error) error {
-	if _, ok := err.(*serviceerror.Unavailable); ok {
-		return fmt.Errorf("peer %s unavailable: %w", targetCell, err)
-	}
-	return fmt.Errorf("peer %s apply failed: %w", targetCell, err)
 }

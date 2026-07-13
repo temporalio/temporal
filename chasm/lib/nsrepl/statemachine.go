@@ -138,3 +138,81 @@ var TransitionAllPeersTerminal = chasm.NewTransition(
 		return nil
 	},
 )
+
+// -----------------------------------------------------------------------------
+// Peer retry: capped exponential backoff with a total budget.
+// -----------------------------------------------------------------------------
+
+const (
+	// peerRetryBaseInterval is the first backoff interval; it doubles per attempt.
+	peerRetryBaseInterval = time.Second
+	// peerRetryMaxInterval caps the backoff so a long peer outage retries at a
+	// steady cadence instead of ever-growing gaps.
+	peerRetryMaxInterval = 5 * time.Minute
+	// peerRetryBudget is the total wall-clock window (from the first failed
+	// attempt) over which a retriable peer failure keeps retrying before it is
+	// given up as FAILED_TERMINAL so the component can still complete.
+	peerRetryBudget = 7 * 24 * time.Hour
+)
+
+// peerRetryBackoff returns the delay before the given attempt: exponential
+// (base * 2^(attempt-1)) capped at peerRetryMaxInterval, overflow-safe.
+func peerRetryBackoff(attempt int32) time.Duration {
+	if attempt < 1 {
+		return peerRetryBaseInterval
+	}
+	if attempt > 20 { // 2^19s already dwarfs the cap; avoid shift overflow
+		return peerRetryMaxInterval
+	}
+	d := peerRetryBaseInterval * time.Duration(int64(1)<<uint(attempt-1))
+	if d <= 0 || d > peerRetryMaxInterval {
+		return peerRetryMaxInterval
+	}
+	return d
+}
+
+// EventPeerRetry records a retriable peer failure without marking the peer
+// terminal: it updates the attempt count and last failure, keeps the peer
+// PENDING (so ApplyPeerTask.Validate lets the next attempt run), and schedules
+// the next ApplyPeerTask with backoff. On peer recovery a later attempt
+// succeeds; if the peer never recovers, recordPeerOutcome flips it to
+// FAILED_TERMINAL once the retry budget is exhausted.
+type EventPeerRetry struct {
+	Time       time.Time
+	TargetCell string
+	Attempt    int32
+	Err        error
+}
+
+var TransitionPeerRetry = chasm.NewTransition(
+	[]nsreplpb.ComponentStatus{nsreplpb.COMPONENT_STATUS_RUNNING},
+	nsreplpb.COMPONENT_STATUS_RUNNING,
+	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventPeerRetry) error {
+		status := c.GetPeerApply()[event.TargetCell]
+		if status == nil {
+			status = &nsreplpb.PeerApplyStatus{}
+		}
+		if status.GetFirstAttemptAt() == nil {
+			status.FirstAttemptAt = timestamppb.New(event.Time)
+		}
+		// Keep PENDING: the peer isn't done, it's between retries.
+		status.Outcome = nsreplpb.PEER_APPLY_OUTCOME_PENDING
+		status.AttemptCount = event.Attempt
+		status.LastAttemptAt = timestamppb.New(event.Time)
+		if event.Err != nil {
+			status.LastFailure = &failurepb.Failure{Message: event.Err.Error()}
+		}
+		c.PeerApply[event.TargetCell] = status
+
+		// Schedule the next attempt with capped exponential backoff. The task's
+		// Attempt matches the peer's AttemptCount, so Validate admits exactly this
+		// task and drops any stale/duplicate retry from an earlier attempt.
+		ctx.AddTask(c, chasm.TaskAttributes{
+			ScheduledTime: event.Time.Add(peerRetryBackoff(event.Attempt)),
+		}, &nsreplpb.ApplyPeerTask{
+			TargetCell: event.TargetCell,
+			Attempt:    event.Attempt,
+		})
+		return nil
+	},
+)
