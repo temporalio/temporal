@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -62,11 +60,9 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 
 	err := cmd.Run()
 	stdout := output.String() + stderr.String()
-	reportErr, writeErr := a.finishReport(output)
+	reportErr := a.finishReport(output)
 	if reportErr != nil {
 		err = reportErr
-	} else if writeErr != nil && err == nil {
-		err = writeErr
 	}
 	return stdout, err
 }
@@ -92,14 +88,13 @@ func (a *attempt) goTestArgs(args []string) []string {
 	})
 }
 
-func (a *attempt) finishReport(output *goTestJSONOutput) (parseErr error, writeErr error) {
-	reportPath := a.junitReport.path
-	a.junitReport, parseErr = output.junitReport()
-	a.junitReport.path = reportPath
-	if parseErr != nil {
-		return parseErr, nil
+func (a *attempt) finishReport(output *goTestJSONOutput) error {
+	report, err := output.junitReport()
+	if err != nil {
+		return err
 	}
-	return nil, a.junitReport.write()
+	a.junitReport = report
+	return nil
 }
 
 type runner struct {
@@ -223,9 +218,7 @@ func (r *runner) newAttempt() *attempt {
 			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
 			len(r.attempts),
 			codeCoverageExtension),
-		junitReport: &junitReport{
-			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
-		},
+		junitReport: &junitReport{},
 	}
 	r.attempts = append(r.attempts, a)
 	return a
