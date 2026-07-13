@@ -371,8 +371,9 @@ type StartWorkflowExecutionResponse struct {
 	Started           bool                              `protobuf:"varint,4,opt,name=started,proto3" json:"started,omitempty"`
 	Status            v12.WorkflowExecutionStatus       `protobuf:"varint,5,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
 	Link              *v14.Link                         `protobuf:"bytes,6,opt,name=link,proto3" json:"link,omitempty"`
-	// Run ID of the first execution in the chain. Equals run_id unless the current run is the result
-	// of a continue-as-new chain. May be empty when the server could not determine it.
+	// Run ID of the first execution in the chain. Equals run_id only for a first run; any
+	// continuation (continue-as-new, retry, cron, or reset) inherits the original run's ID. May be
+	// empty when the server could not determine it.
 	FirstExecutionRunId string `protobuf:"bytes,7,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -3030,8 +3031,9 @@ type SignalWithStartWorkflowExecutionResponse struct {
 	RunId      string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	Started    bool                   `protobuf:"varint,2,opt,name=started,proto3" json:"started,omitempty"`
 	SignalLink *v14.Link              `protobuf:"bytes,3,opt,name=signal_link,json=signalLink,proto3" json:"signal_link,omitempty"`
-	// Run ID of the first execution in the chain. Equals run_id unless the current run is the result
-	// of a continue-as-new chain. May be empty when the server could not determine it.
+	// Run ID of the first execution in the chain. Equals run_id only for a first run; any
+	// continuation (continue-as-new, retry, cron, or reset) inherits the original run's ID. May be
+	// empty when the server could not determine it.
 	FirstExecutionRunId string `protobuf:"bytes,4,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache

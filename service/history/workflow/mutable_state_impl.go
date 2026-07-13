@@ -1990,10 +1990,10 @@ func (ms *MutableStateImpl) GetFirstRunID(
 	// Prefer the canonical source on ExecutionState; the equivalent field on ExecutionInfo is
 	// deprecated. NewMutableStateFromDB backfills ExecutionState from ExecutionInfo on load, so
 	// records that pre-date the ExecutionState field also resolve here.
-	if firstRunID := ms.executionState.FirstExecutionRunId; len(firstRunID) != 0 {
+	if firstRunID := ms.executionState.FirstExecutionRunId; firstRunID != "" {
 		return firstRunID, nil
 	}
-	if firstRunID := ms.executionInfo.FirstExecutionRunId; len(firstRunID) != 0 {
+	if firstRunID := ms.executionInfo.FirstExecutionRunId; firstRunID != "" {
 		return firstRunID, nil
 	}
 	// Workflows created with Temporal release v0.28.0 or earlier don't have FirstExecutionRunID

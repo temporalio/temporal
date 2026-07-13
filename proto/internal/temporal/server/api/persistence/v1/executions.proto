@@ -391,9 +391,10 @@ message WorkflowExecutionState {
   // the workflow execution or request IDs that were attached to an existing running workflow
   // execution via StartWorkflowExecutionRequest.OnConflictOptions.
   map<string, RequestIDInfo> request_ids = 7;
-  // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). For workflows
-  // that have not been continued-as-new this equals run_id. Empty on records written before this
-  // field was added; consumers must not assume run_id in that case.
+  // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
+  // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
+  // inherits the original run's ID. Empty on records written before this field was added;
+  // consumers must not assume run_id in that case.
   string first_execution_run_id = 8;
 }
 

@@ -1445,9 +1445,10 @@ type WorkflowExecutionState struct {
 	// the workflow execution or request IDs that were attached to an existing running workflow
 	// execution via StartWorkflowExecutionRequest.OnConflictOptions.
 	RequestIds map[string]*RequestIDInfo `protobuf:"bytes,7,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Run ID of the first execution in the chain (set on WorkflowExecutionStarted). For workflows
-	// that have not been continued-as-new this equals run_id. Empty on records written before this
-	// field was added; consumers must not assume run_id in that case.
+	// Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
+	// only for a first run; any continuation (continue-as-new, retry, cron, or reset)
+	// inherits the original run's ID. Empty on records written before this field was added;
+	// consumers must not assume run_id in that case.
 	FirstExecutionRunId string `protobuf:"bytes,8,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
