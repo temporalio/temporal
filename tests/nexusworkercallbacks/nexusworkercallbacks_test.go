@@ -187,7 +187,7 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample() {
 	callCtx := caller.OnCompleteCallContext{
 		Message: s.T().Name(),
 	}
-	callbackRef := fauxsdk.UseCompletionService(
+	callbackRef := fauxsdk.UseNotificationService(
 		caller.CallerTaskQueue,
 		callCtx,
 	)
@@ -278,7 +278,7 @@ func (s *NexusWorkerCallbacksSuite) TestBasicExample2() {
 	callCtx := caller.OnCompleteCallContext{
 		Message: s.T().Name(),
 	}
-	callbackRef := fauxsdk.UseCompletionService(
+	callbackRef := fauxsdk.UseNotificationService(
 		// Point to the worker completion handler listening in this other task queue.
 		alternativeTaskQueue,
 		callCtx,
@@ -320,7 +320,7 @@ func (s *NexusWorkerCallbacksSuite) TestNexusOperationFails() {
 		ID:                     "always-fail",
 		ScheduleToCloseTimeout: 5 * time.Second,
 	}
-	callbackRef := fauxsdk.UseCompletionService(caller.CallerTaskQueue, caller.OnCompleteCallContext{})
+	callbackRef := fauxsdk.UseNotificationService(caller.CallerTaskQueue, caller.OnCompleteCallContext{})
 	fauxsdk.AttachWorkerCallback(&callOpts, callbackRef)
 
 	// The always-fail operation terminates with a Nexus application error.

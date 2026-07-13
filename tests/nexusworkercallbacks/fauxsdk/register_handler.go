@@ -8,7 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
+	notificationservicepb "go.temporal.io/api/notificationservice/v1"
 
 	"go.temporal.io/sdk/worker"
 )
@@ -33,11 +33,7 @@ type CompletionHandlerFn[T any] func(
 	completion Completion,
 ) error
 
-// UnitTypeHack is a hack to define a function that doesn't return a value.
-// Is there something like this already exposed from the Go SDK?
-type UnitTypeHack struct{}
-
-// SetCompletionHandler takes care of registering a new implementation of the CompletionService,
+// SetCompletionHandler takes care of registering a new implementation of the NotificationService,
 // and wiring the supplied handler to its OnComplete operation.
 //
 // This is also where the SDK's veneer for converting the nexuspb.OnCompleteHandlerInput proto
@@ -46,13 +42,13 @@ func SetCompletionHandler[T any](
 	w worker.Worker,
 	completionFn CompletionHandlerFn[T],
 ) error {
-	completionSvc := nexus.NewService("temporal.nexus.v1.CompletionService")
+	notificationSvc := nexus.NewService("temporal.notificationservice.v1.NotificationService")
 
-	// Define the OnComplete operation for the CompletionService for the worker and task queue.
+	// Define the OnComplete operation for the NotificationService for the worker and task queue.
 	// This wraps the user-supplied completion handler for ergonomics.
 	completionHandler := nexus.NewSyncOperation(
 		"OnComplete",
-		func(ctx context.Context, input *nexuspb.OnCompleteHandlerInput, options nexus.StartOperationOptions) (UnitTypeHack, error) {
+		func(ctx context.Context, input *notificationservicepb.OnCompleteHandlerRequest, options nexus.StartOperationOptions) (*notificationservicepb.OnCompleteHandlerResponse, error) {
 			// Convert the OnCompleteHandlerInput into the SDK-types that are the parmaeters to the
 			// user-defined completion handler.
 			compCtx := CompletionContext{
@@ -67,14 +63,14 @@ func SetCompletionHandler[T any](
 			// Call the user's handler.
 			err := completionFn(compCtx, completion)
 
-			return UnitTypeHack{}, err
+			return &notificationservicepb.OnCompleteHandlerResponse{}, err
 		})
 
-	err := completionSvc.Register(completionHandler)
+	err := notificationSvc.Register(completionHandler)
 	if err != nil {
 		return fmt.Errorf("registering Nexus service: %w", err)
 	}
 
-	w.RegisterNexusService(completionSvc)
+	w.RegisterNexusService(notificationSvc)
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/notificationservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -113,14 +114,14 @@ func TestInvokeNexusWorker_DispatchesToTaskQueue(t *testing.T) {
 			// Dispatched as a StartOperation targeting the well-known completion service/operation.
 			start := req.GetRequest().GetStartOperation()
 			require.NotNil(t, start, "expected a StartOperation request variant")
-			require.Equal(t, CompletionServiceName, start.GetService())
-			require.Equal(t, CompletionOperationName, start.GetOperation())
+			require.Equal(t, NotificationServiceName, start.GetService())
+			require.Equal(t, OnCompleteOperationName, start.GetOperation())
 			// The request ID is carried through for idempotency.
 			require.Equal(t, testRequestID, start.GetRequestId())
 
 			// The payload is an OnCompleteHandlerInput carrying the operation outcome and source context.
 			require.NotNil(t, start.GetPayload(), "expected an input payload")
-			var input nexuspb.OnCompleteHandlerInput
+			var input notificationservice.OnCompleteHandlerRequest
 			require.NoError(t, payload.Decode(start.GetPayload(), &input))
 
 			var gotResult string

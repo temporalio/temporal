@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	notificationservicepb "go.temporal.io/api/notificationservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -25,13 +28,13 @@ import (
 )
 
 const (
-	// CompletionServiceName is the well-known Nexus service name that worker completion callbacks are
+	// NotificationServiceName is the well-known Nexus service name that worker completion callbacks are
 	// dispatched to. The completion worker registers a Nexus service with this name to receive
 	// operation-completion notifications.
-	CompletionServiceName = "temporal.nexus.v1.CompletionService"
-	// CompletionOperationName is the well-known Nexus operation invoked on CompletionServiceName to deliver
+	NotificationServiceName = "temporal.notificationservice.v1.NotificationService"
+	// OnCompleteOperationName is the well-known Nexus operation invoked on NotificationService to deliver
 	// a source operation's completion to the worker.
-	CompletionOperationName = "OnComplete"
+	OnCompleteOperationName = "OnComplete"
 )
 
 // invocableNexusWorker is an invocable that delivers a completion callback to a Nexus service worker by
@@ -61,8 +64,8 @@ func (n invocableNexusWorker) WrapError(result invocationResult, err error) erro
 //
 // TODO(chrsmith): Populate OnCompleteHandlerInput.SourceOperation (endpoint/service/operation/token/links).
 // That metadata is not carried on the NexusWorker callback proto today, so it is left unset for now.
-func (n invocableNexusWorker) buildCompletionInput() (*nexuspb.OnCompleteHandlerInput, error) {
-	outcome := &nexuspb.OnCompleteHandlerInput_Outcome{}
+func (n invocableNexusWorker) buildCompletionInput() (*notificationservicepb.OnCompleteHandlerRequest, error) {
+	outcome := &notificationservicepb.OnCompleteHandlerRequest_Outcome{}
 	if n.completion.Error != nil {
 		// Unsuccessful completion: convert the Nexus operation error into a Temporal failure, mirroring
 		// invocableInternal.getHistoryRequest.
@@ -78,7 +81,7 @@ func (n invocableNexusWorker) buildCompletionInput() (*nexuspb.OnCompleteHandler
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert failure type: %w", err)
 		}
-		outcome.Result = &nexuspb.OnCompleteHandlerInput_Outcome_Failure{Failure: apiFailure}
+		outcome.Result = &notificationservicepb.OnCompleteHandlerRequest_Outcome_Failure{Failure: apiFailure}
 	} else {
 		// Successful completion. The result payload may legitimately be nil.
 		var result *commonpb.Payload
@@ -89,7 +92,7 @@ func (n invocableNexusWorker) buildCompletionInput() (*nexuspb.OnCompleteHandler
 			}
 			result = p
 		}
-		outcome.Result = &nexuspb.OnCompleteHandlerInput_Outcome_Success{Success: result}
+		outcome.Result = &notificationservicepb.OnCompleteHandlerRequest_Outcome_Success{Success: result}
 	}
 
 	// SourceContext is carried as Payloads on the callback but the handler input holds a single Payload.
@@ -98,7 +101,7 @@ func (n invocableNexusWorker) buildCompletionInput() (*nexuspb.OnCompleteHandler
 		sourceContext = payloads[0]
 	}
 
-	return &nexuspb.OnCompleteHandlerInput{
+	return &notificationservicepb.OnCompleteHandlerRequest{
 		Outcome:       outcome,
 		SourceContext: sourceContext,
 	}, nil
@@ -153,8 +156,8 @@ func (n invocableNexusWorker) Invoke(
 			Header: map[string]string{},
 			Variant: &nexuspb.Request_StartOperation{
 				StartOperation: &nexuspb.StartOperationRequest{
-					Service:   CompletionServiceName,
-					Operation: CompletionOperationName,
+					Service:   NotificationServiceName,
+					Operation: OnCompleteOperationName,
 					RequestId: n.requestID,
 					Payload:   inputPayload,
 				},

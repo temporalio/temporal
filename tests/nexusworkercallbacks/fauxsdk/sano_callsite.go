@@ -10,13 +10,13 @@ import (
 // with a specific type signature.)
 //
 // This is intentionally opaque, to support different kinds of worker callbacks in the future.
-// For now the only way to create a valid instance is via `func UseCompletionService(...)`.
+// For now the only way to create a valid instance is via `func UseNotificationService(...)`.
 type CallbackRef struct {
 	taskqueueName string
 	callContext   any
 }
 
-func UseCompletionService(targetTaskQueue string, sourceCallContext any) *CallbackRef {
+func UseNotificationService(targetTaskQueue string, sourceCallContext any) *CallbackRef {
 	return &CallbackRef{
 		taskqueueName: targetTaskQueue,
 		callContext:   sourceCallContext,

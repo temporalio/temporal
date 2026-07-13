@@ -3240,11 +3240,32 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		}
 	}
 
-	// Invalidate pending workflow task by incrementing the persisted stamp.
-	// This ensures subsequent task dispatch detects the change.
-	if ms.HasPendingWorkflowTask() {
-		ms.executionInfo.WorkflowTaskStamp += 1
-		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+	// A workflow task that is already started (in flight with a worker) is left
+	// alone: its eventual completion or failure is accepted normally even while
+	// paused (see the paused check in RespondWorkflowTaskCompleted, which skips
+	// scheduling a follow-up task but still applies the completion), and if the
+	// worker never responds, its normal start-to-close timeout will fail it and
+	// retry through the usual transient-task mechanism. Only a task that was
+	// scheduled but never delivered to a worker needs help here: nothing else
+	// will ever resolve it, since it has no timeout of its own and dispatching it
+	// to a worker now would violate pause semantics.
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() {
+		// Fail it explicitly, in the same transaction as the paused event, so it
+		// resolves cleanly in history instead of being left scheduled forever. A
+		// fresh workflow task is created automatically when the workflow is
+		// unpaused.
+		if _, err := failWorkflowTask(
+			ms,
+			ms.GetPendingWorkflowTask(),
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED,
+		); err != nil {
+			return err
+		}
+		// The task failure above increments the attempt count for retry
+		// backoff purposes; reset it so the workflow task created on
+		// unpause is a normal, immediately-visible task rather than a
+		// transient retry attempt.
+		ms.executionInfo.WorkflowTaskAttempt = 1
 	}
 
 	return ms.updatePauseInfoSearchAttribute()
@@ -7454,6 +7475,13 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	if result.skipPersistence {
+		if err := ms.cleanupTransaction(); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, nil
+	}
+
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:  ms.executionInfo,
 		ExecutionState: ms.executionState,
@@ -7579,6 +7607,7 @@ type closeTransactionResult struct {
 	workflowEventsSeq  []*persistence.WorkflowEvents
 	bufferEvents       []*historypb.HistoryEvent
 	clearBuffer        bool
+	skipPersistence    bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
 }
@@ -7680,6 +7709,13 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
+
+	if ms.closeTransactionShouldSkipPersistence(isStateDirty, chasmNodesMutation) {
+		return closeTransactionResult{
+			skipPersistence: true,
+		}, nil
+	}
+
 	for nodePath := range chasmNodesMutation.DeletedNodes {
 		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
 		delete(ms.chasmNodeSizes, nodePath)
@@ -7738,6 +7774,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
+	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
