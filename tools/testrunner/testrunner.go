@@ -87,7 +87,7 @@ func (a *attempt) goTestArgs(args []string) []string {
 	}
 	return slices.DeleteFunc(args, func(arg string) bool {
 		// --junitfile is consumed by the runner; go test does not understand it.
-		return arg == "--" || strings.HasPrefix(arg, junitReportFlag)
+		return strings.HasPrefix(arg, junitReportFlag)
 	})
 }
 
