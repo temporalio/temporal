@@ -167,6 +167,71 @@ func (ActivityExecutionStatus) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{0}
 }
 
+// ActivityRetryIntervalSource distinguishes how ActivityAttemptState.current_retry_interval was
+// derived, so that retry policy updates only recompute intervals that are still policy-derived and
+// never clobber a worker-provided override.
+type ActivityRetryIntervalSource int32
+
+const (
+	ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED ActivityRetryIntervalSource = 0
+	// current_retry_interval was computed from the activity's retry policy.
+	ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY ActivityRetryIntervalSource = 1
+	// current_retry_interval was set from a worker-provided NextRetryDelay override on a retryable
+	// application failure, overriding the retry-policy-derived backoff for this attempt only.
+	ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE ActivityRetryIntervalSource = 2
+)
+
+// Enum value maps for ActivityRetryIntervalSource.
+var (
+	ActivityRetryIntervalSource_name = map[int32]string{
+		0: "ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED",
+		1: "ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY",
+		2: "ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE",
+	}
+	ActivityRetryIntervalSource_value = map[string]int32{
+		"ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED":     0,
+		"ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY":    1,
+		"ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE": 2,
+	}
+)
+
+func (x ActivityRetryIntervalSource) Enum() *ActivityRetryIntervalSource {
+	p := new(ActivityRetryIntervalSource)
+	*p = x
+	return p
+}
+
+func (x ActivityRetryIntervalSource) String() string {
+	switch x {
+	case ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED:
+		return "Unspecified"
+	case ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY:
+		return "RetryPolicy"
+	case ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE:
+		return "WorkerOverride"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (ActivityRetryIntervalSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes[1].Descriptor()
+}
+
+func (ActivityRetryIntervalSource) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes[1]
+}
+
+func (x ActivityRetryIntervalSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ActivityRetryIntervalSource.Descriptor instead.
+func (ActivityRetryIntervalSource) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescGZIP(), []int{1}
+}
+
 type ActivityState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The type of the activity, a string that maps to a registered activity on a worker.
@@ -644,9 +709,13 @@ type ActivityAttemptState struct {
 	// `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
 	SdkVersion string `protobuf:"bytes,11,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
 	// Time the current activity attempt is scheduled to dispatch.
-	DispatchTime  *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=dispatch_time,json=dispatchTime,proto3" json:"dispatch_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DispatchTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=dispatch_time,json=dispatchTime,proto3" json:"dispatch_time,omitempty"`
+	// Source of current_retry_interval, distinguishing a retry-policy-derived backoff from a
+	// worker-provided NextRetryDelay override. Retry policy updates only recompute
+	// current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
+	CurrentRetryIntervalSource ActivityRetryIntervalSource `protobuf:"varint,13,opt,name=current_retry_interval_source,json=currentRetryIntervalSource,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource" json:"current_retry_interval_source,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -761,6 +830,13 @@ func (x *ActivityAttemptState) GetDispatchTime() *timestamppb.Timestamp {
 		return x.DispatchTime
 	}
 	return nil
+}
+
+func (x *ActivityAttemptState) GetCurrentRetryIntervalSource() ActivityRetryIntervalSource {
+	if x != nil {
+		return x.CurrentRetryIntervalSource
+	}
+	return ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 }
 
 type ActivityHeartbeatState struct {
@@ -1163,7 +1239,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId\"\xe5\x06\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\xf3\a\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -1178,7 +1254,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	" \x01(\tR\asdkName\x12\x1f\n" +
 	"\vsdk_version\x18\v \x01(\tR\n" +
 	"sdkVersion\x12?\n" +
-	"\rdispatch_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\fdispatchTime\x1a\x80\x01\n" +
+	"\rdispatch_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\fdispatchTime\x12\x8b\x01\n" +
+	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +
@@ -1214,7 +1291,11 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	" ACTIVITY_EXECUTION_STATUS_PAUSED\x10\t\x12-\n" +
 	")ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED\x10\n" +
 	"\x12-\n" +
-	")ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED\x10\vBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	")ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED\x10\v*\xb2\x01\n" +
+	"\x1bActivityRetryIntervalSource\x12.\n" +
+	"*ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED\x10\x00\x12/\n" +
+	"+ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY\x10\x01\x122\n" +
+	".ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE\x10\x02BDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce sync.Once
@@ -1228,75 +1309,77 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDe
 	return file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_goTypes = []any{
 	(ActivityExecutionStatus)(0),                    // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus
-	(*ActivityState)(nil),                           // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState
-	(*ActivityCancelState)(nil),                     // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
-	(*ActivityTerminateState)(nil),                  // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
-	(*ActivityPauseState)(nil),                      // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
-	(*ActivityAttemptState)(nil),                    // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState
-	(*ActivityHeartbeatState)(nil),                  // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState
-	(*ActivityRequestData)(nil),                     // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData
-	(*ActivityOutcome)(nil),                         // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome
-	(*ActivityAttemptState_LastFailureDetails)(nil), // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
-	(*ActivityOutcome_Successful)(nil),              // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	(*ActivityOutcome_Failed)(nil),                  // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	(*v1.ActivityType)(nil),                         // 12: temporal.api.common.v1.ActivityType
-	(*v11.TaskQueue)(nil),                           // 13: temporal.api.taskqueue.v1.TaskQueue
-	(*durationpb.Duration)(nil),                     // 14: google.protobuf.Duration
-	(*v1.RetryPolicy)(nil),                          // 15: temporal.api.common.v1.RetryPolicy
-	(*timestamppb.Timestamp)(nil),                   // 16: google.protobuf.Timestamp
-	(*v1.Priority)(nil),                             // 17: temporal.api.common.v1.Priority
-	(*v12.ActivityOptions)(nil),                     // 18: temporal.api.activity.v1.ActivityOptions
-	(*v13.WorkerDeploymentVersion)(nil),             // 19: temporal.api.deployment.v1.WorkerDeploymentVersion
-	(*v1.Payloads)(nil),                             // 20: temporal.api.common.v1.Payloads
-	(*v1.Header)(nil),                               // 21: temporal.api.common.v1.Header
-	(*v14.UserMetadata)(nil),                        // 22: temporal.api.sdk.v1.UserMetadata
-	(*v15.Failure)(nil),                             // 23: temporal.api.failure.v1.Failure
+	(ActivityRetryIntervalSource)(0),                // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource
+	(*ActivityState)(nil),                           // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState
+	(*ActivityCancelState)(nil),                     // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
+	(*ActivityTerminateState)(nil),                  // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
+	(*ActivityPauseState)(nil),                      // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
+	(*ActivityAttemptState)(nil),                    // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState
+	(*ActivityHeartbeatState)(nil),                  // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState
+	(*ActivityRequestData)(nil),                     // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData
+	(*ActivityOutcome)(nil),                         // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome
+	(*ActivityAttemptState_LastFailureDetails)(nil), // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
+	(*ActivityOutcome_Successful)(nil),              // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	(*ActivityOutcome_Failed)(nil),                  // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	(*v1.ActivityType)(nil),                         // 13: temporal.api.common.v1.ActivityType
+	(*v11.TaskQueue)(nil),                           // 14: temporal.api.taskqueue.v1.TaskQueue
+	(*durationpb.Duration)(nil),                     // 15: google.protobuf.Duration
+	(*v1.RetryPolicy)(nil),                          // 16: temporal.api.common.v1.RetryPolicy
+	(*timestamppb.Timestamp)(nil),                   // 17: google.protobuf.Timestamp
+	(*v1.Priority)(nil),                             // 18: temporal.api.common.v1.Priority
+	(*v12.ActivityOptions)(nil),                     // 19: temporal.api.activity.v1.ActivityOptions
+	(*v13.WorkerDeploymentVersion)(nil),             // 20: temporal.api.deployment.v1.WorkerDeploymentVersion
+	(*v1.Payloads)(nil),                             // 21: temporal.api.common.v1.Payloads
+	(*v1.Header)(nil),                               // 22: temporal.api.common.v1.Header
+	(*v14.UserMetadata)(nil),                        // 23: temporal.api.sdk.v1.UserMetadata
+	(*v15.Failure)(nil),                             // 24: temporal.api.failure.v1.Failure
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_depIdxs = []int32{
-	12, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_type:type_name -> temporal.api.common.v1.ActivityType
-	13, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	14, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	14, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	14, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_to_close_timeout:type_name -> google.protobuf.Duration
-	14, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.heartbeat_timeout:type_name -> google.protobuf.Duration
-	15, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
+	13, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityState.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	14, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityState.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	15, // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	15, // 3: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	15, // 4: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_to_close_timeout:type_name -> google.protobuf.Duration
+	15, // 5: temporal.server.chasm.lib.activity.proto.v1.ActivityState.heartbeat_timeout:type_name -> google.protobuf.Duration
+	16, // 6: temporal.server.chasm.lib.activity.proto.v1.ActivityState.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
 	0,  // 7: temporal.server.chasm.lib.activity.proto.v1.ActivityState.status:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityExecutionStatus
-	16, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_time:type_name -> google.protobuf.Timestamp
-	17, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
-	2,  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
-	3,  // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityState.terminate_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
-	14, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_delay:type_name -> google.protobuf.Duration
-	18, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityState.original_options:type_name -> temporal.api.activity.v1.ActivityOptions
-	4,  // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityState.last_pause_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
-	16, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityState.first_attempt_started_time:type_name -> google.protobuf.Timestamp
-	16, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
-	16, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState.pause_time:type_name -> google.protobuf.Timestamp
-	14, // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
-	16, // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.started_time:type_name -> google.protobuf.Timestamp
-	16, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.complete_time:type_name -> google.protobuf.Timestamp
-	9,  // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure_details:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
-	19, // 22: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	16, // 23: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.dispatch_time:type_name -> google.protobuf.Timestamp
-	20, // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
-	16, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
-	20, // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
-	21, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
-	22, // 28: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	10, // 29: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
-	11, // 30: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
-	16, // 31: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
-	23, // 32: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
-	20, // 33: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
-	23, // 34: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	35, // [35:35] is the sub-list for method output_type
-	35, // [35:35] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	17, // 8: temporal.server.chasm.lib.activity.proto.v1.ActivityState.schedule_time:type_name -> google.protobuf.Timestamp
+	18, // 9: temporal.server.chasm.lib.activity.proto.v1.ActivityState.priority:type_name -> temporal.api.common.v1.Priority
+	3,  // 10: temporal.server.chasm.lib.activity.proto.v1.ActivityState.cancel_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState
+	4,  // 11: temporal.server.chasm.lib.activity.proto.v1.ActivityState.terminate_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityTerminateState
+	15, // 12: temporal.server.chasm.lib.activity.proto.v1.ActivityState.start_delay:type_name -> google.protobuf.Duration
+	19, // 13: temporal.server.chasm.lib.activity.proto.v1.ActivityState.original_options:type_name -> temporal.api.activity.v1.ActivityOptions
+	5,  // 14: temporal.server.chasm.lib.activity.proto.v1.ActivityState.last_pause_state:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState
+	17, // 15: temporal.server.chasm.lib.activity.proto.v1.ActivityState.first_attempt_started_time:type_name -> google.protobuf.Timestamp
+	17, // 16: temporal.server.chasm.lib.activity.proto.v1.ActivityCancelState.request_time:type_name -> google.protobuf.Timestamp
+	17, // 17: temporal.server.chasm.lib.activity.proto.v1.ActivityPauseState.pause_time:type_name -> google.protobuf.Timestamp
+	15, // 18: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval:type_name -> google.protobuf.Duration
+	17, // 19: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.started_time:type_name -> google.protobuf.Timestamp
+	17, // 20: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.complete_time:type_name -> google.protobuf.Timestamp
+	10, // 21: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_failure_details:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails
+	20, // 22: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	17, // 23: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.dispatch_time:type_name -> google.protobuf.Timestamp
+	1,  // 24: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.current_retry_interval_source:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource
+	21, // 25: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.details:type_name -> temporal.api.common.v1.Payloads
+	17, // 26: temporal.server.chasm.lib.activity.proto.v1.ActivityHeartbeatState.recorded_time:type_name -> google.protobuf.Timestamp
+	21, // 27: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.input:type_name -> temporal.api.common.v1.Payloads
+	22, // 28: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.header:type_name -> temporal.api.common.v1.Header
+	23, // 29: temporal.server.chasm.lib.activity.proto.v1.ActivityRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	11, // 30: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.successful:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful
+	12, // 31: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.failed:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed
+	17, // 32: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.time:type_name -> google.protobuf.Timestamp
+	24, // 33: temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetails.failure:type_name -> temporal.api.failure.v1.Failure
+	21, // 34: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Successful.output:type_name -> temporal.api.common.v1.Payloads
+	24, // 35: temporal.server.chasm.lib.activity.proto.v1.ActivityOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	36, // [36:36] is the sub-list for method output_type
+	36, // [36:36] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init() }
@@ -1313,7 +1396,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_init(
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,

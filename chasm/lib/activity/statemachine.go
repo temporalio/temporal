@@ -88,9 +88,10 @@ var TransitionScheduled = chasm.NewTransition(
 )
 
 type rescheduleEvent struct {
-	retryInterval time.Duration
-	failure       *failurepb.Failure
-	timeoutType   enumspb.TimeoutType
+	retryInterval       time.Duration
+	retryIntervalSource activitypb.ActivityRetryIntervalSource
+	failure             *failurepb.Failure
+	timeoutType         enumspb.TimeoutType
 }
 
 // TransitionRescheduled transitions to Scheduled from Started, which happens on retries. The event
@@ -245,7 +246,7 @@ var TransitionFailed = chasm.NewTransition(
 			attempt := a.LastAttempt.Get(ctx)
 			attempt.LastWorkerIdentity = req.GetIdentity()
 
-			if err := a.recordFailedAttempt(ctx, 0, req.GetFailure(), ctx.Now(a), true); err != nil {
+			if err := a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, req.GetFailure(), ctx.Now(a), true); err != nil {
 				return err
 			}
 
@@ -390,10 +391,10 @@ var TransitionTimedOut = chasm.NewTransition(
 				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
+				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
-				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
+				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
 			}
@@ -550,11 +551,12 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 		}
 		attempt.Count = 1
 		attempt.Stamp++
-		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false); err != nil {
+		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false); err != nil {
 			return err
 		}
 		// Reset discards the retry backoff
 		attempt.CurrentRetryInterval = nil
+		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 		attempt.DispatchTime = nil
 		return nil
 	},
@@ -583,11 +585,12 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 		attempt.Count = 1
 		attempt.Stamp++
 
-		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.failure, currentTime, false); err != nil {
+		if err := a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, currentTime, false); err != nil {
 			return err
 		}
 		// Reset discards the retry backoff
 		attempt.CurrentRetryInterval = nil
+		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 
 		dispatchTime := a.dispatchTimeRespectingStartDelay(currentTime)
 		attempt.DispatchTime = timestamppb.New(dispatchTime)

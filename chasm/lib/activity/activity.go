@@ -668,7 +668,6 @@ func (a *Activity) UpdateActivityExecutionOptions(
 	}
 
 	attempt := a.LastAttempt.Get(ctx)
-	policyRetryIntervalBeforeUpdate := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
 
 	if frontendReq.GetRestoreOriginal() {
 		ogOptions := a.GetOriginalOptions()
@@ -692,16 +691,9 @@ func (a *Activity) UpdateActivityExecutionOptions(
 
 	// Recalculate policy-derived retry intervals based on the (possibly updated) retry policy.
 	// Worker-provided NextRetryDelay values are preserved for their already-scheduled retry.
-	if a.shouldRecalculateCurrentRetryInterval(
-		attempt,
-		frontendReq.GetRestoreOriginal(),
-		updateFields,
-		policyRetryIntervalBeforeUpdate,
-	) {
+	if a.shouldRecalculateCurrentRetryInterval(attempt, frontendReq.GetRestoreOriginal(), updateFields) {
 		newInterval := backoff.CalculateExponentialRetryInterval(a.RetryPolicy, attempt.GetCount()-1)
-		if newInterval < attempt.GetCurrentRetryInterval().AsDuration() {
-			attempt.CurrentRetryInterval = durationpb.New(newInterval)
-		}
+		attempt.CurrentRetryInterval = durationpb.New(newInterval)
 	}
 
 	// Recreate the ScheduleToClose task at the (possibly updated) deadline.
@@ -744,13 +736,12 @@ func (a *Activity) UpdateActivityExecutionOptions(
 //   - a retry is actually pending (CurrentRetryInterval is set);
 //   - the update touches the retry policy: either RestoreOriginal (which replaces the whole policy),
 //     or the update mask includes "retryPolicy" or one of its subfields;
-//   - the pending interval is still policy-derived, i.e. it equals the pre-update policy value.
-//     A mismatch means the interval is a worker-provided NextRetryDelay override, which we preserve.
+//   - the pending interval is still policy-derived (CurrentRetryIntervalSource is RETRY_POLICY).
+//     A worker-provided NextRetryDelay override is preserved regardless of its value.
 func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	attempt *activitypb.ActivityAttemptState,
 	restoreOriginal bool,
 	updateFields map[string]struct{},
-	policyRetryIntervalBeforeUpdate time.Duration,
 ) bool {
 	status := a.GetStatus()
 	if status != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
@@ -758,8 +749,7 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 		return false
 	}
 
-	currentRetryInterval := attempt.GetCurrentRetryInterval()
-	if currentRetryInterval == nil {
+	if attempt.GetCurrentRetryInterval() == nil {
 		return false
 	}
 
@@ -769,10 +759,7 @@ func (a *Activity) shouldRecalculateCurrentRetryInterval(
 		}
 	}
 
-	// CurrentRetryInterval stores either policy-derived backoff or worker-provided NextRetryDelay overrides.
-	// Only recalculate intervals that match the old policy value; different values are treated as explicit
-	// worker overrides.
-	return currentRetryInterval.AsDuration() == policyRetryIntervalBeforeUpdate
+	return attempt.GetCurrentRetryIntervalSource() == activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
 }
 
 // mergeActivityOptions applies the field mask from the request to the activity state.
@@ -984,6 +971,7 @@ func (a *Activity) unpause(
 	if event.req.GetResetAttempts() {
 		attempt.Count = 1
 		attempt.CurrentRetryInterval = nil
+		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	}
 	if event.req.GetResetHeartbeat() {
 		a.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{})
@@ -1043,6 +1031,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt.Count = 1
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
+	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	if event.req.GetResetHeartbeat() {
 		a.clearHeartbeat(ctx)
 	}
@@ -1163,6 +1152,7 @@ func (a *Activity) resetKeepPaused(
 	attempt.Count = 1
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
+	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	attempt.DispatchTime = nil
 	if frontendReq.GetResetHeartbeat() {
 		a.clearHeartbeat(ctx)
@@ -1222,7 +1212,7 @@ func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event reschedule
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count++
 	attempt.Stamp++
-	return a.recordFailedAttempt(ctx, event.retryInterval, event.failure, ctx.Now(a), false)
+	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)
 }
 
 // recordFailedAttempt records any failures resulting from a tried attempt, including worker application failures and
@@ -1231,6 +1221,7 @@ func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event reschedule
 func (a *Activity) recordFailedAttempt(
 	ctx chasm.MutableContext,
 	retryInterval time.Duration,
+	retryIntervalSource activitypb.ActivityRetryIntervalSource,
 	failure *failurepb.Failure,
 	currentTime time.Time,
 	noRetriesLeft bool,
@@ -1245,8 +1236,10 @@ func (a *Activity) recordFailedAttempt(
 
 	if noRetriesLeft {
 		attempt.CurrentRetryInterval = nil
+		attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	} else {
 		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
+		attempt.CurrentRetryIntervalSource = retryIntervalSource
 	}
 	return nil
 }
@@ -1267,7 +1260,11 @@ func (a *Activity) tryReschedule(
 	if !resetRequested && !(failureRetryable && shouldRetry) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
 		return false, nil
 	}
-	event := rescheduleEvent{retryInterval: retryInterval, failure: failure}
+	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+	if overridingRetryInterval > 0 {
+		retryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE
+	}
+	event := rescheduleEvent{retryInterval: retryInterval, retryIntervalSource: retryIntervalSource, failure: failure}
 	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
