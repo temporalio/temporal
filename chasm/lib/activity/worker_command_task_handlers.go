@@ -52,10 +52,10 @@ func newCancelCommandDispatchTaskHandler(opts cancelCommandDispatchTaskHandlerOp
 func (h *cancelCommandDispatchTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
-	taskAttrs chasm.TaskAttributes,
+	invocation chasm.TaskInvocation,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
-	if taskAttrs.Attempt > workercommands.MaxTaskAttempts {
+	if invocation.Attempt > workercommands.MaxTaskAttempts {
 		return false, nil
 	}
 	// Valid if the activity is in a state where it has been requested to cancel or terminated
@@ -107,5 +107,7 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		h.logger,
 	)
 
-	return dispatcher.Execute(ctx, task, taskAttrs.Attempt, nsEntry.Name().String())
+	// Attempt count is not available in Execute (only in Validate via TaskInvocation).
+	// Max attempts are enforced in Validate, so this is always within bounds.
+	return dispatcher.Execute(ctx, task, 1, nsEntry.Name().String())
 }
