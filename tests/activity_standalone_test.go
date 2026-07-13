@@ -11655,8 +11655,9 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 
 		// Heartbeat details should still be set before the unpause.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, descResp.GetInfo().GetLastHeartbeatTime(), "expected heartbeat time before unpause")
@@ -11682,8 +11683,9 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 
 		// Heartbeat details must be cleared after unpause.
 		descResp, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.Nil(t, descResp.GetInfo().GetLastHeartbeatTime(),
