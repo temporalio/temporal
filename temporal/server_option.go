@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -240,6 +241,17 @@ func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.testHooks = &testHooks
+	})
+}
+
+// WithPerServiceFxOptions injects additional Fx options into the given service's dependency graph.
+// NOTE: this option is for tests only.
+func WithPerServiceFxOptions(service primitives.ServiceName, opts ...fx.Option) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		if s.perServiceFxOptions == nil {
+			s.perServiceFxOptions = make(map[primitives.ServiceName][]fx.Option)
+		}
+		s.perServiceFxOptions[service] = append(s.perServiceFxOptions[service], opts...)
 	})
 }
 

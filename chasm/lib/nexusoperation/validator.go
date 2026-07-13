@@ -110,7 +110,7 @@ func newStartNexusOperationExecutionRequestValidator(
 			return nil
 		},
 		SearchAttributes: startNexusValidateSearchAttributes(saMapperProvider, saValidator),
-		NexusHeader: startNexusValidateNexusHeader(config),
+		NexusHeader:      startNexusValidateNexusHeader(config),
 		UserMetadata: func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, userMetadata *sdkpb.UserMetadata) error {
 			return userMetadataValidators.ValidateAndNormalize(req.GetNamespace(), userMetadata)
 		},
@@ -156,7 +156,6 @@ func startNexusValidateStartToCloseTimeout() func(*workflowservice.StartNexusOpe
 		return nil
 	}
 }
-
 
 func startNexusValidateInput(config *Config, logger log.Logger) func(*workflowservice.StartNexusOperationExecutionRequest, string, *commonpb.Payload) error {
 	return func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, input *commonpb.Payload) error {
