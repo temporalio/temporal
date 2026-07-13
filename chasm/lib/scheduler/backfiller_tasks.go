@@ -52,7 +52,7 @@ const (
 func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
 	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)

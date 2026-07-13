@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -152,6 +153,18 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	s.Equal(timeoutErr, err)
 }
 
+// closingWorkflowEvents returns events whose last event is a workflow-closing event of the given type.
+func closingWorkflowEvents(closeEventType enumspb.EventType) []*persistence.WorkflowEvents {
+	return []*persistence.WorkflowEvents{{
+		Events: []*historypb.HistoryEvent{
+			{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED},
+			{EventId: 2, EventType: closeEventType},
+		},
+	}}
+}
+
+// A completion metric is emitted only when the run's closing event is written in this
+// transaction, independent of the persisted status or the update mode.
 func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	s.mockShard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
@@ -163,29 +176,54 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 
 	cases := []struct {
-		name                   string
-		updateMode             persistence.UpdateWorkflowMode
-		expectCompletionMetric bool
+		name       string
+		updateMode persistence.UpdateWorkflowMode
+		status     enumspb.WorkflowExecutionStatus
+		state      enumsspb.WorkflowExecutionState
+		events     []*persistence.WorkflowEvents
+		metricName string
+		expectEmit bool
 	}{
 		{
-			name:                   "UpdateCurrent",
-			updateMode:             persistence.UpdateWorkflowModeUpdateCurrent,
-			expectCompletionMetric: true,
+			name:       "completed with closing event emits",
+			updateMode: persistence.UpdateWorkflowModeUpdateCurrent,
+			status:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			state:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			events:     closingWorkflowEvents(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED),
+			metricName: metrics.WorkflowSuccessCount.Name(),
+			expectEmit: true,
 		},
 		{
-			name:                   "BypassCurrent",
-			updateMode:             persistence.UpdateWorkflowModeBypassCurrent,
-			expectCompletionMetric: true,
+			name:       "failed with closing event emits",
+			updateMode: persistence.UpdateWorkflowModeUpdateCurrent,
+			status:     enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			state:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			events:     closingWorkflowEvents(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED),
+			metricName: metrics.WorkflowFailedCount.Name(),
+			expectEmit: true,
 		},
 		{
-			name:                   "IgnoreCurrent",
-			updateMode:             persistence.UpdateWorkflowModeIgnoreCurrent,
-			expectCompletionMetric: false,
+			name:       "failed without closing event (reset re-persist) does not emit",
+			updateMode: persistence.UpdateWorkflowModeUpdateCurrent,
+			status:     enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			state:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			events:     []*persistence.WorkflowEvents{},
+			metricName: metrics.WorkflowFailedCount.Name(),
+			expectEmit: false,
+		},
+		{
+			name:       "IgnoreCurrent with closing event emits",
+			updateMode: persistence.UpdateWorkflowModeIgnoreCurrent,
+			status:     enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			state:      enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			events:     closingWorkflowEvents(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED),
+			metricName: metrics.WorkflowFailedCount.Name(),
+			expectEmit: true,
 		},
 	}
 
 	for _, tc := range cases {
-		s.T().Run(tc.name, func(t *testing.T) {
+		s.Run(tc.name, func() {
 
 			capture := metricsHandler.StartCapture()
 
@@ -202,31 +240,110 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 					},
 					ExecutionState: &persistencespb.WorkflowExecutionState{
 						RunId:  tests.RunID,
-						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-						State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+						Status: tc.status,
+						State:  tc.state,
 					},
 				},
-				[]*persistence.WorkflowEvents{},
+				tc.events,
 				nil,
 				nil,
 				nil,
 				true, // isWorkflow
 			)
-			s.NoError(err)
+			s.Require().NoError(err)
 
-			snapshot := capture.Snapshot()
-			completionMetric := snapshot[metrics.WorkflowSuccessCount.Name()]
+			completionMetric := capture.Snapshot()[tc.metricName]
 
-			if tc.expectCompletionMetric {
-				s.Len(completionMetric, 1)
+			if tc.expectEmit {
+				s.Require().Len(completionMetric, 1)
 			} else {
-				s.Empty(completionMetric)
+				s.Require().Empty(completionMetric)
 			}
 
 			metricsHandler.StopCapture(capture)
 		})
 	}
 
+}
+
+// A reset snapshot with a terminal status emits a completion metric only when its
+// closing event is written in this transaction.
+func (s *transactionSuite) TestConflictResolveWorkflowExecution_CompletionMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	s.mockShard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+	s.mockShard.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
+	s.mockShard.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+
+	resp := &persistence.ConflictResolveWorkflowExecutionResponse{
+		ResetMutableStateStats: persistence.MutableStateStatistics{
+			HistoryStatistics: &persistence.HistoryStatistics{},
+		},
+	}
+	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).AnyTimes()
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
+
+	cases := []struct {
+		name       string
+		events     []*persistence.WorkflowEvents
+		expectEmit bool
+	}{
+		{
+			name:       "reset snapshot failed with closing event emits",
+			events:     closingWorkflowEvents(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED),
+			expectEmit: true,
+		},
+		{
+			name:       "reset snapshot failed without closing event does not emit",
+			events:     []*persistence.WorkflowEvents{},
+			expectEmit: false,
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+
+			capture := metricsHandler.StartCapture()
+
+			_, _, _, err := s.transaction.ConflictResolveWorkflowExecution(
+				context.Background(),
+				persistence.ConflictResolveWorkflowModeUpdateCurrent,
+				chasm.WorkflowArchetypeID,
+				0,
+				&persistence.WorkflowSnapshot{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						NamespaceId:      tests.NamespaceID.String(),
+						WorkflowId:       tests.WorkflowID,
+						VersionHistories: &historyspb.VersionHistories{},
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  tests.RunID,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+					},
+				},
+				tc.events,
+				nil,  // newWorkflowFailoverVersion
+				nil,  // newWorkflowSnapshot
+				nil,  // newWorkflowEventsSeq
+				nil,  // currentWorkflowFailoverVersion
+				nil,  // currentWorkflowMutation
+				nil,  // currentWorkflowEventsSeq
+				true, // isWorkflow
+			)
+			s.Require().NoError(err)
+
+			completionMetric := capture.Snapshot()[metrics.WorkflowFailedCount.Name()]
+
+			if tc.expectEmit {
+				s.Require().Len(completionMetric, 1)
+			} else {
+				s.Require().Empty(completionMetric)
+			}
+
+			metricsHandler.StopCapture(capture)
+		})
+	}
 }
 
 func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFailed() {

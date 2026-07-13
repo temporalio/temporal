@@ -523,7 +523,7 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 		BackoffTime: timestamppb.New(now),
 	}}
 
-	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
 }
@@ -605,7 +605,7 @@ func TestExecuteTask_Validate(t *testing.T) {
 			invoker.TerminateWorkflows = nil
 			invoker.LastProcessedTime = nil
 			c.setup()
-			valid, err := env.handler.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+			valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 			require.NoError(t, err)
 			require.Equal(t, c.expectedValid, valid)
 		})
