@@ -53,9 +53,14 @@ func SignalWithStartWorkflow(
 		); err != nil {
 			return startOutcome{}, err
 		}
+
+		firstExecutionRunID, err := currentWorkflowLease.GetMutableState().GetFirstRunID(ctx)
+		if err != nil {
+			return startOutcome{}, err
+		}
 		return startOutcome{
 			runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
-			firstExecutionRunID: currentWorkflowLease.GetMutableState().GetExecutionState().FirstExecutionRunId,
+			firstExecutionRunID: firstExecutionRunID,
 			started:             false,
 		}, nil
 	}
