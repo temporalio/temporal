@@ -79,6 +79,7 @@ func (a *attempt) goTestArgs(args []string) []string {
 		case strings.HasPrefix(arg, coverProfileFlag):
 			// Each attempt writes a separate coverage profile for later merging.
 			args[i] = coverProfileFlag + a.coverProfilePath
+		default:
 		}
 	}
 	if !hasJSON {
