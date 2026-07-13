@@ -72,14 +72,18 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 
 func (a *attempt) goTestArgs(args []string) []string {
 	args = slices.Clone(args)
-	if !slices.Contains(args, "-json") {
-		args = append([]string{"-json"}, args...)
-	}
+	hasJSON := false
 	for i, arg := range args {
-		if strings.HasPrefix(arg, coverProfileFlag) {
+		switch {
+		case arg == "-json":
+			hasJSON = true
+		case strings.HasPrefix(arg, coverProfileFlag):
 			// Each attempt writes a separate coverage profile for later merging.
 			args[i] = coverProfileFlag + a.coverProfilePath
 		}
+	}
+	if !hasJSON {
+		args = append([]string{"-json"}, args...)
 	}
 	return slices.DeleteFunc(args, func(arg string) bool {
 		// --junitfile is consumed by the runner; go test does not understand it.
