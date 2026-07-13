@@ -7,9 +7,10 @@
 #       to SNAPSHOT_HISTORY_FILE. Logs status every SNAPSHOT_PRINT_INTERVAL_SECONDS
 #       and writes the highest-memory snapshot report to SNAPSHOT_FILE.
 #
-# 2. Profile capture:
+# 2. Diagnostic capture:
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
-#       profile in HEAP_PROFILES_DIR before running analysis.
+#       profile in HEAP_PROFILES_DIR and process/runtime diagnostics in
+#       RUNTIME_DIAGNOSTICS_DIR before running analysis.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
@@ -43,6 +44,7 @@ readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-hi
 readonly HEAP_PROFILE_CAPTURE_THRESHOLD="${HEAP_PROFILE_CAPTURE_THRESHOLD:-90}"
 readonly HEAP_PROFILE_REFRESH_INTERVAL_SECONDS="${HEAP_PROFILE_REFRESH_INTERVAL_SECONDS:-30}"
 readonly HEAP_PROFILES_DIR="${HEAP_PROFILES_DIR:-$SNAPSHOT_DIR/heap-profiles}"
+readonly RUNTIME_DIAGNOSTICS_DIR="${RUNTIME_DIAGNOSTICS_DIR:-$SNAPSHOT_DIR/runtime-diagnostics}"
 readonly PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 
 # OOM prevention config.
@@ -56,6 +58,7 @@ MEMORY_HIGH_WATER_MARK=0
 LAST_SNAPSHOT_PRINT_TIME=0
 LAST_HEAP_PROFILE_CAPTURE_TIME=0
 HEAP_PROFILE_SECTION=""
+RUNTIME_DIAGNOSTICS_SECTION=""
 HAS_CAPTURED_HEAP_PROFILE=false
 OOM_TERMINATED=false
 
@@ -92,6 +95,111 @@ print_heap_profile_summary() {
   fi
 }
 
+monitored_process_pids() {
+  if [[ -z "${MONITORED_PROCESS_GROUP:-}" ]]; then
+    return
+  fi
+
+  ps -e -o pid=,pgid= | awk -v pgid="$MONITORED_PROCESS_GROUP" '$2 == pgid {print $1}'
+}
+
+top_rss_pids() {
+  ps -eo pid= --sort=-rss | head -5
+}
+
+diagnostic_pids() {
+  {
+    monitored_process_pids
+    top_rss_pids
+  } | awk 'NF && !seen[$1]++ {print $1}' | head -10
+}
+
+print_proc_file() {
+  local pid="$1"
+  local file="$2"
+  local path="/proc/$pid/$file"
+
+  echo "--- $path ---"
+  if [[ -r "$path" ]]; then
+    cat "$path"
+  else
+    echo "(not available)"
+  fi
+}
+
+print_runtime_memstats() {
+  local heap_debug_file="$1"
+
+  echo "--- Go runtime.MemStats ---"
+  if [[ ! -s "$heap_debug_file" ]]; then
+    echo "(heap debug profile not available)"
+    return
+  fi
+
+  if ! grep -q '^# runtime.MemStats' "$heap_debug_file"; then
+    echo "(runtime.MemStats section not found; full heap debug profile saved to $heap_debug_file)"
+    return
+  fi
+
+  awk '
+    /^# runtime.MemStats/ {inside = 1}
+    inside {print}
+  ' "$heap_debug_file" | head -120
+}
+
+print_process_diagnostics() {
+  echo "--- Monitored Process Group ---"
+  if [[ -n "${MONITORED_PROCESS_GROUP:-}" ]]; then
+    ps -e -o pid,ppid,pgid,%mem,rss:10,vsz:10,stat,comm,args | awk -v pgid="$MONITORED_PROCESS_GROUP" 'NR == 1 || $3 == pgid'
+  else
+    echo "(MONITORED_PROCESS_GROUP is not set)"
+  fi
+
+  echo
+  echo "--- Top RSS Processes ---"
+  ps -eo pid,ppid,pgid,%mem,rss:10,vsz:10,stat,comm,args --sort=-rss | head -10
+
+  for pid in $(diagnostic_pids); do
+    echo
+    print_proc_file "$pid" "status"
+    echo
+    print_proc_file "$pid" "smaps_rollup"
+  done
+}
+
+capture_runtime_diagnostics() {
+  local memory_pct="$1"
+  local diagnostics_path_prefix heap_debug_file diagnostics_file
+
+  diagnostics_path_prefix="$RUNTIME_DIAGNOSTICS_DIR/$(date '+%Y%m%d-%H%M%S')-${memory_pct}pct"
+  mkdir -p "$RUNTIME_DIAGNOSTICS_DIR"
+  heap_debug_file="${diagnostics_path_prefix}-heap-debug.txt"
+  diagnostics_file="${diagnostics_path_prefix}.txt"
+
+  fetch_pprof "heap?debug=1&gc=0" "$heap_debug_file" || true
+
+  {
+    echo "Runtime diagnostics at $(date '+%Y-%m-%d %H:%M:%S') (usage ${memory_pct}%)"
+    echo
+    print_runtime_memstats "$heap_debug_file"
+    echo
+    echo "--- System Memory Summary ---"
+    free -m
+    echo
+    echo "--- /proc/meminfo ---"
+    grep -E '^(MemTotal|MemFree|MemAvailable|Buffers|Cached|SwapTotal|SwapFree|CommitLimit|Committed_AS|VmallocTotal|VmallocUsed|AnonHugePages|Shmem|Slab|SReclaimable|SUnreclaim)' /proc/meminfo || true
+    echo
+    echo "--- Monitor Process Status ---"
+    print_proc_file "$$" "status"
+    echo
+    print_process_diagnostics
+  } > "$diagnostics_file"
+
+  echo "--- Runtime Diagnostics ---"
+  echo "Saved runtime diagnostics to $diagnostics_file"
+  grep -E '^(# (Alloc|Sys|HeapSys|HeapReleased|HeapInuse|StackSys|MSpanSys|MCacheSys|BuckHashSys|GCSys|OtherSys) =|VmRSS:|RssAnon:|RssFile:|RssShmem:|VmData:|VmSwap:|Threads:)' "$diagnostics_file" | head -40 || true
+}
+
 terminate_monitored_processes() {
   local memory_pct="$1"
 
@@ -123,6 +231,7 @@ EOF
 write_snapshot_report() {
   local memory_pct="$1"
   local optional_heap_profile_section="$2"
+  local optional_runtime_diagnostics_section="$3"
 
   ensure_snapshot_dirs
   cat > "$SNAPSHOT_FILE" <<EOF
@@ -137,6 +246,8 @@ $(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
 $(free -m)
 
 $optional_heap_profile_section
+
+$optional_runtime_diagnostics_section
 EOF
 }
 
@@ -221,6 +332,7 @@ snapshot() {
 
   if should_capture_heap_profile "$now" "$memory_pct" "$is_new_high" "$should_terminate_process_group"; then
     HEAP_PROFILE_SECTION="$(capture_heap_profile "$memory_pct")"
+    RUNTIME_DIAGNOSTICS_SECTION="$(capture_runtime_diagnostics "$memory_pct")"
     LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
     HAS_CAPTURED_HEAP_PROFILE=true
   fi
@@ -228,7 +340,7 @@ snapshot() {
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
   if [[ "$is_new_high" == "true" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
-    write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
+    write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION" "$RUNTIME_DIAGNOSTICS_SECTION"
     MEMORY_HIGH_WATER_MARK="$memory_pct"
   fi
 
