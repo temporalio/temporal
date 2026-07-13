@@ -42,7 +42,10 @@ type ReplicationLifecyclePayload struct {
 	ParentInitiatedID int64
 	Details           map[string]any
 	// sent-only
-	NewRunID     string
+	NewRunID string
+	// SourceTaskID is the sender's replication-queue task id for this event, recorded so a "sent"
+	// event can be correlated with the source cluster's replication queue.
+	SourceTaskID int64
 	IsFirstSync  bool
 	FirstEventID int64
 	NextEventID  int64
@@ -133,6 +136,9 @@ func (p ReplicationLifecyclePayload) Attributes() []log.KeyValue {
 func (p ReplicationLifecyclePayload) appendSent(attrs []log.KeyValue) []log.KeyValue {
 	if p.NewRunID != "" {
 		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
+	}
+	if p.SourceTaskID != 0 {
+		attrs = append(attrs, log.Int64("source_task_id", p.SourceTaskID))
 	}
 	attrs = append(attrs, log.Bool("is_first_sync", p.IsFirstSync))
 	if p.FirstEventID != 0 {
