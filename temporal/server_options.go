@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -66,6 +67,7 @@ type (
 		eventLoggerProvider             otellog.LoggerProvider
 		tokenProvider                   auth.TokenProvider
 		testHooks                       *testhooks.TestHooks
+		perServiceFxOptions             map[primitives.ServiceName][]fx.Option
 	}
 )
 

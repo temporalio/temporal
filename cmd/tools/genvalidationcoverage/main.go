@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,7 +124,7 @@ func messageList(messageFlag string, messagesFile string) ([]string, error) {
 		}
 	}
 
-	for _, message := range strings.Split(messageFlag, ",") {
+	for message := range strings.SplitSeq(messageFlag, ",") {
 		addMessage(message)
 	}
 
@@ -132,7 +133,7 @@ func messageList(messageFlag string, messagesFile string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, line := range strings.Split(string(contents), "\n") {
+		for line := range strings.SplitSeq(string(contents), "\n") {
 			line, _, _ = strings.Cut(line, "#")
 			addMessage(line)
 		}
@@ -263,9 +264,7 @@ func render(allData []templateData) ([]byte, error) {
 	imports := make(map[string]string)
 	for _, data := range allData {
 		imports[data.SelfAlias] = data.ImportPath
-		for alias, path := range data.Imports {
-			imports[alias] = path
-		}
+		maps.Copy(imports, data.Imports)
 	}
 	for _, alias := range sortedImportAliases(imports) {
 		fmt.Fprintf(&b, "\t%s %q\n", alias, imports[alias])
