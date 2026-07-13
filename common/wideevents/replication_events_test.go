@@ -154,6 +154,7 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		ParentInitiatedID:   3,
 		Details:             map[string]any{"k": "v"},
 		NewRunID:            "new-run",
+		SourceTaskID:        42,
 		IsFirstSync:         true,
 		FirstEventID:        1,
 		NextEventID:         8,
@@ -206,6 +207,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		ReplicationSent: mergeFields(base, map[string]any{
 			"phase":          "sent",
 			"new_run_id":     "new-run",
+			"source_task_id": int64(42),
 			"is_first_sync":  true,
 			"first_event_id": int64(1),
 			"next_event_id":  int64(8),

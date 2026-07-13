@@ -96,13 +96,14 @@ func (s *StreamSenderImpl) emitReplicationSent(
 	}
 
 	payload := wideevents.ReplicationLifecyclePayload{
-		Phase:       wideevents.ReplicationSent,
-		TaskType:    taskType,
-		Shard:       s.serverShardKey.ShardID,
-		Namespace:   nsName.String(),
-		NamespaceID: nsID,
-		WorkflowID:  item.GetWorkflowID(),
-		RunID:       item.GetRunID(),
+		Phase:        wideevents.ReplicationSent,
+		TaskType:     taskType,
+		Shard:        s.serverShardKey.ShardID,
+		Namespace:    nsName.String(),
+		NamespaceID:  nsID,
+		WorkflowID:   item.GetWorkflowID(),
+		RunID:        item.GetRunID(),
+		SourceTaskID: item.GetTaskID(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
