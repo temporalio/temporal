@@ -244,16 +244,16 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
-// MarkTimeSkippingTaskRegenForReplication mocks base method.
-func (m *MockChasmTree) MarkTimeSkippingTaskRegenForReplication() {
+// MarkSkipDurationUpdateInPassive mocks base method.
+func (m *MockChasmTree) MarkSkipDurationUpdateInPassive() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MarkTimeSkippingTaskRegenForReplication")
+	m.ctrl.Call(m, "MarkSkipDurationUpdateInPassive")
 }
 
-// MarkTimeSkippingTaskRegenForReplication indicates an expected call of MarkTimeSkippingTaskRegenForReplication.
-func (mr *MockChasmTreeMockRecorder) MarkTimeSkippingTaskRegenForReplication() *gomock.Call {
+// MarkSkipDurationUpdateInPassive indicates an expected call of MarkSkipDurationUpdateInPassive.
+func (mr *MockChasmTreeMockRecorder) MarkSkipDurationUpdateInPassive() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTimeSkippingTaskRegenForReplication", reflect.TypeOf((*MockChasmTree)(nil).MarkTimeSkippingTaskRegenForReplication))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkSkipDurationUpdateInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkSkipDurationUpdateInPassive))
 }
 
 // RefreshTasks mocks base method.

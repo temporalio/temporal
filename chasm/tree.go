@@ -177,7 +177,7 @@ type (
 
 		needsPointerResolution bool
 
-		needsTimeSkippingTaskRegenInReplication bool
+		skipDurationUpdateInPassive bool
 	}
 
 	taskWithAttributes struct {
@@ -2498,7 +2498,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.needsPointerResolution = false
-	n.needsTimeSkippingTaskRegenInReplication = false
+	n.skipDurationUpdateInPassive = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -2772,7 +2772,7 @@ func (n *Node) RefreshTasks() error {
 	// times are converted against the current accumulated skip in backend.AddTasks). It
 	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
 	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
-	n.needsTimeSkippingTaskRegenInReplication = false
+	n.skipDurationUpdateInPassive = false
 
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
@@ -2797,13 +2797,8 @@ func (n *Node) RefreshTasks() error {
 	return nil
 }
 
-// MarkTimeSkippingTaskRegenForReplication marks the tree so the next CloseTransaction
-// re-stamps physical timer tasks against the accumulated skip decided on the active cluster
-// and replicated here. It is needed on the partial-refresh replication path (reachable from
-// both ApplyMutation and ApplySnapshot), which skips CHASM. A full RefreshTasks (new workflow /
-// branch switch) instead regenerates every task at the current virtual time and clears this flag.
-func (n *Node) MarkTimeSkippingTaskRegenForReplication() {
-	n.needsTimeSkippingTaskRegenInReplication = true
+func (n *Node) MarkSkipDurationUpdateInPassive() {
+	n.skipDurationUpdateInPassive = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -3776,7 +3771,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// passive path
 	// todo@feiyang: change to transaction policy check
 	if !n.subtreeIsDirty {
-		if n.needsTimeSkippingTaskRegenInReplication {
+		if n.skipDurationUpdateInPassive {
 			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
 				return err
 			}

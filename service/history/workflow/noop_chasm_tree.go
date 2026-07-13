@@ -41,7 +41,7 @@ func (*noopChasmTree) RefreshTasks() error {
 	return nil
 }
 
-func (*noopChasmTree) MarkTimeSkippingTaskRegenForReplication() {}
+func (*noopChasmTree) MarkSkipDurationUpdateInPassive() {}
 
 func (*noopChasmTree) IsStateDirty() bool {
 	return false
