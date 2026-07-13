@@ -124,8 +124,13 @@ func newRunner() *runner {
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
+	hasArgSeparator := false
 	for _, arg := range args {
-		if arg == "--" || strings.HasPrefix(arg, gotestsumPathFlag) {
+		if arg == "--" && !hasArgSeparator {
+			hasArgSeparator = true
+			continue
+		}
+		if strings.HasPrefix(arg, gotestsumPathFlag) {
 			continue
 		}
 
@@ -186,6 +191,9 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 
 	switch command {
 	case testCommand:
+		if !hasArgSeparator {
+			return nil, fmt.Errorf("missing required argument %q", "--")
+		}
 		if r.coverProfilePath == "" {
 			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
 		}

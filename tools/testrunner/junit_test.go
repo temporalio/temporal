@@ -193,29 +193,6 @@ func TestMergeReports_MissingRerun(t *testing.T) {
 	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
 }
 
-func TestMergeReports_PreservesAlertFailureMessage(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
-
-	merged, err := mergeReports([]*junitReport{report})
-	require.NoError(t, err)
-	require.Len(t, merged.Suites, 1)
-	require.Len(t, merged.Suites[0].Testcases, 1)
-	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
-	require.Equal(t, string(failureTypePanic), merged.Suites[0].Testcases[0].Failure.Type)
-}
-
-func TestMergeReports_PreservesTestrunnerFailureType(t *testing.T) {
-	report := &junitReport{}
-	report.appendSyntheticFailure("testrunner.TotalTimeout", failureTypeTimeout, "total timeout")
-
-	merged, err := mergeReports([]*junitReport{report})
-	require.NoError(t, err)
-	require.Len(t, merged.Suites, 1)
-	require.Len(t, merged.Suites[0].Testcases, 1)
-	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
-	require.Equal(t, string(failureTypeTimeout), merged.Suites[0].Testcases[0].Failure.Type)
-}
-
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 
@@ -224,6 +201,42 @@ func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *
 	require.Len(t, merged.Suites, 1)
 	require.Len(t, merged.Suites[0].Testcases, 1)
 	require.Equal(t, "plain failure output with no recognizable block", merged.Suites[0].Testcases[0].Failure.Data)
+}
+
+func TestMergeReports_PreservesSyntheticFailureType(t *testing.T) {
+	tests := []struct {
+		name        string
+		report      func(t *testing.T) *junitReport
+		failureType failureType
+	}{
+		{
+			name: "Alert",
+			report: func(t *testing.T) *junitReport {
+				return mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
+			},
+			failureType: failureTypePanic,
+		},
+		{
+			name: "Testrunner",
+			report: func(t *testing.T) *junitReport {
+				report := &junitReport{}
+				report.appendSyntheticFailure("testrunner.TotalTimeout", failureTypeTimeout, "total timeout")
+				return report
+			},
+			failureType: failureTypeTimeout,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merged, err := mergeReports([]*junitReport{tt.report(t)})
+			require.NoError(t, err)
+			require.Len(t, merged.Suites, 1)
+			require.Len(t, merged.Suites[0].Testcases, 1)
+			require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
+			require.Equal(t, string(tt.failureType), merged.Suites[0].Testcases[0].Failure.Type)
+		})
+	}
 }
 
 func collectTestNames(suites []junit.Testsuite) []string {
