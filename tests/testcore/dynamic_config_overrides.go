@@ -66,7 +66,6 @@ var (
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
 		dynamicconfig.NumPendingSignalsLimitError.Key():                     ClientSuiteLimit,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
-		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():       true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
