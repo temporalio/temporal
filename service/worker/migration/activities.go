@@ -313,6 +313,13 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	// shards are all no-watermark and thus carry zero lag.
 	maxLaggingTasksShardID := int32(-1)
 	maxTimeLagShardID := int32(-1)
+	// Record each genuinely-lagging shard's timeLag as a distribution so the lag shape is queryable,
+	// not just the max. Bucket coverage comes from the deployment's ms histogram boundaries.
+	timeLagDist := a.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.NamespaceTag(waitRequest.Namespace),
+		metrics.TargetClusterTag(waitRequest.RemoteCluster),
+	).Timer(metrics.CatchUpTimeLagTimer.Name())
 
 	for _, status := range shardStatuses {
 		if status.isReady {
@@ -322,9 +329,13 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 
 		notReadyShardCount++
 
-		// No-ack-watermark shards carry zero lag values
 		if status.laggingTasks == 0 {
+			// No-ack-watermark shards carry zero lag values.
 			noWatermarkShardCount++
+		} else if status.timeLag > 0 {
+			// timeLag is normally >= 0 here; drop any non-positive value so it can't distort
+			// the histogram's sum/buckets.
+			timeLagDist.Record(status.timeLag)
 		}
 
 		if status.laggingTasks > maxLaggingTasks {
@@ -342,6 +353,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	a.MetricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.NamespaceTag(waitRequest.Namespace),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
 
 	// emit the not-ready shard count (namespace-tagged) so the catchup failure mode is
