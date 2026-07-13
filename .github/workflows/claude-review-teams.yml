@@ -217,11 +217,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          # pull_request_target defaults to the base ref; explicitly check out
-          # the PR head so the review sees the proposed changes. Safe here
-          # because the eligibility gate above limits this to trusted users.
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
+          path: pr-head
       - name: Claude PR review
         uses: anthropics/claude-code-action@v1
         with:
@@ -230,11 +229,14 @@ jobs:
           prompt: |
             Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
             Please review PR #${{ needs.check-review-eligibility.outputs.pr_number }}.
-            The PR branch is already checked out in the current working directory.
+            The trusted base branch is checked out in the current working directory.
+            The PR head is checked out in `pr-head/`.
+            Review the changes in `pr-head/`.
             Prefer inline comments for all actionable findings.
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
+            When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
             Only use `gh pr comment` for a brief summary if there are no inline findings or if a finding cannot be attached to a specific changed line.
             Do not duplicate inline findings in a top-level comment.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
