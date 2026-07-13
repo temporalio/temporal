@@ -138,7 +138,7 @@ func (h *InvokerExecuteTaskHandler) recordDuplicateExecuteDrops(scheduler *Sched
 func (h *InvokerExecuteTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
 	// If another execute task already happened to kick everything off, we don't need
@@ -409,7 +409,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 func (h *InvokerProcessBufferTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)

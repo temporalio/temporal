@@ -96,6 +96,8 @@ type (
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
+		RateLimitFractionProvider TaskQueueRateLimitFractionProvider
+
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -214,6 +216,7 @@ type (
 		MaxVersionsInTaskQueue    func() int
 
 		// Rate limiting
+		RateLimitFraction             func() float64
 		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int
@@ -387,6 +390,8 @@ func NewConfig(
 		PartitionScaleManagerSettings: dynamicconfig.MatchingPartitionScaleManager.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+
+		RateLimitFractionProvider: defaultTaskQueueRateLimitFractionProvider,
 	}
 }
 
@@ -534,6 +539,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute).WithExpirationInterval(backoff.NoInterval),
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
+		},
+		RateLimitFraction: func() float64 {
+			return config.RateLimitFractionProvider.GetRateLimitFraction(ns, taskQueueName, taskType)
 		},
 		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
 		FairnessKeyRateLimitCacheSize: func() int {

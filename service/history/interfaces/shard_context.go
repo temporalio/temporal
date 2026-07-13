@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -46,6 +47,7 @@ type (
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler
+		GetEventLogger() otellog.Logger
 		GetTimeSource() clock.TimeSource
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
@@ -57,6 +59,8 @@ type (
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
 		GetEngine(ctx context.Context) (Engine, error)
+
+		GetLifecycleContext() context.Context
 
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)
