@@ -191,7 +191,7 @@ func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.
 func (g *GeneratorTaskHandler) Validate(
 	ctx chasm.Context,
 	generator *Generator,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
 	return validateTaskHighWaterMark(

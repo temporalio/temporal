@@ -80,6 +80,37 @@ func NewComponentRefByArchetypeID(
 	}
 }
 
+// forConsistencyLevel returns a copy of the ref adjusted for the requested [RefConsistencyLevel] by
+// dropping the consistency tokens (and, at the weakest level, the run ID) that the level does not enforce.
+// See [RefConsistencyLevel] for the ladder.
+func (r *ComponentRef) forConsistencyLevel(level RefConsistencyLevel) (ComponentRef, error) {
+	ref := *r
+	switch level {
+	case RefConsistencyLevelExecutionLastUpdate:
+		// Strongest (default): enforce the execution-level token; nothing relaxed.
+		return ref, nil
+	case RefConsistencyLevelComponentCreation:
+		// Tolerate a stale execution transition without losing the staleness guarantee: run the
+		// execution staleness check ([Node.IsStale]) against the component's creation transition
+		// instead of the execution's last update. This still reloads a mutable state that predates
+		// the component (so the handler never operates on a state that doesn't yet know about the
+		// component), while no longer requiring the ref to match the latest execution transition.
+		// The creation transition is also matched in [Node.Component]; identity is otherwise the
+		// caller's responsibility (e.g. request ID).
+		ref.executionLastUpdateVT = ref.componentInitialVT
+		return ref, nil
+	case RefConsistencyLevelCurrentRun:
+		// Weakest: resolve by component path on the current run. Drop the run ID and every versioned
+		// transition; identity must be re-established by caller logic (e.g. request ID).
+		ref.executionLastUpdateVT = nil
+		ref.componentInitialVT = nil
+		ref.RunID = ""
+		return ref, nil
+	default:
+		return ref, serviceerror.NewInternalf("unknown ref consistency level: %d", level)
+	}
+}
+
 func (r *ComponentRef) ArchetypeID(
 	registry *Registry,
 ) (ArchetypeID, error) {

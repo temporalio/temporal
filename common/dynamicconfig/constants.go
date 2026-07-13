@@ -1672,6 +1672,11 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
+		"history.emitReplicationLifecycleEvents",
+		false,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
 		true,

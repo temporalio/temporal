@@ -515,6 +515,13 @@ func NewMutableStateFromDB(
 		mutableState.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
 	}
 
+	// FirstExecutionRunId was duplicated from ExecutionInfo onto ExecutionState so the dedup /
+	// conflict path can surface it without loading ExecutionInfo. Backfill in memory for records
+	// written before that change so the next persist writes it through.
+	if dbRecord.ExecutionState.FirstExecutionRunId == "" && dbRecord.ExecutionInfo.FirstExecutionRunId != "" {
+		dbRecord.ExecutionState.FirstExecutionRunId = dbRecord.ExecutionInfo.FirstExecutionRunId
+	}
+
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
@@ -1980,13 +1987,17 @@ func (ms *MutableStateImpl) GetStartEvent(
 func (ms *MutableStateImpl) GetFirstRunID(
 	ctx context.Context,
 ) (string, error) {
-	firstRunID := ms.executionInfo.FirstExecutionRunId
-	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
-	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
-	// workflow execution started event.
-	if len(firstRunID) != 0 {
+	// Prefer the canonical source on ExecutionState; the equivalent field on ExecutionInfo is
+	// deprecated. NewMutableStateFromDB backfills ExecutionState from ExecutionInfo on load, so
+	// records that pre-date the ExecutionState field also resolve here.
+	if firstRunID := ms.executionState.FirstExecutionRunId; firstRunID != "" {
 		return firstRunID, nil
 	}
+	if firstRunID := ms.executionInfo.FirstExecutionRunId; firstRunID != "" {
+		return firstRunID, nil
+	}
+	// Workflows created with Temporal release v0.28.0 or earlier don't have FirstExecutionRunID
+	// stored as part of mutable state — load it from the WorkflowExecutionStarted event.
 	currentStartEvent, err := ms.GetStartEvent(ctx)
 	if err != nil {
 		return "", err
@@ -2984,6 +2995,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	ms.approximateSize -= ms.executionState.Size()
+	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,

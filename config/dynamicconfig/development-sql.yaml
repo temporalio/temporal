@@ -67,9 +67,3 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
-history.enableTransitionHistory:
-  - value: true
-history.enableChasm:
-  - value: true
-activity.enableStandalone:
-  - value: true

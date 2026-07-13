@@ -103,6 +103,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
 		return respond(e.workerCommandsDispatcher.Execute(ctx, task, executable.Attempt(), namespaceTag.Value))

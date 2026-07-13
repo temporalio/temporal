@@ -107,6 +107,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTaskPure:
 		err = t.executeChasmPureTimerTask(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
 	case *tasks.TimeSkippingTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
@@ -169,12 +170,13 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
+		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
 		if err != nil {
 			return nil, err
 		}
-		if !isTaskInTree {
-			// Replication has removed the logical task — drop the physical task.
+		if !isTaskInTree || !isValid {
+			// Replication has removed the logical task, or the component reports it
+			// invalid — drop the physical task.
 			return nil, nil
 		}
 

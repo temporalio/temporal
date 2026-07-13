@@ -72,7 +72,7 @@ const (
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
 	if scheduler.Closed {
@@ -329,7 +329,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 func (r *SchedulerCallbacksTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerCallbacksTask,
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)
