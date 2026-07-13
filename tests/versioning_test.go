@@ -52,20 +52,8 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster( //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-		t,
-		testcore.WithDynamicConfigOverrides(versioningSuiteGlobalDynamicConfig()),
-	)
+	testcore.UseSuiteScopedCluster(t)                             //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 	parallelsuite.RunLegacySequential(t, &VersioningIntegSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-}
-
-func versioningSuiteGlobalDynamicConfig() map[dynamicconfig.Key]any {
-	return map[dynamicconfig.Key]any{
-		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
-		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():             4,
-		dynamicconfig.ReachabilityCacheOpenWFsTTL.Key():               testReachabilityCacheOpenWFsTTL,
-		dynamicconfig.ReachabilityCacheClosedWFsTTL.Key():             testReachabilityCacheClosedWFsTTL,
-	}
 }
 
 func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
@@ -75,16 +63,21 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueuesPerBuildIdLimit, 3),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure, true),
 
 		testcore.WithDynamicConfig(dynamicconfig.AssignmentRuleLimitPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.RedirectRuleLimitPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.RedirectRuleMaxUpstreamBuildIDsPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeletedRuleRetentionTime, 24*time.Hour),
 		testcore.WithDynamicConfig(dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod, 3*time.Minute),
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityQueryBuildIdLimit, 4),
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheOpenWFsTTL, testReachabilityCacheOpenWFsTTL),
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheClosedWFsTTL, testReachabilityCacheClosedWFsTTL),
 
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 1),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 1000),
 
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general, we only promise to act on new

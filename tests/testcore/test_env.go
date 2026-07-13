@@ -252,10 +252,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
+	useSuiteScopedCluster := testClusterRouter.hasSuiteScoped(t)
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+	if options.dedicatedCluster && !useSuiteScopedCluster && len(options.dynamicConfigSettings) > 0 {
 		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
 		for _, override := range options.dynamicConfigSettings {
 			if !canBeNamespaceScoped(override.setting.Precedence()) {
@@ -267,8 +268,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:         options.dedicatedCluster,
-		needWorkerService: options.needWorkerService,
+		dedicated:         options.dedicatedCluster && !useSuiteScopedCluster,
+		needWorkerService: options.needWorkerService && !useSuiteScopedCluster,
 		dedicatedReason:   options.dedicatedReason,
 		dynamicConfig:     startupConfig,
 		clusterOpts:       options.clusterOptions,
@@ -327,8 +328,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Cleanup(func() { tl.FailOnError(prev) })
 	}
 
-	// For shared clusters, apply all dynamic config settings as overrides.
-	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+	// For shared and suite-scoped clusters, apply all dynamic config settings as overrides.
+	if (!options.dedicatedCluster || useSuiteScopedCluster) && len(options.dynamicConfigSettings) > 0 {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
@@ -519,27 +520,30 @@ func (e *TestEnv) WorkerTaskQueue() string {
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
-// All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
+// All others require `WithDedicatedCluster`, except for legacy suite-scoped clusters.
 func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
-			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
-		}
-
-		// Wrap value with namespace constraint for test isolation on shared clusters.
-		ns := e.nsName.String()
-		if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
-			result := make([]dynamicconfig.ConstrainedValue, len(cvs))
-			for i, cv := range cvs {
-				cv.Constraints.Namespace = ns
-				result[i] = cv
+			if !testClusterRouter.hasSuiteScoped(e.t) {
+				e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
 			}
-			value = result
+			e.dedicatedGuard.record("global dynamic config used")
 		} else {
-			value = []dynamicconfig.ConstrainedValue{{
-				Constraints: dynamicconfig.Constraints{Namespace: ns},
-				Value:       value,
-			}}
+			// Wrap value with namespace constraint for test isolation on shared clusters.
+			ns := e.nsName.String()
+			if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
+				result := make([]dynamicconfig.ConstrainedValue, len(cvs))
+				for i, cv := range cvs {
+					cv.Constraints.Namespace = ns
+					result[i] = cv
+				}
+				value = result
+			} else {
+				value = []dynamicconfig.ConstrainedValue{{
+					Constraints: dynamicconfig.Constraints{Namespace: ns},
+					Value:       value,
+				}}
+			}
 		}
 	} else if !canBeNamespaceScoped(setting.Precedence()) {
 		e.dedicatedGuard.record("global dynamic config used")

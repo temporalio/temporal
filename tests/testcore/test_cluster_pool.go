@@ -179,26 +179,22 @@ type clusterRouter struct {
 
 // suiteScopedCluster owns one lazily created legacy suite cluster.
 type suiteScopedCluster struct {
-	once           sync.Once
-	clusterOptions []TestClusterOption
-	cluster        *FunctionalTestBase
+	once    sync.Once
+	cluster *FunctionalTestBase
 }
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
 // The cluster is created on first use and torn down when `t` completes.
-// The provided clusterOptions are applied when the suite-scoped cluster is created.
 //
 // Deprecated: this only exists for backwards-compatibility with legacy sequential
 // suite execution.
-func UseSuiteScopedCluster(t *testing.T, clusterOptions ...TestClusterOption) {
+func UseSuiteScopedCluster(t *testing.T) {
 	t.Helper()
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if t.Name() != rootName {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{
-		clusterOptions: append([]TestClusterOption(nil), clusterOptions...),
-	})
+	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 
 	t.Cleanup(func() {
 		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
@@ -329,7 +325,6 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 		suiteCluster.cluster = p.createCluster(t, clusterRequest{
 			kind:              clusterKindSuiteScoped,
 			needWorkerService: true,
-			clusterOpts:       suiteCluster.clusterOptions,
 		})
 	})
 	suiteCluster.cluster.SetT(t)
