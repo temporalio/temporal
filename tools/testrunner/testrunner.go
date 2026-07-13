@@ -26,7 +26,6 @@ const (
 	junitGlobFlag         = "--junit-glob="
 	summaryOutputDirFlag  = "--summary-output-dir="
 	crashReportNameFlag   = "--crashreportname="
-	gotestsumPathFlag     = "--gotestsum-path="
 	totalTimeoutFlag      = "--total-timeout="
 
 	// fullRerunThreshold is the number of test failures above which we do a full
@@ -49,26 +48,37 @@ type attempt struct {
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
+	if !slices.Contains(args, "-json") {
+		args = append([]string{"-json"}, args...)
+	}
 	for i, arg := range args {
 		if strings.HasPrefix(arg, coverProfileFlag) {
 			args[i] = coverProfileFlag + a.coverProfilePath
-		} else if strings.HasPrefix(arg, junitReportFlag) {
-			args[i] = junitReportFlag + a.junitReport.path
 		}
 	}
+	args = slices.DeleteFunc(args, func(arg string) bool {
+		return arg == "--" || strings.HasPrefix(arg, junitReportFlag)
+	})
 	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
-	var output strings.Builder
-	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
+		a.number, "go test", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
+	output := newGoTestJSONOutput()
+	var stderr strings.Builder
+	cmd.Stdout = output
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	cmd.Stdin = os.Stdin
 	err := cmd.Run()
-	return output.String(), err
+	stdout := output.String() + stderr.String()
+	reportPath := a.junitReport.path
+	a.junitReport = output.junitReport()
+	a.junitReport.path = reportPath
+	if writeErr := a.junitReport.write(); writeErr != nil && err == nil {
+		err = writeErr
+	}
+	return stdout, err
 }
 
 type runner struct {
-	gotestsumPath    string
 	junitOutputPath  string
 	coverProfilePath string
 	attempts         []*attempt
@@ -115,11 +125,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			continue
 		}
 
-		if strings.HasPrefix(arg, gotestsumPathFlag) {
-			r.gotestsumPath = strings.Split(arg, "=")[1]
-			continue
-		}
-
 		if strings.HasPrefix(arg, crashReportNameFlag) {
 			r.crashName = strings.Split(arg, "=")[1]
 			if r.crashName == "" {
@@ -145,7 +150,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		if strings.HasPrefix(arg, coverProfileFlag) {
 			r.coverProfilePath = strings.Split(arg, "=")[1]
 		} else if strings.HasPrefix(arg, junitReportFlag) {
-			// --junitfile is used by gotestsum
 			r.junitOutputPath = strings.Split(arg, "=")[1]
 		}
 
@@ -159,9 +163,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		}
 		if r.junitOutputPath == "" {
 			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
-		}
-		if r.gotestsumPath == "" {
-			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
 		}
 	case crashReportCommand:
 		if r.junitOutputPath == "" {
@@ -339,16 +340,6 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		if ctx.Err() != nil {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
 			totalTimeoutFired = true
-			// Try to read whatever gotestsum managed to write before it was killed.
-			if readErr := currentAttempt.junitReport.read(); readErr != nil {
-				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
-				// stdout for any "--- FAIL:" lines that completed before the kill.
-				if failedTests := parseFailedTestsFromOutput(stdout); len(failedTests) > 0 {
-					currentAttempt.junitReport = generateReport(failedTests, "total timeout", failureTypeTimeout)
-				}
-				// If no failed tests are found either, the current attempt's report
-				// remains empty and mergeReports will include only prior attempts.
-			}
 			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
 			currentAttempt.junitReport.appendSyntheticFailure(
 				"testrunner.TotalTimeout",
@@ -371,11 +362,6 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 
 			// Don't retry.
 			break
-		}
-
-		// All tests were run, parse JUnit XML output.
-		if err = currentAttempt.junitReport.read(); err != nil {
-			log.Fatal(err)
 		}
 
 		// Write intermediate results so they survive if we are killed externally

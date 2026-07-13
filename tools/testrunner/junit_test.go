@@ -204,6 +204,18 @@ func TestMergeReports_PreservesAlertFailureMessage(t *testing.T) {
 	require.Equal(t, string(failureTypePanic), merged.Suites[0].Testcases[0].Failure.Type)
 }
 
+func TestMergeReports_PreservesTestrunnerFailureType(t *testing.T) {
+	report := &junitReport{}
+	report.appendSyntheticFailure("testrunner.TotalTimeout", failureTypeTimeout, "total timeout")
+
+	merged, err := mergeReports([]*junitReport{report})
+	require.NoError(t, err)
+	require.Len(t, merged.Suites, 1)
+	require.Len(t, merged.Suites[0].Testcases, 1)
+	require.NotNil(t, merged.Suites[0].Testcases[0].Failure)
+	require.Equal(t, string(failureTypeTimeout), merged.Suites[0].Testcases[0].Failure.Type)
+}
+
 func TestMergeReports_PreservesOriginalFailureDataWhenExtractionFindsNothing(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 
