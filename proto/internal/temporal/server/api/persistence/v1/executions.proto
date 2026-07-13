@@ -145,6 +145,7 @@ message WorkflowExecutionInfo {
   map<string, temporal.api.common.v1.Payload> search_attributes = 52;
   map<string, temporal.api.common.v1.Payload> memo = 53;
   temporal.server.api.history.v1.VersionHistories version_histories = 54;
+  // Deprecated. use `WorkflowExecutionState.first_execution_run_id`
   string first_execution_run_id = 55;
   ExecutionStats execution_stats = 56;
   google.protobuf.Timestamp workflow_run_expiration_time = 57;
@@ -390,6 +391,11 @@ message WorkflowExecutionState {
   // the workflow execution or request IDs that were attached to an existing running workflow
   // execution via StartWorkflowExecutionRequest.OnConflictOptions.
   map<string, RequestIDInfo> request_ids = 7;
+  // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
+  // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
+  // inherits the original run's ID. Empty on records written before this field was added;
+  // consumers must not assume run_id in that case.
+  string first_execution_run_id = 8;
 }
 
 message RequestIDInfo {
