@@ -49,8 +49,7 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                             //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &VersioningIntegSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.Run(t, &VersioningIntegSuite{})
 }
 
 func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
