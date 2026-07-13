@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
+
+	notificationservicepb "go.temporal.io/api/notificationservice/v1"
 )
 
 // ReceivedCallback is the data received by the worker callback.
 type ReceivedCallback struct {
-	Input   *nexuspb.OnCompleteHandlerInput
+	Input   *notificationservicepb.OnCompleteHandlerRequest
 	Options nexus.StartOperationOptions
 }
 
@@ -17,7 +18,7 @@ type ReceivedCallback struct {
 // BUG: Not threadsafe, tests cannot be ran in parallel, etc.
 var receivedCallbacks []*ReceivedCallback
 
-func recordWorkerCallbackCalled(input *nexuspb.OnCompleteHandlerInput, opts nexus.StartOperationOptions) {
+func recordWorkerCallbackCalled(input *notificationservicepb.OnCompleteHandlerRequest, opts nexus.StartOperationOptions) {
 	rc := &ReceivedCallback{
 		Input:   input,
 		Options: opts,
@@ -46,16 +47,12 @@ type OnCompleteCallContext struct {
 	Message string
 }
 
-// UnitTypeHack is a hack to define a function that doesn't return a value.
-// Is there something like this already exposed from the Go SDK?
-type UnitTypeHack struct{}
-
 // Completion handler using the raw service contract for the CompletionService (the nexuspb.OnCompleteHandlerInput) parameter.
 var completionHandler = nexus.NewSyncOperation(
 	OnCompleteOperationName,
-	func(ctx context.Context, input *nexuspb.OnCompleteHandlerInput, options nexus.StartOperationOptions) (UnitTypeHack, error) {
+	func(ctx context.Context, input *notificationservicepb.OnCompleteHandlerRequest, options nexus.StartOperationOptions) (*notificationservicepb.OnCompleteHandlerResponse, error) {
 		recordWorkerCallbackCalled(input, options)
-		return UnitTypeHack{}, nil
+		return &notificationservicepb.OnCompleteHandlerResponse{}, nil
 	})
 
 // TODO: `nexus.NewSyncOperation` is old and busted. Use `temporalnexus.NewTemporalOperation(...)`` instead.

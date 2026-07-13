@@ -8,7 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
+	notificationservicepb "go.temporal.io/api/notificationservice/v1"
 
 	"go.temporal.io/sdk/worker"
 )
@@ -52,7 +52,7 @@ func SetCompletionHandler[T any](
 	// This wraps the user-supplied completion handler for ergonomics.
 	completionHandler := nexus.NewSyncOperation(
 		"OnComplete",
-		func(ctx context.Context, input *nexuspb.OnCompleteHandlerInput, options nexus.StartOperationOptions) (UnitTypeHack, error) {
+		func(ctx context.Context, input *notificationservicepb.OnCompleteHandlerRequest, options nexus.StartOperationOptions) (UnitTypeHack, error) {
 			// Convert the OnCompleteHandlerInput into the SDK-types that are the parmaeters to the
 			// user-defined completion handler.
 			compCtx := CompletionContext{
