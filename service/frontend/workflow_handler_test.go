@@ -252,7 +252,7 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
-	tests := []struct {
+	testCases := []struct {
 		name         string
 		kind         enumspb.TaskQueueKind
 		expectedKind enumspb.TaskQueueKind
@@ -274,14 +274,15 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			token, _ := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
 				NamespaceId:   s.testNamespaceID.String(),
 				TaskQueue:     "test-tq",
 				TaskId:        "test-task-id",
 				TaskQueueKind: tc.kind,
 			})
+			s.NoError(err)
 
 			s.mockMatchingClient.EXPECT().
 				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -290,9 +291,67 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueK
 					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 				})
 
-			_, err := wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
+			_, err = wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
 				Namespace: s.testNamespace.String(),
 				TaskToken: token,
+			})
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskFailed(context.Background(), &workflowservice.RespondNexusTaskFailedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+				Failure: &failurepb.Failure{
+					Message: "test failure",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{},
+					},
+				},
 			})
 			s.NoError(err)
 		})
