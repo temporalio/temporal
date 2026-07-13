@@ -179,22 +179,26 @@ type clusterRouter struct {
 
 // suiteScopedCluster owns one lazily created legacy suite cluster.
 type suiteScopedCluster struct {
-	once    sync.Once
-	cluster *FunctionalTestBase
+	once           sync.Once
+	clusterOptions []TestClusterOption
+	cluster        *FunctionalTestBase
 }
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
 // The cluster is created on first use and torn down when `t` completes.
+// The provided clusterOptions are applied when the suite-scoped cluster is created.
 //
 // Deprecated: this only exists for backwards-compatibility with legacy sequential
 // suite execution.
-func UseSuiteScopedCluster(t *testing.T) {
+func UseSuiteScopedCluster(t *testing.T, clusterOptions ...TestClusterOption) {
 	t.Helper()
 	rootName, _, _ := strings.Cut(t.Name(), "/")
 	if t.Name() != rootName {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{
+		clusterOptions: append([]TestClusterOption(nil), clusterOptions...),
+	})
 
 	t.Cleanup(func() {
 		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
@@ -320,9 +324,13 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 	suiteCluster.once.Do(func() {
 		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
+		// Enable the worker service on suite-scoped clusters. Some suite-scoped callers need the system worker
+		// for worker-deployment APIs.
+		suiteCluster.cluster = p.createCluster(t, clusterRequest{
+			kind:              clusterKindSuiteScoped,
+			needWorkerService: true,
+			clusterOpts:       suiteCluster.clusterOptions,
+		})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
