@@ -100,7 +100,7 @@ func (j *junitReport) write() error {
 }
 
 // appendSyntheticFailure adds a failure entry under a "testrunner" suite for
-// events outside any real testcase (e.g. timeout killing gotestsum pre-write).
+// events outside any real testcase (e.g. timeout killing go test mid-run).
 func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
 	tc := junit.Testcase{
 		Name:    name,
@@ -331,7 +331,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 						if testCase.Failure.Type == "" {
 							testCase.Failure.Type = testCase.Failure.Message
 						}
-					} else {
+					} else if suite.Name != "testrunner" || testCase.Failure.Type == "" {
 						testCase.Failure.Type = string(failureTypeFailed)
 					}
 				}

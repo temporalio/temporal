@@ -14,7 +14,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -41,7 +40,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=39m",
 			"--",
@@ -57,7 +55,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--",
 			"-coverprofile=test.cover.out",
@@ -69,7 +66,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=invalid",
 			"--",
@@ -78,25 +74,9 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
-	t.Run("GoTestSumPathMissing", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--junitfile=test.xml",
-			"-foo",
-			"bar",
-			// missing:
-			// "--max-attempts=0",
-			"--",
-			"-coverprofile=test.cover.out",
-			"baz",
-		})
-		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
-	})
-
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -111,7 +91,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
@@ -141,7 +120,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("CoverprofileMissing", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",

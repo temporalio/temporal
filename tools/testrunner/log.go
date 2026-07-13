@@ -116,7 +116,7 @@ func preferFullyQualifiedTestName(tests []string) string {
 	return primary
 }
 
-// parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
+// parseAlerts scans a go test stdout stream and extracts high-priority
 // alerts such as data races and panics. It returns a slice of alerts in the
 // order they were encountered.
 func parseAlerts(stdout string) []alert {
@@ -322,24 +322,6 @@ func isTestResultBoundary(line string) bool {
 
 func shouldStopOnTestBoundary(line string, _ int, _ int) bool {
 	return isTestResultBoundary(line)
-}
-
-// parseFailedTestsFromOutput extracts failing test names from gotestsum stdout.
-// It looks for Go test failure lines produced as tests complete, and is
-// used when the test binary was killed externally before producing a JUnit XML.
-func parseFailedTestsFromOutput(stdout string) []string {
-	var failed []string
-	seen := make(map[string]struct{})
-	for line := range strings.SplitSeq(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, goTestFailLinePrefix) {
-			continue
-		}
-		if name, ok := parseTripleDashTestName(line); ok {
-			addUniqueTest(&failed, seen, name)
-		}
-	}
-	return failed
 }
 
 // parseFailureDetails extracts the actionable part of a JUnit failure Data block.
