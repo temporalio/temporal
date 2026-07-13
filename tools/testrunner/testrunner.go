@@ -123,13 +123,12 @@ func newRunner() *runner {
 
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
+	if command == testCommand {
+		return r.sanitizeAndParseTestArgs(args)
+	}
+
 	var sanitizedArgs []string
-	hasArgSeparator := false
 	for _, arg := range args {
-		if arg == "--" && !hasArgSeparator {
-			hasArgSeparator = true
-			continue
-		}
 		if strings.HasPrefix(arg, gotestsumPathFlag) {
 			continue
 		}
@@ -190,16 +189,6 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 	}
 
 	switch command {
-	case testCommand:
-		if !hasArgSeparator {
-			return nil, fmt.Errorf("missing required argument %q", "--")
-		}
-		if r.coverProfilePath == "" {
-			return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
-		}
-		if r.junitOutputPath == "" {
-			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
-		}
 	case crashReportCommand:
 		if r.junitOutputPath == "" {
 			return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
@@ -218,6 +207,65 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		return nil, fmt.Errorf("unknown command %q", command)
 	}
 
+	return sanitizedArgs, nil
+}
+
+// nolint:revive,cognitive-complexity
+func (r *runner) sanitizeAndParseTestArgs(args []string) ([]string, error) {
+	separator := slices.Index(args, "--")
+	if separator == -1 {
+		return nil, fmt.Errorf("missing required argument %q", "--")
+	}
+	for _, arg := range args[:separator] {
+		switch {
+		case strings.HasPrefix(arg, gotestsumPathFlag):
+			continue
+		case strings.HasPrefix(arg, maxAttemptsFlag):
+			var err error
+			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %q: %w", maxAttemptsFlag, err)
+			}
+			if r.maxAttempts == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
+			}
+		case strings.HasPrefix(arg, totalTimeoutFlag):
+			var err error
+			r.totalTimeout, err = time.ParseDuration(strings.TrimPrefix(arg, totalTimeoutFlag))
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %q: %w", totalTimeoutFlag, err)
+			}
+			if r.totalTimeout == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", totalTimeoutFlag)
+			}
+		case strings.HasPrefix(arg, junitReportFlag):
+			r.junitOutputPath = strings.Split(arg, "=")[1]
+		default:
+			return nil, fmt.Errorf("argument %q must appear after %q", arg, "--")
+		}
+	}
+
+	sanitizedArgs := slices.Clone(args[separator+1:])
+	for _, arg := range sanitizedArgs {
+		switch {
+		case strings.HasPrefix(arg, maxAttemptsFlag),
+			strings.HasPrefix(arg, totalTimeoutFlag),
+			strings.HasPrefix(arg, junitReportFlag),
+			strings.HasPrefix(arg, gotestsumPathFlag),
+			strings.HasPrefix(arg, junitGlobFlag),
+			strings.HasPrefix(arg, summaryOutputDirFlag),
+			strings.HasPrefix(arg, crashReportNameFlag):
+			return nil, fmt.Errorf("argument %q must appear before %q", arg, "--")
+		case strings.HasPrefix(arg, coverProfileFlag):
+			r.coverProfilePath = strings.Split(arg, "=")[1]
+		}
+	}
+	if r.coverProfilePath == "" {
+		return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+	}
+	if r.junitOutputPath == "" {
+		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+	}
 	return sanitizedArgs, nil
 }
 
