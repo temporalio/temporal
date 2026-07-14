@@ -3403,11 +3403,12 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 
 	// Third poll: activity has timed out
 	describeResp3, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-		Namespace:      env.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          startResp.RunId,
-		IncludeOutcome: true,
-		LongPollToken:  describeResp2.LongPollToken,
+		Namespace:          env.Namespace().String(),
+		ActivityId:         activityID,
+		RunId:              startResp.RunId,
+		IncludeOutcome:     true,
+		IncludeLastFailure: true,
+		LongPollToken:      describeResp2.LongPollToken,
 	})
 
 	require.NoError(t, err)
@@ -3682,6 +3683,56 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 		expectedExecution := describeResp.GetInfo().GetScheduleTime().AsTime().Add(startDelay.AsDuration())
 		require.Equal(t, expectedExecution, describeResp.GetInfo().GetExecutionTime().AsTime(),
 			"execution_time should equal scheduleTime + start_delay")
+	})
+
+	s.Run("SensitiveFieldsRequireOptIn", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.startActivity(s.Context(), activityID, taskQueue)
+		require.NoError(t, err)
+
+		pollTaskResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RecordActivityTaskHeartbeat(s.Context(), &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Details:   defaultHeartbeatDetails,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Failure:   defaultFailure,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Nil(t, describeResp.GetInfo().GetHeartbeatDetails())
+		require.Nil(t, describeResp.GetInfo().GetLastFailure())
+
+		describeResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.RunId,
+			IncludeHeartbeatDetails: true,
+			IncludeLastFailure:      true,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, defaultHeartbeatDetails, describeResp.GetInfo().GetHeartbeatDetails())
+		protorequire.ProtoEqual(t, defaultFailure, describeResp.GetInfo().GetLastFailure())
 	})
 
 	s.Run("WaitAnyStateChange", func(s *standaloneActivityTestSuite) {
@@ -9005,11 +9056,13 @@ func (env *standaloneActivityEnv) validateFailure(
 	workerIdentity string,
 ) {
 	activityResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-		Namespace:      env.Namespace().String(),
-		ActivityId:     activityID,
-		RunId:          runID,
-		IncludeInput:   true,
-		IncludeOutcome: true,
+		Namespace:               env.Namespace().String(),
+		ActivityId:              activityID,
+		RunId:                   runID,
+		IncludeInput:            true,
+		IncludeOutcome:          true,
+		IncludeHeartbeatDetails: expectedHeartbeatDetails != nil,
+		IncludeLastFailure:      true,
 	})
 
 	info := activityResp.GetInfo()
@@ -9030,6 +9083,8 @@ func (env *standaloneActivityEnv) validateFailure(
 
 	if expectedHeartbeatDetails != nil {
 		protorequire.ProtoEqual(t, expectedHeartbeatDetails, info.GetHeartbeatDetails())
+	} else {
+		require.Nil(t, info.GetHeartbeatDetails())
 	}
 }
 
@@ -9970,8 +10025,9 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		// After fail, activity should be PAUSED (SCHEDULED + paused) at attempt=2 with a recorded failure.
 		await.Require(s.Context(), s.T(), func(c *await.T) {
 			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
+				Namespace:          env.Namespace().String(),
+				ActivityId:         activityID,
+				IncludeLastFailure: true,
 			})
 			require.NoError(c, dErr)
 			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
@@ -10066,8 +10122,9 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		// Verify attempt is now 2, activity is still paused, and LastFailure is populated.
 		await.Require(s.Context(), t, func(c *await.T) {
 			dr, dErr := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
+				Namespace:          env.Namespace().String(),
+				ActivityId:         activityID,
+				IncludeLastFailure: true,
 			})
 			require.NoError(c, dErr)
 			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_PAUSED, dr.GetInfo().GetRunState())
@@ -11644,8 +11701,9 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 
 		// Heartbeat details should still be set before the unpause.
 		descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, descResp.GetInfo().GetLastHeartbeatTime(), "expected heartbeat time before unpause")
@@ -11671,8 +11729,9 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 
 		// Heartbeat details must be cleared after unpause.
 		descResp, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.Nil(t, descResp.GetInfo().GetLastHeartbeatTime(),
@@ -12301,9 +12360,10 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// Verify heartbeat is visible in describe
 		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.GetRunId(),
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
@@ -12376,9 +12436,10 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// Verify heartbeat is visible
 		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.GetRunId(),
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
@@ -12388,9 +12449,10 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// Activity should still be STARTED with heartbeat still visible (reset is deferred)
 		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.GetRunId(),
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.GetInfo().GetRunState())
@@ -12420,9 +12482,10 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 
 		// Verify new heartbeat is visible in describe
 		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.GetRunId(),
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.GetRunId(),
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails(), "new heartbeat from reset attempt should be visible")
