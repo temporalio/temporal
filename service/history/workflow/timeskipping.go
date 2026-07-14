@@ -63,6 +63,7 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 }
 
 func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	// todo: migrate workflow init and update to this unified method
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
 		// init/update only return an error when their init-or-not precondition is violated,
 		// which the dispatch below already guarantees; the error is redundant here.

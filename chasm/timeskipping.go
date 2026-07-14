@@ -53,15 +53,12 @@ type TimeSkippingTransition struct {
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
-//
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
 func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 	return &TimeSkippingTransition{CurrentTime: currentTime}
 }
 
 // IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
-// signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
-// derived relative to the current time, so without it there is nothing to apply.
+// signal. Nil-safe. A new transition without any field is not a valid one.
 func (t *TimeSkippingTransition) IsValid() bool {
 	return t != nil && !t.CurrentTime.IsZero() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
 }
