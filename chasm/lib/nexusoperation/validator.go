@@ -111,8 +111,8 @@ func newStartNexusOperationExecutionRequestValidator(
 		},
 		SearchAttributes: startNexusValidateSearchAttributes(saMapperProvider, saValidator),
 		NexusHeader:      startNexusValidateNexusHeader(config),
-		UserMetadata: func(req *workflowservice.StartNexusOperationExecutionRequest, _ string, userMetadata *sdkpb.UserMetadata) error {
-			return userMetadataValidators.ValidateAndNormalize(req.GetNamespace(), userMetadata)
+		UserMetadata: func(req *workflowservice.StartNexusOperationExecutionRequest, fieldName string, userMetadata *sdkpb.UserMetadata) error {
+			return userMetadataValidators.ValidateAndNormalize(req.GetNamespace(), fieldName, userMetadata)
 		},
 	}
 }
