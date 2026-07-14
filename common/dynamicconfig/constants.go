@@ -1609,14 +1609,6 @@ default as namespace cardinality can be high and this requires a metrics collect
 		`Settings for simple partition scaler.`,
 	)
 
-	MatchingForceReadTasksOnWrite = NewTaskQueueBoolSetting(
-		"matching.forceReadTasksOnWrite",
-		false,
-		`When true and the fair task reader detects a stuck state (atEnd=false, loadedTasks=0, no
-read goroutine running), the write path calls maybeReadTasksLocked to attempt to unblock it.
-This is a diagnostic flag — the root cause of the stuck state is still under investigation.`,
-	)
-
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
 		"matching.workerRegistryNumBuckets",
