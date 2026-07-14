@@ -31,7 +31,7 @@ func commandOutput(ctx context.Context, timeout time.Duration, args ...string) (
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("gh %s failed: %w\nstderr: %s", strings.Join(args, " "), err, string(exitErr.Stderr))
+			return nil, fmt.Errorf("gh %s failed: %w\nstdout: %s\nstderr: %s", strings.Join(args, " "), err, string(output), string(exitErr.Stderr))
 		}
 		return nil, fmt.Errorf("failed to execute gh %s: %w", strings.Join(args, " "), err)
 	}
