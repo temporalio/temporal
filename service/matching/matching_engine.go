@@ -1313,7 +1313,6 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 
 	// Process each target: local via direct call, remote via RPC.
 	var totalCancelled atomic.Int32
-	var failedPartitions atomic.Int32
 	var wg sync.WaitGroup
 
 	for target, partitions := range partitionsByTarget {
@@ -1334,7 +1333,6 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		if target == self {
 			resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, req)
 			if err != nil {
-				failedPartitions.Add(int32(len(partitions)))
 				e.logger.Warn("Failed to cancel outstanding worker polls for local partitions",
 					tag.NewInt("partition-count", len(partitions)),
 					tag.Error(err))
@@ -1346,7 +1344,6 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		wg.Go(func() {
 			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, req)
 			if err != nil {
-				failedPartitions.Add(int32(len(partitions)))
 				e.logger.Warn("Failed to cancel outstanding worker polls for remote host",
 					tag.NewStringTag("target-host", target),
 					tag.NewInt("partition-count", len(partitions)),
