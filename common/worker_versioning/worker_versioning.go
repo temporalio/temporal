@@ -753,9 +753,14 @@ func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride
 		return nil
 	}
 
-	if override.GetAutoUpgrade() { // v0.32
+	switch o := override.GetOverride().(type) { // v0.32
+	case *workflowpb.VersioningOverride_AutoUpgrade:
+		if !o.AutoUpgrade {
+			return serviceerror.NewInvalidArgument("auto-upgrade override must be true")
+		}
 		return nil
-	} else if p := override.GetPinned(); p != nil {
+	case *workflowpb.VersioningOverride_Pinned:
+		p := o.Pinned
 		if p.GetVersion() == nil {
 			return serviceerror.NewInvalidArgument("must provide version if override is pinned.")
 		}
@@ -764,7 +769,8 @@ func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
 		return nil
-	} else if oneTime := override.GetOneTime(); oneTime != nil {
+	case *workflowpb.VersioningOverride_OneTime:
+		oneTime := o.OneTime
 		if oneTime.GetTargetDeploymentVersion() == nil {
 			return serviceerror.NewInvalidArgument("must provide target deployment version if override is one-time.")
 		}
@@ -813,15 +819,13 @@ func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context
 	}
 
 	// The following checks are for v0.32 protos of worker-versioning which may/may not require reactivation checks
-	if override.GetAutoUpgrade() {
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_AutoUpgrade:
 		return false, 0, nil
-	} else if p := override.GetPinned(); p != nil {
-		return validateVersionAndGetReactivationEligibility(ctx, p.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
-	} else if oneTime := override.GetOneTime(); oneTime != nil {
-		if oneTime.GetTargetDeploymentVersion() == nil {
-			return false, 0, serviceerror.NewInvalidArgument("must provide target deployment version if override is one-time.")
-		}
-		return validateVersionAndGetReactivationEligibility(ctx, oneTime.GetTargetDeploymentVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	case *workflowpb.VersioningOverride_Pinned:
+		return validateVersionAndGetReactivationEligibility(ctx, o.Pinned.GetVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
+	case *workflowpb.VersioningOverride_OneTime:
+		return validateVersionAndGetReactivationEligibility(ctx, o.OneTime.GetTargetDeploymentVersion(), matchingClient, versionCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31

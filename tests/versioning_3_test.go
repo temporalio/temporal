@@ -2012,47 +2012,103 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	s.Equal("v1", out)
 }
 
-// TestChildWorkflowExplicitPinnedOverrideTakesPrecedence verifies that an
-// explicit pinned override on StartChildWorkflowExecution wins over the parent's
-// inherited pinned version.
-// Flow:
-// 1. Start a parent pinned on v1.
-// 2. Move current routing to v2.
-// 3. Parent starts a child with an explicit pinned override to child v2.
-// 4. Assert the child starts on v2 and records that override.
+// TestChildWorkflowExplicitPinnedOverrideTakesPrecedence verifies that a pinned
+// child override wins over inherited pinned routing on the same task queue.
 func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedence() {
+	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(false, vbPinned)
+}
+
+// TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceCrossTaskQueue verifies
+// that an explicit target is validated against and routed on the child's task queue.
+func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceCrossTaskQueue() {
+	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(true, vbPinned)
+}
+
+// TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceOverAutoUpgradeParent
+// verifies that explicit child routing does not retain AutoUpgrade inheritance.
+func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceOverAutoUpgradeParent() {
+	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(false, vbUnpinned)
+}
+
+func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedence(
+	crossTaskQueue bool,
+	parentBehavior enumspb.VersioningBehavior,
+) {
 	env := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
-	tv2 := tv1.WithBuildIDNumber(2)
-	tvChildV2 := tv2.WithWorkflowIDNumber(2)
+	tvParentV1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvChildV1 := tvParentV1.WithWorkflowIDNumber(2)
+	if crossTaskQueue {
+		tvChildV1 = tvChildV1.WithTaskQueueNumber(2)
+	}
+	tvChildV2 := tvChildV1.WithBuildIDNumber(2)
 	childOverride := s.makePinnedOverride(tvChildV2)
 
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tv1, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv1.DeploymentVersionString()),
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tvParentV1, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvParentV1.DeploymentVersionString()),
 		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
 		RevisionNumber:            1,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): {
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvParentV1.DeploymentVersion().GetBuildId(): {
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}}, []string{}, tqTypeWf)
 
-	runID := s.startWorkflow(env, tv1, tv1.VersioningOverridePinned())
-
-	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tv2, &deploymentpb.RoutingConfig{
-		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv2.DeploymentVersionString()),
-		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
-		RevisionNumber:            2,
-	}, map[string]*deploymentspb.WorkerDeploymentVersionData{
-		tv1.DeploymentVersion().GetBuildId(): {
-			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
-		},
-		tv2.DeploymentVersion().GetBuildId(): {
+	if crossTaskQueue {
+		s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tvChildV1, &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tvChildV1.DeploymentVersionString()),
+			CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+			RevisionNumber:            1,
+		}, map[string]*deploymentspb.WorkerDeploymentVersionData{tvChildV1.DeploymentVersion().GetBuildId(): {
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+		}}, []string{}, tqTypeWf)
+	}
+	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tvChildV2, nil, map[string]*deploymentspb.WorkerDeploymentVersionData{
+		tvChildV2.DeploymentVersion().GetBuildId(): {
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 		},
 	}, []string{}, tqTypeWf)
 	s.validatePinnedVersionExistsInTaskQueue(env, tvChildV2)
 
-	s.pollWftAndHandle(env, tv1, false, nil,
+	if crossTaskQueue {
+		membership, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
+			s.Context(),
+			&matchingservice.CheckTaskQueueVersionMembershipRequest{
+				NamespaceId:   env.NamespaceID().String(),
+				TaskQueue:     tvParentV1.TaskQueue().GetName(),
+				TaskQueueType: tqTypeWf,
+				Version:       worker_versioning.DeploymentVersionFromDeployment(tvChildV2.Deployment()),
+			},
+		)
+		s.NoError(err)
+		s.False(membership.GetIsMember())
+	}
+
+	var parentOverride *workflowpb.VersioningOverride
+	if parentBehavior == vbPinned {
+		parentOverride = tvParentV1.VersioningOverridePinned()
+	}
+	runID := s.startWorkflow(env, tvParentV1, parentOverride)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tvParentV1.WorkflowID(), RunId: runID}
+
+	s.pollWftAndHandle(env, tvParentV1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tvParentV1, false, parentBehavior), nil
+		})
+	s.verifyWorkflowVersioning(env, tvParentV1, parentBehavior, tvParentV1.Deployment(), parentOverride, nil)
+	if parentBehavior == vbUnpinned {
+		describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
+			s.Context(),
+			&workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				Execution: execution,
+			},
+		)
+		s.NoError(err)
+		s.Equal(int64(1), describeResponse.GetWorkflowExecutionInfo().GetVersioningInfo().GetRevisionNumber())
+	}
+	s.triggerNormalWFT(env, tvParentV1, execution)
+
+	s.pollWftAndHandle(env, tvParentV1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.Equal(runID, task.GetWorkflowExecution().GetRunId())
@@ -2071,13 +2127,13 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 						},
 					},
 				}},
-				VersioningBehavior: vbPinned,
-				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+				VersioningBehavior: parentBehavior,
+				DeploymentOptions:  tvParentV1.WorkerDeploymentOptions(true),
 			}, nil
 		})
 
 	parentHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
-		WorkflowId: tv1.WorkflowID(),
+		WorkflowId: tvParentV1.WorkflowID(),
 		RunId:      runID,
 	})
 	foundInitiated := false
@@ -2089,14 +2145,28 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 	}
 	s.True(foundInitiated)
 
+	var childExecution *commonpb.WorkflowExecution
 	s.pollWftAndHandle(env, tvChildV2, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
+			childExecution = task.GetWorkflowExecution()
 			s.Equal(tvChildV2.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 			return respondCompleteWorkflow(tvChildV2, vbPinned), nil
 		})
 
 	s.verifyWorkflowVersioning(env, tvChildV2, vbPinned, tvChildV2.Deployment(), childOverride, nil)
+	childHistory := env.GetHistory(env.Namespace().String(), childExecution)
+	var startedAttributes *historypb.WorkflowExecutionStartedEventAttributes
+	for _, event := range childHistory {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			startedAttributes = event.GetWorkflowExecutionStartedEventAttributes()
+			break
+		}
+	}
+	s.NotNil(startedAttributes)
+	s.ProtoEqual(childOverride, startedAttributes.GetVersioningOverride())
+	s.Nil(startedAttributes.GetInheritedPinnedVersion())
+	s.Nil(startedAttributes.GetInheritedAutoUpgradeInfo())
 }
 
 // TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrecedence verifies that an

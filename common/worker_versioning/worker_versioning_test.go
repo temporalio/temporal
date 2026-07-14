@@ -1040,6 +1040,13 @@ func TestValidateVersioningOverrideStructure(t *testing.T) {
 			},
 		},
 		{
+			name: "v0.32 auto-upgrade false",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+			},
+			errorContains: "auto-upgrade override must be true",
+		},
+		{
 			name: "v0.32 pinned",
 			override: &workflowpb.VersioningOverride{
 				Override: &workflowpb.VersioningOverride_Pinned{
@@ -1058,6 +1065,13 @@ func TestValidateVersioningOverrideStructure(t *testing.T) {
 						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
 					},
 				},
+			},
+			errorContains: "must provide version if override is pinned",
+		},
+		{
+			name: "v0.32 pinned nil",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{},
 			},
 			errorContains: "must provide version if override is pinned",
 		},
@@ -1088,6 +1102,13 @@ func TestValidateVersioningOverrideStructure(t *testing.T) {
 				Override: &workflowpb.VersioningOverride_OneTime{
 					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{},
 				},
+			},
+			errorContains: "must provide target deployment version if override is one-time",
+		},
+		{
+			name: "v0.32 one-time nil",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{},
 			},
 			errorContains: "must provide target deployment version if override is one-time",
 		},
