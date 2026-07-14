@@ -40,7 +40,7 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent          func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry            func() *namespace.Namespace
 	HandleEndpointRegistry             func() EndpointRegistry
-	HandleSetTimeSkippingConfig        func(config *commonpb.TimeSkippingConfig)
+	HandleSetTimeSkippingConfig        func(config *commonpb.TimeSkippingConfig) error
 	HandleNow                          func() time.Time
 	HandleRecordTimeSkippingTransition func(transition *TimeSkippingTransition)
 
@@ -257,12 +257,13 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 	return count
 }
 
-func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
 	if m.HandleSetTimeSkippingConfig != nil {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		m.HandleSetTimeSkippingConfig(config)
+		return m.HandleSetTimeSkippingConfig(config)
 	}
+	return nil
 }
 
 func (m *MockNodeBackend) Now() time.Time {
