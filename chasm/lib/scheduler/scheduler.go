@@ -1034,10 +1034,6 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 	}
 }
 
-// userCustomSearchAttributes returns only user-defined search attributes,
-// stripping any reserved/system SAs that are managed by the scheduler framework.
-// This prevents system SAs from leaking into the CustomSearchAttributes store
-// whether they arrive via CreateSchedule, UpdateSchedule, or migration.
 func userCustomSearchAttributes(fields map[string]*commonpb.Payload) map[string]*commonpb.Payload {
 	if len(fields) == 0 {
 		return fields

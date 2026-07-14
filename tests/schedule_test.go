@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
@@ -360,9 +361,7 @@ func testSystemSearchAttributesNotStoredAsCustom(t *testing.T, newContext contex
 	// requestFields returns the custom SA plus the reserved SAs under test.
 	requestFields := func() map[string]*commonpb.Payload {
 		fields := map[string]*commonpb.Payload{csaKeyword: csaValue}
-		for k, v := range reservedFields {
-			fields[k] = v
-		}
+		maps.Copy(fields, reservedFields)
 		return fields
 	}
 
