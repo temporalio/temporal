@@ -232,7 +232,6 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          permission-contents: read
           permission-pull-requests: write
           permission-issues: write
       - uses: actions/checkout@v4
