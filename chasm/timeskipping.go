@@ -39,7 +39,7 @@ type TimeSkippingRuntimeGate interface {
 }
 
 // =============================================================================
-// Time Skipping Data Structure
+// Time Skipping Data Structure and Utils
 // =============================================================================
 
 type TimeSkippingTransition struct {
