@@ -5,18 +5,29 @@ x-healthcheck-defaults: &healthcheck-defaults
 
 services:
   cassandra:
-    image: cassandra:5.0
+    image: scylladb/scylla:2026.1
     ports:
       - "9042:9042"
-    environment:
-      CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
-      MAX_HEAP_SIZE: "2G"
-      HEAP_NEWSIZE: "200M"
-      # Increase native transport threads for handling more concurrent connections
-      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
+    command:
+      - --smp
+      - "1"
+      - --memory
+      - 2G
+      - --overprovisioned
+      - "1"
+      - --developer-mode
+      - "1"
+      - --api-address
+      - 0.0.0.0
+      - --listen-address
+      - 0.0.0.0
+      - --rpc-address
+      - 0.0.0.0
+      - --broadcast-rpc-address
+      - 127.0.0.1
     healthcheck:
       !!merge <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      test: ["CMD-SHELL", "cqlsh 127.0.0.1 9042 -e 'describe cluster'"]
 
   mysql:
     image: mysql:8.0.29-oracle

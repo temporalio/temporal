@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -51,9 +51,9 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 
 func TestPanicCapture(t *testing.T) {
 	_, err := initSession(log.NewNoopLogger(), func() (*gocql.ClusterConfig, error) {
-		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
+		panic("mock panic")
 	}, metrics.NoopMetricsHandler)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panic:")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "panic:")
 }

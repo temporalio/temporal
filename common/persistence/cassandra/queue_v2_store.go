@@ -1,6 +1,7 @@
 package cassandra
 
 import (
+	stdbytes "bytes"
 	"context"
 	"fmt"
 
@@ -471,45 +472,55 @@ func (s *queueV2Store) ListQueues(
 	if request.PageSize <= 0 {
 		return nil, persistence.ErrNonPositiveListQueuesPageSize
 	}
-	iter := s.session.Query(
-		templateGetQueueNamesQuery,
-		request.QueueType,
-	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
-
 	var queues []persistence.QueueInfo
-	for {
-		var (
-			queueName        string
-			metadataBytes    []byte
-			metadataEncoding string
-			version          int64
-		)
-		if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+	nextPageToken := request.NextPageToken
+	for len(queues) < request.PageSize {
+		initialQueueCount := len(queues)
+		iter := s.session.Query(
+			templateGetQueueNamesQuery,
+			request.QueueType,
+		).PageSize(request.PageSize - len(queues)).PageState(nextPageToken).WithContext(ctx).Iter()
+
+		for {
+			var (
+				queueName        string
+				metadataBytes    []byte
+				metadataEncoding string
+				version          int64
+			)
+			if !iter.Scan(&queueName, &metadataBytes, &metadataEncoding, &version) {
+				break
+			}
+			q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
+			if err != nil {
+				return nil, err
+			}
+			partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
+			if err != nil {
+				return nil, err
+			}
+			messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
+			if err != nil {
+				return nil, err
+			}
+			queues = append(queues, persistence.QueueInfo{
+				QueueName:     queueName,
+				MessageCount:  messageCount,
+				LastMessageID: lastMessageID,
+			})
+		}
+		if err := iter.Close(); err != nil {
+			return nil, gocql.ConvertError("QueueV2ListQueues", err)
+		}
+		iterPageToken := iter.PageState()
+		if len(iterPageToken) == 0 || (stdbytes.Equal(iterPageToken, nextPageToken) && len(queues) == initialQueueCount) {
+			nextPageToken = iterPageToken
 			break
 		}
-		q, err := getQueueFromMetadata(request.QueueType, queueName, metadataBytes, metadataEncoding, version)
-		if err != nil {
-			return nil, err
-		}
-		partition, err := persistence.GetPartitionForQueueV2(request.QueueType, queueName, q.Metadata)
-		if err != nil {
-			return nil, err
-		}
-		messageCount, lastMessageID, err := s.getMessageCountAndLastID(ctx, request.QueueType, queueName, partition)
-		if err != nil {
-			return nil, err
-		}
-		queues = append(queues, persistence.QueueInfo{
-			QueueName:     queueName,
-			MessageCount:  messageCount,
-			LastMessageID: lastMessageID,
-		})
-	}
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("QueueV2ListQueues", err)
+		nextPageToken = iterPageToken
 	}
 	return &persistence.InternalListQueuesResponse{
 		Queues:        queues,
-		NextPageToken: iter.PageState(),
+		NextPageToken: nextPageToken,
 	}, nil
 }
