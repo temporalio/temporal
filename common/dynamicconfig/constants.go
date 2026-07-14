@@ -3424,9 +3424,20 @@ close to or more than the workflow task timeout)`,
 	)
 	SchedulerSpecMaxIterations = NewGlobalIntSetting(
 		"scheduler.specMaxIterations",
+		math.MaxInt,
+		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
+scheduler evaluates while searching for a schedule's next action time before giving up with an
+error and stopping the schedule. It defaults to math.MaxInt (effectively disabled); lower it to
+re-enable enforcement against an over-excluded / adversarial spec. In the default (disabled)
+state the search instead emits the SchedulerSpecWarnIterations warning and keeps searching.`,
+	)
+	SchedulerSpecWarnIterations = NewGlobalIntSetting(
+		"scheduler.specWarnIterations",
 		2*7*24*60*60,
-		`SchedulerSpecMaxIterations bounds how many excluded candidate times the scheduler evaluates
-while searching for a schedule's next action time before giving up.`,
+		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
+while searching for a schedule's next action time before emitting a warning (metric + log). It
+is non-fatal: the search continues past this threshold. Defaults to two weeks' worth of
+one-second ticks.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

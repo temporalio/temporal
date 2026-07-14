@@ -210,12 +210,22 @@ func (s *SpecProcessorImpl) checkNextScheduleResult(
 ) (time.Time, error) {
 	// default case, no error, continue
 	if err == nil {
+		// Warn (non-fatal) case: the search went long but still resolved. Surface it for
+		// observability and keep scheduling; an over-excluded spec is visible without being
+		// stopped. This is the default protection mode (the hard limit is disabled).
+		if next.ComputeLimitWarning {
+			metricsHandler.Counter(metrics.ScheduleComputeLimitWarning.Name()).Record(1)
+			newTaggedLogger(s.logger, scheduler).Warn(
+				"schedule spec next-time search crossed the warn threshold; continuing (spec may be over-excluded)")
+		}
 		return next.Next, nil
 	}
 
 	// special case: broken or pathological spec
 	// in this particular case, just swallow the error and log.
-	// The schedule will just degrade to return nothing
+	// The schedule will just degrade to return nothing. Only reached when an operator has
+	// lowered the hard limit (SchedulerSpecMaxIterations) below math.MaxInt to re-enable
+	// enforcement; disabled by default.
 	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
 		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
 		newTaggedLogger(s.logger, scheduler).Warn(

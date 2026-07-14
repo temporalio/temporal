@@ -400,6 +400,27 @@ func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
 	s.Zero(result)
 }
 
+func (s *specSuite) TestGetNextTimeComputeLimitWarning() {
+	// Mirrored calendar/exclude means every candidate is excluded. With the hard limit disabled
+	// (the default, math.MaxInt) the search does not error; it crosses the warn threshold and
+	// keeps searching until the spec's end time, then returns no match. A short end time keeps
+	// the scan bounded for the test.
+	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	builder := NewSpecBuilder()
+	builder.SetWarnIterations(func() int { return 5 })
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		EndTime:         timestamppb.New(start.Add(30 * time.Second)),
+	})
+	s.Require().NoError(err)
+
+	result, err := cs.GetNextTime("", start)
+	s.Require().NoError(err, "crossing the warn threshold must not error; the hard limit is disabled")
+	s.True(result.ComputeLimitWarning, "search should flag that it crossed the warn threshold")
+	s.True(result.Next.IsZero(), "an over-excluded spec resolves to no next time")
+}
+
 func (s *specSuite) TestSpecStartTime() {
 	s.checkSequenceFull(
 		"",

@@ -4887,7 +4887,7 @@ func TestScheduleFarFutureActionTimes(t *testing.T) {
 		workflow.RegisterOptions{Name: wt},
 	)
 
-	twoWeeks := time.Duration(scheduler.DefaultMaxIterations) * time.Second
+	twoWeeks := time.Duration(scheduler.DefaultWarnIterations) * time.Second
 	interval := 10 * twoWeeks
 
 	ctx := chasmContextFactory(s.Context())

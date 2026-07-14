@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 
@@ -216,7 +217,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		MaxIterations:                     DefaultMaxIterations,
+		MaxIterations:                     math.MaxInt, // hard limit disabled by default; warn-only
 		Version:                           TriggerImmediatelyTimestamp,
 	}
 
@@ -609,12 +610,16 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 		for t := start; len(cache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
 			next, err := s.cspec.GetNextTime(s.jitterSeed(), t)
 			if errors.Is(err, ErrComputeLimitExceeded) {
-				// Over-excluded spec: surface it and stop. Mark the cache
-				// completed so the schedule takes no further action until its spec changes.
 				s.metrics.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Inc(1)
 				s.logger.Warn("schedule spec next-time search hit the compute limit; taking no further action until the spec is changed")
 				cache.Completed = true
 				break
+			}
+			if next.ComputeLimitWarning {
+				// Warn (non-fatal) case: the search went long but still resolved. Surface it for
+				// observability and keep scheduling. This is the default protection mode.
+				s.metrics.Counter(metrics.ScheduleComputeLimitWarning.Name()).Inc(1)
+				s.logger.Warn("schedule spec next-time search crossed the warn threshold; continuing (spec may be over-excluded)")
 			}
 			if next.Next.IsZero() {
 				cache.Completed = true

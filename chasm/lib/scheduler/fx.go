@@ -19,6 +19,7 @@ var Module = fx.Module(
 	fx.Provide(ConfigProvider),
 	fx.Provide(func(dc *dynamicconfig.Collection) *legacyscheduler.SpecBuilder {
 		b := legacyscheduler.NewSpecBuilder()
+		b.SetWarnIterations(dynamicconfig.SchedulerSpecWarnIterations.Get(dc))
 		b.SetMaxIterations(dynamicconfig.SchedulerSpecMaxIterations.Get(dc))
 		return b
 	}),

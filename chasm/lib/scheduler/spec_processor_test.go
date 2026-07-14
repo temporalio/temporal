@@ -293,3 +293,55 @@ func TestProcessTimeRange_ComputeLimitExceeded(t *testing.T) {
 	recorded := capture.Snapshot()[metrics.ScheduleComputeLimitExceeded.Name()]
 	require.Len(t, recorded, 2, "expected the compute-limit counter to fire on both the active and paused paths")
 }
+
+func TestProcessTimeRange_ComputeLimitWarning(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval)
+
+	schedule := defaultSchedule()
+	everySecond := &schedulepb.CalendarSpec{Second: "*", Minute: "*", Hour: "*"}
+	schedule.Spec = &schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{everySecond},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{everySecond},
+		// A short end time bounds the (otherwise unlimited) scan so the test stays fast while
+		// still crossing the small warn threshold below.
+		EndTime: timestamppb.New(end.Add(30 * time.Second)),
+	}
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	require.NoError(t, err)
+
+	rec := metricstest.NewCaptureHandler()
+	capture := rec.StartCapture()
+	defer rec.StopCapture(capture)
+
+	specBuilder := legacyscheduler.NewSpecBuilder()
+	// Warn threshold only; leave the hard limit at its default (math.MaxInt, disabled).
+	specBuilder.SetWarnIterations(func() int { return 5 })
+	processor := scheduler.NewSpecProcessor(
+		&scheduler.Config{
+			Tweakables: func(_ string) scheduler.Tweakables { return scheduler.DefaultTweakables },
+		},
+		rec,
+		log.NewTestLogger(),
+		specBuilder,
+	)
+
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err, "crossing the warn threshold must not error out of ProcessTimeRange")
+	require.Empty(t, res.BufferedStarts, "no action should be buffered for an over-excluded spec")
+	require.True(t, res.NextWakeupTime.IsZero(), "no wakeup should be armed for an over-excluded spec")
+
+	sched.Schedule.State.Paused = true
+	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err)
+	require.Empty(t, res.BufferedStarts)
+	require.True(t, res.NextWakeupTime.IsZero())
+
+	require.Empty(t, capture.Snapshot()[metrics.ScheduleComputeLimitExceeded.Name()],
+		"the hard limit is disabled, so the exceeded counter must not fire")
+	recorded := capture.Snapshot()[metrics.ScheduleComputeLimitWarning.Name()]
+	require.Len(t, recorded, 2, "expected the warn counter to fire on both the active and paused paths")
+}

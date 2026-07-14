@@ -1517,7 +1517,11 @@ var (
 	)
 	ScheduleComputeLimitExceeded = NewCounterDef(
 		"schedule_compute_limit_exceeded",
-		WithDescription("The number of times a schedule's next-time search hit the compute iteration bound"),
+		WithDescription("The number of times a schedule's next-time search hit the hard compute iteration bound and stopped the schedule"),
+	)
+	ScheduleComputeLimitWarning = NewCounterDef(
+		"schedule_compute_limit_warning",
+		WithDescription("The number of times a schedule's next-time search crossed the warn compute iteration threshold; the search continued and the schedule was not stopped"),
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",
