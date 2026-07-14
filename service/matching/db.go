@@ -682,7 +682,7 @@ func writeDefinitelyFailed(err error) bool {
 		return true
 	}
 	if re, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
-		switch re.Cause {
+		switch re.Cause { // nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:
 			return true
