@@ -358,14 +358,13 @@ func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, execu
 func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		req.BuildId = tv.BuildID()
-		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition) {
+		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition) {
 			t.Require().NoError(err)
 			return
 		}
@@ -403,8 +402,7 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 
 	// Wait until the version is visible and all requested task queue types are registered.
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(t.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
@@ -431,13 +429,12 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 
 func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
-		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(ctx, err) {
+		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(t.Context(), req)
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err) {
 			t.Require().NoError(err)
 			return
 		}
@@ -455,27 +452,21 @@ func (env *VersioningTestEnv) setRampingDeployment(
 	percentage float32,
 	rampUnversioned bool,
 ) {
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
-	defer cancel()
-	s = parallelsuite.WithContext(s, ctx)
-
 	bid := tv.BuildID()
 	if rampUnversioned {
 		bid = ""
 	}
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 
-	await.Require(ctx, s.TB(), func(t *await.T) {
-
-		ctx := t.Context()
+	await.Require(s.Context(), s.TB(), func(t *await.T) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Percentage:     percentage,
 		}
 		req.BuildId = bid
-		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition) {
+		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(t.Context(), req)
+		if env.shouldRetryWorkerDeploymentRPC(t.Context(), err, failedPrecondition) {
 			t.Require().NoError(err)
 			return
 		}
@@ -489,12 +480,11 @@ func (env *VersioningTestEnv) setRampingDeployment(
 func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		await.Require(s.Context(), s.TB(), func(t *await.T) {
-			ctx := t.Context()
-			resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(t.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
-			if env.shouldRetryWorkerDeploymentRPC(ctx, err) {
+			if env.shouldRetryWorkerDeploymentRPC(t.Context(), err) {
 				t.Require().NoError(err)
 				return
 			}
@@ -641,8 +631,7 @@ func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
 
 	// Verify that the rollback propagated to all partitions
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
-		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(t.Context(), &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
@@ -1177,14 +1166,13 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 	}
 	f, err := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tv.TaskQueue().GetName())
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
 		for pt := range remaining {
 			t.Require().NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
-				ctx,
+				t.Context(),
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
@@ -1251,16 +1239,11 @@ func (env *VersioningTestEnv) validateBacklogCount(
 	tqType enumspb.TaskQueueType,
 	expectedCount int64,
 ) {
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-
 	var resp *workflowservice.DescribeTaskQueueResponse
 	var err error
 
-	await.Require(ctx, s.TB(), func(t *await.T) {
-
-		ctx := t.Context()
-		resp, err = env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	await.Require(s.Context(), s.TB(), func(t *await.T) {
+		resp, err = env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
 			TaskQueueType: tqType,
@@ -1282,7 +1265,6 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 	usedBuilds ...*testvars.TestVars,
 ) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
 		var query string
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
@@ -1291,7 +1273,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeploymentVersion is null AND TemporalWorkflowVersioningBehavior is null AND ExecutionStatus = '%s'",
 				tv.WorkflowID(), executionStatus)
 		}
-		resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		resp, err := env.FrontendClient().ListWorkflowExecutions(t.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			Query:     query,
 		})
@@ -1337,8 +1319,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 // TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
 func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(s parallelsuite.Scope, tv *testvars.TestVars) {
 	await.Require(s.Context(), s.TB(), func(t *await.T) {
-		ctx := t.Context()
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(t.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
