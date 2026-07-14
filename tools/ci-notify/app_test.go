@@ -33,21 +33,43 @@ func TestBuildFailureMessage(t *testing.T) {
 		TotalJobs: 5,
 	}
 
-	msg := BuildFailureMessage(report)
+	expected := &SlackMessage{
+		Text: "CI Failed on Main",
+		Blocks: []SlackBlock{
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failures (2):* `TestHistoryWorkflow`, `TestMatchingWorkflow`",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failed jobs (2/5):* " +
+						"<https://github.com/temporalio/temporal/actions/runs/123456/job/1|test-job-1>, " +
+						"<https://github.com/temporalio/temporal/actions/runs/123456/job/2|test-job-2>",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "<https://github.com/temporalio/temporal/actions/runs/123456|View Run>",
+				},
+			},
+		},
+	}
 
-	require.NotNil(t, msg, "BuildFailureMessage returned nil")
-	require.Contains(t, msg.Text, "CI Failed")
-	require.NotEmpty(t, msg.Blocks, "Message should have at least one block")
-
-	// Check that the first block contains the header
-	require.NotNil(t, msg.Blocks[0].Text)
-	require.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
-	require.NotNil(t, msg.Blocks[1].Text)
-	require.Contains(t, msg.Blocks[1].Text.Text, "TestHistoryWorkflow")
-	require.Contains(t, msg.Blocks[1].Text.Text, "TestMatchingWorkflow")
-	require.Contains(t, msg.Blocks[1].Text.Text, "`TestHistoryWorkflow`, `TestMatchingWorkflow`")
-	require.NotContains(t, msg.Blocks[1].Text.Text, "•")
-	require.NotContains(t, msg.Blocks[1].Text.Text, "\n")
+	require.Equal(t, expected, BuildFailureMessage(report))
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
