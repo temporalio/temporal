@@ -31,7 +31,7 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	commitMeta, err := github.GetCommit(ctx, "temporalio/temporal", run.HeadSHA)
-	author := commitMeta.Author
+	author := commitMeta.Commit.Author.Name
 	if err != nil {
 		// Non-fatal: use unknown if we can't get author
 		author = "Unknown"
