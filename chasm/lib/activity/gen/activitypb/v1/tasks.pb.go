@@ -8,6 +8,7 @@ package activitypb
 
 import (
 	reflect "reflect"
+	"strconv"
 	sync "sync"
 	unsafe "unsafe"
 
@@ -22,12 +23,177 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ActivityDispatchTask_DispatchReason int32
+
+const (
+	ActivityDispatchTask_DISPATCH_REASON_UNSPECIFIED ActivityDispatchTask_DispatchReason = 0
+	ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE   ActivityDispatchTask_DispatchReason = 1
+	ActivityDispatchTask_DISPATCH_REASON_START_DELAY ActivityDispatchTask_DispatchReason = 2
+	ActivityDispatchTask_DISPATCH_REASON_RETRY       ActivityDispatchTask_DispatchReason = 3
+)
+
+// Enum value maps for ActivityDispatchTask_DispatchReason.
+var (
+	ActivityDispatchTask_DispatchReason_name = map[int32]string{
+		0: "DISPATCH_REASON_UNSPECIFIED",
+		1: "DISPATCH_REASON_IMMEDIATE",
+		2: "DISPATCH_REASON_START_DELAY",
+		3: "DISPATCH_REASON_RETRY",
+	}
+	ActivityDispatchTask_DispatchReason_value = map[string]int32{
+		"DISPATCH_REASON_UNSPECIFIED": 0,
+		"DISPATCH_REASON_IMMEDIATE":   1,
+		"DISPATCH_REASON_START_DELAY": 2,
+		"DISPATCH_REASON_RETRY":       3,
+	}
+)
+
+func (x ActivityDispatchTask_DispatchReason) Enum() *ActivityDispatchTask_DispatchReason {
+	p := new(ActivityDispatchTask_DispatchReason)
+	*p = x
+	return p
+}
+
+func (x ActivityDispatchTask_DispatchReason) String() string {
+	switch x {
+	case ActivityDispatchTask_DISPATCH_REASON_UNSPECIFIED:
+		return "ActivityDispatchTaskDispatchReasonUnspecified"
+	case ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE:
+		return "ActivityDispatchTaskDispatchReasonImmediate"
+	case ActivityDispatchTask_DISPATCH_REASON_START_DELAY:
+		return "ActivityDispatchTaskDispatchReasonStartDelay"
+	case ActivityDispatchTask_DISPATCH_REASON_RETRY:
+		return "ActivityDispatchTaskDispatchReasonRetry"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (ActivityDispatchTask_DispatchReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes[0].Descriptor()
+}
+
+func (ActivityDispatchTask_DispatchReason) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes[0]
+}
+
+func (x ActivityDispatchTask_DispatchReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ActivityDispatchTask_DispatchReason.Descriptor instead.
+func (ActivityDispatchTask_DispatchReason) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{0, 0}
+}
+
+type ActivityDispatchTask_StartDelayBucket int32
+
+const (
+	ActivityDispatchTask_START_DELAY_BUCKET_UNSPECIFIED ActivityDispatchTask_StartDelayBucket = 0
+	ActivityDispatchTask_START_DELAY_BUCKET_NONE        ActivityDispatchTask_StartDelayBucket = 1
+	ActivityDispatchTask_START_DELAY_BUCKET_LT_1M       ActivityDispatchTask_StartDelayBucket = 2
+	ActivityDispatchTask_START_DELAY_BUCKET_1M_10M      ActivityDispatchTask_StartDelayBucket = 3
+	ActivityDispatchTask_START_DELAY_BUCKET_10M_1H      ActivityDispatchTask_StartDelayBucket = 4
+	ActivityDispatchTask_START_DELAY_BUCKET_1H_6H       ActivityDispatchTask_StartDelayBucket = 5
+	ActivityDispatchTask_START_DELAY_BUCKET_6H_1D       ActivityDispatchTask_StartDelayBucket = 6
+	ActivityDispatchTask_START_DELAY_BUCKET_1D_7D       ActivityDispatchTask_StartDelayBucket = 7
+	ActivityDispatchTask_START_DELAY_BUCKET_7D_30D      ActivityDispatchTask_StartDelayBucket = 8
+	ActivityDispatchTask_START_DELAY_BUCKET_GT_30D      ActivityDispatchTask_StartDelayBucket = 9
+)
+
+// Enum value maps for ActivityDispatchTask_StartDelayBucket.
+var (
+	ActivityDispatchTask_StartDelayBucket_name = map[int32]string{
+		0: "START_DELAY_BUCKET_UNSPECIFIED",
+		1: "START_DELAY_BUCKET_NONE",
+		2: "START_DELAY_BUCKET_LT_1M",
+		3: "START_DELAY_BUCKET_1M_10M",
+		4: "START_DELAY_BUCKET_10M_1H",
+		5: "START_DELAY_BUCKET_1H_6H",
+		6: "START_DELAY_BUCKET_6H_1D",
+		7: "START_DELAY_BUCKET_1D_7D",
+		8: "START_DELAY_BUCKET_7D_30D",
+		9: "START_DELAY_BUCKET_GT_30D",
+	}
+	ActivityDispatchTask_StartDelayBucket_value = map[string]int32{
+		"START_DELAY_BUCKET_UNSPECIFIED": 0,
+		"START_DELAY_BUCKET_NONE":        1,
+		"START_DELAY_BUCKET_LT_1M":       2,
+		"START_DELAY_BUCKET_1M_10M":      3,
+		"START_DELAY_BUCKET_10M_1H":      4,
+		"START_DELAY_BUCKET_1H_6H":       5,
+		"START_DELAY_BUCKET_6H_1D":       6,
+		"START_DELAY_BUCKET_1D_7D":       7,
+		"START_DELAY_BUCKET_7D_30D":      8,
+		"START_DELAY_BUCKET_GT_30D":      9,
+	}
+)
+
+func (x ActivityDispatchTask_StartDelayBucket) Enum() *ActivityDispatchTask_StartDelayBucket {
+	p := new(ActivityDispatchTask_StartDelayBucket)
+	*p = x
+	return p
+}
+
+func (x ActivityDispatchTask_StartDelayBucket) String() string {
+	switch x {
+	case ActivityDispatchTask_START_DELAY_BUCKET_UNSPECIFIED:
+		return "ActivityDispatchTaskStartDelayBucketUnspecified"
+	case ActivityDispatchTask_START_DELAY_BUCKET_NONE:
+		return "ActivityDispatchTaskStartDelayBucketNone"
+	case ActivityDispatchTask_START_DELAY_BUCKET_LT_1M:
+		return "ActivityDispatchTaskStartDelayBucketLt1M"
+	case ActivityDispatchTask_START_DELAY_BUCKET_1M_10M:
+		return "ActivityDispatchTaskStartDelayBucket1M10M"
+	case ActivityDispatchTask_START_DELAY_BUCKET_10M_1H:
+		return "ActivityDispatchTaskStartDelayBucket10M1H"
+	case ActivityDispatchTask_START_DELAY_BUCKET_1H_6H:
+
+		// Deprecated: Use ActivityDispatchTask_StartDelayBucket.Descriptor instead.
+		return "ActivityDispatchTaskStartDelayBucket1H6H"
+	case ActivityDispatchTask_START_DELAY_BUCKET_6H_1D:
+		return "ActivityDispatchTaskStartDelayBucket6H1D"
+	case ActivityDispatchTask_START_DELAY_BUCKET_1D_7D:
+		return "ActivityDispatchTaskStartDelayBucket1D7D"
+	case ActivityDispatchTask_START_DELAY_BUCKET_7D_30D:
+		return "ActivityDispatchTaskStartDelayBucket7D30D"
+
+		// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+	case ActivityDispatchTask_START_DELAY_BUCKET_GT_30D:
+		return "ActivityDispatchTaskStartDelayBucketGt30D"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (ActivityDispatchTask_StartDelayBucket) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes[1].Descriptor()
+}
+
+func (ActivityDispatchTask_StartDelayBucket) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes[1]
+}
+
+func (x ActivityDispatchTask_StartDelayBucket) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+func (ActivityDispatchTask_StartDelayBucket) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{0, 1}
+}
+
 type ActivityDispatchTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
-	Stamp         int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+
+	Stamp int32 `protobuf:"varint,1,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Dispatch category based on attempt history and the configured start delay.
+	DispatchReason ActivityDispatchTask_DispatchReason `protobuf:"varint,2,opt,name=dispatch_reason,json=dispatchReason,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask_DispatchReason" json:"dispatch_reason,omitempty"`
+	// Bucket for the configured start delay, independent of actual dispatch time.
+	StartDelayBucket ActivityDispatchTask_StartDelayBucket `protobuf:"varint,3,opt,name=start_delay_bucket,json=startDelayBucket,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask_StartDelayBucket" json:"start_delay_bucket,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ActivityDispatchTask) Reset() {
@@ -65,6 +231,20 @@ func (x *ActivityDispatchTask) GetStamp() int32 {
 		return x.Stamp
 	}
 	return 0
+}
+
+func (x *ActivityDispatchTask) GetDispatchReason() ActivityDispatchTask_DispatchReason {
+	if x != nil {
+		return x.DispatchReason
+	}
+	return ActivityDispatchTask_DISPATCH_REASON_UNSPECIFIED
+}
+
+func (x *ActivityDispatchTask) GetStartDelayBucket() ActivityDispatchTask_StartDelayBucket {
+	if x != nil {
+		return x.StartDelayBucket
+	}
+	return ActivityDispatchTask_START_DELAY_BUCKET_UNSPECIFIED
 }
 
 type ScheduleToStartTimeoutTask struct {
@@ -254,9 +434,27 @@ var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\",\n" +
+	"7temporal/server/chasm/lib/activity/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.activity.proto.v1\"\x83\x06\n" +
 	"\x14ActivityDispatchTask\x12\x14\n" +
-	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\x12y\n" +
+	"\x0fdispatch_reason\x18\x02 \x01(\x0e2P.temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.DispatchReasonR\x0edispatchReason\x12\x80\x01\n" +
+	"\x12start_delay_bucket\x18\x03 \x01(\x0e2R.temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.StartDelayBucketR\x10startDelayBucket\"\x8c\x01\n" +
+	"\x0eDispatchReason\x12\x1f\n" +
+	"\x1bDISPATCH_REASON_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19DISPATCH_REASON_IMMEDIATE\x10\x01\x12\x1f\n" +
+	"\x1bDISPATCH_REASON_START_DELAY\x10\x02\x12\x19\n" +
+	"\x15DISPATCH_REASON_RETRY\x10\x03\"\xc7\x02\n" +
+	"\x10StartDelayBucket\x12\"\n" +
+	"\x1eSTART_DELAY_BUCKET_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17START_DELAY_BUCKET_NONE\x10\x01\x12\x1c\n" +
+	"\x18START_DELAY_BUCKET_LT_1M\x10\x02\x12\x1d\n" +
+	"\x19START_DELAY_BUCKET_1M_10M\x10\x03\x12\x1d\n" +
+	"\x19START_DELAY_BUCKET_10M_1H\x10\x04\x12\x1c\n" +
+	"\x18START_DELAY_BUCKET_1H_6H\x10\x05\x12\x1c\n" +
+	"\x18START_DELAY_BUCKET_6H_1D\x10\x06\x12\x1c\n" +
+	"\x18START_DELAY_BUCKET_1D_7D\x10\a\x12\x1d\n" +
+	"\x19START_DELAY_BUCKET_7D_30D\x10\b\x12\x1d\n" +
+	"\x19START_DELAY_BUCKET_GT_30D\x10\t\"2\n" +
 	"\x1aScheduleToStartTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"2\n" +
 	"\x1aScheduleToCloseTimeoutTask\x12\x14\n" +
@@ -278,20 +476,25 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescData
 }
 
+var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
-	(*ActivityDispatchTask)(nil),       // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
-	(*ScheduleToStartTimeoutTask)(nil), // 1: temporal.server.chasm.lib.activity.proto.v1.ScheduleToStartTimeoutTask
-	(*ScheduleToCloseTimeoutTask)(nil), // 2: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
-	(*StartToCloseTimeoutTask)(nil),    // 3: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
-	(*HeartbeatTimeoutTask)(nil),       // 4: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
+	(ActivityDispatchTask_DispatchReason)(0),   // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.DispatchReason
+	(ActivityDispatchTask_StartDelayBucket)(0), // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.StartDelayBucket
+	(*ActivityDispatchTask)(nil),               // 2: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask
+	(*ScheduleToStartTimeoutTask)(nil),         // 3: temporal.server.chasm.lib.activity.proto.v1.ScheduleToStartTimeoutTask
+	(*ScheduleToCloseTimeoutTask)(nil),         // 4: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
+	(*StartToCloseTimeoutTask)(nil),            // 5: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
+	(*HeartbeatTimeoutTask)(nil),               // 6: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.dispatch_reason:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.DispatchReason
+	1, // 1: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.start_delay_bucket:type_name -> temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.StartDelayBucket
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() }
@@ -304,13 +507,14 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      2,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs,
+		EnumInfos:         file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes,
 		MessageInfos:      file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes,
 	}.Build()
 	File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto = out.File

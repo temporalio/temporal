@@ -72,6 +72,85 @@ func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 	}
 }
 
+func TestStartDelayBucket(t *testing.T) {
+	testCases := []struct {
+		name     string
+		delay    time.Duration
+		expected activitypb.ActivityDispatchTask_StartDelayBucket
+	}{
+		{name: "negative", delay: -time.Second, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE},
+		{name: "zero", delay: 0, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE},
+		{name: "less than one minute", delay: time.Minute - time.Nanosecond, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_LT_1M},
+		{name: "one minute", delay: time.Minute, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M},
+		{name: "ten minutes", delay: 10 * time.Minute, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_10M_1H},
+		{name: "one hour", delay: time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H},
+		{name: "six hours", delay: 6 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_6H_1D},
+		{name: "one day", delay: 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1D_7D},
+		{name: "seven days", delay: 7 * 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D},
+		{name: "thirty days", delay: 30 * 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D},
+		{name: "more than thirty days", delay: 30*24*time.Hour + time.Nanosecond, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_GT_30D},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, startDelayBucket(tc.delay))
+		})
+	}
+}
+
+func TestNewActivityDispatchTask(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		startDelay              time.Duration
+		firstAttemptStartedTime *timestamppb.Timestamp
+		expectedReason          activitypb.ActivityDispatchTask_DispatchReason
+		expectedBucket          activitypb.ActivityDispatchTask_StartDelayBucket
+	}{
+		{
+			name:           "immediate",
+			expectedReason: activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE,
+			expectedBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+		},
+		{
+			name:           "start delay",
+			startDelay:     time.Hour,
+			expectedReason: activitypb.ActivityDispatchTask_DISPATCH_REASON_START_DELAY,
+			expectedBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H,
+		},
+		{
+			name:                    "retry without configured start delay",
+			firstAttemptStartedTime: timestamppb.Now(),
+			expectedReason:          activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY,
+			expectedBucket:          activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+		},
+		{
+			name:                    "retry preserves configured start delay bucket",
+			startDelay:              time.Hour,
+			firstAttemptStartedTime: timestamppb.Now(),
+			expectedReason:          activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY,
+			expectedBucket:          activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					StartDelay:              durationpb.New(tc.startDelay),
+					FirstAttemptStartedTime: tc.firstAttemptStartedTime,
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Stamp: 1}),
+			}
+
+			task := activity.newActivityDispatchTask(ctx)
+			require.Equal(t, int32(1), task.GetStamp())
+			require.Equal(t, tc.expectedReason, task.GetDispatchReason())
+			require.Equal(t, tc.expectedBucket, task.GetStartDelayBucket())
+		})
+	}
+}
+
 func TestHandleStarted(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	testRequestID := "test-request-id"

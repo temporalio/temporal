@@ -1010,7 +1010,7 @@ func (a *Activity) unpause(
 	ctx.AddTask(
 		a,
 		chasm.TaskAttributes{ScheduledTime: dispatchTime},
-		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()})
+		a.newActivityDispatchTask(ctx))
 }
 
 // unpauseDispatchTime computes when an unpaused attempt should be dispatched
@@ -1069,7 +1069,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	ctx.AddTask(
 		a,
 		chasm.TaskAttributes{ScheduledTime: dispatchTime},
-		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		a.newActivityDispatchTask(ctx),
 	)
 	a.emitOnResetMetrics(event.handler)
 }
@@ -1337,6 +1337,44 @@ func (a *Activity) firstDispatchTime() time.Time {
 	return a.ScheduleTime.AsTime().Add(a.GetStartDelay().AsDuration())
 }
 
+func (a *Activity) newActivityDispatchTask(ctx chasm.Context) *activitypb.ActivityDispatchTask {
+	dispatchReason := activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE
+	if a.GetFirstAttemptStartedTime() != nil {
+		dispatchReason = activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY
+	} else if a.GetStartDelay().AsDuration() > 0 {
+		dispatchReason = activitypb.ActivityDispatchTask_DISPATCH_REASON_START_DELAY
+	}
+
+	return &activitypb.ActivityDispatchTask{
+		Stamp:            a.LastAttempt.Get(ctx).GetStamp(),
+		DispatchReason:   dispatchReason,
+		StartDelayBucket: startDelayBucket(a.GetStartDelay().AsDuration()),
+	}
+}
+
+func startDelayBucket(delay time.Duration) activitypb.ActivityDispatchTask_StartDelayBucket {
+	switch {
+	case delay <= 0:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE
+	case delay < time.Minute:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_LT_1M
+	case delay < 10*time.Minute:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M
+	case delay < time.Hour:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_10M_1H
+	case delay < 6*time.Hour:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H
+	case delay < 24*time.Hour:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_6H_1D
+	case delay < 7*24*time.Hour:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1D_7D
+	case delay <= 30*24*time.Hour:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D
+	default:
+		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_GT_30D
+	}
+}
+
 // reissueDispatchAndScheduleToStart re-emits the ActivityDispatchTask and ScheduleToStart timeout task for
 // a SCHEDULED activity. Retries fire at the retry time; first attempts dispatch now, lifted to
 // honor any pending start_delay.
@@ -1351,7 +1389,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 	ctx.AddTask(
 		a,
 		chasm.TaskAttributes{ScheduledTime: dispatchTime},
-		&activitypb.ActivityDispatchTask{Stamp: attempt.GetStamp()},
+		a.newActivityDispatchTask(ctx),
 	)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 		ctx.AddTask(
