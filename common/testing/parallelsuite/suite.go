@@ -29,6 +29,7 @@ type testingSuite interface {
 }
 
 // Scope provides the context and test handles for a test or await attempt.
+// It is useful for test helpers.
 type Scope interface {
 	Context() context.Context
 	TB() testing.TB
