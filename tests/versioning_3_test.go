@@ -52,7 +52,8 @@ type Versioning3Suite struct {
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
-	parallelsuite.Run(t, &Versioning3Suite{})
+	testcore.UseSuiteScopedCluster(t)                         //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
+	parallelsuite.RunLegacySequential(t, &Versioning3Suite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *VersioningTestEnv {
@@ -159,7 +160,8 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 
 		env.startWorkflow(s, tv, nil)
 
-		env.idlePollWorkflow(s, tvOldDeployment,
+		env.idlePollWorkflow(s,
+			tvOldDeployment,
 			true,
 			ver3MinPollTime,
 			"old deployment should not receive unpinned task",
