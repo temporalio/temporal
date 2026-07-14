@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // SlackMessage represents a Slack Block Kit message
@@ -40,7 +42,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	}
 
 	// Workflow and commit info
-	commitURL := fmt.Sprintf("https://github.com/temporalio/temporal/commit/%s", report.Commit.SHA)
+	commitURL := github.CommitURL("temporalio/temporal", report.Commit.SHA)
 	infoBlock := SlackBlock{
 		Type: "section",
 		Fields: []SlackText{
@@ -225,7 +227,7 @@ func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
 		for _, run := range slowestRuns {
 			slowest = append(slowest, fmt.Sprintf("• <%s|%s> — %s (%s)",
 				run.URL,
-				run.shortSHA(),
+				run.ShortSHA(),
 				formatDuration(run.Duration),
 				run.Conclusion,
 			))
@@ -272,7 +274,7 @@ func FormatReportForDebug(report *DigestReport) string {
 			fmt.Fprintf(&sb, "  %s (%s): %s\n    %s\n",
 				formatDuration(run.Duration),
 				run.Conclusion,
-				run.shortSHA(),
+				run.ShortSHA(),
 				run.URL,
 			)
 		}

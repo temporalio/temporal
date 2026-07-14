@@ -2,102 +2,19 @@ package cinotify
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"slices"
-	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
-// GetWorkflowRun fetches workflow run details using gh CLI
-func GetWorkflowRun(runID string) (*WorkflowRun, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gh", "run", "view", runID, "--json",
-		"conclusion,name,headBranch,headSha,url,displayTitle,event,createdAt,jobs")
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("failed to get workflow run: %w (stderr: %s)", err, string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("failed to get workflow run: %w", err)
-	}
-
-	var run WorkflowRun
-	if err := json.Unmarshal(output, &run); err != nil {
-		return nil, fmt.Errorf("failed to parse workflow run: %w", err)
-	}
-
-	return &run, nil
-}
-
-// GetCommitAuthor fetches commit author using gh CLI
-func GetCommitAuthor(sha string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gh", "api",
-		fmt.Sprintf("repos/temporalio/temporal/commits/%s", sha),
-		"--jq", ".commit.author.name")
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get commit author: %w", err)
-	}
-
-	return strings.TrimSpace(string(output)), nil
-}
-
-// BuildFailureReport aggregates all failure information
-func BuildFailureReport(runID string) (*FailureReport, error) {
-	run, err := GetWorkflowRun(runID)
-	if err != nil {
-		return nil, err
-	}
-
-	author, err := GetCommitAuthor(run.HeadSHA)
-	if err != nil {
-		// Non-fatal: use unknown if we can't get author
-		author = "Unknown"
-	}
-
-	shortSHA := run.HeadSHA
-	if len(shortSHA) > 7 {
-		shortSHA = shortSHA[:7]
-	}
-
-	commit := CommitInfo{
-		SHA:      run.HeadSHA,
-		ShortSHA: shortSHA,
-		Author:   author,
-		Message:  run.DisplayTitle,
-	}
-
-	// Identify failed jobs
-	var failedJobs []Job
-	for _, job := range run.Jobs {
-		if job.Conclusion == ConclusionFailure {
-			failedJobs = append(failedJobs, job)
-		}
-	}
-
-	return &FailureReport{
-		Workflow:   *run,
-		Commit:     commit,
-		FailedJobs: failedJobs,
-		TotalJobs:  len(run.Jobs),
-	}, nil
-}
-
 // filterCompleted removes workflow runs that are not completed
-func filterCompleted(runs []WorkflowRunSummary) []WorkflowRunSummary {
-	var completed []WorkflowRunSummary
+func filterCompleted(runs []github.Run) []github.Run {
+	var completed []github.Run
 	for _, run := range runs {
 		// Only include runs with a conclusion (success or failure)
-		if run.Conclusion == ConclusionSuccess || run.Conclusion == ConclusionFailure {
+		if run.Conclusion == github.ConclusionSuccess || run.Conclusion == github.ConclusionFailure {
 			completed = append(completed, run)
 		}
 	}
@@ -158,32 +75,22 @@ func calculatePercentUnder(durations []time.Duration, threshold time.Duration) f
 	return (float64(count) / float64(len(durations))) * 100
 }
 
-// GetWorkflowRuns fetches workflow runs for a branch within a time range
-func GetWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRunSummary, error) {
+// getWorkflowRuns fetches workflow runs for a branch within a time range.
+func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Format the date as YYYY-MM-DD for gh CLI
 	sinceDate := since.Format("2006-01-02")
 
-	cmd := exec.CommandContext(ctx, "gh", "run", "list",
-		"--branch", branch,
-		"--workflow", workflowName,
-		"--created", ">="+sinceDate,
-		"--limit", "1000",
-		"--json", "conclusion,name,event,createdAt,startedAt,updatedAt,headSha,displayTitle,url")
-
-	output, err := cmd.Output()
+	runs, err := github.ListRuns(ctx, github.RunListOptions{
+		Branch:   branch,
+		Workflow: workflowName,
+		Created:  ">=" + sinceDate,
+		Limit:    1000,
+	})
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("failed to get workflow runs: %w (stderr: %s)", err, string(exitErr.Stderr))
-		}
 		return nil, fmt.Errorf("failed to get workflow runs: %w", err)
-	}
-
-	var runs []WorkflowRunSummary
-	if err := json.Unmarshal(output, &runs); err != nil {
-		return nil, fmt.Errorf("failed to parse workflow runs: %w", err)
 	}
 
 	// Calculate duration for each run (actual execution time, not including queue time)
@@ -203,7 +110,7 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 	startDate := endDate.AddDate(0, 0, -days)
 
 	// Fetch workflow runs
-	runs, err := GetWorkflowRuns(branch, workflowName, startDate)
+	runs, err := getWorkflowRuns(branch, workflowName, startDate)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +124,7 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 
 	for _, run := range completedRuns {
 		switch run.Conclusion {
-		case ConclusionSuccess:
+		case github.ConclusionSuccess:
 			successCount++
 		default:
 			failureCount++
