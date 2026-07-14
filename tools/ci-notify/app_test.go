@@ -33,7 +33,7 @@ func TestBuildFailureMessage(t *testing.T) {
 		TotalJobs: 5,
 	}
 
-	expected := &SlackMessage{
+	require.Equal(t, &SlackMessage{
 		Text: "CI Failed on Main",
 		Blocks: []SlackBlock{
 			{
@@ -67,9 +67,7 @@ func TestBuildFailureMessage(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	require.Equal(t, expected, BuildFailureMessage(report))
+	}, BuildFailureMessage(report))
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
@@ -89,11 +87,11 @@ func TestFormatMessageForDebug(t *testing.T) {
 		TotalJobs: 5,
 	}
 
-	expected := "🚨 CI Failed on Main Branch 🚨\n\n" +
-		"Failures (1): `TestHistoryWorkflow`\n\n" +
-		"Failed jobs (1/5): test-job-1 (https://github.com/temporalio/temporal/actions/runs/123456/job/1)\n" +
-		"\nView Run: https://github.com/temporalio/temporal/actions/runs/123456\n"
-	require.Equal(t, expected, FormatMessageForDebug(report))
+	require.Equal(t, "🚨 CI Failed on Main Branch 🚨\n\n"+
+		"Failures (1): `TestHistoryWorkflow`\n\n"+
+		"Failed jobs (1/5): test-job-1 (https://github.com/temporalio/temporal/actions/runs/123456/job/1)\n"+
+		"\nView Run: https://github.com/temporalio/temporal/actions/runs/123456\n",
+		FormatMessageForDebug(report))
 }
 
 func TestSlackMessageStructure(t *testing.T) {
@@ -112,7 +110,7 @@ func TestSlackMessageStructure(t *testing.T) {
 
 	// Verify we have the expected number of blocks
 	// Header, Jobs List, Link = 3 blocks
-	expected := &SlackMessage{
+	require.Equal(t, &SlackMessage{
 		Text: "CI Failed on Main",
 		Blocks: []SlackBlock{
 			{
@@ -137,9 +135,7 @@ func TestSlackMessageStructure(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	require.Equal(t, expected, BuildFailureMessage(report))
+	}, BuildFailureMessage(report))
 }
 
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
