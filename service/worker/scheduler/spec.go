@@ -16,9 +16,7 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-// DefaultWarnIterations is the fallback warn threshold for how many iterations before
-// emitting a log wanning on the number of schedule iterations.
-const DefaultWarnIterations = 7 * 24 * 60 * 60
+const defaultWarnIterations = 24 * 60 * 60
 
 type (
 	CompiledSpec struct {
@@ -301,7 +299,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	}
 	warnIterations := cs.warnIterations()
 	if warnIterations <= 0 {
-		warnIterations = DefaultWarnIterations
+		warnIterations = defaultWarnIterations
 	}
 	maxIterations := cs.maxIterations()
 	if maxIterations <= 0 {
