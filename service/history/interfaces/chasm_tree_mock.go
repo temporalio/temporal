@@ -259,6 +259,18 @@ func (mr *MockChasmTreeMockRecorder) PartitionedSnapshot(arg0 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartitionedSnapshot", reflect.TypeOf((*MockChasmTree)(nil).PartitionedSnapshot), arg0)
 }
 
+// MarkTotalTimeSkippedUpdatedInPassive mocks base method.
+func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkTotalTimeSkippedUpdatedInPassive")
+}
+
+// MarkTotalTimeSkippedUpdatedInPassive indicates an expected call of MarkTotalTimeSkippedUpdatedInPassive.
+func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTotalTimeSkippedUpdatedInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkTotalTimeSkippedUpdatedInPassive))
+}
+
 // RefreshTasks mocks base method.
 func (m *MockChasmTree) RefreshTasks() error {
 	m.ctrl.T.Helper()

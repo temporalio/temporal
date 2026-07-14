@@ -5739,3 +5739,96 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 			"the regenerated earliest pure task ends up created again")
 	})
 }
+
+// TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive verifies the passive path: after a
+// skip transition is applied via replication, MutableState calls MarkTotalTimeSkippedUpdatedInPassive
+// so the next CloseTransaction re-stamps pending timer/pure physical tasks against the replicated
+// accumulated skip. Without the flag those already-created tasks are left untouched (nothing to do);
+// with the flag they are regenerated, and the flag is cleared afterwards.
+func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// newTree builds a root component holding one timer side-effect task and one pure task, both
+	// already physicalTaskStatusCreated (as if generated under the old skip in a prior transaction).
+	newTree := func() *Node {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									TypeId:                    testSideEffectTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 1,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+								{
+									TypeId:                    testPureTaskTypeID,
+									ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+									VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+									VersionedTransitionOffset: 2,
+									PhysicalTaskStatus:        physicalTaskStatusCreated,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		return root
+	}
+
+	s.Run("WithoutFlagLeavesCreatedTasksUntouched", func() {
+		root := newTree()
+
+		_, err := root.CloseTransaction()
+		s.NoError(err)
+
+		s.Equal(0, s.nodeBackend.NumTasksAdded(),
+			"already-created timer/pure tasks are not regenerated without the replication flag")
+	})
+
+	s.Run("WithFlagRegeneratesTimerAndPureTasks", func() {
+		root := newTree()
+
+		root.MarkTotalTimeSkippedUpdatedInPassive()
+		s.True(root.totalTimeSkippedUpdatedInPassive)
+
+		_, err := root.CloseTransaction()
+		s.NoError(err)
+
+		s.Equal(2, s.nodeBackend.NumTasksAdded(),
+			"the timer side-effect task and the single earliest pure task are re-stamped")
+		var sideEffectTimers, pureTimers int
+		for _, task := range s.nodeBackend.TasksByCategory[tasks.CategoryTimer] {
+			switch task.(type) {
+			case *tasks.ChasmTask:
+				sideEffectTimers++
+			case *tasks.ChasmTaskPure:
+				pureTimers++
+			default:
+			}
+		}
+		s.Equal(1, sideEffectTimers, "the side-effect timer physical task is regenerated")
+		s.Equal(1, pureTimers, "the single earliest pure physical task is regenerated")
+
+		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
+		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)
+		s.Equal(physicalTaskStatusCreated, rootAttrs.PureTasks[0].PhysicalTaskStatus)
+
+		s.False(root.totalTimeSkippedUpdatedInPassive,
+			"the flag is reset after the transaction closes")
+	})
+}
