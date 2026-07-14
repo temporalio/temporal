@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -33,6 +34,13 @@ const (
 	defaultInterval      = 1 * time.Minute
 	defaultCatchupWindow = 5 * time.Minute
 )
+
+// newLegacySpecBuilder builds a legacy SpecBuilder backed by a dynamic-config Collection with the
+// given overrides (pass nil for all defaults). It replaces the old NewSpecBuilder()+Set* pattern
+// now that the compute-limit bounds are read from dynamic config in NewSpecBuilder.
+func newLegacySpecBuilder(overrides dynamicconfig.StaticClient) *legacyscheduler.SpecBuilder {
+	return legacyscheduler.NewSpecBuilder(dynamicconfig.NewCollection(overrides, log.NewNoopLogger()))
+}
 
 // defaultSchedule returns a protobuf definition for a schedule matching this
 // package's other testing defaults.
@@ -84,7 +92,7 @@ func defaultConfig() *scheduler.Config {
 
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
-	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder := newLegacySpecBuilder(nil)
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
@@ -175,7 +183,7 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 		defaultConfig(),
 		mockMetrics,
 		logger,
-		legacyscheduler.NewSpecBuilder(),
+		newLegacySpecBuilder(nil),
 	)
 }
 

@@ -11,6 +11,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 )
@@ -25,8 +26,8 @@ type (
 		tz             *time.Location
 		calendar       []*compiledCalendar
 		excludes       []*compiledCalendar
-		warnIterations int
-		maxIterations  int
+		warnIterations func() int
+		maxIterations  func() int
 	}
 
 	GetNextTimeResult struct {
@@ -59,49 +60,16 @@ type (
 // hits the hard compute iteration bound before finding a non-excluded time.
 var ErrComputeLimitExceeded = errors.New("schedule spec next-time search exceeded the compute iteration limit")
 
-func NewSpecBuilder() *SpecBuilder {
+func NewSpecBuilder(dc *dynamicconfig.Collection) *SpecBuilder {
 	return &SpecBuilder{
+		warnIterations: dynamicconfig.SchedulerSpecWarnIterations.Get(dc),
+		maxIterations:  dynamicconfig.SchedulerSpecMaxIterations.Get(dc),
 		locationCache: cache.New(1000,
 			&cache.Options{
 				TTL: 24 * time.Hour,
 			},
 		),
 	}
-}
-
-// SetWarnIterations sets the dynamic-config accessor for the GetNextTime warn threshold.
-// Without it, DefaultWarnIterations is used.
-func (b *SpecBuilder) SetWarnIterations(fn func() int) {
-	b.warnIterations = fn
-}
-
-// WarnIterations returns the warn threshold from the dynamic-config accessor, or
-// DefaultWarnIterations if none was set. The warn threshold only drives observability
-// (metric + log) and does not affect scheduling decisions, so it does not need the
-// deterministic snapshotting that the hard limit (MaxIterations) requires.
-func (b *SpecBuilder) WarnIterations() int {
-	if b.warnIterations == nil {
-		return DefaultWarnIterations
-	}
-	return b.warnIterations()
-}
-
-// SetMaxIterations sets the dynamic-config accessor for the hard GetNextTime search bound.
-// Without it, the limit is math.MaxInt (effectively disabled).
-func (b *SpecBuilder) SetMaxIterations(fn func() int) {
-	b.maxIterations = fn
-}
-
-// MaxIterations returns the raw (unclamped) hard search bound from the dynamic-config accessor,
-// or math.MaxInt (disabled) if none was set. Reading dynamic config is non-deterministic, so a
-// workflow must snapshot this through a deterministic channel (e.g. MutableSideEffect) and apply
-// it via CompiledSpec.setMaxIterations, rather than relying on the value read at NewCompiledSpec
-// time.
-func (b *SpecBuilder) MaxIterations() int {
-	if b.maxIterations == nil {
-		return math.MaxInt
-	}
-	return b.maxIterations()
 }
 
 func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledSpec, error) {
@@ -133,25 +101,11 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 		tz:             tz,
 		calendar:       ccs,
 		excludes:       excludes,
-		warnIterations: b.WarnIterations(),
-		maxIterations:  b.MaxIterations(),
+		warnIterations: b.warnIterations,
+		maxIterations:  b.maxIterations,
 	}
 
 	return cspec, nil
-}
-
-// setMaxIterations overrides the compiled hard search bound. The legacy scheduler workflow uses
-// this to apply a value snapshotted through its "tweakables" MutableSideEffect, so the bound is
-// deterministic across replay rather than read live from dynamic config at compile time.
-func (cs *CompiledSpec) setMaxIterations(v int) {
-	cs.maxIterations = v
-}
-
-// setWarnIterations overrides the compiled warn threshold. Like setMaxIterations, the legacy
-// scheduler workflow uses this to apply a value snapshotted through its "tweakables"
-// MutableSideEffect, keeping the compiled spec deterministic across replay.
-func (cs *CompiledSpec) setWarnIterations(v int) {
-	cs.warnIterations = v
 }
 
 // CleanSpec sets default values in ranges.
@@ -345,11 +299,11 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
 	}
-	warnIterations := cs.warnIterations
+	warnIterations := cs.warnIterations()
 	if warnIterations <= 0 {
 		warnIterations = DefaultWarnIterations
 	}
-	maxIterations := cs.maxIterations
+	maxIterations := cs.maxIterations()
 	if maxIterations <= 0 {
 		maxIterations = math.MaxInt // disabled: effectively unlimited
 	}

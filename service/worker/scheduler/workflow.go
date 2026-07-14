@@ -22,6 +22,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -232,7 +233,7 @@ var (
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 	disabled := func() bool { return false }
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), disabled, disabled)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(dynamicconfig.NewNoopCollection()), disabled, disabled)
 }
 
 func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
@@ -434,8 +435,6 @@ func (s *scheduler) compileSpec() {
 		s.cspec = nil
 	} else {
 		s.Info.InvalidScheduleError = ""
-		cspec.setMaxIterations(s.tweakables.MaxIterations)
-		cspec.setWarnIterations(s.tweakables.WarnIterations)
 		s.cspec = cspec
 	}
 }
@@ -1321,10 +1320,6 @@ func (s *scheduler) updateTweakables() {
 		// Re-evaluates migration dynamic config each iteration.
 		p.EnableCHASMMigration = s.enableCHASMMigration()
 		p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
-		// Snapshot the search bounds here (inside the MutableSideEffect) so compileSpec applies
-		// deterministic values rather than reading dynamic config live at compile time.
-		p.MaxIterations = s.specBuilder.MaxIterations()
-		p.WarnIterations = s.specBuilder.WarnIterations()
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }

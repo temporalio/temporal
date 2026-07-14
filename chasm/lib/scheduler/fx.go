@@ -18,10 +18,7 @@ var Module = fx.Module(
 	"chasm.lib.scheduler",
 	fx.Provide(ConfigProvider),
 	fx.Provide(func(dc *dynamicconfig.Collection) *legacyscheduler.SpecBuilder {
-		b := legacyscheduler.NewSpecBuilder()
-		b.SetWarnIterations(dynamicconfig.SchedulerSpecWarnIterations.Get(dc))
-		b.SetMaxIterations(dynamicconfig.SchedulerSpecMaxIterations.Get(dc))
-		return b
+		return legacyscheduler.NewSpecBuilder(dc)
 	}),
 	fx.Provide(NewSpecProcessor),
 	fx.Provide(func(impl *SpecProcessorImpl) SpecProcessor { return impl }),

@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
-	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -610,7 +609,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 // component maps untouched. Before the fix this assertion fails because the maps are shared.
 func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
-	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder := newLegacySpecBuilder(nil)
 
 	vis := sched.Visibility.Get(ctx)
 	vis.MergeCustomMemo(ctx, map[string]*commonpb.Payload{"memoKey": payload.EncodeString("v")})
