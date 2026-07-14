@@ -35,7 +35,7 @@ type TestScope interface {
 	TB() testing.TB
 }
 
-type testScope struct {
+type scope struct {
 	ctx     context.Context
 	tb      testing.TB
 	assertT require.TestingT
@@ -48,7 +48,7 @@ type testScopeWithContext struct {
 
 // NewTestScope creates a test scope from its context and test handles.
 func NewTestScope(ctx context.Context, tb testing.TB, assertT require.TestingT) TestScope {
-	return testScope{ctx: ctx, tb: tb, assertT: assertT}
+	return scope{ctx: ctx, tb: tb, assertT: assertT}
 }
 
 // WithContext returns a scope that uses ctx and delegates test failures to scope.
@@ -60,19 +60,19 @@ func (s testScopeWithContext) Context() context.Context {
 	return s.ctx
 }
 
-func (s testScope) Context() context.Context {
+func (s scope) Context() context.Context {
 	return s.ctx
 }
 
-func (s testScope) TB() testing.TB {
+func (s scope) TB() testing.TB {
 	return s.tb
 }
 
-func (s testScope) Errorf(format string, args ...any) {
+func (s scope) Errorf(format string, args ...any) {
 	s.assertT.Errorf(format, args...)
 }
 
-func (s testScope) FailNow() {
+func (s scope) FailNow() {
 	s.assertT.FailNow()
 }
 
