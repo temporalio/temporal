@@ -134,7 +134,7 @@ func serializeTimerTask(
 		timerTask = timerChasmTaskToProto(task)
 	case *tasks.ChasmTaskPure:
 		timerTask = timerChasmPureTaskToProto(task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		timerTask = timeSkippingTimerTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown timer task type: %v", task)
@@ -142,7 +142,7 @@ func serializeTimerTask(
 	return encoder.TimerTaskInfoToBlob(timerTask)
 }
 
-func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
+func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingFastForwardTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
 		NamespaceId:    task.NamespaceID,
 		WorkflowId:     task.WorkflowID,
@@ -154,8 +154,8 @@ func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistenc
 	}
 }
 
-func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingTimerTask {
-	return &tasks.TimeSkippingTimerTask{
+func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.TimeSkippingFastForwardTimerTask {
+	return &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			info.NamespaceId,
 			info.WorkflowId,

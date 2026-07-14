@@ -106,7 +106,7 @@ func (ms *MutableStateImpl) applyFastForward(currentEventID int64, propagatedTar
 		SourceEventId: currentEventID,
 		HasReached:    false,
 	}
-	ms.addTimeSkippingTimerTask()
+	ms.addTimeSkippingFastForwardTask()
 }
 
 func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
@@ -456,7 +456,7 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 	tsi.AccumulatedSkippedDuration = durationpb.New(
 		tsi.GetAccumulatedSkippedDuration().AsDuration() + transition.GetSkippedDuration())
 	if transition.GetSkippedDuration() > 0 {
-		ms.addTimeSkippingTimerTask()
+		ms.addTimeSkippingFastForwardTask()
 	}
 	if transition.DisabledAfterFastForward {
 		tsi.Config.Enabled = false
@@ -487,18 +487,18 @@ func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
 		return
 	}
 	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
-	ms.addTimeSkippingTimerTask()
+	ms.addTimeSkippingFastForwardTask()
 }
 
 // =============================================================================
 // Time Skipping Utility Methods
 // =============================================================================
 
-func (ms *MutableStateImpl) addTimeSkippingTimerTask() {
+func (ms *MutableStateImpl) addTimeSkippingFastForwardTask() {
 	ff := ms.GetExecutionInfo().GetTimeSkippingInfo().GetFastForwardInfo()
 	if ff != nil && !ff.GetHasReached() {
 		// todo@time-skipping: add archetypeID and remove eventID
-		ms.AddTasks(&tasks.TimeSkippingTimerTask{
+		ms.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         ms.GetWorkflowKey(),
 			VisibilityTimestamp: ff.TargetTime.AsTime(),
 		})
