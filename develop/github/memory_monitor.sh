@@ -194,12 +194,11 @@ print_smaps_summary() {
     }
   ' "$smaps_file" \
     | sort -nr -k1,1 \
-    | head -30 \
     | awk -F '\t' '
       BEGIN {
         printf "%12s %12s %12s %12s %8s %s\n", "private_kb", "rss_kb", "anon_kb", "size_kb", "count", "mapping"
       }
-      {
+      NR <= 30 {
         printf "%12d %12d %12d %12d %8d %s\n", $1, $2, $3, $4, $5, $6
       }
     '
@@ -240,12 +239,11 @@ print_smaps_summary() {
     END { flush() }
   ' "$smaps_file" \
     | sort -nr -k1,1 \
-    | head -30 \
     | awk -F '\t' '
       BEGIN {
         printf "%12s %12s %12s %12s %-39s %s\n", "private_kb", "rss_kb", "anon_kb", "size_kb", "address", "mapping"
       }
-      {
+      NR <= 30 {
         printf "%12d %12d %12d %12d %-39s %s\n", $1, $2, $3, $4, $5, $6
       }
     '
