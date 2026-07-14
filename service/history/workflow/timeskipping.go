@@ -168,8 +168,8 @@ func propagateTimeSkippingToChild(
 	}
 
 	enabled := source.GetTimeSkippingInfo().GetConfig().GetEnabled()
-	disableChildPropagation := source.GetTimeSkippingInfo().GetConfig().GetDisableChildPropagation()
-	if !enabled || disableChildPropagation {
+	disablePropagation := source.GetTimeSkippingInfo().GetConfig().GetDisablePropagation()
+	if !enabled || disablePropagation {
 		return nil, stateProp
 	}
 
@@ -393,6 +393,9 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (needRegenTasks bool) {
+	if !ms.IsWorkflow() {
+		return false
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
@@ -404,7 +407,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. state change
+		// 3. state change.
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
 		if err != nil {

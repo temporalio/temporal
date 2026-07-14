@@ -103,6 +103,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task, nsName))
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
 		// Worker commands are best-effort and only executed on the active cluster.
@@ -186,12 +187,13 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	isTaskInTree, _, err := validateChasmSideEffectTask(ctx, ms, task)
+	isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
 	if err != nil {
 		return err
 	}
-	if !isTaskInTree {
-		// Replication has removed the logical task — drop the physical task.
+	if !isTaskInTree || !isValid {
+		// Replication has removed the logical task, or the component reports it
+		// invalid — drop the physical task.
 		return nil
 	}
 

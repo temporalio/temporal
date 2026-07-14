@@ -1980,12 +1980,11 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.NoError(err)
 	prevActivityStamp := activityInfo.Stamp
 
-	// Create a pending workflow task.
-	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	// Create a pending workflow task, but don't start it.
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	prevWFTStamp := pendingWFT.Stamp
 
-	// Pause and assert stamps incremented.
+	// Pause and assert activity stamps incremented.
 	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
 	s.NoError(err)
 
@@ -1993,11 +1992,61 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.True(ok)
 	s.Greater(updatedActivityInfo.Stamp, prevActivityStamp)
 
-	wftInfo := s.mutableState.GetPendingWorkflowTask()
-	s.NotNil(wftInfo)
-	s.Greater(wftInfo.Stamp, prevWFTStamp)
+	// The pending workflow task was scheduled but never started, so pausing
+	// must fail it outright rather than merely invalidating it, and reset the
+	// attempt counter so a subsequently scheduled task is a fresh, non-transient one.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
+	s.True(pausedEvent.GetWorkerMayIgnore())
+}
+
+// TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskLeftAlone verifies
+// that pausing while a workflow task is already started (in flight with a
+// worker) leaves it completely untouched: its stamp, attempt, and identity
+// are unchanged, so the worker's eventual completion or failure is accepted
+// normally, and an unresponsive worker's task still resolves via its own
+// start-to-close timeout.
+func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent_StartedWorkflowTaskLeftAlone() {
+	s.SetupSubTest()
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createVersionedMutableStateWithCompletedWFT(tq)
+
+	// Create and start a workflow task, but don't complete it.
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		worker_versioning.StampFromBuildId("b1"),
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+	prevWFTStamp := wft.Stamp
+	prevWFTAttempt := wft.Attempt
+
+	pausedEvent, err := s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
+	s.NoError(err)
+
+	wftInfo := s.mutableState.GetPendingWorkflowTask()
+	s.NotNil(wftInfo)
+	s.Equal(wft.ScheduledEventID, wftInfo.ScheduledEventID)
+	s.Equal(wft.StartedEventID, wftInfo.StartedEventID)
+	s.Equal(prevWFTStamp, wftInfo.Stamp)
+	s.Equal(prevWFTAttempt, wftInfo.Attempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
+
 	s.True(pausedEvent.GetWorkerMayIgnore())
 }
 
@@ -2046,17 +2095,25 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	pendingWFT, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
 
+	s.Equal(pendingWFT.ScheduledEventID, s.mutableState.GetPendingWorkflowTask().ScheduledEventID)
+
 	// Pause first to simulate paused workflow state.
 	_, err = s.mutableState.AddWorkflowExecutionPausedEvent("tester", "reason", uuid.NewString())
 	s.NoError(err)
 
-	// Capture stamps after pause.
+	// Capture activity stamp after pause.
 	pausedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	pausedActivityStamp := pausedActivityInfo.Stamp
-	pausedWFT := s.mutableState.GetPendingWorkflowTask()
-	s.NotNil(pausedWFT)
-	pausedWFTStamp := pausedWFT.Stamp
+
+	// The pending workflow task was scheduled but never started, so pausing
+	// must fail it outright (in the same transaction as the paused event)
+	// rather than merely invalidating it, and reset the attempt counter so
+	// the task created on unpause is a fresh, non-transient one.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
+	s.Equal(int32(1), s.mutableState.executionInfo.WorkflowTaskAttempt)
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED, s.mutableState.executionInfo.GetLastWorkflowTaskFailureCause())
 
 	// Unpause and verify.
 	unpausedEvent, err := s.mutableState.AddWorkflowExecutionUnpausedEvent("tester", "reason", uuid.NewString())
@@ -2071,15 +2128,20 @@ func (s *mutableStateSuite) TestAddWorkflowExecutionUnpausedEvent() {
 	s.True(ok)
 	s.Greater(updatedActivityInfo.Stamp, pausedActivityStamp)
 
+	// The task failed at pause time stays cleared through unpause; the
+	// unpause API (not ApplyWorkflowExecutionUnpausedEvent) is responsible
+	// for scheduling the fresh one.
+	s.False(s.mutableState.HasPendingWorkflowTask())
+	s.Nil(s.mutableState.GetPendingWorkflowTask())
+
+	err = ScheduleWorkflowTask(s.mutableState)
+	s.NoError(err)
 	currentWFT := s.mutableState.GetPendingWorkflowTask()
 	s.NotNil(currentWFT)
-	s.Equal(currentWFT.Stamp, pausedWFTStamp) // workflow task stamp should not change between pause and unpause.
+	s.Greater(currentWFT.ScheduledEventID, pendingWFT.ScheduledEventID)
 
 	// assert the event is marked as 'worker may ignore' so that older SDKs can safely ignore it.
 	s.True(unpausedEvent.GetWorkerMayIgnore())
-
-	// Ensure the pending workflow task we created earlier still exists (no unexpected removal).
-	s.Equal(pendingWFT.ScheduledEventID, currentWFT.ScheduledEventID)
 }
 
 func (s *mutableStateSuite) TestPauseWorkflowExecution_FailStateValidation() {
@@ -3108,6 +3170,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	s.NoError(err)
 
@@ -3174,6 +3237,7 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 		nil,
 		nil,
 		"",
+		nil,
 	)
 	s.NoError(err)
 
@@ -5227,6 +5291,87 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersistence() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
+	var lastUpdateTime *timestamppb.Timestamp
+	if mutableState.executionInfo.LastUpdateTime != nil {
+		lastUpdateTime = proto.Clone(mutableState.executionInfo.LastUpdateTime).(*timestamppb.Timestamp)
+	}
+	var checksum *persistencespb.Checksum
+	if mutableState.checksum != nil {
+		checksum = proto.Clone(mutableState.checksum).(*persistencespb.Checksum)
+	}
+	dbRecordVersion := mutableState.dbRecordVersion
+
+	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Nil(mutation)
+	s.Empty(eventsSeq)
+	s.False(mutableState.IsDirty())
+	s.Equal(stateTransitionCount, mutableState.executionInfo.StateTransitionCount)
+	if lastUpdateTime == nil {
+		s.Nil(mutableState.executionInfo.LastUpdateTime)
+	} else {
+		protorequire.ProtoEqual(s.T(), lastUpdateTime, mutableState.executionInfo.LastUpdateTime)
+	}
+	if checksum == nil {
+		s.Nil(mutableState.checksum)
+	} else {
+		protorequire.ProtoEqual(s.T(), checksum, mutableState.checksum)
+	}
+	s.Equal(dbRecordVersion, mutableState.dbRecordVersion)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoesNotSkipPersistence() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
+
+	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.NotNil(mutation)
+	s.Equal(stateTransitionCount+1, mutableState.executionInfo.StateTransitionCount)
+}
+
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
@@ -5270,7 +5415,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
+	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5308,7 +5454,8 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
+	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -5714,10 +5861,11 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     state.executionState.RunId,
-			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			StartTime: state.executionState.StartTime,
+			RunId:               state.executionState.RunId,
+			State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime:           state.executionState.StartTime,
+			FirstExecutionRunId: state.executionState.FirstExecutionRunId,
 		},
 		NextEventId: 103,
 	}
@@ -6635,6 +6783,7 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 		nil,
 		nil,
 		expectedWorkerControlTaskQueue,
+		nil,
 	)
 	s.NoError(err)
 

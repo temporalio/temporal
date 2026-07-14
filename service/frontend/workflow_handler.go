@@ -590,11 +590,12 @@ func (wh *WorkflowHandler) convertToStartWorkflowExecutionResponse(
 	}
 
 	return &workflowservice.StartWorkflowExecutionResponse{
-		RunId:             resp.GetRunId(),
-		Started:           resp.Started,
-		EagerWorkflowTask: resp.GetEagerWorkflowTask(),
-		Link:              resp.GetLink(),
-		Status:            resp.GetStatus(),
+		RunId:               resp.GetRunId(),
+		FirstExecutionRunId: resp.GetFirstExecutionRunId(),
+		Started:             resp.Started,
+		EagerWorkflowTask:   resp.GetEagerWorkflowTask(),
+		Link:                resp.GetLink(),
+		Status:              resp.GetStatus(),
 	}, nil
 }
 
@@ -2366,9 +2367,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	return &workflowservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:      resp.GetRunId(),
-		Started:    resp.Started,
-		SignalLink: resp.GetSignalLink(),
+		RunId:               resp.GetRunId(),
+		FirstExecutionRunId: resp.GetFirstExecutionRunId(),
+		Started:             resp.Started,
+		SignalLink:          resp.GetSignalLink(),
 	}, nil
 }
 
@@ -5739,8 +5741,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
 			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			wildCardUnpause := fmt.Sprintf("%s STARTS_WITH 'property:activityType='", sadefs.TemporalPauseInfo)
-			input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, wildCardUnpause)
+			input.Request.VisibilityQuery = visibilityQuery
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY

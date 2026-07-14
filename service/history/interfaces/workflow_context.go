@@ -5,6 +5,8 @@ package interfaces
 import (
 	"context"
 
+	commandpb "go.temporal.io/api/command/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
@@ -120,5 +122,14 @@ type (
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry(ctx context.Context) update.Registry
+
+		// AppendTaskCompletionPage buffers an intermediate page's commands, keyed by
+		// page number. The buffer lives on the cached context and is reclaimed by
+		// Clear().
+		AppendTaskCompletionPage(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) error
+		// GetMergedTaskCompletionPages concatenates the buffered intermediate pages
+		// (0..finalPageNumber-1) in order, clears the buffer, and returns the merged
+		// commands to be prepended to the final page's own commands.
+		GetMergedTaskCompletionPages(schedID int64, attempt int32, request *workflowservice.RespondWorkflowTaskCompletedRequest) ([]*commandpb.Command, error)
 	}
 )

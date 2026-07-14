@@ -355,11 +355,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Task in tree but component says invalid (e.g. code-deployment) — still retry.
+	// Task in tree but component says invalid (e.g. code-deployment) — drop the physical task.
 	expectValidate(true, false, nil)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
-	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	// Task not in tree — replication removed it, drop the physical task.
 	expectValidate(false, false, nil)

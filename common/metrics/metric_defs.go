@@ -1096,6 +1096,9 @@ var (
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
+	// ReplicationBackfillEventsLatency measures the latency of bringing local events up to the
+	// source cluster's current branch (backfilling history events) during workflow state replication.
+	ReplicationBackfillEventsLatency = NewTimerDef("replication_backfill_events_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag                             = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1198,6 +1201,16 @@ var (
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
 
+	// Pagination of RespondWorkflowTaskCompleted requests
+	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
+		"workflow_task_completion_paginated_bytes",
+		WithDescription("Total wire size of successfully completed paginated RespondWorkflowTaskCompleted requests. count givens the total number of successful paginated requests."),
+	)
+	WorkflowTaskCompletionBufferLost = NewCounterDef(
+		"workflow_task_completion_buffer_lost",
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted or a page was missing)."),
+	)
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1278,6 +1291,7 @@ var (
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
+	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
@@ -1548,6 +1562,10 @@ var (
 	ScheduleCallbackLatency = NewTimerDef(
 		"schedule_callback_latency",
 		WithDescription("Latency between a scheduled action completing and the scheduler receiving the completion callback"),
+	)
+	ScheduleCallbackIgnored = NewCounterDef(
+		"schedule_callback_ignored",
+		WithDescription("Scheduler received a completion callback unassociated with any known running actions"),
 	)
 
 	// Worker Versioning

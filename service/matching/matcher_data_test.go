@@ -30,8 +30,9 @@ import (
 
 type MatcherDataSuite struct {
 	suite.Suite
-	ts *clock.EventTimeSource
-	md matcherData
+	ts               *clock.EventTimeSource
+	md               matcherData
+	rateLimitedCount atomic.Int32
 }
 
 func TestMatcherDataSuite(t *testing.T) {
@@ -49,7 +50,8 @@ func (s *MatcherDataSuite) SetupTest() {
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
+	s.rateLimitedCount.Store(0)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, func() { s.rateLimitedCount.Add(1) })
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -154,7 +156,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -181,7 +183,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -227,6 +229,52 @@ func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
 	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
 }
 
+func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	s.Equal(int32(0), s.rateLimitedCount.Load())
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should be rate limited and callback should fire.
+	t := s.newSyncTask(nil)
+	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+
+	s.Positive(s.rateLimitedCount.Load())
+}
+
+func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	// Enqueue a backlog task.
+	_ = s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 0, nil))
+
+	// Poller arrives — findAndWakeMatches should hit the rate limiter.
+	poller := &waitingPoller{startTime: s.now()}
+	s.md.MatchPollerImmediately(poller)
+
+	s.Positive(s.rateLimitedCount.Load())
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
@@ -264,7 +312,8 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	resp := <-respC
 	s.True(resp.forwarded)
 	s.NoError(resp.forwardErr)
-	s.True(resp.forwardRes != nil) // typed nil
+	//nolint:testifylint // NotEqual is intentional: interface is non-nil but holds typed nil *QueryWorkflowResponse
+	s.NotEqual(resp.forwardRes, nil)
 	s.Nil(resp.forwardRes.(*matchingservice.QueryWorkflowResponse))
 }
 
@@ -553,9 +602,9 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 		return t.event.TaskId%4 == 0
 	})
 
-	s.Equal(25, len(removed))
+	s.Len(removed, 25)
 	for _, t := range removed {
-		s.True(t.event.TaskId%4 == 0)
+		s.Equal(int64(0), t.event.TaskId%4)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -565,7 +614,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.False(t.event.TaskId%4 == 0)
+		s.NotEqual(int64(0), t.event.TaskId%4)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}
@@ -1000,7 +1049,7 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 		1e-8, // 1 per 1000+ days
 	} {
 		pLow := makeSimpleLimiterParams(lowRate, time.Second)
-		require.True(t, pLow.never() == (lowRate == 0))
+		require.Equal(t, pLow.never(), (lowRate == 0))
 
 		now := time.Now().UnixNano()
 		var ready simpleLimiter
@@ -1046,7 +1095,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, func() {})
 
 		next := func() int {
 			if len(tape) == 0 {

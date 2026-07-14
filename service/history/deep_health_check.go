@@ -53,8 +53,9 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		Message: fmt.Sprintf("historyservice gRPC health check: %s", status.Status.String()),
 	})
 
+	// TODO: Remove AverageLatency check once Latency is used by default. It is fine to combine both for now since only one returns a non-zero value.
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCLatency,
-		h.historyHealthSignal.AverageLatency(), h.config.HealthRPCLatencyFailure(),
+		h.historyHealthSignal.AverageLatency()+h.historyHealthSignal.LatencyQuantile(0.99), h.config.HealthRPCLatencyFailure(),
 		"historyservice latency"))
 
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCErrorRatio,

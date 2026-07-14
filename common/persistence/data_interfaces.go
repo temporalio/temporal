@@ -116,12 +116,16 @@ type (
 		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
 		// request ID that started the workflow execution as well as the request IDs that were attached
 		// to the workflow execution when it was running.
-		RequestIDs       map[string]*persistencespb.RequestIDInfo
-		RunID            string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
-		StartTime        *time.Time
+		RequestIDs map[string]*persistencespb.RequestIDInfo
+		RunID      string
+		// FirstExecutionRunID is the run ID of the first execution in the continue-as-new chain.
+		// May be empty on records written before this field was added to WorkflowExecutionState;
+		// callers must not assume RunID in that case.
+		FirstExecutionRunID string
+		State               enumsspb.WorkflowExecutionState
+		Status              enumspb.WorkflowExecutionStatus
+		LastWriteVersion    int64
+		StartTime           *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record

@@ -58,7 +58,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	// Create HTTP client with TLS config
 	httpClient := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: env.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+			TLSClientConfig: env.GetTestCluster().Host().TLSConfigProvider().FrontendClientConfig,
 		},
 	}
 
