@@ -772,6 +772,8 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 
 // TestDrainClearsBacklogBits verifies that partitions which report as fully
 // drained have their BacklogState bits cleared on the next periodic drain check.
+// It also covers that the drain write is synchronous and that freshly sampled
+// backlog counts ride along on the same write.
 func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 	s.settings.BackgroundInterval = 50 * time.Millisecond
 	s.settings.DrainBufferTime = 0
@@ -782,31 +784,30 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 		TargetVersion: 0, // fake clock starts at Unix zero
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	// scaleStateToInfo for the initial state has Read=4, Write=2.
-	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: true},
-					},
-				},
-			},
-		},
-	}
+	// scaleStateToInfo for the initial state has Read=4, Write=2, which
+	// backlogDescribeResponse echoes so partitionIsFullyDrained's equality check
+	// passes. Partitions 0,1 (id < target) stay occupied; 2,3 report fully drained.
 	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(drainedResp, nil).AnyTimes()
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			if req.GetTaskQueuePartition().GetNormalPartitionId() >= 2 {
+				return backlogDescribeResponse(0, true), nil
+			}
+			return backlogDescribeResponse(500, false), nil
+		}).AnyTimes()
 
 	// Timer-driven path also calls the scaler (with NumTasks=0). It returns
 	// NoChange so no decision-driven DB write happens — only the drain write.
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
-	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	writes := make(chan dbWrite, 1)
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
-			dbWrites <- common.CloneProto(state)
+		Do(func(state *persistencespb.PartitionScaleState, sync bool) {
+			writes <- dbWrite{common.CloneProto(state), sync}
 		}).
 		Return(nil)
 
@@ -824,14 +825,18 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 
 	s.fireBackgroundTimer()
 
-	state := waitRecv(s, dbWrites, "drain never wrote")
-	s.Equal(int32(2), state.Target, "target should not change during drain")
+	w := waitRecv(s, writes, "drain never wrote")
+	s.True(w.sync, "a drain-bit change must force a synchronous DB write")
+	s.Equal(int32(2), w.state.Target, "target should not change during drain")
 	// Drained ids 2 and 3 should be cleared; ids 0 and 1 stay set (id < target).
-	s.Equal(int32(2), bitSet(state.BacklogState).len())
-	s.True(bitSet(state.BacklogState).get(0))
-	s.True(bitSet(state.BacklogState).get(1))
-	s.False(bitSet(state.BacklogState).get(2))
-	s.False(bitSet(state.BacklogState).get(3))
+	s.Equal(int32(2), bitSet(w.state.BacklogState).len())
+	s.True(bitSet(w.state.BacklogState).get(0))
+	s.True(bitSet(w.state.BacklogState).get(1))
+	s.False(bitSet(w.state.BacklogState).get(2))
+	s.False(bitSet(w.state.BacklogState).get(3))
+	// Freshly sampled counts ride along: occupied 0,1 hold 500; drained 2,3 are 0.
+	c500 := number.EncodeCompact8(500)
+	s.Equal([]byte{c500, c500, 0, 0}, w.state.BacklogCounts)
 
 	// Drain dropped Read to 2; Write stays at target 2.
 	i1 := waitRecv(s, scaleInfos, "no drain push")
@@ -951,20 +956,9 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 		TargetVersion: 0,
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	notDrainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: false},
-					},
-				},
-			},
-		},
-	}
+	// Partitions report not-drained with no backlog count, so nothing changes.
 	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(notDrainedResp, nil).AnyTimes()
+		Return(backlogDescribeResponse(0, false), nil).AnyTimes()
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
@@ -1293,56 +1287,6 @@ func (s *ScaleManagerSuite) TestNoWriteWhenBacklogUnchanged() {
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "no write expected when backlog is unchanged and nothing drains")
-}
-
-// TestDrainWritePersistsBacklogCountsAndSyncs verifies the drain path: when
-// partitions drain, the write is synchronous (sync=true), drained bits are
-// cleared, and the freshly sampled backlog counts ride along on the same write.
-func (s *ScaleManagerSuite) TestDrainWritePersistsBacklogCountsAndSyncs() {
-	s.settings.BackgroundInterval = 50 * time.Millisecond
-	s.settings.DrainBufferTime = 0
-
-	s.scaler.EXPECT().OnTasks(gomock.Any()).
-		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
-
-	// Partitions 0,1 (write side) still have backlog; 2,3 (draining side) are drained.
-	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(
-			_ context.Context,
-			req *matchingservice.DescribeTaskQueuePartitionRequest,
-			_ ...grpc.CallOption,
-		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
-			if req.GetTaskQueuePartition().GetNormalPartitionId() >= 2 {
-				return backlogDescribeResponse(0, true), nil
-			}
-			return backlogDescribeResponse(500, false), nil
-		}).AnyTimes()
-
-	writes := make(chan dbWrite, 1)
-	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		Do(func(state *persistencespb.PartitionScaleState, sync bool) {
-			writes <- dbWrite{common.CloneProto(state), sync}
-		}).
-		Return(nil)
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
-
-	initial := &persistencespb.PartitionScaleState{
-		Target:        2,
-		MaxTarget:     4,
-		TargetVersion: 0,
-		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
-	}
-	s.startManager(4, initial)
-	s.fireBackgroundTimer()
-
-	w := waitRecv(s, writes, "drain never wrote")
-	s.True(w.sync, "a drain-bit change must force a synchronous DB write")
-	s.Equal(int32(2), w.state.Target, "target unchanged during drain")
-	s.Equal([]byte{number.EncodeCompact8(500), number.EncodeCompact8(500), 0, 0}, w.state.BacklogCounts)
-	s.True(bitSet(w.state.BacklogState).get(0))
-	s.True(bitSet(w.state.BacklogState).get(1))
-	s.False(bitSet(w.state.BacklogState).get(2), "drained partition bit cleared")
-	s.False(bitSet(w.state.BacklogState).get(3), "drained partition bit cleared")
 }
 
 // TestBacklogCapChangePersists verifies that a decision that keeps the same

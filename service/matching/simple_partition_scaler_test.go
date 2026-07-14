@@ -104,8 +104,8 @@ func TestOnTasksFloorsAddTargetAtOne(t *testing.T) {
 }
 
 // TestOnTasksBacklogScalesUpAndDown verifies that with no rate windows, backlog
-// pressure grows the target one partition at a time (baseline 1 + hot count) and
-// shrinks back to the baseline once partitions drain below BacklogReset.
+// pressure grows the target one partition at a time (baseline 1 + occupied count)
+// and shrinks back to the baseline once partitions drain below BacklogReset.
 func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 	t.Parallel()
 	cfg := dynamicconfig.SimplePartitionScalerSettings{
@@ -117,11 +117,11 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 	}
 	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(cfg), nil)
 
-	// One partition, hot: baseline 1 + 1 hot = 2.
+	// One partition, occupied: baseline 1 + 1 occupied = 2.
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1, BacklogCounts: encodeCounts(500)})
 	require.Equal(t, 2, d.NewTarget)
 
-	// Two partitions, both hot: baseline 1 + 2 hot = 3.
+	// Two partitions, both occupied: baseline 1 + 2 occupied = 3.
 	d = scaler.OnTasks(PartitionScalerInput{
 		CurrentTarget: 2,
 		BacklogCounts: encodeCounts(500, 500),
@@ -129,8 +129,8 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 	})
 	require.Equal(t, 3, d.NewTarget)
 
-	// A newly-opened partition that is not yet hot does not add more capacity:
-	// baseline 1 + 2 hot = 3 (unchanged).
+	// A newly-opened partition that is not yet occupied does not add more capacity:
+	// baseline 1 + 2 occupied = 3 (unchanged).
 	d = scaler.OnTasks(PartitionScalerInput{
 		CurrentTarget: 3,
 		BacklogCounts: encodeCounts(500, 500, 32),
