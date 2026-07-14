@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
@@ -3824,8 +3823,8 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	s.NoError(err)
 
 	// Verify that the workflow is running on v1
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		env.verifyWorkflowVersioning(t, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
+	s.Await(func(s *Versioning3Suite) {
+		env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Start v0 workers to ensure they never receive a task
@@ -3892,8 +3891,8 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 		})
 
 	// Verify that the workflow is running on v1.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		env.verifyWorkflowVersioning(t, tv0, vbUnpinned, tv0.Deployment(), nil, nil)
+	s.Await(func(s *Versioning3Suite) {
+		env.verifyWorkflowVersioning(s, tv0, vbUnpinned, tv0.Deployment(), nil, nil)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Update the userData for the activity TQ by setting the current version to v1.
@@ -3930,8 +3929,8 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 	<-activityTaskCh
 
 	// Verify that the workflow is running on v1.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		env.verifyWorkflowVersioning(t, tv0, vbUnpinned, tv1.Deployment(), nil, nil)
+	s.Await(func(s *Versioning3Suite) {
+		env.verifyWorkflowVersioning(s, tv0, vbUnpinned, tv1.Deployment(), nil, nil)
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
@@ -3983,8 +3982,8 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 		})
 
 	// Verify that the workflow is running on v0.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		env.verifyWorkflowVersioning(t, tv0, vbUnpinned, tv0.Deployment(), nil, nil)
+	s.Await(func(s *Versioning3Suite) {
+		env.verifyWorkflowVersioning(s, tv0, vbUnpinned, tv0.Deployment(), nil, nil)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Update the userData for the workflow TQ *only* by setting the current version to v1
@@ -4025,8 +4024,8 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 	env.WaitForChannel(activityTaskCh)
 
 	// Verify that the workflow is still running on v1.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
-		env.verifyWorkflowVersioning(t, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
+	s.Await(func(s *Versioning3Suite) {
+		env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
