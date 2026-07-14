@@ -1518,6 +1518,14 @@ default as namespace cardinality can be high and this requires a metrics collect
 		false,
 		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
 	)
+	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
+		"matching.partitionScaleAllowedDrift",
+		PartitionScaleAllowedDrift{
+			Delta: 1,
+			Ratio: 1.5,
+		},
+		`How far off client partition scale values have to be to reject RPCs.`,
+	)
 
 	// Worker registry settings
 	MatchingWorkerRegistryNumBuckets = NewGlobalIntSetting(
@@ -2970,6 +2978,12 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 		false,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	EnableSignalWithStartFromWorkflow = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartFromWorkflow",
+		false,
+		`Controls whether signal with start from workflow is enabled.`,
 	)
 
 	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(

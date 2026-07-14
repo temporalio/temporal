@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -88,6 +89,9 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { testUpdateScheduleMemoOnly(t, newContext) })
+	t.Run("TestStateSizeBytesReported", func(t *testing.T) { testStateSizeBytesReported(t, newContext) })
+	t.Run("TestSingleDateScheduleCloses", func(t *testing.T) { testSingleDateScheduleCloses(t, newContext) })
+	t.Run("TestMultiDateScheduleCloses", func(t *testing.T) { testMultiDateScheduleCloses(t, newContext) })
 }
 
 func TestScheduleV1(t *testing.T) {
@@ -1957,6 +1961,54 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
+func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-state-size")
+	wid := testcore.RandomizeStr("sched-state-size-wf")
+	wt := testcore.RandomizeStr("sched-state-size-wt")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.Positive(desc.GetInfo().GetStateSizeBytes(), "Describe should report a non-zero StateSizeBytes")
+
+	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+		return e.GetInfo().GetStateSizeBytes() > 0
+	})
+	s.Positive(entry.GetInfo().GetStateSizeBytes(), "ListSchedules entry should report a non-zero StateSizeBytes")
+}
+
 // testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
 func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
@@ -3326,4 +3378,177 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 	})
 	var invalidArgBlob *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgBlob)
+}
+
+// testSingleDateScheduleCloses verifies that a CHASM schedule configured with
+// a single calendar date closes after its one workflow completes.
+func testSingleDateScheduleCloses(t *testing.T, newContext contextFactory) {
+	shortIdleTime := 3 * time.Second
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.IdleTime = shortIdleTime
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables),
+	)...)
+
+	fireAt := time.Now().Add(2 * time.Second).UTC()
+	sid := "sched-single-date-closes-" + uuid.NewString()
+	wid := "sched-single-date-wf-" + uuid.NewString()
+
+	const wfType = "testSingleDateScheduleClosesWf"
+	var ran atomic.Bool
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		ran.Store(true)
+		return nil
+	}, workflow.RegisterOptions{Name: wfType})
+
+	ctx := newContext(testcore.NewContext())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		RequestId:  uuid.NewString(),
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Calendar: []*schedulepb.CalendarSpec{{
+					Year:       fmt.Sprintf("%d", fireAt.Year()),
+					Month:      fireAt.Month().String(),
+					DayOfMonth: fmt.Sprintf("%d", fireAt.Day()),
+					Hour:       fmt.Sprintf("%d", fireAt.Hour()),
+					Minute:     fmt.Sprintf("%d", fireAt.Minute()),
+					Second:     fmt.Sprintf("%d", fireAt.Second()),
+				}},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wfType},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Wait for the workflow to fire and complete.
+	require.Eventually(t, func() bool { return ran.Load() },
+		10*time.Second, 200*time.Millisecond, "workflow should have fired")
+
+	// Poll until DescribeSchedule reflects the completed action and no future times.
+	var preCloseDesc *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil || len(resp.Info.RecentActions) == 0 {
+			return false
+		}
+		preCloseDesc = resp
+		return len(resp.Info.FutureActionTimes) == 0
+	}, 10*time.Second, 200*time.Millisecond, "schedule should have one completed action and no future times")
+
+	require.Len(t, preCloseDesc.Info.RecentActions, 1)
+	require.NotNil(t, preCloseDesc.Info.RecentActions[0].StartWorkflowResult)
+	require.Empty(t, preCloseDesc.Info.FutureActionTimes)
+
+	// Schedule goes idle and closes after IdleTime (3s).
+	require.Eventually(t, func() bool {
+		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err != nil
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
+}
+
+// testMultiDateScheduleCloses verifies that a CHASM schedule configured with
+// two calendar dates closes after both workflows complete.
+func testMultiDateScheduleCloses(t *testing.T, newContext contextFactory) {
+	shortIdleTime := 3 * time.Second
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.IdleTime = shortIdleTime
+	s := testcore.NewEnv(t, append(scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables),
+	)...)
+
+	now := time.Now().UTC()
+	fire1 := now.Add(2 * time.Second)
+	fire2 := now.Add(5 * time.Second)
+	sid := "sched-multi-date-closes-" + uuid.NewString()
+	wid := "sched-multi-date-wf-" + uuid.NewString()
+
+	const wfType2 = "testMultiDateScheduleClosesWf"
+	var runs atomic.Int32
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		runs.Add(1)
+		return nil
+	}, workflow.RegisterOptions{Name: wfType2})
+
+	calSpec := func(t time.Time) *schedulepb.CalendarSpec {
+		return &schedulepb.CalendarSpec{
+			Year:       fmt.Sprintf("%d", t.Year()),
+			Month:      t.Month().String(),
+			DayOfMonth: fmt.Sprintf("%d", t.Day()),
+			Hour:       fmt.Sprintf("%d", t.Hour()),
+			Minute:     fmt.Sprintf("%d", t.Minute()),
+			Second:     fmt.Sprintf("%d", t.Second()),
+		}
+	}
+
+	ctx := newContext(testcore.NewContext())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		RequestId:  uuid.NewString(),
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Calendar: []*schedulepb.CalendarSpec{calSpec(fire1), calSpec(fire2)},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:            wid,
+						WorkflowType:          &commonpb.WorkflowType{Name: wfType2},
+						TaskQueue:             &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Wait for both workflows to fire and complete.
+	require.Eventually(t, func() bool { return runs.Load() >= 2 },
+		15*time.Second, 200*time.Millisecond, "both workflows should have fired")
+
+	// Poll until DescribeSchedule reflects both completed actions and no future times.
+	var preCloseDesc *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		resp, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil || len(resp.Info.RecentActions) < 2 {
+			return false
+		}
+		preCloseDesc = resp
+		return len(resp.Info.FutureActionTimes) == 0
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have two completed actions and no future times")
+
+	require.Len(t, preCloseDesc.Info.RecentActions, 2)
+	for _, action := range preCloseDesc.Info.RecentActions {
+		require.NotNil(t, action.StartWorkflowResult)
+	}
+	require.Empty(t, preCloseDesc.Info.FutureActionTimes)
+
+	// Schedule goes idle and closes after IdleTime (3s).
+	require.Eventually(t, func() bool {
+		_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err != nil
+	}, 15*time.Second, 200*time.Millisecond, "schedule should have closed")
 }

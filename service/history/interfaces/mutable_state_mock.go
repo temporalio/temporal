@@ -1986,6 +1986,20 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
+// GenerateActivityCancelCommandsForClose mocks base method.
+func (m *MockMutableState) GenerateActivityCancelCommandsForClose() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityCancelCommandsForClose")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityCancelCommandsForClose indicates an expected call of GenerateActivityCancelCommandsForClose.
+func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
+}
+
 // GenerateEventLoadToken mocks base method.
 func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
 	m.ctrl.T.Helper()

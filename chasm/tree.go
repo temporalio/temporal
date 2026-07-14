@@ -1,6 +1,7 @@
 package chasm
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -782,6 +783,13 @@ func (n *Node) setSerializedNode(
 	return childNode.setSerializedNode(nodePath[1:], encodedPath, serializedNode)
 }
 
+// hasNewTransactionSideEffects returns true when the transaction has observable
+// effects that must be persisted regardless of whether data bytes changed:
+// new tasks scheduled on this node, or lifecycle termination.
+func (n *Node) hasNewTransactionSideEffects() bool {
+	return len(n.newTasks[n.value]) > 0 || n.terminated
+}
+
 // serialize sets or updates serializedValue field of the node n with serialized value.
 // It sets node's valueState to valueStateSynced and updates LastUpdateVersionedTransition.
 func (n *Node) serialize() error {
@@ -799,6 +807,18 @@ func (n *Node) serialize() error {
 	}
 }
 
+// marshalDeterministic encodes a proto.Message to bytes using deterministic
+// serialization. Deterministic encoding sorts map keys before encoding, making
+// byte comparison a reliable equality check for any well-formed proto message.
+// For messages without map fields this is a no-op with no performance overhead.
+func marshalDeterministic(m proto.Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(m)
+}
+
+// serializeComponentNode serializes the component node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeComponentNode() error {
 	for field := range n.valueFields() {
 		if field.err != nil {
@@ -811,22 +831,35 @@ func (n *Node) serializeComponentNode() error {
 
 		var blob *commonpb.DataBlob
 		if !field.val.IsNil() {
-			var err error
-			if blob, err = serialization.ProtoEncode(field.val.Interface().(proto.Message)); err != nil {
-				return err
+			data, err := marshalDeterministic(field.val.Interface().(proto.Message))
+			if err != nil {
+				return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 			}
-		}
-
-		rc, ok := n.registry.componentFor(n.value)
-		if !ok {
-			return softassert.UnexpectedInternalErr(
-				n.logger,
-				"component type is not registered",
-				fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 		}
 
 		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+
+		if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			rc, ok := n.registry.componentFor(n.value)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component type is not registered",
+					fmt.Errorf("%s", reflect.TypeOf(n.value).String()))
+			}
+			// TypeId mismatch on a brand new node indicates node reassignment.
+			existingTypeID := n.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId()
+			if existingTypeID != 0 && existingTypeID != rc.componentID {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"component node TypeId changed on first serialization",
+					fmt.Errorf("existing: %d, new: %d", existingTypeID, rc.componentID),
+				)
+			}
+			n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
+		}
+
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -1160,6 +1193,10 @@ func (n *Node) deleteChildren(
 	return nil
 }
 
+// serializeDataNode serializes the data node.
+// If this method is updated to modify serialized fields beyond Data and
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeDataNode() error {
 	protoValue, ok := n.value.(proto.Message)
 	if !ok {
@@ -1168,10 +1205,11 @@ func (n *Node) serializeDataNode() error {
 
 	var blob *commonpb.DataBlob
 	if protoValue != nil {
-		var err error
-		if blob, err = serialization.ProtoEncode(protoValue); err != nil {
-			return err
+		data, err := marshalDeterministic(protoValue)
+		if err != nil {
+			return serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 		}
+		blob = &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 	}
 	n.serializedNode.Data = blob
 	n.updateLastUpdateVersionedTransition()
@@ -1180,6 +1218,10 @@ func (n *Node) serializeDataNode() error {
 	return nil
 }
 
+// serializeCollectionNode serializes the collection node.
+// If this method is updated to modify serialized fields beyond
+// LastUpdateVersionedTransition, the skip-if-clean revert logic in
+// closeTransactionSerializeNodes must be updated accordingly.
 func (n *Node) serializeCollectionNode() error {
 	// The collection node has no data; therefore, only metadata needs to be updated.
 	n.updateLastUpdateVersionedTransition()
@@ -1708,8 +1750,34 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		encodedPath, err := node.getEncodedPath()
+		if err != nil {
+			return err
+		}
+
+		// Skip writing nodes whose serialized content hasn't changed. A nil
+		// LastUpdateVersionedTransition means the node is brand new and must be written.
+		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
+		// blob, leaving prevData pointing at the original for comparison.
+		prevVersionedTransition := common.CloneProto(
+			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+		)
+		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+			prevVersionedTransition != nil &&
+			!node.hasNewTransactionSideEffects()
+		var prevData *commonpb.DataBlob
+		if skipIfClean {
+			prevData = node.serializedNode.Data
+		}
+
 		if err := node.serialize(); err != nil {
 			return err
+		}
+
+		// Data bytes unchanged: revert the versioned transition bump and skip persistence.
+		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
+			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
+			continue
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
@@ -1721,10 +1789,6 @@ func (n *Node) closeTransactionSerializeNodes() error {
 				fmt.Errorf("found at path %s", nodePath))
 		}
 
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
-			return err
-		}
 		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
 		// DeletedNodes map is populated when syncing tree structure. However, since we may sync tree structure
 		// multiple times in one transaction, if node at the same path was previously deleted, have structure synced,
@@ -2577,6 +2641,8 @@ func (n *Node) delete(isSystemDelete bool) error {
 		return err
 	}
 
+	// Only record the deletion if the node was previously persisted.
+	//
 	// TODO: consider remove entries from UpdatedNodes map as well
 	// if the same node is updated and then deleted in the same transaction.
 	//
@@ -2587,10 +2653,12 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
 	//   first with a deletion only mutation for tombstone nodes, and then an
 	//   update only mutation.
-	if isSystemDelete {
-		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
-	} else {
-		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	if n.serializedNode.GetMetadata().GetLastUpdateVersionedTransition() != nil {
+		if isSystemDelete {
+			n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+		} else {
+			n.mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
 	}
 
 	n.cleanupCachedTasks()

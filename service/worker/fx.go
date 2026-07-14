@@ -7,6 +7,8 @@ import (
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -45,6 +47,8 @@ var Module = fx.Options(
 	migration.Module,
 	resource.Module,
 	deletenamespace.Module,
+	chasmscheduler.Module,
+	callback.Module,
 	scheduler.Module,
 	batcher.Module,
 	workerdeployment.Module,
