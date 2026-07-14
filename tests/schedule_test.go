@@ -4887,8 +4887,8 @@ func TestScheduleFarFutureActionTimes(t *testing.T) {
 		workflow.RegisterOptions{Name: wt},
 	)
 
-	twoWeeks := time.Duration(scheduler.DefaultWarnIterations) * time.Second
-	interval := 10 * twoWeeks
+	warn := time.Duration(scheduler.DefaultWarnIterations) * time.Second
+	interval := 10 * warn
 
 	ctx := chasmContextFactory(s.Context())
 	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
@@ -4913,7 +4913,7 @@ func TestScheduleFarFutureActionTimes(t *testing.T) {
 		require.Equal(t, interval, future[i].AsTime().Sub(future[i-1].AsTime()),
 			"consecutive future action times should be exactly one interval apart")
 	}
-	require.Greater(t, future[len(future)-1].AsTime().Sub(time.Now().UTC()), twoWeeks,
+	require.Greater(t, future[len(future)-1].AsTime().Sub(time.Now().UTC()), warn,
 		"future action times should extend well past the two-week compute horizon")
 
 	base := time.Now().UTC()
