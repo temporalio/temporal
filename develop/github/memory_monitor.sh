@@ -9,8 +9,9 @@
 #
 # 2. Diagnostic capture:
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
-#       profile in HEAP_PROFILES_DIR and process/runtime diagnostics in
-#       RUNTIME_DIAGNOSTICS_DIR before running analysis.
+#       profile in HEAP_PROFILES_DIR and process/runtime diagnostics, including
+#       full goroutine stacks, in RUNTIME_DIAGNOSTICS_DIR before running
+#       analysis.
 #
 # 3. OOM prevention:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
@@ -531,17 +532,20 @@ print_cluster_event_summary() {
 
 capture_runtime_diagnostics() {
   local memory_pct="$1"
-  local diagnostics_path_prefix heap_debug_file diagnostics_file
+  local diagnostics_path_prefix heap_debug_file goroutine_file diagnostics_file
 
   diagnostics_path_prefix="$RUNTIME_DIAGNOSTICS_DIR/$(date '+%Y%m%d-%H%M%S')-${memory_pct}pct"
   mkdir -p "$RUNTIME_DIAGNOSTICS_DIR"
   heap_debug_file="${diagnostics_path_prefix}-heap-debug.txt"
+  goroutine_file="${diagnostics_path_prefix}-goroutines-debug2.txt"
   diagnostics_file="${diagnostics_path_prefix}.txt"
 
   fetch_pprof "heap?debug=1&gc=0" "$heap_debug_file" || true
+  fetch_pprof "goroutine?debug=2" "$goroutine_file" || true
 
   {
     echo "Runtime diagnostics at $(date '+%Y-%m-%d %H:%M:%S') (usage ${memory_pct}%)"
+    echo "Full goroutine dump saved to $goroutine_file"
     echo
     print_runtime_memstats "$heap_debug_file"
     echo
