@@ -475,7 +475,7 @@ jobs:
           - name: cass-es-shard1-no-race
             cmd: make TEST_RACE_FLAG=off functional-test-coverage
           - name: cass-es-shard1-no-coverage
-            cmd: make TEST_COVERAGE_FLAG=off functional-test-coverage
+            cmd: make functional-test-no-coverage
     env:
       PERSISTENCE_TYPE: nosql
       PERSISTENCE_DRIVER: cassandra
@@ -531,6 +531,7 @@ jobs:
             ./.testoutput/test-cluster-events.jsonl
             ./.testoutput/memory/**
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
       - name: Stop containerized dependencies

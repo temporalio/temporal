@@ -566,6 +566,12 @@ functional-test-coverage: prepare-coverage-test
 		$(COMPILED_TEST_ARGS) $(COVERPROFILE_FLAG) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
+functional-test-no-coverage: prepare-coverage-test
+	@printf $(COLOR) "Run functional tests without coverage with $(PERSISTENCE_DRIVER) driver..."
+	$(GOTESTSUM) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) $(FUNCTIONAL_TEST_ROOT) \
+		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
+
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
