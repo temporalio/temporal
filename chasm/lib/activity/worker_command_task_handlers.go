@@ -107,7 +107,5 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		h.logger,
 	)
 
-	// Attempt count is not available in Execute (only in Validate via TaskInvocation).
-	// Max attempts are enforced in Validate, so this is always within bounds.
 	return dispatcher.Execute(ctx, task, 1, nsEntry.Name().String())
 }
