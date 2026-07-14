@@ -74,7 +74,7 @@ func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) *Versioning
 }
 
 func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tq *taskqueuepb.TaskQueue,
 	expectedCurrentVersion string,
 	expectedRampingVersion string,
@@ -110,7 +110,7 @@ func (env *VersioningTestEnv) findVersionTaskQueue(
 }
 
 func (env *VersioningTestEnv) pollAndQueryWorkflow(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	sticky bool,
 ) {
@@ -132,7 +132,7 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
 func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
 ) (*commonpb.WorkflowExecution, string) {
@@ -163,7 +163,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
 func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) (*commonpb.WorkflowExecution, string) {
 	t := s
@@ -186,7 +186,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
 }
 
 func (env *VersioningTestEnv) pollAndDispatchNexusTask(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	nexusRequest *matchingservice.DispatchNexusTaskRequest,
 ) {
@@ -207,7 +207,7 @@ func (env *VersioningTestEnv) pollAndDispatchNexusTask(
 }
 
 func (env *VersioningTestEnv) describeVersioningInfo(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	execution *commonpb.WorkflowExecution,
 ) *workflowpb.WorkflowExecutionVersioningInfo {
 	ctx := s.Context()
@@ -224,7 +224,7 @@ func (env *VersioningTestEnv) describeVersioningInfo(
 }
 
 func (env *VersioningTestEnv) requireOneTimeOverride(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	execution *commonpb.WorkflowExecution,
 	tv *testvars.TestVars,
 ) {
@@ -236,7 +236,7 @@ func (env *VersioningTestEnv) requireOneTimeOverride(
 }
 
 func (env *VersioningTestEnv) requireNoVersioningOverride(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	execution *commonpb.WorkflowExecution,
 ) {
 	t := s
@@ -245,7 +245,7 @@ func (env *VersioningTestEnv) requireNoVersioningOverride(
 }
 
 func (env *VersioningTestEnv) updateVersioningOverride(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	execution *commonpb.WorkflowExecution,
 	override *workflowpb.VersioningOverride,
 ) {
@@ -261,7 +261,7 @@ func (env *VersioningTestEnv) updateVersioningOverride(
 }
 
 func (env *VersioningTestEnv) pollWorkflowTask(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) *workflowservice.PollWorkflowTaskQueueResponse {
 	ctx := s.Context()
@@ -278,7 +278,7 @@ func (env *VersioningTestEnv) pollWorkflowTask(
 }
 
 func (env *VersioningTestEnv) completeWorkflowTask(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -293,7 +293,7 @@ func (env *VersioningTestEnv) completeWorkflowTask(
 }
 
 func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	childWorkflowID string,
 	handleChild func(*workflowservice.PollWorkflowTaskQueueResponse) *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -320,7 +320,7 @@ func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
 }
 
 // Signal to trigger a normal WFT
-func (env *VersioningTestEnv) triggerNormalWFT(s parallelsuite.TestScope, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+func (env *VersioningTestEnv) triggerNormalWFT(s parallelsuite.Scope, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
 	ctx := s.Context()
 	t := s
 	_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -334,7 +334,7 @@ func (env *VersioningTestEnv) triggerNormalWFT(s parallelsuite.TestScope, tv *te
 }
 
 // Trigger a normal task and then fail the task twice to trigger a transient WFT
-func (env *VersioningTestEnv) triggerTransientWFT(s parallelsuite.TestScope, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+func (env *VersioningTestEnv) triggerTransientWFT(s parallelsuite.Scope, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
 	ctx := s.Context()
 	t := s
 	env.triggerNormalWFT(t, tv, execution)
@@ -361,7 +361,7 @@ func (env *VersioningTestEnv) triggerTransientWFT(s parallelsuite.TestScope, tv 
 }
 
 // Verify this is a speculative task - events not yet in persisted history
-func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.TestScope, execution *commonpb.WorkflowExecution) {
+func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.Scope, execution *commonpb.WorkflowExecution) {
 	t := s
 	events := env.GetHistory(env.Namespace().String(), execution)
 	historyrequire.New(t.AssertionT()).EqualHistoryEvents(`
@@ -378,7 +378,7 @@ func (env *VersioningTestEnv) verifySpeculativeTask(s parallelsuite.TestScope, e
 	`, events)
 }
 
-func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.TestScope, tv *testvars.TestVars) {
+func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	ctx := s.Context()
 	t := s
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
@@ -404,7 +404,7 @@ func (env *VersioningTestEnv) setCurrentDeployment(s parallelsuite.TestScope, tv
 // pollUntilRegistered registers versioned pollers for the given deployment.
 // tqTypes controls which task queue types to poll; it defaults to workflow only.
 // Pollers run continuously until all TQ types are registered.
-func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.TestScope, tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) {
+func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) {
 	ctx := s.Context()
 	t := s
 	if len(tqTypes) == 0 {
@@ -456,7 +456,7 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.TestScope, tv 
 	cancel()
 }
 
-func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.TestScope, tv *testvars.TestVars) {
+func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	ctx := s.Context()
 	t := s
 	await.Require(ctx, s.TB(), func(t *await.T) {
@@ -479,7 +479,7 @@ func (env *VersioningTestEnv) unsetCurrentDeployment(s parallelsuite.TestScope, 
 }
 
 func (env *VersioningTestEnv) setRampingDeployment(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	percentage float32,
 	rampUnversioned bool,
@@ -517,7 +517,7 @@ func (env *VersioningTestEnv) setRampingDeployment(
 	env.waitForDeploymentDataPropagationQueryWorkerDeployment(t, tv)
 }
 
-func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(s parallelsuite.TestScope, tv *testvars.TestVars) {
+func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(s parallelsuite.Scope, tv *testvars.TestVars) {
 	ctx := s.Context()
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
 		await.Require(ctx, s.TB(), func(t *await.T) {
@@ -554,7 +554,7 @@ func (env *VersioningTestEnv) shouldRetryWorkerDeploymentRPC(ctx context.Context
 }
 
 func (env *VersioningTestEnv) updateTaskQueueDeploymentData(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	isCurrent bool,
 	ramp float32,
@@ -583,7 +583,7 @@ func (env *VersioningTestEnv) updateTaskQueueDeploymentData(
 // and also waits for the data to propagate to all the relevant partitions.
 // TODO (Shivam): Update the name of this one.
 func (env *VersioningTestEnv) updateTaskQueueDeploymentDataWithRoutingConfig(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	routingConfig *deploymentpb.RoutingConfig,
 	upsertVersions map[string]*deploymentspb.WorkerDeploymentVersionData,
@@ -609,7 +609,7 @@ func (env *VersioningTestEnv) updateTaskQueueDeploymentDataWithRoutingConfig(
 // returned from the WF type root partition, so no need to wait for propagation before calling this
 // function.
 func (env *VersioningTestEnv) getTaskQueueDeploymentData(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
 ) *persistencespb.DeploymentData {
@@ -629,7 +629,7 @@ func (env *VersioningTestEnv) getTaskQueueDeploymentData(
 }
 
 func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	routingConfig *deploymentpb.RoutingConfig,
 	upsertVersions map[string]*deploymentspb.WorkerDeploymentVersionData,
@@ -662,7 +662,7 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(
 // to an older version with revision number 0. This is used to test that workflows correctly use
 // inherited revision numbers instead of falling back to the (stale) current task queue version.
 func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) {
 	ctx := s.Context()
@@ -695,7 +695,7 @@ func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
 }
 
 func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	isCurrent bool,
 	ramp float32,
@@ -741,7 +741,7 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
 }
 
 func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	deploymentName string,
 	forgetUnversionedRamp bool,
@@ -769,7 +769,7 @@ func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(
 }
 
 func (env *VersioningTestEnv) forgetTaskQueueDeploymentVersion(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
 	forgetUnversionedRamp bool,
@@ -796,7 +796,7 @@ func (env *VersioningTestEnv) forgetTaskQueueDeploymentVersion(
 }
 
 func (env *VersioningTestEnv) verifyWorkflowVersioning(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
@@ -854,7 +854,7 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 }
 
 func (env *VersioningTestEnv) startWorkflow(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
 ) string {
@@ -895,7 +895,7 @@ func (env *VersioningTestEnv) queryWorkflow(
 // will be closed when the task is handled.
 // Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
 func (env *VersioningTestEnv) pollWftAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- struct{},
@@ -905,7 +905,7 @@ func (env *VersioningTestEnv) pollWftAndHandle(
 }
 
 func (env *VersioningTestEnv) unversionedPollWftAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- struct{},
@@ -918,7 +918,7 @@ func (env *VersioningTestEnv) unversionedPollWftAndHandle(
 // will be closed when the task is handled.
 // Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
 func (env *VersioningTestEnv) doPollWftAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	sticky bool,
@@ -952,7 +952,7 @@ func (env *VersioningTestEnv) doPollWftAndHandle(
 }
 
 func (env *VersioningTestEnv) pollWftAndHandleQueries(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- any,
@@ -985,7 +985,7 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(
 }
 
 func (env *VersioningTestEnv) pollNexusTaskAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- any,
@@ -1018,7 +1018,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(
 }
 
 func (env *VersioningTestEnv) unversionedPollActivityAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -1027,7 +1027,7 @@ func (env *VersioningTestEnv) unversionedPollActivityAndHandle(
 }
 
 func (env *VersioningTestEnv) pollActivityAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -1036,7 +1036,7 @@ func (env *VersioningTestEnv) pollActivityAndHandle(
 }
 
 func (env *VersioningTestEnv) pollActivityAndHandleErr(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
@@ -1044,7 +1044,7 @@ func (env *VersioningTestEnv) pollActivityAndHandleErr(
 }
 
 func (env *VersioningTestEnv) doPollActivityAndHandle(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	async chan<- struct{},
@@ -1065,7 +1065,7 @@ func (env *VersioningTestEnv) doPollActivityAndHandle(
 }
 
 func (env *VersioningTestEnv) doPollActivityAndHandleErr(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -1080,7 +1080,7 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 
 //nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollWorkflow(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
@@ -1104,7 +1104,7 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 }
 
 func (env *VersioningTestEnv) idlePollUnversionedActivity(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
@@ -1126,7 +1126,7 @@ func (env *VersioningTestEnv) idlePollUnversionedActivity(
 }
 
 func (env *VersioningTestEnv) idlePollActivity(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
@@ -1154,7 +1154,7 @@ func (env *VersioningTestEnv) idlePollActivity(
 
 //nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollNexus(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
@@ -1180,7 +1180,7 @@ func (env *VersioningTestEnv) idlePollNexus(
 }
 
 func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) {
 	ctx := s.Context()
@@ -1197,7 +1197,7 @@ func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
 // Sticky queue needs to be created in server before tasks can schedule in it. Call to this method
 // create the sticky queue by polling it.
 func (env *VersioningTestEnv) warmUpSticky(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 ) {
 	t := s
@@ -1217,7 +1217,7 @@ func (env *VersioningTestEnv) warmUpSticky(
 
 // TODO (Shivam): Clean up this function once sync entity workflows have been removed.
 func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	status versionStatus,
 	unversionedRamp bool,
@@ -1312,7 +1312,7 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 }
 
 func (env *VersioningTestEnv) validateBacklogCount(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
 	expectedCount int64,
@@ -1342,7 +1342,7 @@ func (env *VersioningTestEnv) validateBacklogCount(
 }
 
 func (env *VersioningTestEnv) verifyVersioningSAs(
-	s parallelsuite.TestScope,
+	s parallelsuite.Scope,
 	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	executionStatus enumspb.WorkflowExecutionStatus,
@@ -1403,7 +1403,7 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 
 // validatePinnedVersionExistsInTaskQueue validates that the version, to be pinned, exists in the task queue.
 // TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
-func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(s parallelsuite.TestScope, tv *testvars.TestVars) {
+func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(s parallelsuite.Scope, tv *testvars.TestVars) {
 	ctx := s.Context()
 	await.Require(ctx, s.TB(), func(t *await.T) {
 		ctx := t.Context()

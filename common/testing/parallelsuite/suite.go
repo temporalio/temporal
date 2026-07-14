@@ -28,8 +28,8 @@ type testingSuite interface {
 	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
 }
 
-// TestScope provides the context and test handles for a test or await attempt.
-type TestScope interface {
+// Scope provides the context and test handles for a test or await attempt.
+type Scope interface {
 	Context() context.Context
 	TB() testing.TB
 	Require() *require.Assertions
@@ -37,13 +37,13 @@ type TestScope interface {
 }
 
 type contextScope struct {
-	TestScope
+	Scope
 	ctx context.Context
 }
 
 // WithContext returns a scope that uses ctx and delegates assertions to scope.
-func WithContext(scope TestScope, ctx context.Context) TestScope {
-	return contextScope{TestScope: scope, ctx: ctx}
+func WithContext(scope Scope, ctx context.Context) Scope {
+	return contextScope{Scope: scope, ctx: ctx}
 }
 
 func (s contextScope) Context() context.Context {
