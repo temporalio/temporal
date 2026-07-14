@@ -64,7 +64,8 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 }
 
 func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
-	// todo: migrate workflow init and update to this unified method
+	// todo: migrate workflow init and update to this unified method,
+	// and remove errors returned
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
 		// init/update only return an error when their init-or-not precondition is violated,
 		// which the dispatch below already guarantees; the error is redundant here.
@@ -442,6 +443,7 @@ func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(
 // =============================================================================
 // Time Skipping Runtime Methods for Chasm-based Executions
 // =============================================================================
+
 func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
 	if ms.IsWorkflow() {
 		// CHASM-based executions only, and workflows use events
