@@ -474,8 +474,13 @@ jobs:
         include:
           - name: cass-es-shard1-no-race
             cmd: make TEST_RACE_FLAG=off functional-test-coverage
+            gorace: ""
           - name: cass-es-shard1-no-coverage
             cmd: make functional-test-no-coverage
+            gorace: ""
+          - name: cass-es-shard1-race-history0
+            cmd: make functional-test-coverage
+            gorace: history_size=0
     env:
       PERSISTENCE_TYPE: nosql
       PERSISTENCE_DRIVER: cassandra
@@ -513,6 +518,7 @@ jobs:
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
+          GORACE: ${{ matrix.gorace }}
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl

@@ -145,6 +145,25 @@ safe_file_part() {
 print_smaps_summary() {
   local smaps_file="$1"
 
+  echo "Process memory totals:"
+  awk '
+    /^(Size|Rss|Pss|Shared_Clean|Shared_Dirty|Private_Clean|Private_Dirty|Referenced|Anonymous|AnonHugePages|Swap):/ {
+      field = $1
+      sub(/:$/, "", field)
+      totals[field] += $2
+    }
+    END {
+      fields = "Size Rss Pss Shared_Clean Shared_Dirty Private_Clean Private_Dirty Referenced Anonymous AnonHugePages Swap"
+      field_count = split(fields, ordered_fields, " ")
+      printf "%18s %12s\n", "field", "kb"
+      for (i = 1; i <= field_count; i++) {
+        field = ordered_fields[i]
+        printf "%18s %12d\n", field, totals[field]
+      }
+    }
+  ' "$smaps_file"
+
+  echo
   echo "Top mappings by private dirty memory:"
   awk '
     function flush() {
@@ -200,6 +219,126 @@ print_smaps_summary() {
       }
       NR <= 30 {
         printf "%12d %12d %12d %12d %8d %s\n", $1, $2, $3, $4, $5, $6
+      }
+    '
+
+  echo
+  echo "Top anonymous address regions by private dirty memory:"
+  awk '
+    function flush() {
+      if (addr == "" || name != "[anon]") {
+        return
+      }
+      split(addr, parts, "-")
+      region = substr(parts[1], 1, 3) "*"
+      size_by_region[region] += size
+      rss_by_region[region] += rss
+      private_dirty_by_region[region] += private_dirty
+      count_by_region[region]++
+    }
+    function mapping_name(  i, n) {
+      if (NF <= 5) {
+        return "[anon]"
+      }
+      n = $6
+      for (i = 7; i <= NF; i++) {
+        n = n " " $i
+      }
+      return n
+    }
+    /^[0-9a-fA-F]+-[0-9a-fA-F]+ / {
+      flush()
+      addr = $1
+      name = mapping_name()
+      size = 0
+      rss = 0
+      private_dirty = 0
+      next
+    }
+    /^Size:/ { size = $2; next }
+    /^Rss:/ { rss = $2; next }
+    /^Private_Dirty:/ { private_dirty = $2; next }
+    END {
+      flush()
+      for (region in private_dirty_by_region) {
+        printf "%d\t%d\t%d\t%d\t%s\n",
+          private_dirty_by_region[region],
+          rss_by_region[region],
+          size_by_region[region],
+          count_by_region[region],
+          region
+      }
+    }
+  ' "$smaps_file" \
+    | sort -nr -k1,1 \
+    | awk -F '\t' '
+      BEGIN {
+        printf "%12s %12s %12s %8s %s\n", "private_kb", "rss_kb", "size_kb", "count", "region"
+      }
+      NR <= 30 {
+        printf "%12d %12d %12d %8d %s\n", $1, $2, $3, $4, $5
+      }
+    '
+
+  echo
+  echo "Top anonymous VM flag groups by private dirty memory:"
+  awk '
+    function flush() {
+      if (addr == "" || name != "[anon]") {
+        return
+      }
+      size_by_flags[flags] += size
+      rss_by_flags[flags] += rss
+      private_dirty_by_flags[flags] += private_dirty
+      count_by_flags[flags]++
+    }
+    function mapping_name(  i, n) {
+      if (NF <= 5) {
+        return "[anon]"
+      }
+      n = $6
+      for (i = 7; i <= NF; i++) {
+        n = n " " $i
+      }
+      return n
+    }
+    /^[0-9a-fA-F]+-[0-9a-fA-F]+ / {
+      flush()
+      addr = $1
+      name = mapping_name()
+      size = 0
+      rss = 0
+      private_dirty = 0
+      flags = "(none)"
+      next
+    }
+    /^Size:/ { size = $2; next }
+    /^Rss:/ { rss = $2; next }
+    /^Private_Dirty:/ { private_dirty = $2; next }
+    /^VmFlags:/ {
+      flags = $0
+      sub(/^VmFlags:[[:space:]]*/, "", flags)
+      next
+    }
+    END {
+      flush()
+      for (flags in private_dirty_by_flags) {
+        printf "%d\t%d\t%d\t%d\t%s\n",
+          private_dirty_by_flags[flags],
+          rss_by_flags[flags],
+          size_by_flags[flags],
+          count_by_flags[flags],
+          flags
+      }
+    }
+  ' "$smaps_file" \
+    | sort -nr -k1,1 \
+    | awk -F '\t' '
+      BEGIN {
+        printf "%12s %12s %12s %8s %s\n", "private_kb", "rss_kb", "size_kb", "count", "vm_flags"
+      }
+      NR <= 30 {
+        printf "%12d %12d %12d %8d %s\n", $1, $2, $3, $4, $5
       }
     '
 
@@ -262,6 +401,16 @@ save_proc_mapping_file() {
   cat "$path" > "$output_file" 2>/dev/null || true
 }
 
+save_proc_snapshot_files() {
+  local pid="$1"
+  local output_prefix="$2"
+
+  save_proc_mapping_file "$pid" "status" "${output_prefix}-status.txt"
+  save_proc_mapping_file "$pid" "statm" "${output_prefix}-statm.txt"
+  save_proc_mapping_file "$pid" "limits" "${output_prefix}-limits.txt"
+  save_proc_mapping_file "$pid" "smaps_rollup" "${output_prefix}-smaps-rollup.txt"
+}
+
 capture_proc_mapping_diagnostics() {
   local diagnostics_path_prefix="$1"
 
@@ -276,6 +425,7 @@ capture_proc_mapping_diagnostics() {
 
     echo
     echo "pid $pid ($comm)"
+    save_proc_snapshot_files "$pid" "$output_prefix"
     save_proc_mapping_file "$pid" "maps" "${output_prefix}-maps.txt"
     save_proc_mapping_file "$pid" "smaps" "$smaps_file"
     save_proc_mapping_file "$pid" "numa_maps" "${output_prefix}-numa-maps.txt"
