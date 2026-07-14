@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -637,4 +638,23 @@ func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 		"DescribeSchedule response Memo must be a copy, not the live Visibility map")
 	require.NotContains(t, vis.CustomSearchAttributes(ctx), "injectedSA",
 		"DescribeSchedule response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestScheduler_Describe_ZeroCatchupWindowUsesDefault(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Schedule.Policies.CatchupWindow = durationpb.New(0)
+
+	resp, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	}, legacyscheduler.NewSpecBuilder())
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		365*24*time.Hour,
+		resp.GetFrontendResponse().GetSchedule().GetPolicies().GetCatchupWindow().AsDuration(),
+	)
 }

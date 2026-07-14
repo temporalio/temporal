@@ -155,6 +155,13 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
 	require.Len(t, res.BufferedStarts, 5)
+
+	// Zero means unspecified, so it uses the default rather than the minimum.
+	sched.Schedule.Policies.CatchupWindow = durationpb.New(0)
+	start = end.Add(-defaultInterval * 5)
+	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err)
+	require.Len(t, res.BufferedStarts, 5)
 }
 
 func TestProcessTimeRange_Limit(t *testing.T) {

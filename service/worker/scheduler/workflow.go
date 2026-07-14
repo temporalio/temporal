@@ -1304,7 +1304,7 @@ func (s *scheduler) updateTweakables() {
 
 func (s *scheduler) getCatchupWindow() time.Duration {
 	cw := s.Schedule.Policies.CatchupWindow
-	if cw == nil {
+	if cw == nil || cw.AsDuration() == 0 {
 		return s.tweakables.DefaultCatchupWindow
 	} else if cw.AsDuration() < s.tweakables.MinCatchupWindow {
 		return s.tweakables.MinCatchupWindow

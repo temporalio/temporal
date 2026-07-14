@@ -658,7 +658,8 @@ func (s *Scheduler) Describe(
 	if s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		s.Schedule.Policies.OverlapPolicy = s.overlapPolicy()
 	}
-	if !s.Schedule.GetPolicies().GetCatchupWindow().IsValid() {
+	catchupWindow := s.Schedule.GetPolicies().GetCatchupWindow()
+	if !catchupWindow.IsValid() || catchupWindow.AsDuration() == 0 {
 		// TODO - this should be set from Tweakables.DefaultCatchupWindow.
 		s.Schedule.Policies.CatchupWindow = durationpb.New(365 * 24 * time.Hour)
 	}

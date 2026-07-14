@@ -195,7 +195,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	cw := s.Schedule.GetPolicies().GetCatchupWindow()
-	if cw == nil {
+	if cw == nil || cw.AsDuration() == 0 {
 		return tweakables.DefaultCatchupWindow
 	}
 

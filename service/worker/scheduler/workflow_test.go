@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -452,6 +453,22 @@ func (s *workflowSuite) TestCatchupWindow() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func TestGetCatchupWindowZeroUsesDefault(t *testing.T) {
+	s := &scheduler{
+		StartScheduleArgs: &schedulespb.StartScheduleArgs{
+			Schedule: &schedulepb.Schedule{
+				Policies: &schedulepb.SchedulePolicies{CatchupWindow: durationpb.New(0)},
+			},
+		},
+		tweakables: TweakablePolicies{
+			DefaultCatchupWindow: 365 * 24 * time.Hour,
+			MinCatchupWindow:     10 * time.Second,
+		},
+	}
+
+	require.Equal(t, 365*24*time.Hour, s.getCatchupWindow())
 }
 
 func (s *workflowSuite) TestCatchupWindowWhilePaused() {
