@@ -127,10 +127,6 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var droppedCount int64
 	recordedGenerateLatency := false
 	limitReached := false
-	// Accumulate the (non-fatal) warn signal across the whole range: an intermediate GetNextTime
-	// that crosses the warn threshold but still resolves should be surfaced even if the terminal
-	// peek resolves cheaply. checkNextScheduleResult only sees the terminal result, so fold the
-	// accumulated flag into it below. This is observability only; it doesn't affect scheduling.
 	computeLimitWarning := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		computeLimitWarning = computeLimitWarning || next.ComputeLimitWarning
@@ -216,11 +212,8 @@ func (s *SpecProcessorImpl) checkNextScheduleResult(
 	next legacyscheduler.GetNextTimeResult,
 	err error,
 ) (time.Time, error) {
-	// default case, no error, continue
 	if err == nil {
-		// Warn (non-fatal) case: the search went long but still resolved. Surface it for
-		// observability and keep scheduling; an over-excluded spec is visible without being
-		// stopped. This is the default protection mode (the hard limit is disabled).
+		// Warn (non-fatal) case: the search went long but still resolved.
 		if next.ComputeLimitWarning {
 			metricsHandler.Counter(metrics.ScheduleComputeLimitWarning.Name()).Record(1)
 			newTaggedLogger(s.logger, scheduler).Warn(
@@ -231,9 +224,7 @@ func (s *SpecProcessorImpl) checkNextScheduleResult(
 
 	// special case: broken or pathological spec
 	// in this particular case, just swallow the error and log.
-	// The schedule will just degrade to return nothing. Only reached when an operator has
-	// lowered the hard limit (SchedulerSpecMaxIterations) below math.MaxInt to re-enable
-	// enforcement; disabled by default.
+	// The schedule will just degrade to return nothing.
 	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
 		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
 		newTaggedLogger(s.logger, scheduler).Warn(

@@ -15,13 +15,9 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-// DefaultWarnIterations is the fallback warn threshold: how many excluded candidate times
-// GetNextTime will scan before emitting the compute-limit warning (metric + log), used when no
-// dynamic-config accessor is injected into the SpecBuilder. It is two weeks' worth of one-second
-// ticks: enough that no well-formed spec ever reaches it, small enough that an adversarial spec
-// (calendar matches every second, exclude cancels every second) trips it quickly. Crossing it is
-// non-fatal; the search continues (see GetNextTime).
-const DefaultWarnIterations = 2 * 7 * 24 * 60 * 60
+// DefaultWarnIterations is the fallback warn threshold for how many iterations before
+// emitting a log wanning on the number of schedule iterations.
+const DefaultWarnIterations = 7 * 24 * 60 * 60
 
 type (
 	CompiledSpec struct {
@@ -367,9 +363,6 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 		if iterations >= maxIterations {
 			return GetNextTimeResult{ComputeLimitWarning: warned}, ErrComputeLimitExceeded
 		}
-		// Warn bound: non-fatal. Record that the search went long so callers can surface it, then
-		// keep searching. This is the default protection: observe over-excluded specs without
-		// stopping the schedule.
 		if !warned && iterations >= warnIterations {
 			warned = true
 		}
