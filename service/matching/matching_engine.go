@@ -1338,8 +1338,9 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 				e.logger.Warn("Failed to cancel outstanding worker polls for local partitions",
 					tag.NewInt("partition-count", len(partitions)),
 					tag.Error(err))
+			} else {
+				totalCancelled.Add(resp.GetCancelledCount())
 			}
-			totalCancelled.Add(resp.GetCancelledCount())
 			continue
 		}
 		wg.Go(func() {
