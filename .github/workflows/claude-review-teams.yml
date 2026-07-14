@@ -223,17 +223,10 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v4
-      - name: Generate review app token
-        id: generate_review_token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
-          private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          permission-pull-requests: write
-          permission-issues: write
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
@@ -241,7 +234,7 @@ jobs:
       - name: Claude PR review
         uses: anthropics/claude-code-action@v1
         with:
-          github_token: ${{ steps.generate_review_token.outputs.token }}
+          github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: ${{ github.event.action != 'labeled' }}
           prompt: |
