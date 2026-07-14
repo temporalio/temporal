@@ -311,6 +311,8 @@ type (
 	FaultInjectionTarget struct {
 		Store  DataStoreName
 		Method string
+		// Request is optionally populated by fault injection wrappers for request-aware faults.
+		Request any
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
@@ -443,7 +445,10 @@ type (
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
-		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
+		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url.
+		// For the postgres12_pgx plugin, "require_auth" restricts which authentication methods the client
+		// accepts from the server (e.g. "scram-sha-256", or "!none" to negate), hardening against auth
+		// downgrade. Unset means all methods are accepted.
 		ConnectAttributes map[string]string `yaml:"connectAttributes"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
@@ -650,6 +655,14 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

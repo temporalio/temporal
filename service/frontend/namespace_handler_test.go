@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -112,7 +111,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v2",
 	}, out)
 }
@@ -127,7 +126,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Adding() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v0",
 		"k1": "v2",
 	}, out)
@@ -144,7 +143,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Merging() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
@@ -159,7 +158,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Nil() {
 		},
 	)
 
-	assert.Equal(s.T(), map[string]string{
+	s.Equal(map[string]string{
 		"k0": "v1",
 		"k1": "v2",
 	}, out)
@@ -199,7 +198,7 @@ func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Adding() {
 			"k1": {Reason: "reason2", CreateTime: timestamppb.New(now)},
 		},
 	}
-	assert.Equal(s.T(), out.String(), expected.String())
+	s.Equal(out.String(), expected.String())
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeBadBinaries_Merging() {
@@ -331,7 +330,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		})
 		s.NoError(err)
 		token = resp.NextPageToken
-		s.True(len(resp.Namespaces) <= int(pagesize))
+		s.LessOrEqual(len(resp.Namespaces), int(pagesize))
 		if len(resp.Namespaces) > 0 {
 			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
@@ -386,12 +385,14 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
+	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerCommands)
+	s.False(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
+	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 
@@ -402,13 +403,15 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute = dc.GetIntPropertyFnFilteredByNamespace(5)
 	s.config.WorkerHeartbeatsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.WorkflowPauseEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.Activity.Enabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.EnableChasm = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.StandaloneNexusOperationsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1024)
 	s.config.MemoSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(512)
 	s.config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.WorkerCommandsEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -420,10 +423,12 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowPause)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
+	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
+	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 }
@@ -1001,7 +1006,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_AllDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1051,7 +1056,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NoDefault() {
 			s.Equal(description, request.Namespace.GetInfo().GetDescription())
 			s.Equal(email, request.Namespace.GetInfo().GetOwner())
 			s.Equal(data, request.Namespace.GetInfo().GetData())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(activeClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{activeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1228,7 +1233,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_AllDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(true, request.IsGlobalNamespace)
+			s.True(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1282,7 +1287,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterGlobalNamespace_NoDefault() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(true, request.IsGlobalNamespace)
+			s.True(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName, cluster.TestAlternativeClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1454,7 +1459,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterLocalNamespace_NotMaster() {
 			s.NotEmpty(request.Namespace.GetInfo().GetId())
 			s.Equal(enumspb.NAMESPACE_STATE_REGISTERED, request.Namespace.Info.GetState())
 			s.Equal(namespace, request.Namespace.GetInfo().GetName())
-			s.Equal(false, request.IsGlobalNamespace)
+			s.False(request.IsGlobalNamespace)
 			s.Equal(retention, request.Namespace.GetConfig().GetRetention())
 			s.Equal(cluster.TestCurrentClusterName, request.Namespace.GetReplicationConfig().ActiveClusterName)
 			s.Equal([]string{cluster.TestCurrentClusterName}, request.Namespace.GetReplicationConfig().GetClusters())
@@ -1907,14 +1912,14 @@ func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
 	rules, err := s.handler.ListWorkflowRules(context.Background(), namespaceName)
 	s.NoError(err)
 	s.NotNil(rules)
-	s.Equal(2, len(rules))
+	s.Len(rules, 2)
 
 	// config is nil
 	nsConfig.WorkflowRules = nil
 	rules, err = s.handler.ListWorkflowRules(context.Background(), namespaceName)
 	s.NoError(err)
 	s.NotNil(rules)
-	s.Equal(0, len(rules))
+	s.Empty(rules)
 }
 
 func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
@@ -1952,7 +1957,7 @@ func (s *namespaceHandlerCommonSuite) TestWorkflowRuleEviction() {
 		oldLens := len(tt.rules)
 		s.handler.removeOldestExpiredWorkflowRule("", tt.rules)
 		if len(tt.deletedRule) == 0 {
-			s.Equal(oldLens, len(tt.rules))
+			s.Len(tt.rules, oldLens)
 		} else {
 			if _, exists := tt.rules[tt.deletedRule]; exists {
 				s.True(false, "Rule was not deleted")

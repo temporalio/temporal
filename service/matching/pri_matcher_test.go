@@ -77,7 +77,8 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		rateLimitManager,
-		func() {},
+		func() {}, // onRateLimited
+		func() {}, // markAlive
 	)
 
 	// start the matcher
@@ -171,6 +172,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 			metrics.NoopMetricsHandler,
 			rateLimitManager,
 			func() {},
+			func() {},
 		)
 
 		tm.Start()
@@ -191,4 +193,78 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		require.True(t, task.isStarted(), "task should be a started (forwarded) task")
 		require.Equal(t, taskToken, task.started.workflowTaskInfo.TaskToken)
 	})
+}
+
+// TestValidatorDrop_SetsDropReason verifies that when the root-partition validator
+// rejects a backlog task, it finishes the task with the right drop reason — which
+// reader.completeTask records in tasks_dropped: expired_memory for a time-expired task,
+// invalid for one that only failed validation.
+func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
+	cases := []struct {
+		name       string
+		expiryTime *timestamppb.Timestamp
+		wantReason dropReason
+	}{
+		{"ExpiredMemory", timestamppb.New(time.Now().Add(-time.Hour)), dropReasonExpiredMemory},
+		{"Invalid", nil, dropReasonInvalid},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			cfg := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+				NewConfig(dynamicconfig.NewNoopCollection()),
+				"nsname",
+			)
+			partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
+				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				RootPartition()
+
+			// Validator rejects every task it sees, forcing the drop path.
+			mockValidator := NewMocktaskValidator(s.controller)
+			mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
+
+			rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			tm := newPriTaskMatcher(
+				ctx,
+				cfg,
+				partition,
+				nil, // nil forwarder = root partition -> validateTasksOnRoot path
+				nil,
+				mockValidator,
+				s.logger,
+				metrics.NoopMetricsHandler,
+				rateLimitManager,
+				func() {},
+				func() {},
+			)
+			tm.Start()
+			defer tm.Stop()
+
+			completionCalled := make(chan taskResponse, 1)
+			task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+				TaskId: 1,
+				Data: &persistencespb.TaskInfo{
+					CreateTime: timestamppb.Now(),
+					ExpiryTime: tc.expiryTime,
+				},
+			}, func(_ *internalTask, res taskResponse) {
+				completionCalled <- res
+			})
+
+			task.resetMatcherState()
+			_ = tm.AddTask(task)
+
+			select {
+			case res := <-completionCalled:
+				s.Require().NoError(res.err()) // task is dropped, not reprocessed
+				s.Equal(tc.wantReason, res.dropReason)
+			case <-time.After(2 * time.Second):
+				s.Fail("timed out waiting for validator to drop task")
+			}
+		})
+	}
 }

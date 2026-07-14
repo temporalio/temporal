@@ -680,10 +680,10 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
-	// test for last page hits
+	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
 	s.NoError(err)
-	s.Equal(0, len(resp.NextPageToken))
+	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
@@ -701,10 +701,10 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
-	// for last page
+	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
 	s.NoError(err)
-	s.Equal(0, len(resp.NextPageToken))
+	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(numOfHits, len(resp.Executions))
 }
 

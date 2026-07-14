@@ -196,6 +196,74 @@ func TestCommandProtocolMessage(t *testing.T) {
 		require.Equal(t, event.UserMetadata, command.UserMetadata)
 	})
 
+	// Verifies that event group markers attached to a command are passed through to the newly created event.
+	t.Run("Attach event group markers", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.EventGroupMarkers = []*sdkpb.EventGroupMarker{
+			{
+				Variant: &sdkpb.EventGroupMarker_Label_{
+					Label: &sdkpb.EventGroupMarker_Label{
+						Id: "explicit-marker-id",
+						Label: &commonpb.Payload{
+							Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+							Data:     []byte(`"payment"`),
+						},
+					},
+				},
+			},
+			{
+				Variant: &sdkpb.EventGroupMarker_InboundUpdate_{
+					InboundUpdate: &sdkpb.EventGroupMarker_InboundUpdate{
+						InboundUpdateId: "fire-update-1",
+					},
+				},
+			},
+		}
+
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Equal(t, command.EventGroupMarkers, event.EventGroupMarkers)
+	})
+
+	// Verifies that an empty or nil EventGroupMarkers slice does not result in any unintended
+	// field being set on the produced history event.
+	t.Run("No event group markers leaves field unset", func(t *testing.T) {
+		var tc testconf
+		setup(t, &tc, setupOpts{blobSizeLimit: defaultBlobSizeLimit})
+		msgID := t.Name() + "-message-id"
+		command := msgCommand(msgID)
+		startTimerCommandAttributes := &commandpb.StartTimerCommandAttributes{
+			TimerId: fmt.Sprintf("random-timer-id-%d", rand.Int63()),
+		}
+		command.CommandType = enumspb.COMMAND_TYPE_START_TIMER
+		command.Attributes = &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: startTimerCommandAttributes,
+		}
+
+		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().AddTimerStartedEvent(tc.handler.workflowTaskCompletedID, startTimerCommandAttributes).MaxTimes(1).Return(event, nil, nil)
+
+		_, err := tc.handler.handleCommand(context.Background(), command, newMsgList())
+		require.NoError(t, err)
+
+		require.Nil(t, event.EventGroupMarkers)
+	})
+
 	// Verifies that the error is properly handled when event creation fails.
 	t.Run("Event creation failure", func(t *testing.T) {
 		var tc testconf
@@ -539,6 +607,71 @@ func TestFlushWorkerCommandsTasks(t *testing.T) {
 		err := handler.flushWorkerCommandsTasks()
 		require.NoError(t, err)
 	})
+}
+
+func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	shardCtx := historyi.NewMockShardContext(ctrl)
+
+	activityID := "test-activity-1"
+	scheduledEventID := int64(5)
+
+	ai := &persistencespb.ActivityInfo{
+		ScheduledEventId: scheduledEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
+		Version:          1,
+		StartVersion:     1,
+		TaskQueue:        "test-queue",
+		ActivityType:     &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
+	ms.EXPECT().GetAssignedBuildId().Return("")
+	ms.EXPECT().AddActivityTaskStartedEvent(
+		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
+	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: "test-namespace-id",
+		WorkflowId:  "test-workflow-id",
+	})
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: "test-run-id",
+	})
+	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "test-workflow"})
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+
+	shardCtx.EXPECT().NewVectorClock().Return(expectedClock, nil)
+
+	dcClient := dynamicconfig.StaticClient(nil)
+	col := dynamicconfig.NewCollection(dcClient, log.NewNoopLogger())
+	config := configs.NewConfig(col, 1)
+
+	handler := &workflowTaskCompletedHandler{
+		identity:               "test-identity",
+		workerControlTaskQueue: "/_sys/worker-commands/test-ns/key1",
+		mutableState:           ms,
+		shard:                  shardCtx,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		logger:                 log.NewNoopLogger(),
+		metricsHandler:         metrics.NoopMetricsHandler,
+		config:                 config,
+	}
+
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId:   activityID,
+		ActivityType: &commonpb.ActivityType{Name: "test-activity"},
+	}
+
+	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
+	require.NoError(t, err)
+	require.NotNil(t, mutation)
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {

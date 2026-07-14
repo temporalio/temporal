@@ -144,6 +144,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	}
 	executionInfo.LastRunningClock = lastEvent.GetTaskId()
 
+	// [history] is a single persistence batch, so firstEvent.EventId is the batch ID for every
+	// event applied below. Event definitions that generate load tokens (e.g. NexusOperationScheduled)
+	// read this via GenerateEventLoadToken to find the original batch ID.
+	b.mutableState.SetReplayEventBatchID(firstEvent.GetEventId())
+
 	for _, event := range history {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
@@ -237,7 +242,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetWorkerVersion(),
 				attributes.GetBuildIdRedirectCounter(),
 				attributes.GetSuggestContinueAsNewReasons(),
-				attributes.GetTargetWorkerDeploymentVersionChanged(),
 			)
 			if err != nil {
 				return nil, err

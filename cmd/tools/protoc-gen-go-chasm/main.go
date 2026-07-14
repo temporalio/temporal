@@ -95,6 +95,7 @@ func (p *Plugin) Run(plugin *protogen.Plugin) error {
 		w.println(`"go.temporal.io/server/common/log"`)
 		w.println(`"go.temporal.io/server/common/membership"`)
 		w.println(`"go.temporal.io/server/common/metrics"`)
+		w.println(`"go.uber.org/fx"`)
 		w.println(`"google.golang.org/grpc"`)
 		w.unindent()
 		w.println(")")
@@ -154,7 +155,7 @@ func genAssignShard(m *protogen.Method) (string, error) {
 func goFieldPath(m *protogen.Method, path string) (string, error) {
 	parts := strings.Split(path, ".")
 	field := m.Input
-	goPath := ""
+	var goPath strings.Builder
 	for _, part := range parts {
 		fieldName := codegen.SnakeCaseToPascalCase(part)
 		i := slices.IndexFunc(field.Fields, func(f *protogen.Field) bool {
@@ -165,9 +166,9 @@ func goFieldPath(m *protogen.Method, path string) (string, error) {
 		}
 		field = field.Fields[i].Message
 		// Convert to getter form
-		goPath += "." + "Get" + fieldName + "()"
+		goPath.WriteString("." + "Get" + fieldName + "()")
 	}
-	return goPath, nil
+	return goPath.String(), nil
 }
 
 func routingOptions(m *protogen.Method) (*routingspb.RoutingOptions, error) {
@@ -194,6 +195,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("// %s initializes a new %s.", ctorName, structName)
 	w.println("func %s(", ctorName)
 	w.indent()
+	w.println("lc fx.Lifecycle,")
 	w.println("dc *dynamicconfig.Collection,")
 	w.println("rpcFactory     common.RPCFactory,")
 	w.println("monitor        membership.Monitor,")
@@ -209,7 +211,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("return nil, err")
 	w.unindent()
 	w.println("}")
-	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient)", svc.GoName)
+	w.println("connections := history.NewConnectionPool(resolver, rpcFactory, New%sClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))", svc.GoName)
 	w.println("var redirector history.Redirector[%sClient]", svc.GoName)
 	w.println("if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {")
 	w.indent() // start if
@@ -227,15 +229,23 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("redirector = history.NewBasicRedirector(connections, resolver)")
 	w.unindent() // close else
 	w.println("}")
-	w.println("return &%s{", structName)
+	w.println("client := &%s{", structName)
 	w.indent() // start struct literal
 	w.println("metricsHandler: metricsHandler,")
 	w.println("redirector:     redirector,")
 	w.println("numShards:      config.NumHistoryShards,")
-	w.println("retryPolicy:    common.CreateHistoryClientRetryPolicy(),")
+	w.println("retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),")
 	w.unindent() // close struct literal
-	w.println("}, nil")
+	w.println("}")
+	w.println("lc.Append(fx.StopHook(client.Stop))")
+	w.println("return client, nil")
 	w.unindent() // close ctor body
+	w.println("}")
+
+	w.println("func (c *%s) Stop() {", structName)
+	w.indent()
+	w.println("c.redirector.Close()")
+	w.unindent()
 	w.println("}")
 
 	for _, method := range svc.Methods {

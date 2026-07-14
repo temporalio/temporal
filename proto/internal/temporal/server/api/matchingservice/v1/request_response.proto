@@ -342,6 +342,7 @@ message DescribeTaskQueuePartitionRequest {
 
 message DescribeTaskQueuePartitionResponse {
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
+  temporal.server.api.taskqueue.v1.PartitionScaleInfo scale_info = 2;
 }
 
 message ListTaskQueuePartitionsRequest {
@@ -718,6 +719,16 @@ message ListWorkersResponse {
   repeated temporal.api.worker.v1.WorkerInfo workers_info = 1 [deprecated = true];
   bytes next_page_token = 2;
   repeated temporal.api.worker.v1.WorkerListInfo workers = 3;
+}
+
+message CountWorkersRequest {
+  string namespace_id = 1;
+  temporal.api.workflowservice.v1.CountWorkersRequest count_request = 2;
+}
+
+message CountWorkersResponse {
+  // Number of workers matching the query.
+  int64 count = 1;
 }
 
 // (-- api-linter: core::0134::request-resource-required=disabled

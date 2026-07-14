@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -83,6 +84,7 @@ func eagerNamespaceRefresherProvider(
 	dataMerger nsreplication.NamespaceDataMerger,
 	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
 		metadataManager,
@@ -95,6 +97,7 @@ func eagerNamespaceRefresherProvider(
 			dataMerger,
 			admitter,
 			logger,
+			testHooks,
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
@@ -190,10 +193,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 		if !ok {
 			return NewSequentialTaskQueueWithID(item)
 		}
-		parallelism := config.ReplicationLowPriorityTaskParallelism()
-		if parallelism < 1 {
-			parallelism = 1
-		}
+		parallelism := max(config.ReplicationLowPriorityTaskParallelism(), 1)
 		// 0..parallelism-1, stable for a given RunID. Different runs of the same workflow can share
 		// a slot, so up to P sequential queues (and workers) can progress them concurrently.
 		slot := int(farm.Fingerprint32([]byte(workflowKey.RunID)) % uint32(parallelism))

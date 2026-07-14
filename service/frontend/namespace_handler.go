@@ -5,6 +5,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -896,18 +897,20 @@ func (d *namespaceHandler) createResponse(
 		Id:          info.Id,
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
-			EagerWorkflowStart:              d.config.EnableEagerWorkflowStart(info.Name),
-			SyncUpdate:                      d.config.EnableUpdateWorkflowExecution(info.Name),
-			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
-			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
-			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
-			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
-			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
-			StandaloneNexusOperation:        d.config.EnableChasm(info.Name) && d.config.StandaloneNexusOperationsEnabled(info.Name),
-			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
-			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
-			WorkflowUpdateCallbacks:         d.config.EnableWorkflowUpdateCallbacks(info.Name),
-			PollerAutoscaling:               true,
+			EagerWorkflowStart:               d.config.EnableEagerWorkflowStart(info.Name),
+			SyncUpdate:                       d.config.EnableUpdateWorkflowExecution(info.Name),
+			AsyncUpdate:                      d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			ReportedProblemsSearchAttribute:  numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
+			WorkerHeartbeats:                 d.config.WorkerHeartbeatsEnabled(info.Name),
+			WorkflowPause:                    d.config.WorkflowPauseEnabled(info.Name),
+			StandaloneActivities:             d.config.Activity.Enabled(info.Name),
+			StandaloneNexusOperation:         d.config.EnableChasm(info.Name) && d.config.StandaloneNexusOperationsEnabled(info.Name),
+			WorkerPollCompleteOnShutdown:     d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
+			WorkerCommands:                   d.config.WorkerCommandsEnabled(info.Name),
+			WorkflowUpdateCallbacks:          d.config.EnableWorkflowUpdateCallbacks(info.Name),
+			PollerAutoscaling:                true,
+			PollerAutoscalingAutoEnroll:      d.config.PollerAutoscalingAutoEnroll(info.Name),
+			WorkflowTaskCompletionPagination: d.config.EnableWorkflowTaskCompletionPagination(info.Name),
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
@@ -975,9 +978,7 @@ func (d *namespaceHandler) mergeNamespaceData(
 	if old == nil {
 		old = map[string]string{}
 	}
-	for k, v := range new {
-		old[k] = v
-	}
+	maps.Copy(old, new)
 	return old
 }
 

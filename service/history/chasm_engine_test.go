@@ -1094,7 +1094,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	//
 	// All three UpdateComponent calls result in a workflow execution mutation (UpdateWorkflowExecution
 	// is always called). However, only the third call actually mutates CHASM node data, so
-	// NotifyChasmExecution fires exactly once — for that satisfying update — which is sufficient
+	// NotifyChasmExecution fires exactly once - for that satisfying update - which is sufficient
 	// to wake the poll.
 	const numUpdatesTotal = 3
 	const numChasmNodeUpdates = 1 // only the satisfying update changes CHASM node bytes
@@ -1989,7 +1989,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.ProtoEncode(state)
+	blob, err := serialization.Encode(state, serialization.WithDeterministicProto3)
 	s.NoError(err)
 	return blob
 }

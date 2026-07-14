@@ -5,90 +5,86 @@ import (
 	"net/http"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type TLSFunctionalSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*TLSFunctionalSuite]
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(TLSFunctionalSuite))
+	parallelsuite.Run(t, &TLSFunctionalSuite{})
 }
 
-func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithMTLS())
-}
-
-func (s *TLSFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownCluster()
+func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	baseOpts := []testcore.TestOption{
+		testcore.WithMTLS(),
+	}
+	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Track auth info
-	calls := s.trackAuthInfoByCall()
+	calls := s.trackAuthInfoByCall(env)
 
 	// Make a list-open call
-	_, _ = s.SdkClient().ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{})
+	_, _ = env.SdkClient().ListOpenWorkflow(s.Context(), &workflowservice.ListOpenWorkflowExecutionsRequest{})
 
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions")
-	s.Require().True(ok)
-	s.Require().Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.True(ok)
+	s.Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
 func (s *TLSFunctionalSuite) TestHTTPMTLS() {
-	if s.HttpAPIAddress() == "" {
+	env := s.newTestEnv()
+	if env.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 	// Track auth info
-	calls := s.trackAuthInfoByCall()
+	calls := s.trackAuthInfoByCall(env)
 
 	// Confirm non-HTTPS call is rejected with 400
-	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace().String() + "/workflows")
-	s.Require().NoError(err)
-	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
+	resp, err := http.Get("http://" + env.HttpAPIAddress() + "/namespaces/" + env.Namespace().String() + "/workflows")
+	s.NoError(err)
+	s.Equal(http.StatusBadRequest, resp.StatusCode)
 
 	// Create HTTP client with TLS config
 	httpClient := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+			TLSClientConfig: env.GetTestCluster().Host().TLSConfigProvider().FrontendClientConfig,
 		},
 	}
 
 	// Make a list call
-	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace().String()+"/workflows", nil)
-	s.Require().NoError(err)
+	req, err := http.NewRequest("GET", "https://"+env.HttpAPIAddress()+"/namespaces/"+env.Namespace().String()+"/workflows", nil)
+	s.NoError(err)
 	resp, err = httpClient.Do(req)
-	s.Require().NoError(err)
-	s.Require().Equal(http.StatusOK, resp.StatusCode)
+	s.NoError(err)
+	s.Equal(http.StatusOK, resp.StatusCode)
 
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions")
-	s.Require().True(ok)
-	s.Require().Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.True(ok)
+	s.Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
-func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
+func (s *TLSFunctionalSuite) trackAuthInfoByCall(env *testcore.TestEnv) *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
-	s.GetTestCluster().Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	env.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
 			System:     authorization.RoleAdmin,
 			Extensions: authInfo,
 		}, nil
 	})
-	s.GetTestCluster().Host().SetOnAuthorize(func(
+	env.SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,

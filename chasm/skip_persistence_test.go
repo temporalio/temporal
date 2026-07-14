@@ -9,9 +9,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// minimalTestComponent returns a TestComponent with just enough fields set for
-// CloseTransaction to succeed. It has no sub-components so the root node is the
-// only thing we need to reason about in these tests.
 func (s *nodeSuite) minimalTestComponent() *TestComponent {
 	return &TestComponent{
 		ComponentData: &persistencespb.WorkflowExecutionState{RunId: "initial-run-id"},
@@ -19,9 +16,6 @@ func (s *nodeSuite) minimalTestComponent() *TestComponent {
 	}
 }
 
-// TestSkipPersistenceIfClean_NewNode verifies that a brand-new component node
-// (never written to storage) is always persisted, even though skip-if-clean is
-// the default behavior. The guard is initialStatePersisted == false.
 func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -36,15 +30,10 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_NewNode() {
 	s.NotNil(mutation.UpdatedNodes[""].GetData(), "data blob must be present")
 }
 
-// TestSkipPersistenceIfClean_LoadedUnmodified verifies the core optimization:
-// a node loaded from storage and accessed via MutableContext without any data
-// mutation is NOT added to UpdatedNodes and its LastUpdateVersionedTransition is
-// not bumped.
 func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
-	// First transaction: create and persist.
 	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.NoError(rootNode.SetRootComponent(s.minimalTestComponent()))
 
@@ -57,7 +46,6 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 		persistedNodes[""].GetMetadata().GetLastUpdateVersionedTransition(),
 	).(*persistencespb.VersionedTransition)
 
-	// Second transaction: load from storage, touch via MutableContext, no mutation.
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 
@@ -79,8 +67,6 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedUnmodified() {
 	)
 }
 
-// TestSkipPersistenceIfClean_LoadedModified verifies that a node whose data was
-// actually mutated IS added to UpdatedNodes and its transition IS bumped.
 func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -102,7 +88,6 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	component, err := rootNode2.Component(ctx, ComponentRef{})
 	s.NoError(err)
 
-	// Mutate a field so the serialized bytes change.
 	component.(*TestComponent).ComponentData.RunId = "modified-run-id"
 
 	secondMutation, err := rootNode2.CloseTransaction()
@@ -116,9 +101,6 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_LoadedModified() {
 	)
 }
 
-// TestSkipPersistenceIfClean_WithNewTask verifies that a node with unchanged data
-// is still added to UpdatedNodes when a new task is scheduled on it, so the task
-// is written to storage and its versioned transition is bumped for replication.
 func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -140,7 +122,6 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	component, err := rootNode2.Component(ctx, ComponentRef{})
 	s.NoError(err)
 
-	// Data is unchanged — only a side-effect task is added.
 	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	ctx.AddTask(component, TaskAttributes{}, &TestSideEffectTask{Data: []byte("task-payload")})
@@ -151,4 +132,27 @@ func (s *nodeSuite) TestSkipPersistenceIfClean_WithNewTask() {
 	s.Contains(secondMutation.UpdatedNodes, "", "node with a new task must be in UpdatedNodes even if data is unchanged")
 	componentAttr := secondMutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(componentAttr.SideEffectTasks, 1, "side-effect task must be written to the persisted node")
+}
+
+func (s *nodeSuite) TestSkipPersistenceIfClean_DeleteUnpersistedNode() {
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
+	s.NoError(rootNode.SetRootComponent(&TestComponent{
+		ComponentData: &persistencespb.WorkflowExecutionState{RunId: "root"},
+		SubComponent1: NewComponentField(nil, &TestSubComponent1{
+			SubComponent1Data: &persistencespb.WorkflowExecutionState{RunId: "created-then-deleted"},
+		}),
+		MSPointer: NewMSPointer(s.nodeBackend),
+	}))
+
+	component := rootNode.value.(*TestComponent)
+	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+
+	mutation, err := rootNode.CloseTransaction()
+	s.NoError(err)
+
+	s.Contains(mutation.UpdatedNodes, "", "root still needs initial persistence")
+	s.Empty(mutation.DeletedNodes, "node created and deleted before first persistence must not emit a tombstone")
 }

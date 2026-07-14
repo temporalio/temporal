@@ -8,8 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -578,4 +581,177 @@ func (s *contextSuite) TestRefreshTask() {
 			s.NoError(err)
 		})
 	}
+}
+
+func (s *contextSuite) TestUpdateWorkflowExecutionWithNew_ChasmNoopSkipsPersistence() {
+	now := time.Now().UTC()
+	chasmArchetypeID := chasm.WorkflowArchetypeID + 101
+	dbState := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte("token#1"),
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 1, Version: common.EmptyVersion},
+						},
+					},
+				},
+			},
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{
+					NamespaceFailoverVersion: common.EmptyVersion,
+					TransitionCount:          1,
+				},
+			},
+			ExecutionStats: &persistencespb.ExecutionStats{
+				HistorySize: 128,
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:     tests.RunID,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(now),
+		},
+		NextEventId: 2,
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.MockEventsCache,
+		s.mockShard.GetLogger(),
+		tests.LocalNamespaceEntry,
+		dbState,
+		1,
+	)
+	s.NoError(err)
+	_, err = mutableState.StartTransaction(tests.LocalNamespaceEntry)
+	s.NoError(err)
+
+	mockChasmTree := historyi.NewMockChasmTree(gomock.NewController(s.T()))
+	mutableState.chasmTree = mockChasmTree
+	mockChasmTree.EXPECT().ArchetypeID().Return(chasmArchetypeID).AnyTimes()
+	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
+
+	s.workflowContext.archetypeID = chasmArchetypeID
+	s.workflowContext.MutableState = mutableState
+
+	err = s.workflowContext.UpdateWorkflowExecutionWithNew(
+		context.Background(),
+		s.mockShard,
+		persistence.UpdateWorkflowModeIgnoreCurrent,
+		nil,
+		nil,
+		historyi.TransactionPolicyActive,
+		nil,
+	)
+	s.NoError(err)
+}
+
+func intermediatePage(pageNumber int32, markerName string) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		IntermediatePage: true,
+		PageNumber:       pageNumber,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{MarkerName: markerName},
+			},
+		}},
+	}
+}
+
+func finalPage(pageNumber int32, commands []*commandpb.Command) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		PageNumber: pageNumber,
+		Commands:   commands,
+	}
+}
+
+func (s *contextSuite) setTaskCompletionBufferSizeLimit(limit int) {
+	s.workflowContext.config.WorkflowTaskCompletionBufferSizeLimit = func(string) int { return limit }
+	mockMutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	mockMutableState.EXPECT().GetStartedWorkflowTask().Return(&historyi.WorkflowTaskInfo{}).AnyTimes()
+	s.workflowContext.MutableState = mockMutableState
+}
+
+// TestTaskCompletionBuffer_AttemptIsolation verifies that a buffer left behind by a
+// different (schedID, attempt) is treated as stale: a page for a new attempt drops
+// the old buffer, and a final page for the old attempt no longer sees its pages.
+func (s *contextSuite) TestTaskCompletionBuffer_AttemptIsolation() {
+	const schedID = int64(10)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	// Attempt 1 buffers page 0.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "attempt1")))
+
+	// A page for attempt 2 arrives on the same context (timeout -> retry path, which
+	// does not Clear()). It must drop attempt 1's buffer and start fresh.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 2, intermediatePage(0, "attempt2")))
+
+	// Attempt 1's final page can no longer find its buffer.
+	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, nil))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+}
+
+// TestTaskCompletionBuffer_GapDetection verifies that a missing intermediate page in
+// the expected range surfaces buffer-lost rather than silently dropping commands.
+func (s *contextSuite) TestTaskCompletionBuffer_GapDetection() {
+	const schedID = int64(11)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
+	// Page 1 never buffered; final page claims pages 0 and 1 preceded it.
+	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(2, nil))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+}
+
+// TestTaskCompletionBuffer_Idempotency verifies that a resent page does not overwrite
+// the first write and the merge still yields the original commands in order.
+func (s *contextSuite) TestTaskCompletionBuffer_Idempotency() {
+	const schedID = int64(12)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "first")))
+	// Resend page 0 with different content; first write must win.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "second")))
+
+	merged, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, intermediatePage(1, "final").Commands))
+	s.NoError(err)
+	s.Len(merged, 1)
+	s.Equal("first", merged[0].GetRecordMarkerCommandAttributes().GetMarkerName())
+}
+
+func (s *contextSuite) TestTaskCompletionBuffer_PageCountLimit() {
+	const schedID = int64(13)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	err := s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(maxWorkflowTaskCompletionPages, "too-many"))
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
+	_, err = s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(maxWorkflowTaskCompletionPages, nil))
+	s.ErrorAs(err, &invalidArgument)
+}
+
+// TestTaskCompletionBuffer_PerWorkflowCapTerminates verifies that a page pushing the
+// cumulative buffer past the per-workflow limit returns the terminate sentinel and
+// drops the buffer.
+func (s *contextSuite) TestTaskCompletionBuffer_PerWorkflowCapTerminates() {
+	s.setTaskCompletionBufferSizeLimit(1)
+
+	// 1-byte per-workflow limit: any non-empty page exceeds it.
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "big"))
+	s.ErrorIs(err, ErrTaskCompletionBufferSizeExceeded)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
 }

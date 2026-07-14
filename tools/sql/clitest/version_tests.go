@@ -53,8 +53,8 @@ func (s *VersionTestSuite) SetupTest() {
 
 // TestVerifyCompatibleVersion test
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
-	database := "temporal_ver_test_" + persistencetests.GenerateRandomDBName(3)
-	visDatabase := "temporal_vis_ver_test_" + persistencetests.GenerateRandomDBName(3)
+	database := persistencetests.GenerateRandomDBName()
+	visDatabase := persistencetests.GenerateRandomDBName()
 
 	defer s.createDatabase(database)()
 	defer s.createDatabase(visDatabase)()

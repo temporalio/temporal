@@ -3,6 +3,7 @@ package temporal
 import (
 	"net/http"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
@@ -198,10 +200,28 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
+// WithTokenProvider sets a custom token provider for outbound remote-cluster auth.
+func WithTokenProvider(tp auth.TokenProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.tokenProvider = tp
+	})
+}
+
 // WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricsHandler interface
 // metrics.MetricsHandler is the base interface for publishing metric events
 func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
+	})
+}
+
+// WithCustomEventLoggerProvider sets a custom OTEL LoggerProvider used to emit structured
+// ("wide") events. Each service builds an events.Handler from it (see events.NewHandler). When
+// unset, events are discarded via a no-op provider.
+//
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithCustomEventLoggerProvider(loggerProvider otellog.LoggerProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.eventLoggerProvider = loggerProvider
 	})
 }

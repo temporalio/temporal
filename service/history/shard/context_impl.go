@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -87,6 +89,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
+		eventLogger         otellog.Logger
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -907,7 +910,9 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
+	workflowStartTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete, and execution replication delete task,
@@ -985,16 +990,17 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 							CloseTime:                      workflowCloseTime,
+							StartTime:                      workflowStartTime,
+							IsRetentionDelete:              retentionDelete,
 						},
 					}
 				}
 				// Piggyback delete execution replication task on the same write to save a DB operation.
-				if s.config.EnableDeleteWorkflowExecutionReplication() &&
-					!stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
+				if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication) {
 					if nsEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(
 						namespace.ID(key.NamespaceID),
 					); err == nil &&
-						nsEntry.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
+						nsEntry.ActiveClusterName(namespace.RoutingKey{ID: key.WorkflowID}) == s.GetClusterMetadata().GetCurrentClusterName() &&
 						nsEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster {
 						newTasks[tasks.CategoryReplication] = []tasks.Task{
 							&tasks.DeleteExecutionReplicationTask{
@@ -1485,6 +1491,10 @@ func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
+}
+
+func (s *ContextImpl) GetLifecycleContext() context.Context {
+	return s.lifecycleCtx
 }
 
 func (s *ContextImpl) stoppedForOwnershipLost() bool {
@@ -2043,6 +2053,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
+	eventLogger otellog.Logger,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2080,6 +2091,7 @@ func newContext(
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
+		eventLogger:             eventLogger,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2188,6 +2200,13 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
 }
 
+func (s *ContextImpl) GetEventLogger() otellog.Logger {
+	if s.eventLogger == nil {
+		return wideevents.NoopLogger()
+	}
+	return s.eventLogger
+}
+
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
@@ -2285,10 +2304,7 @@ func (s *ContextImpl) newDetachedContext(
 	var cancel context.CancelFunc
 	deadline, ok := ctx.Deadline()
 	if ok {
-		timeout := deadline.Sub(s.GetTimeSource().Now())
-		if timeout < minContextTimeout {
-			timeout = minContextTimeout
-		}
+		timeout := max(deadline.Sub(s.GetTimeSource().Now()), minContextTimeout)
 		detachedContext, cancel = context.WithTimeout(detachedContext, timeout)
 	} else {
 		cancel = func() {}

@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	log "go.opentelemetry.io/otel/log"
 	common "go.temporal.io/api/common/v1"
 	adminservice "go.temporal.io/server/api/adminservice/v1"
 	clock "go.temporal.io/server/api/clock/v1"
@@ -26,7 +27,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	finalizer "go.temporal.io/server/common/finalizer"
 	locks "go.temporal.io/server/common/locks"
-	log "go.temporal.io/server/common/log"
+	log0 "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -195,17 +196,17 @@ func (mr *MockShardContextMockRecorder) CurrentVectorClock() *gomock.Call {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockShardContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockShardContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime, workflowStartTime time.Time, stage *tasks.DeleteWorkflowExecutionStage, retentionDelete bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
+func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete)
 }
 
 // EndpointRegistry mocks base method.
@@ -369,6 +370,20 @@ func (mr *MockShardContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockShardContext)(nil).GetEngine), ctx)
 }
 
+// GetEventLogger mocks base method.
+func (m *MockShardContext) GetEventLogger() log.Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
+	return ret0
+}
+
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockShardContextMockRecorder) GetEventLogger() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockShardContext)(nil).GetEventLogger))
+}
+
 // GetEventsCache mocks base method.
 func (m *MockShardContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
@@ -440,11 +455,25 @@ func (mr *MockShardContextMockRecorder) GetHistoryTasks(ctx, request any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockShardContext)(nil).GetHistoryTasks), ctx, request)
 }
 
+// GetLifecycleContext mocks base method.
+func (m *MockShardContext) GetLifecycleContext() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLifecycleContext")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// GetLifecycleContext indicates an expected call of GetLifecycleContext.
+func (mr *MockShardContextMockRecorder) GetLifecycleContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLifecycleContext", reflect.TypeOf((*MockShardContext)(nil).GetLifecycleContext))
+}
+
 // GetLogger mocks base method.
-func (m *MockShardContext) GetLogger() log.Logger {
+func (m *MockShardContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -641,10 +670,10 @@ func (mr *MockShardContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockShardContext) GetThrottledLogger() log.Logger {
+func (m *MockShardContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -1000,17 +1029,17 @@ func (mr *MockControllableContextMockRecorder) CurrentVectorClock() *gomock.Call
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error {
+func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, archetypeID chasm.ArchetypeID, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime, workflowStartTime time.Time, stage *tasks.DeleteWorkflowExecutionStage, retentionDelete bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
+func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, workflowStartTime, stage, retentionDelete)
 }
 
 // EndpointRegistry mocks base method.
@@ -1186,6 +1215,20 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockControllableContext)(nil).GetEngine), ctx)
 }
 
+// GetEventLogger mocks base method.
+func (m *MockControllableContext) GetEventLogger() log.Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventLogger")
+	ret0, _ := ret[0].(log.Logger)
+	return ret0
+}
+
+// GetEventLogger indicates an expected call of GetEventLogger.
+func (mr *MockControllableContextMockRecorder) GetEventLogger() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventLogger", reflect.TypeOf((*MockControllableContext)(nil).GetEventLogger))
+}
+
 // GetEventsCache mocks base method.
 func (m *MockControllableContext) GetEventsCache() events.Cache {
 	m.ctrl.T.Helper()
@@ -1257,11 +1300,25 @@ func (mr *MockControllableContextMockRecorder) GetHistoryTasks(ctx, request any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryTasks), ctx, request)
 }
 
+// GetLifecycleContext mocks base method.
+func (m *MockControllableContext) GetLifecycleContext() context.Context {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLifecycleContext")
+	ret0, _ := ret[0].(context.Context)
+	return ret0
+}
+
+// GetLifecycleContext indicates an expected call of GetLifecycleContext.
+func (mr *MockControllableContextMockRecorder) GetLifecycleContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLifecycleContext", reflect.TypeOf((*MockControllableContext)(nil).GetLifecycleContext))
+}
+
 // GetLogger mocks base method.
-func (m *MockControllableContext) GetLogger() log.Logger {
+func (m *MockControllableContext) GetLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 
@@ -1472,10 +1529,10 @@ func (mr *MockControllableContextMockRecorder) GetShardID() *gomock.Call {
 }
 
 // GetThrottledLogger mocks base method.
-func (m *MockControllableContext) GetThrottledLogger() log.Logger {
+func (m *MockControllableContext) GetThrottledLogger() log0.Logger {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetThrottledLogger")
-	ret0, _ := ret[0].(log.Logger)
+	ret0, _ := ret[0].(log0.Logger)
 	return ret0
 }
 

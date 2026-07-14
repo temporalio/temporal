@@ -248,6 +248,11 @@ service MatchingService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // CountWorkers counts workers in the specified namespace that match the provided query.
+  rpc CountWorkers(CountWorkersRequest) returns (CountWorkersResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // Set the persisted task queue configuration.
   // (-- api-linter: core::0134::method-signature=disabled
   //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)

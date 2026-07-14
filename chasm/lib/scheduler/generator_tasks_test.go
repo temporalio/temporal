@@ -134,6 +134,47 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.Len(t, generator.FutureActionTimes, 2)
 }
 
+func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Exhaust the schedule's actions so it goes idle (no more work to do).
+	sched.Schedule.State.LimitedActions = true
+	sched.Schedule.State.RemainingActions = 0
+
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	// The idle-close deadline must be recorded so it can be surfaced as the
+	// ScheduleIdleCloseTime search attribute.
+	require.NotNil(t, sched.IdleCloseTime, "expected IdleCloseTime to be set once idle")
+	require.True(t, sched.IdleCloseTime.AsTime().After(ctx.Now(generator)),
+		"expected idle-close deadline in the future, got %v", sched.IdleCloseTime.AsTime())
+}
+
+func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+
+	// Simulate a stale deadline left over from a prior idle period.
+	sched.IdleCloseTime = timestamppb.New(ctx.Now(generator).Add(7 * 24 * time.Hour))
+
+	// A normal execution generates future actions, so the schedule is not idle.
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, generator.FutureActionTimes)
+	require.Nil(t, sched.IdleCloseTime, "expected IdleCloseTime to be cleared when the schedule has work")
+}
+
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
@@ -154,6 +195,38 @@ func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.
 	for _, futureTime := range generator.FutureActionTimes {
 		require.True(t, futureTime.AsTime().After(updateTime))
 	}
+}
+
+// TestGeneratorTask_PausedDropsActionsAdvancesHWM verifies the "drop, don't
+// buffer; keep advancing the HWM" semantic of the always-on GeneratorTask.
+// A paused Execute over a non-trivial time range must produce no buffered
+// starts and must still advance the high water mark.
+func TestGeneratorTask_PausedDropsActionsAdvancesHWM(t *testing.T) {
+	env := newTestEnv(t)
+	handler := newGeneratorHandler(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	// Pause and pull the HWM back so a non-paused run would have buffered
+	// several actions across the interval.
+	sched.Schedule.State.Paused = true
+	pausedStart := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+	generator.LastProcessedTime = timestamppb.New(pausedStart)
+
+	err := handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+
+	// No actions buffered while paused - they are dropped.
+	require.Empty(t, invoker.BufferedStarts)
+
+	// HWM advanced past the paused window so a future unpause won't replay
+	// the dropped window.
+	newHWM := generator.LastProcessedTime.AsTime()
+	require.True(t, newHWM.After(pausedStart),
+		"HWM should advance past the paused start: was %v, now %v", pausedStart, newHWM)
 }
 
 func TestUnpause_ResumesProcessing(t *testing.T) {

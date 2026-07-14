@@ -13,15 +13,13 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
 	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
 	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
 
 	RPS                                         dynamicconfig.IntPropertyFn
 	NamespaceRPS                                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableNamespaceFairness                     dynamicconfig.BoolPropertyFn
-	NamespaceFairShareMultiplier                dynamicconfig.FloatPropertyFn
-	FrontendGlobalNamespaceRPS                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OperatorRPSRatio                            dynamicconfig.FloatPropertyFn
 	MaxIDLengthLimit                            dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS                           dynamicconfig.IntPropertyFn
@@ -45,13 +43,15 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog            dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS            dynamicconfig.IntPropertyFn
-	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange      dynamicconfig.DurationPropertyFn
-	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                        dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                  dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                        dynamicconfig.IntPropertyFn
+	EnableStickyQuery                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                  dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay             dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -106,13 +106,14 @@ type Config struct {
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 	ChasmStandbyTaskDiscardDelay         dynamicconfig.DurationPropertyFnWithChasmTaskTypeFilter
 
-	QueuePendingTaskCriticalCount     dynamicconfig.IntPropertyFn
-	QueueReaderStuckCriticalAttempts  dynamicconfig.IntPropertyFn
-	QueueCriticalSlicesCount          dynamicconfig.IntPropertyFn
-	QueuePendingTaskMaxCount          dynamicconfig.IntPropertyFn
-	QueueMaxPredicateSize             dynamicconfig.IntPropertyFn
-	QueueMoveGroupTaskCountBase       dynamicconfig.IntPropertyFn
-	QueueMoveGroupTaskCountMultiplier dynamicconfig.FloatPropertyFn
+	QueuePendingTaskCriticalCount      dynamicconfig.IntPropertyFn
+	QueueReaderStuckCriticalAttempts   dynamicconfig.IntPropertyFn
+	QueueCriticalSlicesCount           dynamicconfig.IntPropertyFn
+	QueuePendingTaskMaxCount           dynamicconfig.IntPropertyFn
+	QueueMaxPredicateSize              dynamicconfig.IntPropertyFn
+	QueueShrinkPredicateMaxPendingKeys dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountBase        dynamicconfig.IntPropertyFn
+	QueueMoveGroupTaskCountMultiplier  dynamicconfig.FloatPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -199,6 +200,7 @@ type Config struct {
 	MaximumBufferedEventsBatch       dynamicconfig.IntPropertyFn
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
 	// ShardUpdateMinInterval is the minimum time interval within which the shard info can be updated.
 	ShardUpdateMinInterval dynamicconfig.DurationPropertyFn
@@ -325,7 +327,6 @@ type Config struct {
 	ReplicationStreamReceiverLivenessMultiplier         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLivenessMultiplier           dynamicconfig.IntPropertyFn
 	EnableHistoryReplicationRateLimiter                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableDeleteWorkflowExecutionReplication            dynamicconfig.BoolPropertyFn
 
 	// The following are used by consistent query
 	MaxBufferedQueryCount dynamicconfig.IntPropertyFn
@@ -375,7 +376,7 @@ type Config struct {
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
-	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFn
+	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
@@ -444,15 +445,13 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
+		EmitReplicationLifecycleEvents:                dynamicconfig.EmitReplicationLifecycleEvents.Get(dc),
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
 
 		RPS:                                  dynamicconfig.HistoryRPS.Get(dc),
 		NamespaceRPS:                         dynamicconfig.HistoryNamespaceRPS.Get(dc),
-		EnableNamespaceFairness:              dynamicconfig.EnableHistoryNamespaceFairness.Get(dc),
-		NamespaceFairShareMultiplier:         dynamicconfig.HistoryNamespaceFairShareMultiplier.Get(dc),
-		FrontendGlobalNamespaceRPS:           dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		OperatorRPSRatio:                     dynamicconfig.OperatorRPSRatio.Get(dc),
 		MaxIDLengthLimit:                     dynamicconfig.MaxIDLengthLimit.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.HistoryPersistenceMaxQPS.Get(dc),
@@ -531,13 +530,14 @@ func NewConfig(
 		StandbyTaskMissingEventsDiscardDelay: dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
 		ChasmStandbyTaskDiscardDelay:         dynamicconfig.ChasmStandbyTaskDiscardDelay.Get(dc),
 
-		QueuePendingTaskCriticalCount:     dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
-		QueueReaderStuckCriticalAttempts:  dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
-		QueueCriticalSlicesCount:          dynamicconfig.QueueCriticalSlicesCount.Get(dc),
-		QueuePendingTaskMaxCount:          dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
-		QueueMaxPredicateSize:             dynamicconfig.QueueMaxPredicateSize.Get(dc),
-		QueueMoveGroupTaskCountBase:       dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
-		QueueMoveGroupTaskCountMultiplier: dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
+		QueuePendingTaskCriticalCount:      dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
+		QueueReaderStuckCriticalAttempts:   dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
+		QueueCriticalSlicesCount:           dynamicconfig.QueueCriticalSlicesCount.Get(dc),
+		QueuePendingTaskMaxCount:           dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
+		QueueMaxPredicateSize:              dynamicconfig.QueueMaxPredicateSize.Get(dc),
+		QueueShrinkPredicateMaxPendingKeys: dynamicconfig.QueueShrinkPredicateMaxPendingKeys.Get(dc),
+		QueueMoveGroupTaskCountBase:        dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
+		QueueMoveGroupTaskCountMultiplier:  dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
@@ -638,11 +638,11 @@ func NewConfig(
 		ReplicationStreamReceiverLivenessMultiplier:         dynamicconfig.ReplicationStreamReceiverLivenessMultiplier.Get(dc),
 		ReplicationStreamSenderLivenessMultiplier:           dynamicconfig.ReplicationStreamSenderLivenessMultiplier.Get(dc),
 		EnableHistoryReplicationRateLimiter:                 dynamicconfig.EnableHistoryReplicationRateLimiter.Get(dc),
-		EnableDeleteWorkflowExecutionReplication:            dynamicconfig.EnableDeleteWorkflowExecutionReplication.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
+		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
 		ShardFirstUpdateInterval:         dynamicconfig.ShardFirstUpdateInterval.Get(dc),
 		ShardUpdateMinTasksCompleted:     dynamicconfig.ShardUpdateMinTasksCompleted.Get(dc),
@@ -821,6 +821,10 @@ func NewConfig(
 		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+
+		// Workflow task completion pagination
+		EnableWorkflowTaskCompletionPagination: dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:  dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 	}
 
 	return cfg
