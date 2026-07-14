@@ -1396,6 +1396,34 @@ func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
 	return append([]capturedTaskMatchDetails(nil), h.calls...)
 }
 
+// closeUnstarted is used by the matching engine on the loser side of a concurrent
+// load of the same partition. It must release the dynamic config subscriptions
+// registered at construction time (otherwise the abandoned manager stays reachable
+// from the dynamic config collection forever), and it must not block even though
+// the manager was never started.
+func (s *PartitionManagerTestSuite) TestCloseUnstartedReleasesDynamicConfigSubscriptions() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(pm.rateLimitManager.cancels)
+
+	done := make(chan struct{})
+	go func() {
+		pm.closeUnstarted()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		s.FailNow("closeUnstarted blocked on an unstarted partition manager")
+	}
+	s.Empty(pm.rateLimitManager.cancels)
+}
+
 // setupPartitionManagerWithTaskHookFactories creates a partition manager with the given task match hooks.
 func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(taskHookFactories []hooks.TaskHookFactory) (*taskQueuePartitionManagerImpl, func()) {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)

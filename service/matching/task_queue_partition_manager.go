@@ -343,6 +343,19 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.goroGroup.Cancel()
 }
 
+// closeUnstarted releases the resources acquired when constructing a manager that
+// was never started, so that it can be garbage collected. In particular, the rate
+// limit manager registers dynamic config subscriptions at construction time, which
+// keep the whole manager graph reachable from the dynamic config collection until
+// they are cancelled. Stop cannot be used for this purpose: it blocks on
+// defaultQueueFuture, which is only set once a started manager has initialized.
+// Must not be called on a manager that has been started.
+func (pm *taskQueuePartitionManagerImpl) closeUnstarted() {
+	pm.initCancel()
+	pm.rateLimitManager.Stop()
+	pm.userDataManager.Stop()
+}
+
 func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
 	// Note that this must be called before defaultQueue is marked initialized!
 	// Otherwise child partitions will see empty scale info in their first ephemeral data update.

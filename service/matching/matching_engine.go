@@ -528,6 +528,13 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
+		// Lost the race with a concurrent load of the same partition. Release the
+		// resources newPM acquired at construction time (in particular its dynamic
+		// config subscriptions), otherwise the abandoned manager stays reachable
+		// from the dynamic config collection forever and is never garbage
+		// collected. Note that Stop cannot be used here: it blocks on the default
+		// queue future, which is only set after the manager is started.
+		newPM.closeUnstarted()
 		return pm, false, nil
 	}
 
