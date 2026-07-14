@@ -16,7 +16,10 @@ func TestReportableFailures(t *testing.T) {
 		{Kind: summaryKindOOM, Name: "OOM prevention"},
 	}
 
-	require.Equal(t, []string{"TestHistoryWorkflow", "OOM"}, reportableFailures(rows))
+	require.Equal(t, []string{
+		"TestHistoryWorkflow",
+		"OOM",
+	}, reportableFailures(rows))
 }
 
 func TestFailuresFromZip(t *testing.T) {
