@@ -76,19 +76,19 @@ func TestStartDelayBucket(t *testing.T) {
 	testCases := []struct {
 		name     string
 		delay    time.Duration
-		expected activitypb.ActivityDispatchTask_StartDelayBucket
+		expected activitypb.StartDelayBucket
 	}{
-		{name: "negative", delay: -time.Second, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE},
-		{name: "zero", delay: 0, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE},
-		{name: "less than one minute", delay: time.Minute - time.Nanosecond, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_LT_1M},
-		{name: "one minute", delay: time.Minute, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M},
-		{name: "ten minutes", delay: 10 * time.Minute, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_10M_1H},
-		{name: "one hour", delay: time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H},
-		{name: "six hours", delay: 6 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_6H_1D},
-		{name: "one day", delay: 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1D_7D},
-		{name: "seven days", delay: 7 * 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D},
-		{name: "thirty days", delay: 30 * 24 * time.Hour, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D},
-		{name: "more than thirty days", delay: 30*24*time.Hour + time.Nanosecond, expected: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_GT_30D},
+		{name: "negative", delay: -time.Second, expected: activitypb.START_DELAY_BUCKET_NONE},
+		{name: "zero", delay: 0, expected: activitypb.START_DELAY_BUCKET_NONE},
+		{name: "less than one minute", delay: time.Minute - time.Nanosecond, expected: activitypb.START_DELAY_BUCKET_LT_1M},
+		{name: "one minute", delay: time.Minute, expected: activitypb.START_DELAY_BUCKET_1M_10M},
+		{name: "ten minutes", delay: 10 * time.Minute, expected: activitypb.START_DELAY_BUCKET_10M_1H},
+		{name: "one hour", delay: time.Hour, expected: activitypb.START_DELAY_BUCKET_1H_6H},
+		{name: "six hours", delay: 6 * time.Hour, expected: activitypb.START_DELAY_BUCKET_6H_1D},
+		{name: "one day", delay: 24 * time.Hour, expected: activitypb.START_DELAY_BUCKET_1D_7D},
+		{name: "seven days", delay: 7 * 24 * time.Hour, expected: activitypb.START_DELAY_BUCKET_7D_30D},
+		{name: "thirty days", delay: 30 * 24 * time.Hour, expected: activitypb.START_DELAY_BUCKET_7D_30D},
+		{name: "more than thirty days", delay: 30*24*time.Hour + time.Nanosecond, expected: activitypb.START_DELAY_BUCKET_GT_30D},
 	}
 
 	for _, tc := range testCases {
@@ -103,32 +103,32 @@ func TestNewActivityDispatchTask(t *testing.T) {
 		name                    string
 		startDelay              time.Duration
 		firstAttemptStartedTime *timestamppb.Timestamp
-		expectedReason          activitypb.ActivityDispatchTask_DispatchReason
-		expectedBucket          activitypb.ActivityDispatchTask_StartDelayBucket
+		expectedReason          activitypb.DispatchReason
+		expectedBucket          activitypb.StartDelayBucket
 	}{
 		{
 			name:           "immediate",
-			expectedReason: activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE,
-			expectedBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedReason: activitypb.DISPATCH_REASON_IMMEDIATE,
+			expectedBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:           "start delay",
 			startDelay:     time.Hour,
-			expectedReason: activitypb.ActivityDispatchTask_DISPATCH_REASON_START_DELAY,
-			expectedBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H,
+			expectedReason: activitypb.DISPATCH_REASON_START_DELAY,
+			expectedBucket: activitypb.START_DELAY_BUCKET_1H_6H,
 		},
 		{
 			name:                    "retry without configured start delay",
 			firstAttemptStartedTime: timestamppb.Now(),
-			expectedReason:          activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY,
-			expectedBucket:          activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedReason:          activitypb.DISPATCH_REASON_RETRY,
+			expectedBucket:          activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:                    "retry preserves configured start delay bucket",
 			startDelay:              time.Hour,
 			firstAttemptStartedTime: timestamppb.Now(),
-			expectedReason:          activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY,
-			expectedBucket:          activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H,
+			expectedReason:          activitypb.DISPATCH_REASON_RETRY,
+			expectedBucket:          activitypb.START_DELAY_BUCKET_1H_6H,
 		},
 	}
 

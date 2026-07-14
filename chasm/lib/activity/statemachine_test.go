@@ -45,8 +45,8 @@ func TestTransitionScheduled(t *testing.T) {
 		startDelay               time.Duration
 		scheduleToStartTimeout   time.Duration
 		scheduleToCloseTimeout   time.Duration
-		expectedDispatchReason   activitypb.ActivityDispatchTask_DispatchReason
-		expectedStartDelayBucket activitypb.ActivityDispatchTask_StartDelayBucket
+		expectedDispatchReason   activitypb.DispatchReason
+		expectedStartDelayBucket activitypb.StartDelayBucket
 	}{
 		{
 			name:                 "all timeouts set",
@@ -58,8 +58,8 @@ func TestTransitionScheduled(t *testing.T) {
 			},
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			scheduleToCloseTimeout:   defaultScheduleToCloseTimeout,
-			expectedDispatchReason:   activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedDispatchReason:   activitypb.DISPATCH_REASON_IMMEDIATE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:                 "schedule to start timeout not set",
@@ -70,8 +70,8 @@ func TestTransitionScheduled(t *testing.T) {
 			},
 			scheduleToStartTimeout:   0,
 			scheduleToCloseTimeout:   defaultScheduleToCloseTimeout,
-			expectedDispatchReason:   activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedDispatchReason:   activitypb.DISPATCH_REASON_IMMEDIATE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:                 "schedule to close timeout not set",
@@ -82,8 +82,8 @@ func TestTransitionScheduled(t *testing.T) {
 			},
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			scheduleToCloseTimeout:   0,
-			expectedDispatchReason:   activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedDispatchReason:   activitypb.DISPATCH_REASON_IMMEDIATE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:                 "start delay",
@@ -96,8 +96,8 @@ func TestTransitionScheduled(t *testing.T) {
 			startDelay:               5 * time.Minute,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			scheduleToCloseTimeout:   defaultScheduleToCloseTimeout,
-			expectedDispatchReason:   activitypb.ActivityDispatchTask_DISPATCH_REASON_START_DELAY,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M,
+			expectedDispatchReason:   activitypb.DISPATCH_REASON_START_DELAY,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_1M_10M,
 		},
 	}
 
@@ -174,7 +174,7 @@ func TestTransitionRescheduled(t *testing.T) {
 		expectedTasks            []chasm.MockTask
 		expectedRetryInterval    time.Duration
 		startDelay               time.Duration
-		expectedStartDelayBucket activitypb.ActivityDispatchTask_StartDelayBucket
+		expectedStartDelayBucket activitypb.StartDelayBucket
 		retryPolicy              *commonpb.RetryPolicy
 		scheduleToStartTimeout   time.Duration
 		operationTag             string
@@ -189,7 +189,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				{Payload: &activitypb.ActivityDispatchTask{}},
 			},
 			expectedRetryInterval:    2 * time.Second,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			operationTag:             metrics.TimerActiveTaskActivityTimeoutScope,
@@ -204,7 +204,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				{Payload: &activitypb.ActivityDispatchTask{}},
 			},
 			expectedRetryInterval:    4 * time.Second,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			operationTag:             metrics.TimerActiveTaskActivityTimeoutScope,
@@ -218,7 +218,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				{Payload: &activitypb.ActivityDispatchTask{}},
 			},
 			expectedRetryInterval:    2 * time.Second,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   0,
 			operationTag:             metrics.TimerActiveTaskActivityTimeoutScope,
@@ -233,7 +233,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				{Payload: &activitypb.ActivityDispatchTask{}},
 			},
 			expectedRetryInterval:    2 * time.Second,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			operationTag:             metrics.TimerActiveTaskActivityTimeoutScope,
@@ -249,7 +249,7 @@ func TestTransitionRescheduled(t *testing.T) {
 				{Payload: &activitypb.ActivityDispatchTask{}},
 			},
 			expectedRetryInterval:    2 * time.Second,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_NONE,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			operationTag:             metrics.HistoryRespondActivityTaskFailedScope,
@@ -264,7 +264,7 @@ func TestTransitionRescheduled(t *testing.T) {
 			},
 			expectedRetryInterval:    2 * time.Second,
 			startDelay:               5 * time.Minute,
-			expectedStartDelayBucket: activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M,
+			expectedStartDelayBucket: activitypb.START_DELAY_BUCKET_1M_10M,
 			retryPolicy:              defaultRetryPolicy,
 			scheduleToStartTimeout:   defaultScheduleToStartTimeout,
 			operationTag:             metrics.HistoryRespondActivityTaskFailedScope,
@@ -324,7 +324,7 @@ func TestTransitionRescheduled(t *testing.T) {
 					dispatchTask, ok := actualTask.Payload.(*activitypb.ActivityDispatchTask)
 					require.True(t, ok, "expected ActivityDispatchTask at index %d", i)
 					require.Equal(t, defaultTime.Add(tc.expectedRetryInterval), actualTask.Attributes.ScheduledTime)
-					require.Equal(t, activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY, dispatchTask.GetDispatchReason())
+					require.Equal(t, activitypb.DISPATCH_REASON_RETRY, dispatchTask.GetDispatchReason())
 					require.Equal(t, tc.expectedStartDelayBucket, dispatchTask.GetStartDelayBucket())
 				case *activitypb.ScheduleToStartTimeoutTask:
 					_, ok := actualTask.Payload.(*activitypb.ScheduleToStartTimeoutTask)

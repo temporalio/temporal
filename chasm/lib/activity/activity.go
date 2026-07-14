@@ -1338,11 +1338,11 @@ func (a *Activity) firstDispatchTime() time.Time {
 }
 
 func (a *Activity) newActivityDispatchTask(ctx chasm.Context) *activitypb.ActivityDispatchTask {
-	dispatchReason := activitypb.ActivityDispatchTask_DISPATCH_REASON_IMMEDIATE
+	dispatchReason := activitypb.DISPATCH_REASON_IMMEDIATE
 	if a.GetFirstAttemptStartedTime() != nil {
-		dispatchReason = activitypb.ActivityDispatchTask_DISPATCH_REASON_RETRY
+		dispatchReason = activitypb.DISPATCH_REASON_RETRY
 	} else if a.GetStartDelay().AsDuration() > 0 {
-		dispatchReason = activitypb.ActivityDispatchTask_DISPATCH_REASON_START_DELAY
+		dispatchReason = activitypb.DISPATCH_REASON_START_DELAY
 	}
 
 	return &activitypb.ActivityDispatchTask{
@@ -1352,26 +1352,26 @@ func (a *Activity) newActivityDispatchTask(ctx chasm.Context) *activitypb.Activi
 	}
 }
 
-func startDelayBucket(delay time.Duration) activitypb.ActivityDispatchTask_StartDelayBucket {
+func startDelayBucket(delay time.Duration) activitypb.StartDelayBucket {
 	switch {
 	case delay <= 0:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_NONE
+		return activitypb.START_DELAY_BUCKET_NONE
 	case delay < time.Minute:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_LT_1M
+		return activitypb.START_DELAY_BUCKET_LT_1M
 	case delay < 10*time.Minute:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1M_10M
+		return activitypb.START_DELAY_BUCKET_1M_10M
 	case delay < time.Hour:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_10M_1H
+		return activitypb.START_DELAY_BUCKET_10M_1H
 	case delay < 6*time.Hour:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1H_6H
+		return activitypb.START_DELAY_BUCKET_1H_6H
 	case delay < 24*time.Hour:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_6H_1D
+		return activitypb.START_DELAY_BUCKET_6H_1D
 	case delay < 7*24*time.Hour:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_1D_7D
+		return activitypb.START_DELAY_BUCKET_1D_7D
 	case delay <= 30*24*time.Hour:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_7D_30D
+		return activitypb.START_DELAY_BUCKET_7D_30D
 	default:
-		return activitypb.ActivityDispatchTask_START_DELAY_BUCKET_GT_30D
+		return activitypb.START_DELAY_BUCKET_GT_30D
 	}
 }
 
