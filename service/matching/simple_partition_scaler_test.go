@@ -9,14 +9,10 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-// TestSimplePartitionScalerEnabledDoesNotPanic is the regression test for the
-// nil-map panic in getTracker: when the scaler is enabled with any Up/Down
-// window, OnTasks lazily creates trackers by writing to the trackers map. If
-// that map is never initialized in the constructor, this write panics with
-// "assignment to entry in nil map" and crash-loops the matching service.
-//
-// The existing scale_manager_test.go only drives a MockPartitionScaler, so it
-// never exercised this real code path.
+// TestSimplePartitionScalerEnabledDoesNotPanic when the scaler is enabled with any
+// Up/Down window, OnTasks lazily creates trackers by writing to the trackers map.
+// Confirm that when SimplePartitionScaler is enabled with non-empty Ups and Downs,
+// there is no nil-map panic.
 func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
@@ -26,12 +22,15 @@ func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
 			Ups: []dynamicconfig.SimplePartitionScalerThreshold{
 				{Window: time.Second, TargetRate: 100},
 			},
+			Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+				{Window: time.Second, TargetRate: 100},
+			},
 		}),
 		clock.NewEventTimeSource(),
 	)
 
-	// The first call reaches getTracker (the map write that used to panic) and,
-	// because no full window has elapsed yet, must report no change.
+	// The first call reaches getTracker. Must report no change because no full
+	// window has elapsed yet.
 	var dec PartitionScalerDecision
 	require.NotPanics(t, func() {
 		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: 1, CurrentTarget: 1})
