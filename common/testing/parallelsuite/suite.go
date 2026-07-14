@@ -43,7 +43,7 @@ type contextScope struct {
 }
 
 // WithContext returns a scope that uses ctx and delegates assertions to scope.
-func WithContext(scope Scope, ctx context.Context) Scope {
+func WithContext(ctx context.Context, scope Scope) Scope {
 	return contextScope{Scope: scope, ctx: ctx}
 }
 

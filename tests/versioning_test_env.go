@@ -388,11 +388,11 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 			for pollCtx.Err() == nil {
 				switch tqType {
 				case tqTypeWf:
-					env.idlePollWorkflow(parallelsuite.WithContext(s, pollCtx), tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollWorkflow(parallelsuite.WithContext(pollCtx, s), tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
 					env.idlePollActivity(s, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeNexus:
-					env.idlePollNexus(parallelsuite.WithContext(s, pollCtx), tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollNexus(parallelsuite.WithContext(pollCtx, s), tv, true, ver3MinPollTime, "should not get any tasks yet")
 				default:
 					panic("invalid task queue type")
 				}
