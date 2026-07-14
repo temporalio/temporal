@@ -108,8 +108,6 @@ func TestSlackMessageStructure(t *testing.T) {
 		TotalJobs: 3,
 	}
 
-	// Verify we have the expected number of blocks
-	// Header, Jobs List, Link = 3 blocks
 	require.Equal(t, &SlackMessage{
 		Text: "CI Failed on Main",
 		Blocks: []SlackBlock{
