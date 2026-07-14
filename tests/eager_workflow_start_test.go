@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"cmp"
 	"fmt"
 	"testing"
 	"time"
@@ -11,14 +10,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/api/protohelpers/match"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -30,25 +28,9 @@ func TestEagerWorkflowTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &EagerWorkflowTestSuite{})
 }
 
-func (s *EagerWorkflowTestSuite) defaultWorkflowID() string {
-	return fmt.Sprintf("functional-%v", s.T().Name())
-}
-
-func (s *EagerWorkflowTestSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
-	name := fmt.Sprintf("functional-queue-%v", s.T().Name())
-	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-}
-
 func (s *EagerWorkflowTestSuite) startEagerWorkflow(env *testcore.TestEnv, baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
-	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest) //nolint:revive
+	options := env.Requests().StartWorkflowExecution(baseOptions)
 	options.RequestEagerExecution = true
-
-	options.Namespace = cmp.Or(options.GetNamespace(), env.Namespace().String())
-	options.Identity = cmp.Or(options.Identity, "test")
-	options.WorkflowId = cmp.Or(options.WorkflowId, s.defaultWorkflowID())
-	options.WorkflowType = cmp.Or(options.WorkflowType, &commonpb.WorkflowType{Name: "Workflow"})
-	options.TaskQueue = cmp.Or(options.TaskQueue, s.defaultTaskQueue())
-	options.RequestId = cmp.Or(options.RequestId, uuid.NewString())
 
 	response, err := env.FrontendClient().StartWorkflowExecution(s.Context(), options)
 	s.NoError(err)
@@ -60,24 +42,20 @@ func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(env *testcore.Test
 	dataConverter := converter.GetDefaultDataConverter()
 	payloads, err := dataConverter.ToPayloads(result)
 	s.NoError(err)
-	completion := workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		Identity:  "test",
+	completion := env.Requests().RespondWorkflowTaskCompleted(&workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION, Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 				Result: payloads,
 			},
 		}}},
-	}
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &completion)
+	})
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), completion)
 	s.NoError(err)
 }
 
 func (s *EagerWorkflowTestSuite) failWorkflow(env *testcore.TestEnv, task *workflowservice.PollWorkflowTaskQueueResponse, msg string) {
-	completion := workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		Identity:  "test",
+	completion := env.Requests().RespondWorkflowTaskCompleted(&workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
@@ -89,17 +67,13 @@ func (s *EagerWorkflowTestSuite) failWorkflow(env *testcore.TestEnv, task *workf
 				},
 			},
 		}},
-	}
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &completion)
+	})
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), completion)
 	s.NoError(err)
 }
 
 func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue(env *testcore.TestEnv) *workflowservice.PollWorkflowTaskQueueResponse {
-	task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: s.defaultTaskQueue(),
-		Identity:  "test",
-	})
+	task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), env.Requests().PollWorkflowTaskQueue(&workflowservice.PollWorkflowTaskQueueRequest{}))
 	s.NotNil(task, "PollWorkflowTaskQueue response was empty")
 	s.NoError(err)
 	return task
@@ -129,6 +103,17 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 			},
 		},
 	})
+	// Assert the whole response shape exhaustively: every field must be
+	// accounted for, so a new response field would force this to be revisited.
+	match.StartWorkflowExecutionResponse{
+		RunId:               match.NotEmpty(),
+		Started:             true,
+		EagerWorkflowTask:   match.NotEmpty(),
+		Status:              match.Any(),
+		Link:                match.Any(),
+		FirstExecutionRunId: match.Any(),
+	}.Test(s.T(), response)
+
 	task := response.GetEagerWorkflowTask()
 	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 	startedEventAttrs := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
@@ -137,7 +122,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 	s.Equal(`"value"`, string(kwData))
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
 }
 
@@ -153,7 +138,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() 
 	task = s.pollWorkflowTaskQueue(env)
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
 }
 
@@ -177,7 +162,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 	task = s.pollWorkflowTaskQueue(env)
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
 }
 
@@ -193,7 +178,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() 
 
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
 }
 
@@ -211,7 +196,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 
 	s.respondWorkflowTaskCompleted(env, task, "ok")
 	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
 }
 
@@ -251,7 +236,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 			s.Context(),
 			&workflowservice.CountWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
+				Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", env.Tv().WorkflowID()),
 			},
 		)
 		s.NoError(err)

@@ -387,18 +387,15 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
 	}
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
+	request := env.Requests().StartWorkflowExecution(&workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
-		Input:               nil,
 		Header:              header,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
-	}
+	})
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
