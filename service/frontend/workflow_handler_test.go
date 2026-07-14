@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -245,6 +246,116 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			saValidator,
 		),
 	)
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+			})
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskFailed(context.Background(), &workflowservice.RespondNexusTaskFailedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+				Failure: &failurepb.Failure{
+					Message: "test failure",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{},
+					},
+				},
+			})
+			s.NoError(err)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {

@@ -4144,6 +4144,93 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	}
 }
 
+func (s *matchingEngineSuite) TestPollNexusTaskQueue_TaskTokenContainsTaskQueueKind() {
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "normal kind",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "worker commands kind",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			namespaceID := s.ns.ID().String()
+			taskQueueName := "test-nexus-tq"
+
+			dispatchReq := &matchingservice.DispatchNexusTaskRequest{
+				NamespaceId: namespaceID,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: tc.kind,
+				},
+				Request: &nexuspb.Request{
+					Header: map[string]string{
+						"request-timeout": "10s",
+					},
+				},
+			}
+
+			nexusTask := newInternalNexusTask(
+				"test-task-id",
+				time.Now().Add(10*time.Second),
+				time.Time{},
+				dispatchReq,
+			)
+
+			partition, err := tqid.PartitionFromProto(
+				&taskqueuepb.TaskQueue{Name: taskQueueName, Kind: tc.kind},
+				namespaceID,
+				enumspb.TASK_QUEUE_TYPE_NEXUS,
+			)
+			s.Require().NoError(err)
+
+			mockPM := NewMocktaskQueuePartitionManager(s.controller)
+			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+			mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+			mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
+			mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(nexusTask, false, nil)
+
+			s.matchingEngine.partitionsLock.Lock()
+			s.matchingEngine.partitions[partition.Key()] = mockPM
+			s.matchingEngine.partitionsLock.Unlock()
+			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+			s.matchingEngine.outstandingPollers = collection.NewSyncMap[string, context.CancelFunc]()
+			s.matchingEngine.shutdownWorkers = cache.New(100, &cache.Options{TTL: 30 * time.Second})
+
+			resp, err := s.matchingEngine.PollNexusTaskQueue(
+				context.Background(),
+				&matchingservice.PollNexusTaskQueueRequest{
+					NamespaceId: namespaceID,
+					PollerId:    uuid.NewString(),
+					Request: &workflowservice.PollNexusTaskQueueRequest{
+						Namespace: string(s.ns.Name()),
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueueName,
+							Kind: tc.kind,
+						},
+					},
+				},
+				metrics.NoopMetricsHandler,
+			)
+			s.Require().NoError(err)
+
+			token, err := s.matchingEngine.tokenSerializer.DeserializeNexusTaskToken(resp.GetResponse().GetTaskToken())
+			s.Require().NoError(err)
+			s.Require().Equal(tc.expectedKind, token.GetTaskQueueKind())
+		})
+	}
+}
+
 // Following are tests for SyncDeploymentUserData API when it uses the new deployment data format.
 
 // TestSyncDeploymentUserData_NewDeploymentDataRemovesOldVersions verifies that when a new routing config is set for a deployment using the latest deployment data format,
