@@ -9,19 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReportableFailures(t *testing.T) {
-	rows := []summaryRow{
-		{Kind: "Failed", Name: "TestHistoryWorkflow (retry 1) (final)", Final: true},
-		{Kind: "Failed", Name: "TestRetryFailure (retry 1)"},
-		{Kind: summaryKindOOM, Name: "OOM prevention"},
-	}
-
-	require.Equal(t, []string{
-		"TestHistoryWorkflow",
-		"OOM",
-	}, reportableFailures(rows))
-}
-
 func TestFailuresFromZip(t *testing.T) {
 	dir := t.TempDir()
 	zipPath := filepath.Join(dir, "artifact.zip")
@@ -35,8 +22,12 @@ func TestFailuresFromZip(t *testing.T) {
   "rows": [
     {
       "kind": "Failed",
-      "name": "TestMatchingWorkflow (final)",
+      "name": "TestMatchingWorkflow (retry 1) (final)",
       "final": true
+    },
+    {
+      "kind": "Failed",
+      "name": "TestRetryFailure (retry 1)"
     },
     {
       "kind": "OOM",

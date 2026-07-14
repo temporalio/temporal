@@ -5,11 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"regexp"
-	"sort"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,19 +25,14 @@ type testSummary struct {
 type summaryRow struct {
 	Kind  string `json:"kind"`
 	Name  string `json:"name"`
-	Final bool   `json:"final,omitempty"`
+	Final bool   `json:"final"`
 }
 
-func getFailures(ctx context.Context, run github.Run, runID string) ([]string, error) {
-	artifactRunID, err := artifactRunID(run, runID)
-	if err != nil {
-		return nil, err
-	}
-
+func getFailures(ctx context.Context, runID int64) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	artifacts, err := github.ListRunArtifacts(ctx, "temporalio/temporal", artifactRunID)
+	artifacts, err := github.ListRunArtifacts(ctx, "temporalio/temporal", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +45,7 @@ func getFailures(ctx context.Context, run github.Run, runID string) ([]string, e
 
 	var failures []string
 	for _, artifact := range artifacts {
-		if artifact.Expired || !isSummaryArtifact(artifact.Name) {
+		if artifact.Expired || !strings.HasPrefix(artifact.Name, "test-summary-json--") {
 			continue
 		}
 
@@ -69,21 +62,6 @@ func getFailures(ctx context.Context, run github.Run, runID string) ([]string, e
 	}
 
 	return uniqueSorted(failures), nil
-}
-
-func artifactRunID(run github.Run, runID string) (int64, error) {
-	if run.DatabaseID != 0 {
-		return run.DatabaseID, nil
-	}
-	id, err := strconv.ParseInt(runID, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid workflow run ID %q: %w", runID, err)
-	}
-	return id, nil
-}
-
-func isSummaryArtifact(name string) bool {
-	return strings.HasPrefix(name, "test-summary-json--")
 }
 
 func failuresFromZip(zipPath string) ([]string, error) {
@@ -115,13 +93,8 @@ func failuresFromZipFile(file *zip.File) ([]string, error) {
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read %s in artifact zip: %w", file.Name, err)
-	}
-
 	var summary testSummary
-	if err := json.Unmarshal(data, &summary); err != nil {
+	if err := json.NewDecoder(rc).Decode(&summary); err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
 	return reportableFailures(summary.Rows), nil
@@ -130,23 +103,16 @@ func failuresFromZipFile(file *zip.File) ([]string, error) {
 func reportableFailures(rows []summaryRow) []string {
 	var failures []string
 	for _, row := range rows {
-		if !isReportableFailure(row) {
+		if !row.Final && row.Kind != summaryKindOOM {
 			continue
 		}
-		failures = append(failures, failureName(row))
+		if row.Kind == summaryKindOOM {
+			failures = append(failures, summaryKindOOM)
+			continue
+		}
+		failures = append(failures, normalizeFailureName(row.Name))
 	}
 	return failures
-}
-
-func isReportableFailure(row summaryRow) bool {
-	return row.Final || row.Kind == summaryKindOOM
-}
-
-func failureName(row summaryRow) string {
-	if row.Kind == summaryKindOOM {
-		return summaryKindOOM
-	}
-	return normalizeFailureName(row.Name)
 }
 
 func normalizeFailureName(name string) string {
@@ -160,15 +126,7 @@ func normalizeFailureName(name string) string {
 }
 
 func uniqueSorted(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	var unique []string
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		unique = append(unique, value)
-	}
-	sort.Strings(unique)
-	return unique
+	values = slices.Clone(values)
+	slices.Sort(values)
+	return slices.Compact(values)
 }

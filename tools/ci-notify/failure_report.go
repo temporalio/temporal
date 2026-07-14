@@ -38,7 +38,7 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 		}
 	}
 
-	failures, err := getFailures(context.Background(), *run, runID)
+	failures, err := getFailures(context.Background(), run.DatabaseID)
 	if err != nil {
 		failures = nil
 	}
