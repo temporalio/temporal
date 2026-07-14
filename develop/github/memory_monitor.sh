@@ -128,6 +128,173 @@ print_proc_file() {
   fi
 }
 
+proc_comm() {
+  local pid="$1"
+
+  if [[ -r "/proc/$pid/comm" ]]; then
+    tr -d '\n' < "/proc/$pid/comm"
+  else
+    echo "pid$pid"
+  fi
+}
+
+safe_file_part() {
+  tr -c '[:alnum:]_.-' '_' | sed 's/_$//'
+}
+
+print_smaps_summary() {
+  local smaps_file="$1"
+
+  echo "Top mappings by private dirty memory:"
+  awk '
+    function flush() {
+      if (name == "") {
+        return
+      }
+      size_by_name[name] += size
+      rss_by_name[name] += rss
+      private_dirty_by_name[name] += private_dirty
+      anonymous_by_name[name] += anonymous
+      count_by_name[name]++
+    }
+    function mapping_name(  i, n) {
+      if (NF <= 5) {
+        return "[anon]"
+      }
+      n = $6
+      for (i = 7; i <= NF; i++) {
+        n = n " " $i
+      }
+      return n
+    }
+    /^[0-9a-fA-F]+-[0-9a-fA-F]+ / {
+      flush()
+      name = mapping_name()
+      size = 0
+      rss = 0
+      private_dirty = 0
+      anonymous = 0
+      next
+    }
+    /^Size:/ { size = $2; next }
+    /^Rss:/ { rss = $2; next }
+    /^Private_Dirty:/ { private_dirty = $2; next }
+    /^Anonymous:/ { anonymous = $2; next }
+    END {
+      flush()
+      for (name in private_dirty_by_name) {
+        printf "%d\t%d\t%d\t%d\t%d\t%s\n",
+          private_dirty_by_name[name],
+          rss_by_name[name],
+          anonymous_by_name[name],
+          size_by_name[name],
+          count_by_name[name],
+          name
+      }
+    }
+  ' "$smaps_file" \
+    | sort -nr -k1,1 \
+    | head -30 \
+    | awk -F '\t' '
+      BEGIN {
+        printf "%12s %12s %12s %12s %8s %s\n", "private_kb", "rss_kb", "anon_kb", "size_kb", "count", "mapping"
+      }
+      {
+        printf "%12d %12d %12d %12d %8d %s\n", $1, $2, $3, $4, $5, $6
+      }
+    '
+
+  echo
+  echo "Top individual VMAs by private dirty memory:"
+  awk '
+    function flush() {
+      if (addr == "") {
+        return
+      }
+      printf "%d\t%d\t%d\t%d\t%s\t%s\n", private_dirty, rss, anonymous, size, addr, name
+    }
+    function mapping_name(  i, n) {
+      if (NF <= 5) {
+        return "[anon]"
+      }
+      n = $6
+      for (i = 7; i <= NF; i++) {
+        n = n " " $i
+      }
+      return n
+    }
+    /^[0-9a-fA-F]+-[0-9a-fA-F]+ / {
+      flush()
+      addr = $1
+      name = mapping_name()
+      size = 0
+      rss = 0
+      private_dirty = 0
+      anonymous = 0
+      next
+    }
+    /^Size:/ { size = $2; next }
+    /^Rss:/ { rss = $2; next }
+    /^Private_Dirty:/ { private_dirty = $2; next }
+    /^Anonymous:/ { anonymous = $2; next }
+    END { flush() }
+  ' "$smaps_file" \
+    | sort -nr -k1,1 \
+    | head -30 \
+    | awk -F '\t' '
+      BEGIN {
+        printf "%12s %12s %12s %12s %-39s %s\n", "private_kb", "rss_kb", "anon_kb", "size_kb", "address", "mapping"
+      }
+      {
+        printf "%12d %12d %12d %12d %-39s %s\n", $1, $2, $3, $4, $5, $6
+      }
+    '
+}
+
+save_proc_mapping_file() {
+  local pid="$1"
+  local proc_file="$2"
+  local output_file="$3"
+  local path="/proc/$pid/$proc_file"
+
+  if [[ ! -r "$path" ]]; then
+    return
+  fi
+
+  cat "$path" > "$output_file" 2>/dev/null || true
+}
+
+capture_proc_mapping_diagnostics() {
+  local diagnostics_path_prefix="$1"
+
+  echo "--- Process Mapping Diagnostics ---"
+  for pid in $(diagnostic_pids); do
+    local comm safe_comm output_prefix smaps_file summary_file
+    comm="$(proc_comm "$pid")"
+    safe_comm="$(printf "%s" "$comm" | safe_file_part)"
+    output_prefix="${diagnostics_path_prefix}-pid${pid}-${safe_comm}"
+    smaps_file="${output_prefix}-smaps.txt"
+    summary_file="${output_prefix}-smaps-summary.txt"
+
+    echo
+    echo "pid $pid ($comm)"
+    save_proc_mapping_file "$pid" "maps" "${output_prefix}-maps.txt"
+    save_proc_mapping_file "$pid" "smaps" "$smaps_file"
+    save_proc_mapping_file "$pid" "numa_maps" "${output_prefix}-numa-maps.txt"
+    if command -v pmap >/dev/null 2>&1; then
+      pmap -x "$pid" > "${output_prefix}-pmap-x.txt" 2>/dev/null || true
+    fi
+
+    echo "Saved full mapping artifacts with prefix ${output_prefix}"
+    if [[ -s "$smaps_file" ]]; then
+      print_smaps_summary "$smaps_file" > "$summary_file"
+      cat "$summary_file"
+    else
+      echo "(smaps not available)"
+    fi
+  done
+}
+
 print_runtime_memstats() {
   local heap_debug_file="$1"
 
@@ -240,6 +407,8 @@ capture_runtime_diagnostics() {
     print_proc_file "$$" "status"
     echo
     print_process_diagnostics
+    echo
+    capture_proc_mapping_diagnostics "$diagnostics_path_prefix"
   } > "$diagnostics_file"
 
   echo "--- Runtime Diagnostics ---"

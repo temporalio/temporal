@@ -463,6 +463,83 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
+  memory-experiment:
+    name: Memory experiment (${{ matrix.name }})
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 11039 }}
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cass-es-shard1-no-race
+            cmd: make TEST_RACE_FLAG=off functional-test-coverage
+          - name: cass-es-shard1-no-coverage
+            cmd: make TEST_COVERAGE_FLAG=off functional-test-coverage
+    env:
+      PERSISTENCE_TYPE: nosql
+      PERSISTENCE_DRIVER: cassandra
+      TEST_TIMEOUT: 35m
+      GITHUB_TIMEOUT: 40
+      CONTAINERS: cassandra elasticsearch
+      TEST_TOTAL_SHARDS: ${{ env.SHARD_COUNT }}
+      TEST_SHARD_INDEX: 1
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - name: Start containerized dependencies
+        uses: ./.github/actions/docker-compose-start
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
+          cache: true
+
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
+
+      - name: Wait for containerized dependencies to be healthy
+        uses: ./.github/actions/docker-compose-healthy
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: ${{ env.CONTAINERS }}
+
+      - name: Run memory experiment
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        env:
+          TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
+          TEMPORAL_TEST_LOG_LEVEL: info
+          TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
+
+      - name: Dump container logs
+        if: failure()
+        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
+
+      - name: Upload memory experiment artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: memory-experiment--${{ github.run_id }}--${{ github.run_attempt }}--${{ matrix.name }}
+          path: |
+            ./.testoutput/junit.*.xml
+            ./.testoutput/debug.log
+            ./.testoutput/test-cluster-events.jsonl
+            ./.testoutput/memory/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop containerized dependencies
+        if: always()
+        uses: ./.github/actions/docker-compose-stop
+        with:
+          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
+          flags: -v
+
   mixed-brain-test:
     name: Mixed brain test
     needs: [pre-build, test-setup]

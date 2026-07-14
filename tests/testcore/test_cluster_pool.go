@@ -300,10 +300,12 @@ func (e clusterEvent) record(event string) {
 	}
 
 	liveClusters := testClusterEventCounters.live.Load()
-	if event == "created" {
+	switch event {
+	case "created":
 		liveClusters = testClusterEventCounters.live.Add(1)
-	} else if event == "teardown-done" {
+	case "teardown-done":
 		liveClusters = testClusterEventCounters.live.Add(-1)
+	default:
 	}
 
 	fields := map[string]any{
@@ -383,7 +385,7 @@ func procSelfStatusValues(keys ...string) map[string]uint64 {
 	}
 
 	values := make(map[string]uint64, len(keys))
-	for _, line := range strings.Split(string(contents), "\n") {
+	for line := range strings.SplitSeq(string(contents), "\n") {
 		key, rest, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
