@@ -237,6 +237,9 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
+		if len(params.GetArchetypeExecutions()) > 0 {
+			return serviceerror.NewInvalidArgument("executions cannot be used with activity batch operations; use archetype executions")
+		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {
