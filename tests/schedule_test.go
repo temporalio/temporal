@@ -4115,10 +4115,6 @@ func testBackfillReprocessesCompletedAction(
 	paused bool,
 	rangeRadius int,
 ) {
-	if strings.HasPrefix(t.Name(), "TestScheduleCHASM/") {
-		t.Skip("CHASM scheduler leaves duplicate workflow-ID backfill starts eligible indefinitely")
-	}
-
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-backfill-reprocess")

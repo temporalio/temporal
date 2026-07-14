@@ -171,6 +171,50 @@ func TestExecuteTask_Basic(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime: startTime,
+			ActualTime:  startTime,
+			DesiredTime: startTime,
+			RequestId:   "automatic-request",
+			WorkflowId:  "workflow-id",
+			Attempt:     1,
+			RunId:       "completed-run",
+			StartTime:   startTime,
+			Completed:   &schedulespb.CompletedResult{},
+		},
+		{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        true,
+			RequestId:     "backfill-request",
+			WorkflowId:    "workflow-id",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			Attempt:       1,
+		},
+	}
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("backfill-request")).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "backfill-run"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:    bufferedStarts,
+		ExpectedBufferedStarts:   2,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, "completed-run", invoker.BufferedStarts[0].GetRunId())
+			require.Equal(t, "backfill-run", invoker.BufferedStarts[1].GetRunId())
+		},
+	})
+}
+
 // Execute is scheduled with an empty buffer.
 func TestExecuteTask_Empty(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
