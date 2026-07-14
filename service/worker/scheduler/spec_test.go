@@ -421,6 +421,27 @@ func (s *specSuite) TestGetNextTimeComputeLimitWarning() {
 	s.True(result.Next.IsZero(), "an over-excluded spec resolves to no next time")
 }
 
+func (s *specSuite) TestGetNextTimeComputeLimitWarningThenResolves() {
+	// Calendar matches every second; exclude matches every second EXCEPT :59. The search skips
+	// the excluded seconds (crossing the small warn threshold) and then resolves to a real time.
+	// This exercises the success return path carrying ComputeLimitWarning=true (as opposed to the
+	// no-match path in TestGetNextTimeComputeLimitWarning).
+	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	builder := NewSpecBuilder()
+	builder.SetWarnIterations(func() int { return 5 })
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "0-58", Minute: "*", Hour: "*"}},
+	})
+	s.Require().NoError(err)
+
+	result, err := cs.GetNextTime("", start)
+	s.Require().NoError(err)
+	s.True(result.ComputeLimitWarning, "crossing the warn threshold should be flagged even when the search resolves")
+	s.Require().False(result.Next.IsZero(), "the search should resolve to a real next time")
+	s.Equal(59, result.Nominal.Second(), "the only non-excluded second is :59")
+}
+
 func (s *specSuite) TestSpecStartTime() {
 	s.checkSequenceFull(
 		"",

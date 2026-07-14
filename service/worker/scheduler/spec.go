@@ -144,11 +144,18 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 	return cspec, nil
 }
 
-// setMaxIterations overrides the compiled search bound. The legacy scheduler workflow uses this
-// to apply a value snapshotted through its "tweakables" MutableSideEffect, so the bound is
+// setMaxIterations overrides the compiled hard search bound. The legacy scheduler workflow uses
+// this to apply a value snapshotted through its "tweakables" MutableSideEffect, so the bound is
 // deterministic across replay rather than read live from dynamic config at compile time.
 func (cs *CompiledSpec) setMaxIterations(v int) {
 	cs.maxIterations = v
+}
+
+// setWarnIterations overrides the compiled warn threshold. Like setMaxIterations, the legacy
+// scheduler workflow uses this to apply a value snapshotted through its "tweakables"
+// MutableSideEffect, keeping the compiled spec deterministic across replay.
+func (cs *CompiledSpec) setWarnIterations(v int) {
+	cs.warnIterations = v
 }
 
 // CleanSpec sets default values in ranges.

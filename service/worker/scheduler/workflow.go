@@ -166,7 +166,8 @@ type (
 
 		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
 		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
-		MaxIterations               int
+		MaxIterations               int  // Hard bound on GetNextTime search iterations (math.MaxInt = disabled)
+		WarnIterations              int  // Warn (non-fatal) bound on GetNextTime search iterations
 
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
@@ -218,6 +219,7 @@ var (
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
 		MaxIterations:                     math.MaxInt, // hard limit disabled by default; warn-only
+		WarnIterations:                    DefaultWarnIterations,
 		Version:                           TriggerImmediatelyTimestamp,
 	}
 
@@ -436,6 +438,7 @@ func (s *scheduler) compileSpec() {
 	} else {
 		s.Info.InvalidScheduleError = ""
 		cspec.setMaxIterations(s.tweakables.MaxIterations)
+		cspec.setWarnIterations(s.tweakables.WarnIterations)
 		s.cspec = cspec
 	}
 }
@@ -1321,9 +1324,10 @@ func (s *scheduler) updateTweakables() {
 		// Re-evaluates migration dynamic config each iteration.
 		p.EnableCHASMMigration = s.enableCHASMMigration()
 		p.MigrateWithRunningWorkflows = s.migrateWithRunningWorkflows()
-		// Snapshot the search bound here (inside the MutableSideEffect) so compileSpec applies a
-		// deterministic value rather than reading dynamic config live at compile time.
+		// Snapshot the search bounds here (inside the MutableSideEffect) so compileSpec applies
+		// deterministic values rather than reading dynamic config live at compile time.
 		p.MaxIterations = s.specBuilder.MaxIterations()
+		p.WarnIterations = s.specBuilder.WarnIterations()
 		return p
 	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }

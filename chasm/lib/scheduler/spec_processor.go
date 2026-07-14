@@ -127,7 +127,13 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var droppedCount int64
 	recordedGenerateLatency := false
 	limitReached := false
+	// Accumulate the (non-fatal) warn signal across the whole range: an intermediate GetNextTime
+	// that crosses the warn threshold but still resolves should be surfaced even if the terminal
+	// peek resolves cheaply. checkNextScheduleResult only sees the terminal result, so fold the
+	// accumulated flag into it below. This is observability only; it doesn't affect scheduling.
+	computeLimitWarning := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
+		computeLimitWarning = computeLimitWarning || next.ComputeLimitWarning
 		lastAction = next.Next
 
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
@@ -188,6 +194,8 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 	}
 
+	// Fold any warning seen mid-loop into the terminal result so it isn't lost.
+	next.ComputeLimitWarning = next.ComputeLimitWarning || computeLimitWarning
 	nextWakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 	if err != nil {
 		return nil, err
