@@ -24,9 +24,10 @@ import (
 // Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
 // If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
-	DCRedirectionContextHeaderName = "xdc-redirection"
-	DCRedirectionApiHeaderName     = "xdc-redirection-api"
-	dcRedirectionMetricsPrefix     = "DCRedirection"
+	DCRedirectionContextHeaderName    = "xdc-redirection"
+	DCRedirectionAPIHeaderName        = "xdc-redirection-api"
+	DCRedirectionSourceCellHeaderName = "xdc-redirection-source-cell"
+	dcRedirectionMetricsPrefix        = "DCRedirection"
 )
 
 var (
@@ -180,6 +181,10 @@ type (
 		clientBean         client.Bean
 		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
+		// redirectResponsesByFullMethod registers embedder methods (keyed by full gRPC method, so
+		// they don't collide with the bareredirectResponsesByFullMethod-name maps) as globally-redirectable, each mapped to its
+		// response constructor. Nil by default, preserving the WorkflowService-only behavior.
+		redirectResponsesByFullMethod map[string]responseConstructorFn
 	}
 )
 
@@ -214,6 +219,19 @@ func NewRedirection(
 	}
 }
 
+// WithRedirectResponses returns a copy of the interceptor that treats the given fullMethod ->
+// response-constructor entries as globally-redirectable APIs, keyed by full gRPC method so they
+// don't collide with the bare-method-name maps. The registered requests must expose their
+// namespace (via NamespaceNameGetter/NamespaceIDGetter) so it can be resolved for redirection.
+func (i *Redirection) WithRedirectResponses(responses map[string]func() any) *Redirection {
+	clone := *i
+	clone.redirectResponsesByFullMethod = make(map[string]responseConstructorFn, len(responses))
+	for fullMethod, ctor := range responses {
+		clone.redirectResponsesByFullMethod[fullMethod] = ctor
+	}
+	return &clone
+}
+
 var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
 func (i *Redirection) Intercept(
@@ -223,6 +241,19 @@ func (i *Redirection) Intercept(
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
+	if raFn, ok := i.redirectResponsesByFullMethod[info.FullMethod]; ok {
+		if !i.RedirectionAllowed(ctx) {
+			return handler(ctx, req)
+		}
+		// Resolve the namespace exactly like the WorkflowService global path below; the registered
+		// request must expose it via NamespaceNameGetter/NamespaceIDGetter. Fails closed (returns
+		// the error) rather than running a global-namespace request on a possibly non-owning cell.
+		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
+		if err != nil {
+			return nil, err
+		}
+		return i.handleRedirectAPIInvocation(ctx, req, info, handler, api.MethodName(info.FullMethod), raFn, namespaceName)
+	}
 
 	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
@@ -290,7 +321,8 @@ func (i *Redirection) handleRedirectAPIInvocation(
 				return err
 			}
 			resp = respCtorFn()
-			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionApiHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionAPIHeaderName, "true")
+			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionSourceCellHeaderName, i.currentClusterName)
 			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 			if err != nil {
 				return err

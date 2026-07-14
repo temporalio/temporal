@@ -17,6 +17,9 @@ type (
 		// Evict removes the cached entry for the given key and runs its
 		// release fn.
 		Evict(clientKey string)
+		// EvictAll removes every cached entry and runs each one's release fn.
+		// Used to deterministically release cached gRPC connections on shutdown.
+		EvictAll()
 	}
 
 	keyResolver interface {
@@ -123,6 +126,21 @@ func (c *clientCacheImpl) Evict(clientKey string) {
 	if ok && entry.release != nil {
 		if err := entry.release(); err != nil {
 			c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
+		}
+	}
+}
+
+func (c *clientCacheImpl) EvictAll() {
+	c.cacheLock.Lock()
+	entries := c.clients
+	c.clients = make(map[string]cachedEntry)
+	c.cacheLock.Unlock()
+
+	for _, entry := range entries {
+		if entry.release != nil {
+			if err := entry.release(); err != nil {
+				c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
+			}
 		}
 	}
 }

@@ -515,6 +515,13 @@ func NewMutableStateFromDB(
 		mutableState.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
 	}
 
+	// FirstExecutionRunId was duplicated from ExecutionInfo onto ExecutionState so the dedup /
+	// conflict path can surface it without loading ExecutionInfo. Backfill in memory for records
+	// written before that change so the next persist writes it through.
+	if dbRecord.ExecutionState.FirstExecutionRunId == "" && dbRecord.ExecutionInfo.FirstExecutionRunId != "" {
+		dbRecord.ExecutionState.FirstExecutionRunId = dbRecord.ExecutionInfo.FirstExecutionRunId
+	}
+
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
@@ -1980,13 +1987,17 @@ func (ms *MutableStateImpl) GetStartEvent(
 func (ms *MutableStateImpl) GetFirstRunID(
 	ctx context.Context,
 ) (string, error) {
-	firstRunID := ms.executionInfo.FirstExecutionRunId
-	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
-	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
-	// workflow execution started event.
-	if len(firstRunID) != 0 {
+	// Prefer the canonical source on ExecutionState; the equivalent field on ExecutionInfo is
+	// deprecated. NewMutableStateFromDB backfills ExecutionState from ExecutionInfo on load, so
+	// records that pre-date the ExecutionState field also resolve here.
+	if firstRunID := ms.executionState.FirstExecutionRunId; firstRunID != "" {
 		return firstRunID, nil
 	}
+	if firstRunID := ms.executionInfo.FirstExecutionRunId; firstRunID != "" {
+		return firstRunID, nil
+	}
+	// Workflows created with Temporal release v0.28.0 or earlier don't have FirstExecutionRunID
+	// stored as part of mutable state — load it from the WorkflowExecutionStarted event.
 	currentStartEvent, err := ms.GetStartEvent(ctx)
 	if err != nil {
 		return "", err
@@ -2984,6 +2995,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	ms.approximateSize -= ms.executionState.Size()
+	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
@@ -3240,11 +3252,32 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		}
 	}
 
-	// Invalidate pending workflow task by incrementing the persisted stamp.
-	// This ensures subsequent task dispatch detects the change.
-	if ms.HasPendingWorkflowTask() {
-		ms.executionInfo.WorkflowTaskStamp += 1
-		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
+	// A workflow task that is already started (in flight with a worker) is left
+	// alone: its eventual completion or failure is accepted normally even while
+	// paused (see the paused check in RespondWorkflowTaskCompleted, which skips
+	// scheduling a follow-up task but still applies the completion), and if the
+	// worker never responds, its normal start-to-close timeout will fail it and
+	// retry through the usual transient-task mechanism. Only a task that was
+	// scheduled but never delivered to a worker needs help here: nothing else
+	// will ever resolve it, since it has no timeout of its own and dispatching it
+	// to a worker now would violate pause semantics.
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() {
+		// Fail it explicitly, in the same transaction as the paused event, so it
+		// resolves cleanly in history instead of being left scheduled forever. A
+		// fresh workflow task is created automatically when the workflow is
+		// unpaused.
+		if _, err := failWorkflowTask(
+			ms,
+			ms.GetPendingWorkflowTask(),
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_PAUSE_REQUESTED_BEFORE_TASK_STARTED,
+		); err != nil {
+			return err
+		}
+		// The task failure above increments the attempt count for retry
+		// backoff purposes; reset it so the workflow task created on
+		// unpause is a normal, immediately-visible task rather than a
+		// transient retry attempt.
+		ms.executionInfo.WorkflowTaskAttempt = 1
 	}
 
 	return ms.updatePauseInfoSearchAttribute()
@@ -7454,6 +7487,13 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
+	if result.skipPersistence {
+		if err := ms.cleanupTransaction(); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, nil
+	}
+
 	workflowMutation := &persistence.WorkflowMutation{
 		ExecutionInfo:  ms.executionInfo,
 		ExecutionState: ms.executionState,
@@ -7579,6 +7619,7 @@ type closeTransactionResult struct {
 	workflowEventsSeq  []*persistence.WorkflowEvents
 	bufferEvents       []*historypb.HistoryEvent
 	clearBuffer        bool
+	skipPersistence    bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
 }
@@ -7680,6 +7721,13 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
+
+	if ms.closeTransactionShouldSkipPersistence(isStateDirty, chasmNodesMutation) {
+		return closeTransactionResult{
+			skipPersistence: true,
+		}, nil
+	}
+
 	for nodePath := range chasmNodesMutation.DeletedNodes {
 		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
 		delete(ms.chasmNodeSizes, nodePath)
@@ -7738,6 +7786,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
+}
+
+func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
+	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(

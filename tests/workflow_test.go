@@ -30,8 +30,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -1103,8 +1105,8 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            tv.WorkerIdentity(),
 	})
-	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 	s.NoError(err0)
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// start workflow task, but do not respond to it
 	res, err := env.FrontendClient().PollWorkflowTaskQueue(testContext, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1917,6 +1919,359 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 		s.Contains(opErrs[0].Error(), errorMessageKeyword)
 	})
 
+}
+
+// TestStartWorkflowExecution_FirstExecutionRunId covers the contract that StartWorkflowExecution
+// (both the response and the WorkflowExecutionAlreadyStarted error) carries first_execution_run_id
+// pointing at the head of the continue-as-new chain. For workflows that have never been continued
+// as new, this should equal the current run id; the chained case is covered in continue_as_new_test.go.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
+	s.Run("brand new start", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		requireStartedAndRunning(s.T(), we)
+		s.Equal(we.RunId, we.FirstExecutionRunId)
+	})
+
+	s.Run("use existing dedup", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		req.RequestId = uuid.NewString()
+		req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		requireNotStartedButRunning(s.T(), we1)
+		s.Equal(we0.RunId, we1.RunId)
+		s.Equal(we0.RunId, we1.FirstExecutionRunId)
+	})
+
+	s.Run("fail policy error carries first execution run id", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		req.RequestId = uuid.NewString()
+		// Default conflict policy is FAIL.
+		_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		s.ErrorAs(err, &already)
+		s.Equal(we0.RunId, already.RunId)
+		s.Equal(we0.RunId, already.FirstExecutionRunId)
+	})
+
+	s.Run("retried request dedup", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+
+		// Re-issue with same RequestId: server dedupes against the started request.
+		we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		s.Equal(we0.RunId, we1.RunId)
+		s.Equal(we0.RunId, we1.FirstExecutionRunId)
+	})
+}
+
+// TestStartWorkflowExecution_FirstExecutionRunId_AfterRetry verifies that when a workflow has been
+// retried (creating a new run with the same workflow id), a subsequent StartWorkflowExecution with
+// the FAIL conflict policy fails with WorkflowExecutionAlreadyStarted, and that error reports the
+// original (first attempt) run id in FirstExecutionRunId — not the retry's run id.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_AfterRetry() {
+	env := testcore.NewEnv(s.T())
+	tv := testvars.New(s.T())
+	workflowID := testcore.RandomizeStr(s.T().Name())
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(1 * time.Second),
+			MaximumInterval:    durationpb.New(1 * time.Second),
+			MaximumAttempts:    3,
+			BackoffCoefficient: 1.0,
+		},
+	}
+	we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+	s.NoError(err)
+	originalRunID := we0.RunId
+	s.Equal(originalRunID, we0.FirstExecutionRunId)
+
+	// Fail the first attempt so the server creates a retry run.
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+					FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+						Failure: failure.NewServerFailure("retryable", false),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Wait for the retry run to be current and confirm it differs from the original.
+	var retryRunID string
+	s.Await(func(s *WorkflowTestSuite) {
+		desc, derr := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		})
+		s.NoError(derr)
+		retryRunID = desc.WorkflowExecutionInfo.Execution.GetRunId()
+		s.NotEqual(originalRunID, retryRunID)
+		s.NotEmpty(retryRunID)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// FAIL policy: error must surface the original run id as the first execution run id.
+	failReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
+	failReq.RequestId = uuid.NewString()
+	failReq.RetryPolicy = nil
+	failReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+	_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), failReq)
+	var already *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &already)
+	s.Equal(retryRunID, already.RunId)
+	s.Equal(originalRunID, already.FirstExecutionRunId)
+}
+
+// TestStartWorkflowExecution_FirstExecutionRunId_AfterReset verifies that after a workflow is
+// reset, a StartWorkflowExecution against the reset workflow (with FAIL or USE_EXISTING) reports
+// the original run id as FirstExecutionRunId — not the reset's new run id.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_AfterReset() {
+	env := testcore.NewEnv(s.T())
+	tv := testvars.New(s.T())
+	workflowID := testcore.RandomizeStr(s.T().Name())
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            tv.WorkerIdentity(),
+	}
+	we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+	s.NoError(err)
+	originalRunID := we0.RunId
+
+	// Drive one workflow task so there is a WorkflowTaskCompleted to reset to. Don't complete the
+	// workflow — we need it to be resetable to a non-trivial point.
+	var firstWTCompletedEventID int64
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+				Attributes: &commandpb.Command_StartTimerCommandAttributes{
+					StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+						TimerId:            "t1",
+						StartToFireTimeout: durationpb.New(time.Hour),
+					},
+				},
+			}},
+		}, nil
+	})
+	s.NoError(err)
+
+	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: originalRunID})
+	for _, ev := range events {
+		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			firstWTCompletedEventID = ev.GetEventId()
+		}
+	}
+	s.NotZero(firstWTCompletedEventID)
+
+	resetResp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: originalRunID},
+		Reason:                    "test reset preserves FirstExecutionRunId",
+		WorkflowTaskFinishEventId: firstWTCompletedEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRunID := resetResp.RunId
+	s.NotEqual(originalRunID, resetRunID)
+
+	// FAIL policy: error references the reset (current) run, but first-execution stays at the head.
+	failReq := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
+	failReq.RequestId = uuid.NewString()
+	failReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+	_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), failReq)
+	var already *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &already)
+	s.Equal(resetRunID, already.RunId)
+	s.Equal(originalRunID, already.FirstExecutionRunId)
+
+	// USE_EXISTING: response references the reset run id, FirstExecutionRunId == head.
+	useExisting := proto.Clone(startReq).(*workflowservice.StartWorkflowExecutionRequest)
+	useExisting.RequestId = uuid.NewString()
+	useExisting.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), useExisting)
+	s.NoError(err)
+	s.False(we2.Started)
+	s.Equal(resetRunID, we2.RunId)
+	s.Equal(originalRunID, we2.FirstExecutionRunId)
+}
+
+// TestSignalWithStartWorkflowExecution_FirstExecutionRunId verifies that the
+// SignalWithStartWorkflowExecution response and (under FAIL conflict policy) error both carry
+// FirstExecutionRunId of the head-of-chain run, matching the contract from StartWorkflowExecution.
+func (s *WorkflowTestSuite) TestSignalWithStartWorkflowExecution_FirstExecutionRunId() {
+	s.Run("brand new start via SignalWithStart", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			SignalName:         "sig",
+			SignalInput:        payloads.EncodeString("x"),
+			Identity:           tv.WorkerIdentity(),
+		}
+		resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		s.True(resp.Started)
+		s.Equal(resp.RunId, resp.FirstExecutionRunId)
+	})
+
+	s.Run("signal existing workflow returns first execution run id", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+
+		startReq := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         workflowID,
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+		s.NoError(err)
+
+		swsReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         workflowID,
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			SignalName:         "sig",
+			SignalInput:        payloads.EncodeString("x"),
+			Identity:           tv.WorkerIdentity(),
+		}
+		resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), swsReq)
+		s.NoError(err)
+		s.False(resp.Started)
+		s.Equal(we0.RunId, resp.RunId)
+		s.Equal(we0.RunId, resp.FirstExecutionRunId)
+	})
+
+	s.Run("reject duplicate on completed workflow carries first execution run id", func(s *WorkflowTestSuite) {
+		// SignalWithStart does not accept WORKFLOW_ID_CONFLICT_POLICY_FAIL, so the AlreadyStarted
+		// error path is reached via WorkflowIdReusePolicy REJECT_DUPLICATE against a completed run.
+		env := testcore.NewEnv(s.T())
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+
+		startReq := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         workflowID,
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		we0, err := env.FrontendClient().StartWorkflowExecution(s.Context(), startReq)
+		s.NoError(err)
+
+		// Terminate the workflow so it's completed (FAILED/TERMINATED) — this triggers the reuse-policy branch on the next start.
+		_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			Reason:            "test",
+			Identity:          tv.WorkerIdentity(),
+		})
+		s.NoError(err)
+
+		swsReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			RequestId:             uuid.NewString(),
+			Namespace:             env.Namespace().String(),
+			WorkflowId:            workflowID,
+			WorkflowType:          tv.WorkflowType(),
+			TaskQueue:             tv.TaskQueue(),
+			WorkflowRunTimeout:    durationpb.New(100 * time.Second),
+			SignalName:            "sig",
+			SignalInput:           payloads.EncodeString("x"),
+			Identity:              tv.WorkerIdentity(),
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		}
+		_, err = env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), swsReq)
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		s.ErrorAs(err, &already)
+		s.Equal(we0.RunId, already.RunId)
+		s.Equal(we0.RunId, already.FirstExecutionRunId)
+	})
 }
 
 func requireNotStartedButRunning(t *testing.T, resp *workflowservice.StartWorkflowExecutionResponse) {
