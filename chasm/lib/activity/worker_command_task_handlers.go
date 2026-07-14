@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
@@ -50,12 +51,18 @@ func newCancelCommandDispatchTaskHandler(opts cancelCommandDispatchTaskHandlerOp
 }
 
 func (h *cancelCommandDispatchTaskHandler) Validate(
-	_ chasm.Context,
+	ctx chasm.Context,
 	activity *Activity,
 	invocation chasm.TaskInvocation,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
 	if invocation.Attempt > workercommands.MaxTaskAttempts {
+		key := ctx.ExecutionKey()
+		h.logger.Info("Cancel command dispatch task exceeded max attempts, dropping",
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.ActivityID(key.BusinessID),
+			tag.Attempt(int32(invocation.Attempt)),
+		)
 		return false, nil
 	}
 	// Valid if the activity is in a state where it has been requested to cancel or terminated

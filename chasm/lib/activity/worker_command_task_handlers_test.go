@@ -5,12 +5,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/workercommands"
 )
 
 func TestCancelCommandDispatchTaskHandler_Validate(t *testing.T) {
-	handler := &cancelCommandDispatchTaskHandler{}
+	handler := &cancelCommandDispatchTaskHandler{
+		logger: log.NewNoopLogger(),
+	}
 
 	testCases := []struct {
 		name     string
@@ -69,8 +72,16 @@ func TestCancelCommandDispatchTaskHandler_Validate(t *testing.T) {
 					Status: tc.status,
 				},
 			}
+			ctx := &chasm.MockContext{
+				HandleExecutionKey: func() chasm.ExecutionKey {
+					return chasm.ExecutionKey{
+						NamespaceID: "test-ns-id",
+						BusinessID:  "test-activity-id",
+					}
+				},
+			}
 			invocation := chasm.TaskInvocation{Attempt: tc.attempt}
-			valid, err := handler.Validate(nil, activity, invocation, nil)
+			valid, err := handler.Validate(ctx, activity, invocation, nil)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, valid)
 		})
