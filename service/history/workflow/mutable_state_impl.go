@@ -8193,7 +8193,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 	if regenerateTimerTasksForTimeSkipping {
-		if err := ms.closeTransactionRegenTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
+		if err := ms.regenerateTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
 			return err
 		}
 	}
@@ -9178,30 +9178,6 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	// to chasmTree.ApplySnapshot does not matter.
 	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
 	return nil
-}
-
-// flagSkipDurationUpdateInPassive marks the chasm tree to re-stamp timer tasks against the
-// replicated accumulated skip, detected via changes to TimeSkippingInfo. On the active cluster,
-// tasks are regenerated as time is skipped; on a passive cluster those time changes instead arrive
-// via replication from the active cluster, so this flag is how the passive side triggers the
-// equivalent task regeneration. It is called from the replication paths in ApplyMutation and
-// ApplySnapshot.
-func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
-	prevTimeSkippingVT *persistencespb.VersionedTransition,
-	preAccumulatedSkipDuration time.Duration,
-) {
-	if ms.IsWorkflow() {
-		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
-		return
-	}
-	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
-	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
-		return
-	}
-	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
-		return
-	}
-	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {

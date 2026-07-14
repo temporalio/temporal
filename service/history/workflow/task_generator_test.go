@@ -1555,9 +1555,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			taskGenerator := NewTaskGenerator(nil, mutableState, &configs.Config{}, nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
-			var fastForwardTasks []*tasks.TimeSkippingTimerTask
+			var fastForwardTasks []*tasks.TimeSkippingFastForwardTimerTask
 			for _, task := range captured {
-				if bt, ok := task.(*tasks.TimeSkippingTimerTask); ok {
+				if bt, ok := task.(*tasks.TimeSkippingFastForwardTimerTask); ok {
 					fastForwardTasks = append(fastForwardTasks, bt)
 				}
 			}

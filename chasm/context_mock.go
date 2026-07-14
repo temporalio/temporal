@@ -232,10 +232,11 @@ func (c *MockMutableContext) withValue(key any, value any) Context {
 	}
 }
 
-func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.TimeSkippingConfig = config
+	return nil
 }
 
 type MockTask struct {

@@ -125,7 +125,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
@@ -908,7 +908,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 // so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	task *tasks.TimeSkippingTimerTask,
+	task *tasks.TimeSkippingFastForwardTimerTask,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
@@ -950,7 +950,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 // either time skipping has been disabled since the task was emitted, or the fast-forward this
 // task was associated with has been superseded (different SourceEventId) or already fired
 // (HasReached=true). Dropping is harmless: the new fast-forward, if any, has its own wake-up task.
-func fastForwardTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingTimerTask) bool {
+func fastForwardTaskIsLive(mutableState historyi.MutableState, task *tasks.TimeSkippingFastForwardTimerTask) bool {
 	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if tsi == nil || !tsi.GetConfig().GetEnabled() {
 		return false

@@ -2422,7 +2422,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Wor
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2439,7 +2439,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_TSI
 	pms, workflowKey := s.makeTimeSkippingMS()
 	pms.ExecutionInfo.TimeSkippingInfo = nil
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2462,7 +2462,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Con
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2482,7 +2482,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_NoF
 		// FastForward deliberately not set.
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2506,7 +2506,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Has
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2529,7 +2529,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2552,7 +2552,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Sou
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2577,7 +2577,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Hap
 		},
 	}
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),
