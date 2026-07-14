@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-const defaultWarnIterations = 24 * 60 * 60
+const DefaultWarnIterations = 24 * 60 * 60
 
 type (
 	CompiledSpec struct {
@@ -299,7 +299,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	}
 	warnIterations := cs.warnIterations()
 	if warnIterations <= 0 {
-		warnIterations = defaultWarnIterations
+		warnIterations = DefaultWarnIterations
 	}
 	maxIterations := cs.maxIterations()
 	if maxIterations <= 0 {
