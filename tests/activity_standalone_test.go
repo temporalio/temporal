@@ -7820,6 +7820,83 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.GreaterOrEqual(t, lastStart.Add(timerSafetyMargin).UnixNano(), expectedExecution.UnixNano(),
 			"activity dispatched before its original execution_time; multiple pause cycles let the target drift")
 	})
+
+	// start_delay is mutable while the first dispatch is still pending, which includes while the
+	// activity is paused in the delay window: UpdateActivityOptions can change anything while
+	// paused, including the start delay.
+	s.Run("UpdateWhilePaused_ShortensDispatch", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		// If the paused update didn't take effect, the poll would time out.
+		originalDelay := 60 * time.Second
+		// The poll returns quickly under the updated delay.
+		newDelay := 2 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(originalDelay),
+		})
+		require.NoError(t, err)
+
+		// Pause while inside the delay window -> PAUSED
+		_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+
+		// Update start_delay while paused
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(newDelay)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, newDelay, descResp.GetInfo().GetStartDelay().AsDuration())
+
+		// Unpause; dispatch honors the updated (shorter) delay, so the poll succeeds well within the 10s
+		// context and long before the original 60s delay would have elapsed.
+		_, err = env.FrontendClient().UnpauseActivityExecution(s.Context(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		pollCtx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+		defer cancel()
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken(), "expected dispatch under the updated start_delay after unpause")
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
