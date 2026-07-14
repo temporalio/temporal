@@ -188,11 +188,11 @@ func (b *nexusTaskHandlerBase) recordCallOutcome(
 	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 
-	logCallFailure(b.logger, traceCtx, callErr, failureSource)
+	b.logCallFailure(traceCtx, callErr, failureSource)
 }
 
 // logCallFailure logs a failed outbound Nexus call.
-func logCallFailure(logger log.Logger, traceCtx invocationTraceContext, callErr error, failureSource string) {
+func (b *nexusTaskHandlerBase) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
 	if callErr == nil {
 		return
 	}
@@ -200,8 +200,8 @@ func logCallFailure(logger log.Logger, traceCtx invocationTraceContext, callErr 
 	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
 	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
 	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		logger.Debug(msg, tags...)
+		b.logger.Debug(msg, tags...)
 	} else {
-		logger.Error(msg, tags...)
+		b.logger.Error(msg, tags...)
 	}
 }

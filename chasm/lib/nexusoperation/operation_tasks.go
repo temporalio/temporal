@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/resource"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
@@ -41,45 +40,21 @@ type operationTaskHandlerOptions struct {
 type operationInvocationTaskHandlerOptions struct {
 	fx.In
 
-	Config                 *Config
-	NamespaceRegistry      namespace.Registry
-	MetricsHandler         metrics.Handler
-	Logger                 log.Logger
+	InvocationTaskHandlerOptions
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	ClientProvider         ClientProvider
-	EndpointRegistry       commonnexus.EndpointRegistry
-	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
-	HistoryClient          resource.HistoryClient
-	ChasmRegistry          *chasm.Registry
 }
 
 type operationInvocationTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*nexusoperationpb.InvocationTask]
 
-	config                 *Config
-	namespaceRegistry      namespace.Registry
-	metricsHandler         metrics.Handler
-	logger                 log.Logger
+	nexusTaskHandlerBase
 	callbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	clientProvider         ClientProvider
-	endpointRegistry       commonnexus.EndpointRegistry
-	httpTraceProvider      commonnexus.HTTPClientTraceProvider
-	historyClient          resource.HistoryClient
-	chasmRegistry          *chasm.Registry
 }
 
 func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOptions) *operationInvocationTaskHandler {
 	return &operationInvocationTaskHandler{
-		config:                 opts.Config,
-		namespaceRegistry:      opts.NamespaceRegistry,
-		metricsHandler:         opts.MetricsHandler,
-		logger:                 opts.Logger,
+		nexusTaskHandlerBase:   opts.toBase(),
 		callbackTokenGenerator: opts.CallbackTokenGenerator,
-		clientProvider:         opts.ClientProvider,
-		endpointRegistry:       opts.EndpointRegistry,
-		httpTraceProvider:      opts.HTTPTraceProvider,
-		historyClient:          opts.HistoryClient,
-		chasmRegistry:          opts.ChasmRegistry,
 	}
 }
 
@@ -198,7 +173,16 @@ func (h *operationInvocationTaskHandler) Execute(
 		attempt:           task.GetAttempt(),
 	}
 
-	invocation, err := h.newInvocation(callCtx, ns, endpoint, args.service, callTimeout, timeoutType, traceCtx)
+	invocation, err := h.newInvocation(
+		callCtx,
+		ns,
+		endpoint,
+		traceCtx.endpointName,
+		args.service,
+		callTimeout,
+		timeoutType,
+		traceCtx,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
@@ -210,7 +194,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordStartCallOutcome(callCtx, endpoint, response, callErr, callDuration, failureSource, traceCtx)
+	h.recordCallOutcome(endpoint, startCallOutcomeTag(callCtx, response, callErr), callErr, callDuration, failureSource, traceCtx)
 
 	result, err := newInvocationResult(response, callErr)
 	if err != nil {
@@ -254,38 +238,6 @@ func (h *operationInvocationTaskHandler) resolveEndpoint(
 	return lookupEndpoint(ctx, h.endpointRegistry, ns.ID(), args.endpointID, args.endpointName)
 }
 
-func (h *operationInvocationTaskHandler) newInvocation(
-	ctx context.Context,
-	ns *namespace.Namespace,
-	endpoint *persistencespb.NexusEndpointEntry,
-	service string,
-	callTimeout time.Duration,
-	timeoutType enumspb.TimeoutType,
-	traceCtx invocationTraceContext,
-) (invocation, error) {
-	base := nexusTaskHandlerBase{
-		config:            h.config,
-		namespaceRegistry: h.namespaceRegistry,
-		metricsHandler:    h.metricsHandler,
-		logger:            h.logger,
-		clientProvider:    h.clientProvider,
-		endpointRegistry:  h.endpointRegistry,
-		httpTraceProvider: h.httpTraceProvider,
-		historyClient:     h.historyClient,
-		chasmRegistry:     h.chasmRegistry,
-	}
-	return base.newInvocation(
-		ctx,
-		ns,
-		endpoint,
-		traceCtx.endpointName,
-		service,
-		callTimeout,
-		timeoutType,
-		traceCtx,
-	)
-}
-
 func (h *operationInvocationTaskHandler) validateStartResult(
 	ns *namespace.Namespace,
 	result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
@@ -301,31 +253,6 @@ func (h *operationInvocationTaskHandler) validateStartResult(
 		return ErrResponseBodyTooLarge
 	}
 	return nil
-}
-
-func (h *operationInvocationTaskHandler) recordStartCallOutcome(
-	callCtx context.Context,
-	endpoint *persistencespb.NexusEndpointEntry,
-	response *nexusrpc.ClientStartOperationResponse[*commonpb.Payload],
-	callErr error,
-	callDuration time.Duration,
-	failureSource string,
-	traceCtx invocationTraceContext,
-) {
-	methodTag := metrics.NexusMethodTag(traceCtx.operationTag)
-	namespaceTag := metrics.NamespaceTag(traceCtx.namespaceName)
-	var destTag metrics.Tag
-	if endpoint != nil {
-		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	} else {
-		destTag = metrics.DestinationTag(traceCtx.endpointName)
-	}
-	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, response, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSource)
-	OutboundRequestCounter.With(h.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-	OutboundRequestLatency.With(h.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-
-	logCallFailure(h.logger, traceCtx, callErr, failureSource)
 }
 
 type operationBackoffTaskHandler struct {
