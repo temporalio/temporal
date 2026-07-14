@@ -633,7 +633,6 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(ctx c
 func (env *VersioningTestEnv) rollbackTaskQueueToVersion(ctx context.Context,
 	tv *testvars.TestVars,
 ) {
-
 	cleanup := env.InjectHook(testhooks.NewHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true))
 	defer cleanup()
 
