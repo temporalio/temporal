@@ -80,19 +80,20 @@ func TestFormatMessageForDebug(t *testing.T) {
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 		},
-		FailedJobs: []github.Job{{Name: "test-job-1", Conclusion: "failure"}},
-		Failures:   []string{"TestHistoryWorkflow"},
-		TotalJobs:  5,
+		FailedJobs: []github.Job{{
+			Name:       "test-job-1",
+			Conclusion: "failure",
+			URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/1",
+		}},
+		Failures:  []string{"TestHistoryWorkflow"},
+		TotalJobs: 5,
 	}
 
-	output := FormatMessageForDebug(report)
-
-	require.Contains(t, output, "CI Failed")
-	require.NotContains(t, output, "Workflow:")
-	require.NotContains(t, output, "Branch:")
-	require.NotContains(t, output, "Commit:")
-	require.Contains(t, output, "test-job-1")
-	require.Contains(t, output, "TestHistoryWorkflow")
+	expected := "🚨 CI Failed on Main Branch 🚨\n\n" +
+		"Failures (1): `TestHistoryWorkflow`\n\n" +
+		"Failed jobs (1/5): test-job-1 (https://github.com/temporalio/temporal/actions/runs/123456/job/1)\n" +
+		"\nView Run: https://github.com/temporalio/temporal/actions/runs/123456\n"
+	require.Equal(t, expected, FormatMessageForDebug(report))
 }
 
 func TestSlackMessageStructure(t *testing.T) {
@@ -109,17 +110,36 @@ func TestSlackMessageStructure(t *testing.T) {
 		TotalJobs: 3,
 	}
 
-	msg := BuildFailureMessage(report)
-
 	// Verify we have the expected number of blocks
 	// Header, Jobs List, Link = 3 blocks
-	require.Len(t, msg.Blocks, 3)
+	expected := &SlackMessage{
+		Text: "CI Failed on Main",
+		Blocks: []SlackBlock{
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failed jobs (1/3):* <http://example.com/job1|job1>",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "<https://github.com/temporalio/temporal/actions/runs/123|View Run>",
+				},
+			},
+		},
+	}
 
-	require.NotNil(t, msg.Blocks[1].Text)
-	require.Contains(t, msg.Blocks[1].Text.Text, "*Failed jobs (1/3):*")
-	require.Contains(t, msg.Blocks[1].Text.Text, "<http://example.com/job1|job1>")
-	require.NotContains(t, msg.Blocks[1].Text.Text, "•")
-	require.NotContains(t, msg.Blocks[1].Text.Text, "\n")
+	require.Equal(t, expected, BuildFailureMessage(report))
 }
 
 func TestBuildFailureMessageLimitsFailures(t *testing.T) {
@@ -144,10 +164,13 @@ func TestBuildFailureMessageLimitsFailures(t *testing.T) {
 	msg := BuildFailureMessage(report)
 
 	require.Len(t, msg.Blocks, 4)
-	require.NotNil(t, msg.Blocks[1].Text)
-	require.Contains(t, msg.Blocks[1].Text.Text, "*Failures (6):*")
-	require.Contains(t, msg.Blocks[1].Text.Text, "Test05")
-	require.NotContains(t, msg.Blocks[1].Text.Text, "Test06")
+	require.Equal(t, SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: "*Failures (6):* `Test01`, `Test02`, `Test03`, `Test04`, `Test05`",
+		},
+	}, msg.Blocks[1])
 }
 
 func TestIsFailedJobExcludesTestStatus(t *testing.T) {
@@ -169,12 +192,11 @@ func TestFilterCompleted(t *testing.T) {
 	tests := []struct {
 		name     string
 		runs     []github.Run
-		expected int
+		expected []github.Run
 	}{
 		{
-			name:     "empty slice",
-			runs:     []github.Run{},
-			expected: 0,
+			name: "empty slice",
+			runs: []github.Run{},
 		},
 		{
 			name: "all completed",
@@ -182,7 +204,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: "success"},
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "mixed with in-progress",
@@ -191,7 +216,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: ""}, // in-progress
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "with cancelled and skipped",
@@ -201,7 +229,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: "skipped"},
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "only in-progress",
@@ -209,14 +240,12 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: ""},
 				{Conclusion: ""},
 			},
-			expected: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterCompleted(tt.runs)
-			require.Len(t, result, tt.expected)
+			require.Equal(t, tt.expected, filterCompleted(tt.runs))
 		})
 	}
 }
@@ -232,10 +261,9 @@ func TestSlowestRuns(t *testing.T) {
 		},
 	}
 
-	result := report.slowestRuns(3)
-
-	require.Len(t, result, 3)
-	require.Equal(t, "slowest", result[0].DisplayTitle)
-	require.Equal(t, "second slowest", result[1].DisplayTitle)
-	require.Equal(t, "medium", result[2].DisplayTitle)
+	require.Equal(t, []github.Run{
+		{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+		{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		{DisplayTitle: "medium", Duration: 20 * time.Minute},
+	}, report.slowestRuns(3))
 }
