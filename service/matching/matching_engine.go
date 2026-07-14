@@ -2766,9 +2766,10 @@ pollLoop:
 		}
 
 		taskToken := &tokenspb.NexusTask{
-			NamespaceId: string(namespaceID),
-			TaskQueue:   taskQueueName,
-			TaskId:      task.nexus.taskID,
+			NamespaceId:   string(namespaceID),
+			TaskQueue:     taskQueueName,
+			TaskId:        task.nexus.taskID,
+			TaskQueueKind: partition.Kind(),
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 

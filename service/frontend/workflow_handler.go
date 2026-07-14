@@ -6253,11 +6253,15 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		}
 	}
 
+	taskQueueKind := tt.GetTaskQueueKind()
+	if taskQueueKind == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		taskQueueKind = enumspb.TASK_QUEUE_KIND_NORMAL
+	}
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
 		NamespaceId: namespaceId.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: tt.GetTaskQueue(),
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Kind: taskQueueKind,
 		},
 		TaskId:  tt.GetTaskId(),
 		Request: request,
@@ -6306,11 +6310,15 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
+	taskQueueKind := tt.GetTaskQueueKind()
+	if taskQueueKind == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+		taskQueueKind = enumspb.TASK_QUEUE_KIND_NORMAL
+	}
 	matchingRequest := &matchingservice.RespondNexusTaskFailedRequest{
 		NamespaceId: namespaceId.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: tt.GetTaskQueue(),
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			Kind: taskQueueKind,
 		},
 		TaskId:  tt.GetTaskId(),
 		Request: request,
