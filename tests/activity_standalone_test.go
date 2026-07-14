@@ -8170,6 +8170,89 @@ func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
 		require.EqualValues(t, 2, pollResp2.Attempt)
 	})
 
+	t.Run("UpdateRetryPolicy_PreservesEqualNextRetryDelay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		workerNextRetryDelay := 2 * time.Minute
+		updatedPolicyInterval := 10 * time.Minute
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        &commonpb.ActivityType{Name: "test-activity"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(30 * time.Minute),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(workerNextRetryDelay),
+				MaximumAttempts: 5,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, pollResp.Attempt)
+
+		_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable:   false,
+						NextRetryDelay: durationpb.New(workerNextRetryDelay),
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		describeBeforeUpdate, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, describeBeforeUpdate.GetInfo().GetCurrentRetryInterval())
+		require.Equal(t, workerNextRetryDelay, describeBeforeUpdate.GetInfo().GetCurrentRetryInterval().AsDuration())
+		require.NotNil(t, describeBeforeUpdate.GetInfo().GetNextAttemptScheduleTime())
+		nextAttemptScheduleTime := describeBeforeUpdate.GetInfo().GetNextAttemptScheduleTime().AsTime()
+
+		updateResp, err := env.FrontendClient().UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{
+				RetryPolicy: &commonpb.RetryPolicy{
+					InitialInterval: durationpb.New(updatedPolicyInterval),
+				},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updateResp)
+		require.Equal(t, updatedPolicyInterval, updateResp.GetActivityOptions().GetRetryPolicy().GetInitialInterval().AsDuration())
+
+		describeAfterUpdate, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, updatedPolicyInterval, describeAfterUpdate.GetInfo().GetRetryPolicy().GetInitialInterval().AsDuration())
+		require.NotNil(t, describeAfterUpdate.GetInfo().GetCurrentRetryInterval())
+		require.Equal(t, workerNextRetryDelay, describeAfterUpdate.GetInfo().GetCurrentRetryInterval().AsDuration())
+		require.NotNil(t, describeAfterUpdate.GetInfo().GetNextAttemptScheduleTime())
+		require.Equal(t, nextAttemptScheduleTime, describeAfterUpdate.GetInfo().GetNextAttemptScheduleTime().AsTime())
+	})
+
 	t.Run("ChangeRetryInterval_WhileStarted", func(t *testing.T) {
 		// Update retry_policy.initial_interval while the activity is STARTED (running).
 		// In this state CurrentRetryInterval is not recalculated at update time — the new

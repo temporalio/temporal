@@ -171,6 +171,18 @@ message ActivityPauseState {
   string request_id = 4;
 }
 
+// ActivityRetryIntervalSource distinguishes how ActivityAttemptState.current_retry_interval was
+// derived, so that retry policy updates only recompute intervals that are still policy-derived and
+// never clobber a worker-provided override.
+enum ActivityRetryIntervalSource {
+  ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED = 0;
+  // current_retry_interval was computed from the activity's retry policy.
+  ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY = 1;
+  // current_retry_interval was set from a worker-provided NextRetryDelay override on a retryable
+  // application failure, overriding the retry-policy-derived backoff for this attempt only.
+  ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE = 2;
+}
+
 message ActivityAttemptState {
   // The attempt this activity is currently on.
   // Incremented each time a new attempt is scheduled. A newly created activity will immediately be scheduled, and
@@ -233,6 +245,11 @@ message ActivityAttemptState {
 
   // Time the current activity attempt is scheduled to dispatch.
   google.protobuf.Timestamp dispatch_time = 12;
+
+  // Source of current_retry_interval, distinguishing a retry-policy-derived backoff from a
+  // worker-provided NextRetryDelay override. Retry policy updates only recompute
+  // current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
+  ActivityRetryIntervalSource current_retry_interval_source = 13;
 }
 
 message ActivityHeartbeatState {
