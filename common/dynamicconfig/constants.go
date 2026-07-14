@@ -260,6 +260,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5*time.Second,
 		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
 	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
 		"system.historyHealthSignalUsePercentiles",

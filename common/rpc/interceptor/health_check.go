@@ -219,7 +219,7 @@ func (s *healthSignalAggregatorImpl) Record(latency time.Duration, err error) {
 }
 
 func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
-	if !s.aggregatorEnabled() || s.percentilesEnabled() {
+	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal average aggregator is disabled")
 		return 0
 	}
@@ -227,7 +227,7 @@ func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) float64 {
-	if !s.aggregatorEnabled() || !s.percentilesEnabled() {
+	if !s.aggregatorEnabled() {
 		s.logger.Debug("health signal percentile aggregator is disabled")
 		return 0
 	}
