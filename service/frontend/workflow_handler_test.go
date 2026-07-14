@@ -225,7 +225,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
-		scheduler.NewSpecBuilder(),
+		scheduler.NewSpecBuilder(dc.NewNoopCollection()),
 		true,
 		nil, // Not testing activity handler here
 		nexusoperation.NewFrontendHandler(
