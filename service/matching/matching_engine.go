@@ -1266,7 +1266,7 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 
 	// Group partitions by destination host. When Route() is unavailable or fails, each
 	// unroutable partition gets a synthetic key so it's sent as an individual RPC.
-	routingClient, _ := e.matchingRawClient.(matching.RoutingClient)
+	routingClient, _ := e.matchingRawClient.(matching.RoutingClient) //nolint:revive // unchecked-type-assertion: nil is the desired zero value
 	self := e.hostInfoProvider.HostInfo().Identity()
 	tq := rootPartition.TaskQueue()
 	partitionsByTarget := make(map[string][]*tqid.NormalPartition, numPartitions)
