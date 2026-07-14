@@ -2702,6 +2702,79 @@ func (s *standaloneActivityTestSuite) TestDispatchCancelCommandToWorker() {
 	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
 }
 
+// TestDispatchCancelCommandOnTerminate tests that when a running standalone activity is terminated,
+// the server dispatches a cancel command to the worker's control queue.
+func (s *standaloneActivityTestSuite) TestDispatchCancelCommandOnTerminate() {
+	env := s.newTestEnv()
+	t := s.T()
+	ctx := s.Context()
+
+	env.GetTestCluster().OverrideDynamicConfig(
+		t, dynamicconfig.EnableCancelActivityWorkerCommand,
+		true,
+	)
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	tv := env.Tv()
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+
+	startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+	runID := startResp.RunId
+
+	// Poll with worker command support.
+	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity:               tv.WorkerIdentity(),
+		WorkerInstanceKey:      tv.WorkerInstanceKey(),
+		WorkerControlTaskQueue: controlQueueName,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, activityPollResp.TaskToken)
+
+	// Terminate the activity.
+	_, err = env.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      runID,
+		Reason:     "test terminate cancel command",
+		Identity:   "terminator",
+	})
+	require.NoError(t, err)
+
+	// Poll the Nexus control queue — should receive the cancel command.
+	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
+	await.RequireTrue(t, func() bool {
+		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer pollCancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS},
+			Identity:  tv.WorkerIdentity(),
+		})
+		if err == nil && resp != nil && resp.Request != nil {
+			nexusPollResp = resp
+			return true
+		}
+		return false
+	}, 30*time.Second, 200*time.Millisecond)
+
+	startOp := nexusPollResp.Request.GetStartOperation()
+	require.NotNil(t, startOp, "expected StartOperation in Nexus request")
+	require.Equal(t, "ExecuteCommands", startOp.Operation)
+
+	var executeReq workerservicepb.ExecuteCommandsRequest
+	require.NoError(t, proto.Unmarshal(startOp.Payload.Data, &executeReq))
+	require.Len(t, executeReq.Commands, 1)
+	cancelCmd := executeReq.Commands[0].GetCancelActivity()
+	require.NotNil(t, cancelCmd, "expected CancelActivity command")
+	require.Equal(t, activityPollResp.TaskToken, cancelCmd.TaskToken)
+}
+
 func (s *standaloneActivityTestSuite) TestTerminate() {
 	env := s.newTestEnv()
 	t := s.T()

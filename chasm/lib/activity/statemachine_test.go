@@ -303,10 +303,13 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
+	componentRef := []byte("test-component-ref")
 	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-			Identity: "test-worker",
+			Identity:               "test-worker",
+			WorkerControlTaskQueue: "test-control-queue",
 		},
+		ComponentRef: componentRef,
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
@@ -315,6 +318,8 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
+	require.Equal(t, componentRef, attemptState.ComponentRef)
+	require.Equal(t, "test-control-queue", attemptState.WorkerControlTaskQueue)
 
 	// Verify added tasks
 	require.Len(t, ctx.Tasks, 1)
