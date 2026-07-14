@@ -535,7 +535,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitRecycleWakesBlockedMatch() {
 	// The parked poller should now match task1b without any fake-time advancement.
 	select {
 	case pres := <-ch:
-		s.NoError(pres.ctxErr)
+		s.Require().NoError(pres.ctxErr)
 		s.Equal(task1b, pres.task, "recycled token should immediately dispatch the blocked key1 task")
 	case <-time.After(time.Second):
 		s.FailNow("recycling the per-key token did not wake the blocked match")
