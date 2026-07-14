@@ -255,6 +255,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
+	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
 	t.Run("IdleClose", func(t *testing.T) {
 		t.Parallel()
 		testScheduleClosesFromIdle(t, newContext)
@@ -390,6 +391,51 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 
 	s.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
 	s.GreaterOrEqual(len(lastDescribe.GetInfo().GetRunningWorkflows()), 1, "expected the buffered fire to be queued behind a running workflow")
+}
+
+// A full buffer (MaxBufferSize reached) makes the CHASM generator drop further
+// fires and increment ScheduleInfo.BufferDropped.
+func testBufferOverrunDropsActions(t *testing.T, newContext contextFactory) {
+	// A small buffer plus a gated workflow under BUFFER_ALL fills within a few
+	// fast-interval ticks. Only the CHASM scheduler reads these tweakables.
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.MaxBufferSize = 2
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables))
+	s := testcore.NewEnv(t, opts...)
+
+	sid := testcore.RandomizeStr("sched-buffer-overrun")
+	wid := testcore.RandomizeStr("sched-buffer-overrun-wf")
+	wt := testcore.RandomizeStr("sched-buffer-overrun-wt")
+
+	var runs atomic.Int32
+	registerGatedWorkflow(s, wt, &runs)
+
+	ctx := newContext(s.Context())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(fastInterval),
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+	})
+
+	// RunningWorkflows lags the drop (it needs the async StartWorkflow to land), so
+	// assert both together rather than after the wait.
+	require.Eventually(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil {
+			return false
+		}
+		return desc.GetInfo().GetBufferDropped() > 0 &&
+			len(desc.GetInfo().GetRunningWorkflows()) >= 1
+	}, awaitTimeout, pollInterval, "expected BufferDropped > 0 with a gated workflow holding the buffer full")
+
+	require.Positive(t, runs.Load(), "the gated workflow should have started")
+
+	completeRunningWorkflows(ctx, t, s, sid)
 }
 
 // testRecentActionsAdvanceWhilePaused verifies that an in-flight workflow's

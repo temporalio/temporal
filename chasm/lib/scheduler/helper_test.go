@@ -82,6 +82,15 @@ func defaultConfig() *scheduler.Config {
 	}
 }
 
+// configWithTweakables returns defaultConfig with its Tweakables mutated by fn.
+func configWithTweakables(fn func(*scheduler.Tweakables)) *scheduler.Config {
+	tweakables := scheduler.DefaultTweakables
+	fn(&tweakables)
+	config := defaultConfig()
+	config.Tweakables = func(string) scheduler.Tweakables { return tweakables }
+	return config
+}
+
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
 	specBuilder := legacyscheduler.NewSpecBuilder()

@@ -124,7 +124,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var bufferedStarts []*schedulespb.BufferedStart
 	var droppedCount int64
 	recordedGenerateLatency := false
-	limitReached := false
+	// Once the buffer fills, drop further automated actions (counted in
+	// droppedCount) instead of buffering. A non-manual limit already <= 0 means
+	// the buffer was full on entry, so the whole range drops. Manual (backfill)
+	// callers pass a positive limit and break to retry the remainder, never drop.
+	limitReached := limit != nil && !manual && *limit <= 0
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
 		lastAction = next.Next
 
@@ -190,6 +194,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		NextWakeupTime: next.Next,
 		LastActionTime: lastAction,
 		BufferedStarts: bufferedStarts,
+		DroppedCount:   droppedCount,
 	}, nil
 }
 
