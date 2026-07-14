@@ -58,7 +58,7 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	})
 }
 
-func TestClusterPool_FreshClusterOptionReplacesIdlePooledCluster(t *testing.T) {
+func TestClusterPool_OneOffClusterReplacesIdlePooledCluster(t *testing.T) {
 	p := newClusterPool(1, true, 0)
 	slot := p.allSlots[0]
 	var created int
@@ -76,7 +76,7 @@ func TestClusterPool_FreshClusterOptionReplacesIdlePooledCluster(t *testing.T) {
 	require.NotNil(t, pooledCluster)
 
 	t.Run("uses fresh cluster", func(t *testing.T) {
-		cluster := p.getFresh(t, createCluster)
+		cluster := p.getOneOff(t, createCluster)
 		require.NotSame(t, pooledCluster, cluster)
 		require.Nil(t, slot.cluster)
 	})

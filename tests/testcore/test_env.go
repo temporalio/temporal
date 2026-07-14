@@ -255,11 +255,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:         options.dedicatedCluster,
-		needWorkerService: options.needWorkerService,
-		dedicatedReason:   options.dedicatedReason,
-		dynamicConfig:     globalDynamicConfigSettingsByKey(options.dynamicConfigSettings),
-		clusterOpts:       options.clusterOptions,
+		dedicated:           options.dedicatedCluster,
+		needWorkerService:   options.needWorkerService,
+		dedicatedReason:     options.dedicatedReason,
+		globalDynamicConfig: globalDynamicConfigOverrides(options.dynamicConfigSettings),
+		clusterOpts:         options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
 
@@ -327,7 +327,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	return env
 }
 
-func globalDynamicConfigSettingsByKey(settings []dynamicConfigOverride) map[dynamicconfig.Key]any {
+func globalDynamicConfigOverrides(settings []dynamicConfigOverride) map[dynamicconfig.Key]any {
 	if len(settings) == 0 {
 		return nil
 	}

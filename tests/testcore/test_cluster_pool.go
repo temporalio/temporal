@@ -44,10 +44,10 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:           newClusterPool(sharedSize, false, 0),
-		legacyDedicated:  newClusterPool(dedicatedSize, true, 0),
-		testEnvDedicated: newClusterPool(1, true, 0), // limited to 1 to avoid OOM kill
-		eventsFile:       eventsFile,
+		shared:                       newClusterPool(sharedSize, false, 0),
+		legacySuiteDedicatedClusters: newClusterPool(dedicatedSize, true, 0),
+		exclusiveTestEnvCluster:      newClusterPool(1, true, 0), // limited to 1 to avoid OOM kill
+		eventsFile:                   eventsFile,
 	}
 }
 
@@ -98,7 +98,7 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 	return cluster
 }
 
-func (p *clusterPool) getFresh(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+func (p *clusterPool) getOneOff(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
 	slot := p.reserveSlot(t)
 	slot.tearDown(t)
 	cluster := createCluster()
@@ -190,11 +190,11 @@ func (s *clusterPoolSlot) tearDown(t *testing.T) {
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
 	shared *clusterPool
-	// legacyDedicated is used by FunctionalTestBase.SetupSuiteWithCluster.
-	legacyDedicated *clusterPool
-	// testEnvDedicated serializes TestEnv dedicated cluster use.
-	testEnvDedicated *clusterPool
-	suiteScoped      sync.Map
+	// legacySuiteDedicatedClusters is used by FunctionalTestBase.SetupSuiteWithCluster.
+	legacySuiteDedicatedClusters *clusterPool
+	// exclusiveTestEnvCluster serializes TestEnv dedicated cluster use.
+	exclusiveTestEnvCluster *clusterPool
+	suiteScoped             sync.Map
 
 	eventsFile *os.File
 }
@@ -241,24 +241,24 @@ const (
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind              string // set by the router: shared, dedicated, or suite-scoped
-	dedicated         bool
-	dedicatedReason   string
-	needWorkerService bool
-	dynamicConfig     map[dynamicconfig.Key]any
-	clusterOpts       []TestClusterOption
+	kind                string // set by the router: shared, dedicated, or suite-scoped
+	dedicated           bool
+	dedicatedReason     string
+	needWorkerService   bool
+	globalDynamicConfig map[dynamicconfig.Key]any
+	clusterOpts         []TestClusterOption
 }
 
-// hasClusterOpts reports whether the request has cluster-construction options
-// that cannot be reset on a running cluster.
-func (r clusterRequest) hasClusterOpts() bool {
+// requiresOneOffCluster reports whether the request has cluster-construction
+// options that cannot be reset on a running cluster.
+func (r clusterRequest) requiresOneOffCluster() bool {
 	return len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
 func (r clusterRequest) needsDedicated() bool {
-	return r.dedicated || r.needWorkerService || len(r.dynamicConfig) > 0 || r.hasClusterOpts()
+	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || r.requiresOneOffCluster()
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -273,7 +273,7 @@ func (r clusterRequest) reason() string {
 	switch {
 	case r.dedicatedReason != "":
 		return r.dedicatedReason
-	case r.needWorkerService || len(r.dynamicConfig) > 0 || r.hasClusterOpts():
+	case r.needWorkerService || len(r.globalDynamicConfig) > 0 || r.requiresOneOffCluster():
 		return "custom config"
 	default:
 		return "dedicated (pooled)"
@@ -351,16 +351,20 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
+	// TestEnv dedicated requests normally reuse one exclusive worker-enabled cluster.
+	// Only cluster-construction options use a one-off cluster because they cannot be
+	// reset after startup.
 	req.kind = clusterKindDedicated
-	req.needWorkerService = true
-	if req.hasClusterOpts() {
-		return p.testEnvDedicated.getFresh(t, func() *FunctionalTestBase {
+	req.needWorkerService = true // always enable the worker service on dedicated clusters
+
+	if req.requiresOneOffCluster() {
+		return p.exclusiveTestEnvCluster.getOneOff(t, func() *FunctionalTestBase {
 			return p.createCluster(t, req)
 		})
 	}
 
-	return p.testEnvDedicated.get(t, func() *FunctionalTestBase {
-		req.dynamicConfig = nil
+	return p.exclusiveTestEnvCluster.get(t, func() *FunctionalTestBase {
+		req.globalDynamicConfig = nil
 		return p.createCluster(t, req)
 	})
 }
@@ -374,8 +378,8 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}
-	if len(req.dynamicConfig) > 0 {
-		opts = append(opts, WithDynamicConfigOverrides(req.dynamicConfig))
+	if len(req.globalDynamicConfig) > 0 {
+		opts = append(opts, WithDynamicConfigOverrides(req.globalDynamicConfig))
 	}
 	opts = append(opts, req.clusterOpts...)
 
