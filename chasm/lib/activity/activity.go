@@ -217,9 +217,11 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 // The token must match what was sent to the worker in the poll response.
 func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
 	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
 
 	token := tasktoken.NewStandaloneActivityTaskToken(
-		activityRef.NamespaceID,
+		key.NamespaceID,
+		key.BusinessID, // activityID
 		a.GetActivityType().GetName(),
 		attempt.GetCount(),
 		attempt.GetComponentRef(),
