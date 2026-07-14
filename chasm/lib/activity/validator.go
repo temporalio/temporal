@@ -1,6 +1,8 @@
 package activity
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -456,6 +458,27 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 	return nil
 }
 
+// supportedActivityOptionsUpdatePaths is the allowlist of update_mask paths (in camelCase JSON
+// form, as produced by util.ConvertPathToCamel) that UpdateActivityExecutionOptions supports.
+// It must stay in sync with the fields handled in MergeActivityOptions.
+var supportedActivityOptionsUpdatePaths = map[string]struct{}{
+	"taskQueue.name":                 {},
+	"scheduleToCloseTimeout":         {},
+	"scheduleToStartTimeout":         {},
+	"startToCloseTimeout":            {},
+	"heartbeatTimeout":               {},
+	"priority":                       {},
+	"priority.priorityKey":           {},
+	"priority.fairnessKey":           {},
+	"priority.fairnessWeight":        {},
+	"retryPolicy":                    {},
+	"retryPolicy.initialInterval":    {},
+	"retryPolicy.backoffCoefficient": {},
+	"retryPolicy.maximumInterval":    {},
+	"retryPolicy.maximumAttempts":    {},
+	"startDelay":                     {},
+}
+
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
 func validateUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
@@ -496,6 +519,15 @@ func validateUpdateActivityExecutionOptionsRequest(
 	}
 	if req.GetUpdateMask() == nil {
 		return serviceerror.NewInvalidArgument("UpdateMask is not provided")
+	}
+	if len(req.GetUpdateMask().GetPaths()) == 0 {
+		return serviceerror.NewInvalidArgument("UpdateMask must specify at least one path")
+	}
+	for _, path := range req.GetUpdateMask().GetPaths() {
+		jsonPath := strings.Join(util.ConvertPathToCamel(path), ".")
+		if _, ok := supportedActivityOptionsUpdatePaths[jsonPath]; !ok {
+			return serviceerror.NewInvalidArgumentf("unsupported update_mask path: %q", path)
+		}
 	}
 
 	opts := req.GetActivityOptions()
