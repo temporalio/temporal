@@ -246,11 +246,11 @@ type userMetadataFieldValidators struct {
 	Details validation.NestedFieldValidator[sdkpb.UserMetadata, *commonpb.Payload]
 }
 
-func (v userMetadataFieldValidators) ValidateAndNormalize(ns string, req *sdkpb.UserMetadata) error {
-	if err := v.Summary(ns, req, "summary", req.GetSummary()); err != nil {
+func (v userMetadataFieldValidators) ValidateAndNormalize(ns string, fieldPrefix string, req *sdkpb.UserMetadata) error {
+	if err := v.Summary(ns, req, fieldPrefix+".summary", req.GetSummary()); err != nil {
 		return err
 	}
-	if err := v.Details(ns, req, "details", req.GetDetails()); err != nil {
+	if err := v.Details(ns, req, fieldPrefix+".details", req.GetDetails()); err != nil {
 		return err
 	}
 	return nil

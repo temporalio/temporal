@@ -311,9 +311,9 @@ func renderNestedValidator(b *bytes.Buffer, data templateData) {
 		fmt.Fprintf(b, "\t%s validation.NestedFieldValidator[%s.%s, %s]\n", f.GoName, data.SelfAlias, data.TypeName, f.Type)
 	}
 	fmt.Fprint(b, "}\n")
-	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(ns string, req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
+	fmt.Fprintf(b, "\nfunc (v %sFieldValidators) ValidateAndNormalize(ns string, fieldPrefix string, req *%s.%s) error {\n", data.Prefix, data.SelfAlias, data.TypeName)
 	for _, f := range data.Fields {
-		fmt.Fprintf(b, "\tif err := v.%s(ns, req, %q, req.Get%s()); err != nil {\n", f.GoName, f.ProtoName, f.GoName)
+		fmt.Fprintf(b, "\tif err := v.%s(ns, req, fieldPrefix+%q, req.Get%s()); err != nil {\n", f.GoName, "."+f.ProtoName, f.GoName)
 		fmt.Fprint(b, "\t\treturn err\n")
 		fmt.Fprint(b, "\t}\n")
 	}
