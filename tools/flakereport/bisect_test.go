@@ -412,7 +412,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("docs-only commit is deprioritized", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{".github/workflows/ci.yml", "docs/architecture.md"},
+			Files: []github.CommitFile{{Filename: ".github/workflows/ci.yml"}, {Filename: "docs/architecture.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.05, weight, 1e-10)
@@ -422,7 +422,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("markdown-only commit is deprioritized", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"README.md", "CHANGELOG.md"},
+			Files: []github.CommitFile{{Filename: "README.md"}, {Filename: "CHANGELOG.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.05, weight, 1e-10)
@@ -432,7 +432,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("service/history/ commit is neutral weight", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/history/workflow_executor.go", "service/history/mutable_state.go"},
+			Files: []github.CommitFile{{Filename: "service/history/workflow_executor.go"}, {Filename: "service/history/mutable_state.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestContinueAsNew")
 		assert.InDelta(t, 1.0, weight, 1e-10)
@@ -442,7 +442,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("test-only commit is mildly deprioritized", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/nexus_handler_test.go", "service/worker/deployment_test.go"},
+			Files: []github.CommitFile{{Filename: "service/frontend/nexus_handler_test.go"}, {Filename: "service/worker/deployment_test.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.3, weight, 1e-10)
@@ -452,7 +452,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("mixed code and doc files is neutral", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/handler.go", "README.md"},
+			Files: []github.CommitFile{{Filename: "service/frontend/handler.go"}, {Filename: "README.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		// Not all files are docs/config (handler.go is not), not all are test files
@@ -471,7 +471,7 @@ func TestCommitPriorWeight(t *testing.T) {
 	t.Run("service/frontend/ commit is neutral weight", func(t *testing.T) {
 		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/nexus_handler.go"},
+			Files: []github.CommitFile{{Filename: "service/frontend/nexus_handler.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestNexusSuite/TestOperation")
 		assert.InDelta(t, 1.0, weight, 1e-10)

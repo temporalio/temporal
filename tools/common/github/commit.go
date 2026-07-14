@@ -9,54 +9,54 @@ import (
 
 // Commit holds changed-file info fetched from the GitHub API.
 type Commit struct {
-	SHA         string
-	Title       string
-	Author      string
-	CommittedAt time.Time
-	Files       []string
+	SHA    string        `json:"sha"`
+	Commit CommitDetails `json:"commit"`
+	Files  []CommitFile  `json:"files"`
+}
+
+// CommitDetails holds the commit metadata nested in the GitHub API response.
+type CommitDetails struct {
+	Message string       `json:"message"`
+	Author  CommitAuthor `json:"author"`
+}
+
+// CommitAuthor holds the commit author nested in the GitHub API response.
+type CommitAuthor struct {
+	Name string    `json:"name"`
+	Date time.Time `json:"date"`
+}
+
+// CommitFile holds a changed file in the GitHub API response.
+type CommitFile struct {
+	Filename string `json:"filename"`
+}
+
+// Title returns the first line of the commit message.
+func (c Commit) Title() string {
+	title, _, _ := strings.Cut(c.Commit.Message, "\n")
+	return title
+}
+
+// Filenames returns the names of the files changed by the commit.
+func (c Commit) Filenames() []string {
+	filenames := make([]string, 0, len(c.Files))
+	for _, file := range c.Files {
+		filenames = append(filenames, file.Filename)
+	}
+	return filenames
 }
 
 // GetCommit fetches commit metadata from the GitHub API.
 // Uses: GET /repos/{owner}/{repo}/commits/{sha}
 func GetCommit(ctx context.Context, repo, sha string) (Commit, error) {
-	var response struct {
-		SHA    string `json:"sha"`
-		Commit struct {
-			Message string `json:"message"`
-			Author  struct {
-				Name string    `json:"name"`
-				Date time.Time `json:"date"`
-			} `json:"author"`
-		} `json:"commit"`
-		Files []struct {
-			Filename string `json:"filename"`
-		} `json:"files"`
+	commit := Commit{SHA: sha}
+
+	if err := getJSON(ctx, fmt.Sprintf("/repos/%s/commits/%s", repo, sha), &commit); err != nil {
+		return commit, err
 	}
 
-	if err := getJSON(ctx, fmt.Sprintf("/repos/%s/commits/%s", repo, sha), &response); err != nil {
-		return Commit{SHA: sha}, err
+	if commit.SHA == "" {
+		commit.SHA = sha
 	}
-
-	responseSHA := response.SHA
-	if responseSHA == "" {
-		responseSHA = sha
-	}
-
-	title := response.Commit.Message
-	if idx := strings.IndexByte(title, '\n'); idx >= 0 {
-		title = title[:idx]
-	}
-
-	files := make([]string, 0, len(response.Files))
-	for _, f := range response.Files {
-		files = append(files, f.Filename)
-	}
-
-	return Commit{
-		SHA:         responseSHA,
-		Title:       title,
-		Author:      response.Commit.Author.Name,
-		CommittedAt: response.Commit.Author.Date,
-		Files:       files,
-	}, nil
+	return commit, nil
 }

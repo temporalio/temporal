@@ -186,7 +186,7 @@ func runBisect(obs []CommitObservation) []BisectResult {
 // Weight < 1.0 makes the commit less likely to be the culprit.
 // Weight > 1.0 makes it more likely.
 func commitPriorWeight(meta github.Commit, testName string) (weight float64, note string) {
-	files := meta.Files
+	files := meta.Filenames()
 	if len(files) == 0 {
 		return 1.0, ""
 	}
@@ -292,10 +292,10 @@ func runBisectForTest(cfg BisectConfig, testName string, allRuns []TestRun, comm
 	for i := range results {
 		results[i].HeuristicNote = obsNotes[results[i].CommitSHA]
 		if meta, ok := commitMetas[results[i].CommitSHA]; ok {
-			results[i].CommitTitle = meta.Title
-			results[i].CommitAuthor = meta.Author
-			if !meta.CommittedAt.IsZero() {
-				results[i].CommitDate = meta.CommittedAt.Format("2006-01-02")
+			results[i].CommitTitle = meta.Title()
+			results[i].CommitAuthor = meta.Commit.Author.Name
+			if !meta.Commit.Author.Date.IsZero() {
+				results[i].CommitDate = meta.Commit.Author.Date.Format("2006-01-02")
 			}
 		}
 	}
