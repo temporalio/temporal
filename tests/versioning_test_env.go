@@ -1347,7 +1347,6 @@ func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(s parallels
 		t.Require().NoError(err)
 		t.Require().True(resp.GetIsMember())
 	}, 10*time.Second, 500*time.Millisecond)
-
 }
 
 func (env *VersioningTestEnv) startChildWorkflowCommand(tv *testvars.TestVars) *commandpb.Command {
