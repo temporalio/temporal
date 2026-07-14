@@ -94,7 +94,6 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 				Namespace:      s.Namespace().String(),
 				WorkflowId:     wfID,
 				ActivityId:     actID,
-				ResetHeartbeat: resetHeartbeat,
 				KeepPaused:     keepPaused,
 			})
 			return err
