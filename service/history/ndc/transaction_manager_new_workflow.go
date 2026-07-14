@@ -79,7 +79,21 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	if currentRunID == "" {
-		// current record does not exists
+		// The current execution record is gone. A brand-new workflow legitimately has no current
+		// record yet and should own it. But a CLOSED run that already has a successor (via
+		// continue-as-new/retry/cron or reset) must never become current — its successor is the
+		// latest run. If we created such a run as current here and its successor was deleted (so the
+		// successor never arrives to take over), the deleted workflow would be resurrected as a live
+		// current run. Persist it without a current record instead.
+		if targetHasSuccessor(targetWorkflow) && !targetWorkflow.GetMutableState().IsWorkflowExecutionRunning() {
+			return r.executeTransaction(
+				ctx,
+				nDCTransactionPolicyCreateAsZombie,
+				nil, // no current workflow: the current record was deleted
+				targetWorkflow,
+			)
+		}
+		// current record does not exists, create as brand new
 		return r.executeTransaction(
 			ctx,
 			nDCTransactionPolicyCreateAsCurrent,
@@ -134,6 +148,14 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		currentWorkflow,
 		targetWorkflow,
 	)
+}
+
+// targetHasSuccessor reports whether the run already has a successor run — from a
+// continue-as-new/retry/cron close (NewExecutionRunId) or a reset (SuccessorRunId). Such a run is
+// not the latest run of the workflow and must never own the current execution record.
+func targetHasSuccessor(targetWorkflow Workflow) bool {
+	executionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
+	return executionInfo.GetNewExecutionRunId() != "" || executionInfo.GetSuccessorRunId() != ""
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
@@ -195,11 +217,17 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow Workflow,
 ) error {
 
-	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(
-		currentWorkflow,
-	)
-	if err != nil {
-		return err
+	// currentWorkflow is nil on the orphan-resurrection path (dispatchForNewWorkflow, deleted current
+	// record): there is nothing to suppress against and the target is guaranteed closed, so it stays
+	// passive. Do not call SuppressBy with a nil current for a running target — it would report the
+	// target as suppressed without zombifying it.
+	targetWorkflowPolicy := historyi.TransactionPolicyPassive
+	if currentWorkflow != nil {
+		var err error
+		targetWorkflowPolicy, err = targetWorkflow.SuppressBy(currentWorkflow)
+		if err != nil {
+			return err
+		}
 	}
 	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
@@ -207,8 +235,10 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
-	currentWorkflow = nil
+	if currentWorkflow != nil {
+		currentWorkflow.GetReleaseFn()(nil)
+		currentWorkflow = nil
+	}
 
 	ms := targetWorkflow.GetMutableState()
 
