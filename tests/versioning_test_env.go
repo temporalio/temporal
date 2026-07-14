@@ -65,40 +65,39 @@ var _ = testhooks.MatchingIgnoreRoutingConfigRevisionCheck
 
 type VersioningTestEnv struct {
 	*testcore.TestEnv
-	versioningTestContext *versioningTestContext
-}
-
-type versioningTestContext struct {
-	t       func() *testing.T
-	context func() context.Context
-	await   func(func(*versioningTestContext), time.Duration, time.Duration)
 	*require.Assertions
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
-}
-
-func (c *versioningTestContext) T() *testing.T {
-	return c.t()
-}
-
-func (c *versioningTestContext) Context() context.Context {
-	return c.context()
-}
-
-func (c *versioningTestContext) Await(fn func(*versioningTestContext), timeout, interval time.Duration) {
-	c.await(fn, timeout, interval)
+	t *testing.T
 }
 
 func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
+	testEnv := testcore.NewEnv(t, opts...)
 	return &VersioningTestEnv{
-		TestEnv: testcore.NewEnv(t, opts...),
+		TestEnv:         testEnv,
+		Assertions:      require.New(t),
+		ProtoAssertions: protorequire.New(t),
+		HistoryRequire:  historyrequire.New(t),
+		t:               t,
 	}
 }
 
-func (env *VersioningTestEnv) withVersioningTestContext(ctx *versioningTestContext) *VersioningTestEnv {
-	rebound := *env
-	rebound.versioningTestContext = ctx
-	return &rebound
+func (env *VersioningTestEnv) T() *testing.T {
+	return env.t
+}
+
+func (env *VersioningTestEnv) NoError(err error, msgAndArgs ...any) {
+	env.Assertions.NoError(err, msgAndArgs...)
+}
+
+func (env *VersioningTestEnv) Await(ctx context.Context, fn func(context.Context, *VersioningTestEnv), timeout, interval time.Duration) {
+	await.Require(ctx, env.T(), func(t *await.T) {
+		attempt := *env
+		attempt.Assertions = require.New(t)
+		attempt.ProtoAssertions = protorequire.New(t)
+		attempt.HistoryRequire = historyrequire.New(t)
+		fn(t.Context(), &attempt)
+	}, timeout, interval)
 }
 
 func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(
@@ -141,7 +140,6 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(
 	tv *testvars.TestVars,
 	sticky bool,
 ) {
-	s := env.versioningTestContext
 	queryResultCh := make(chan any)
 	env.pollWftAndHandleQueries(tv, sticky, queryResultCh,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
@@ -149,7 +147,7 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(
 		})
 
 	_, err := env.queryWorkflow(tv)
-	s.NoError(err)
+	env.NoError(err)
 
 	<-queryResultCh
 }
@@ -157,24 +155,23 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(
 // drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
-func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
+func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(ctx context.Context,
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
 ) (*commonpb.WorkflowExecution, string) {
-	s := env.versioningTestContext
 	wftCompleted := make(chan struct{})
 	env.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
+			env.NotNil(task)
 			if override != nil {
-				env.verifyWorkflowVersioning(tv, vbUnspecified, nil, override, nil)
+				env.verifyWorkflowVersioning(ctx, tv, vbUnspecified, nil, override, nil)
 			} else {
-				env.verifyWorkflowVersioning(tv, vbUnspecified, nil, override, tv.DeploymentVersionTransition())
+				env.verifyWorkflowVersioning(ctx, tv, vbUnspecified, nil, override, tv.DeploymentVersionTransition())
 			}
 			return env.respondEmptyWft(tv, false, vbUnpinned), nil
 		})
-	env.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypeWf)
-	env.setCurrentDeployment(tv)
+	env.waitForDeploymentDataPropagation(ctx, tv, versionStatusInactive, false, tqTypeWf)
+	env.setCurrentDeployment(ctx, tv)
 
 	runID := env.startWorkflow(tv, override)
 	execution := tv.WithRunID(runID).WorkflowExecution()
@@ -187,19 +184,18 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
 // drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
 // drains the initial workflow task from the execution, and ensures the task is correctly
 // routed to the appropriate build.
-func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
+func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(ctx context.Context,
 	tv *testvars.TestVars,
 ) (*commonpb.WorkflowExecution, string) {
-	s := env.versioningTestContext
 	wftCompleted := make(chan struct{})
 	env.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.NotNil(task)
-			env.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
+			env.NotNil(task)
+			env.verifyWorkflowVersioning(ctx, tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			return env.respondEmptyWft(tv, false, vbUnpinned), nil
 		})
-	env.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypeWf)
-	env.setCurrentDeployment(tv)
+	env.waitForDeploymentDataPropagation(ctx, tv, versionStatusInactive, false, tqTypeWf)
+	env.setCurrentDeployment(ctx, tv)
 
 	runID := env.startWorkflow(tv, nil)
 	execution := tv.WithRunID(runID).WorkflowExecution()
@@ -209,99 +205,92 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
 	return execution, runID
 }
 
-func (env *VersioningTestEnv) pollAndDispatchNexusTask(
+func (env *VersioningTestEnv) pollAndDispatchNexusTask(ctx context.Context,
 	tv *testvars.TestVars,
 	nexusRequest *matchingservice.DispatchNexusTaskRequest,
 ) {
-	s := env.versioningTestContext
 	matchingClient := env.GetTestCluster().MatchingClient()
 
 	nexusCompleted := make(chan any)
 	env.pollNexusTaskAndHandle(tv, false, nexusCompleted,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
-			s.NotNil(task)
+			env.NotNil(task)
 			return &workflowservice.RespondNexusTaskCompletedRequest{}, nil // response object gets filled during processing
 		})
 
-	_, err := matchingClient.DispatchNexusTask(s.Context(), nexusRequest)
-	s.NoError(err)
+	_, err := matchingClient.DispatchNexusTask(ctx, nexusRequest)
+	env.NoError(err)
 	<-nexusCompleted
 }
 
-func (env *VersioningTestEnv) describeVersioningInfo(
+func (env *VersioningTestEnv) describeVersioningInfo(ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 ) *workflowpb.WorkflowExecutionVersioningInfo {
-	s := env.versioningTestContext
 	resp, err := env.FrontendClient().DescribeWorkflowExecution(
-		s.Context(),
+		ctx,
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: execution,
 		},
 	)
-	s.NoError(err)
+	env.NoError(err)
 	return resp.GetWorkflowExecutionInfo().GetVersioningInfo()
 }
 
-func (env *VersioningTestEnv) requireOneTimeOverride(
+func (env *VersioningTestEnv) requireOneTimeOverride(ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 	tv *testvars.TestVars,
 ) {
-	s := env.versioningTestContext
-	versioningInfo := env.describeVersioningInfo(execution)
+	versioningInfo := env.describeVersioningInfo(ctx, execution)
 	oneTime := versioningInfo.GetVersioningOverride().GetOneTime()
-	s.NotNil(oneTime)
-	s.ProtoEqual(tv.ExternalDeploymentVersion(), oneTime.GetTargetDeploymentVersion())
+	env.NotNil(oneTime)
+	env.ProtoEqual(tv.ExternalDeploymentVersion(), oneTime.GetTargetDeploymentVersion())
 }
 
-func (env *VersioningTestEnv) requireNoVersioningOverride(
+func (env *VersioningTestEnv) requireNoVersioningOverride(ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 ) {
-	s := env.versioningTestContext
-	versioningInfo := env.describeVersioningInfo(execution)
-	s.Nil(versioningInfo.GetVersioningOverride())
+	versioningInfo := env.describeVersioningInfo(ctx, execution)
+	env.Nil(versioningInfo.GetVersioningOverride())
 }
 
-func (env *VersioningTestEnv) updateVersioningOverride(
+func (env *VersioningTestEnv) updateVersioningOverride(ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 	override *workflowpb.VersioningOverride,
 ) {
-	s := env.versioningTestContext
-	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                env.Namespace().String(),
 		WorkflowExecution:        execution,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: override},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
-	s.NoError(err)
+	env.NoError(err)
 }
 
-func (env *VersioningTestEnv) pollWorkflowTask(
+func (env *VersioningTestEnv) pollWorkflowTask(ctx context.Context,
 	tv *testvars.TestVars,
 ) *workflowservice.PollWorkflowTaskQueueResponse {
-	s := env.versioningTestContext
-	task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		Identity:          tv.WorkerIdentity(),
 		TaskQueue:         tv.TaskQueue(),
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
-	s.NoError(err)
-	s.NotEmpty(task.GetTaskToken())
+	env.NoError(err)
+	env.NotEmpty(task.GetTaskToken())
 	return task
 }
 
-func (env *VersioningTestEnv) completeWorkflowTask(
+func (env *VersioningTestEnv) completeWorkflowTask(ctx context.Context,
 	tv *testvars.TestVars,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) {
-	s := env.versioningTestContext
 	request.Namespace = env.Namespace().String()
 	request.Identity = tv.WorkerIdentity()
 	request.TaskToken = task.GetTaskToken()
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), request)
-	s.NoError(err)
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(ctx, request)
+	env.NoError(err)
 }
 
 func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
@@ -309,7 +298,6 @@ func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
 	childWorkflowID string,
 	handleChild func(*workflowservice.PollWorkflowTaskQueueResponse) *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) *commonpb.WorkflowExecution {
-	s := env.versioningTestContext
 	// Starting the child can create two WFTs on the same version/task queue:
 	// one parent follow-up WFT for ChildWorkflowExecutionStarted, and one child
 	// first WFT. Drain the parent follow-up if it arrives first.
@@ -318,7 +306,7 @@ func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
 	for i := 0; i < maxWorkflowTasksAfterChildStart && childExecution == nil; i++ {
 		env.pollWftAndHandle(tv, false, nil,
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
+				env.NotNil(task)
 				if task.GetWorkflowExecution().GetWorkflowId() == childWorkflowID {
 					childExecution = task.GetWorkflowExecution()
 					return handleChild(task), nil
@@ -326,54 +314,51 @@ func (env *VersioningTestEnv) pollUntilChildWorkflowTask(
 				return env.respondEmptyWft(tv, false, vbPinned), nil
 			})
 	}
-	s.NotNil(childExecution)
+	env.NotNil(childExecution)
 	return childExecution
 }
 
 // Signal to trigger a normal WFT
-func (env *VersioningTestEnv) triggerNormalWFT(tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
-	s := env.versioningTestContext
-	_, err := env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+func (env *VersioningTestEnv) triggerNormalWFT(ctx context.Context, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+	_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: execution,
 		SignalName:        tv.SignalName(),
 		Input:             tv.Any().Payloads(),
 		Identity:          tv.WorkerIdentity(),
 	})
-	s.NoError(err)
+	env.NoError(err)
 }
 
 // Trigger a normal task and then fail the task twice to trigger a transient WFT
-func (env *VersioningTestEnv) triggerTransientWFT(tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
-	s := env.versioningTestContext
-	env.triggerNormalWFT(tv, execution)
+func (env *VersioningTestEnv) triggerTransientWFT(ctx context.Context, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
+	env.triggerNormalWFT(ctx, tv, execution)
 
 	// Poll and FAIL the WFT to create a transient WFT situation
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
 		Identity:          tv.WorkerIdentity(),
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
-	s.NoError(err)
-	s.NotNil(pollResp)
-	s.NotEmpty(pollResp.TaskToken)
+	env.NoError(err)
+	env.NotNil(pollResp)
+	env.NotEmpty(pollResp.TaskToken)
 
 	// Fail the workflow task - this will cause a transient WFT to be scheduled
-	_, err = env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: pollResp.TaskToken,
 		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 		Identity:  tv.WorkerIdentity(),
 	})
-	s.NoError(err)
+	env.NoError(err)
 }
 
 // Verify this is a speculative task - events not yet in persisted history
 func (env *VersioningTestEnv) verifySpeculativeTask(execution *commonpb.WorkflowExecution) {
-	s := env.versioningTestContext
 	events := env.GetHistory(env.Namespace().String(), execution)
-	s.EqualHistoryEvents(`
+	env.EqualHistoryEvents(`
 		1 WorkflowExecutionStarted
 		2 WorkflowTaskScheduled
 		3 WorkflowTaskStarted
@@ -387,39 +372,34 @@ func (env *VersioningTestEnv) verifySpeculativeTask(execution *commonpb.Workflow
 	`, events)
 }
 
-func (env *VersioningTestEnv) setCurrentDeployment(tv *testvars.TestVars) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
-	defer cancel()
-
+func (env *VersioningTestEnv) setCurrentDeployment(ctx context.Context, tv *testvars.TestVars) {
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
-	s.Await(func(s *versioningTestContext) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		req.BuildId = tv.BuildID()
 		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(s.Context(), err, failedPrecondition) {
-			s.NoError(err)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition) {
+			env.NoError(err)
 			return
 		}
-		s.NoError(err)
+		env.NoError(err)
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	env.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
+	env.waitForDeploymentDataPropagationQueryWorkerDeployment(ctx, tv)
 }
 
 // pollUntilRegistered registers versioned pollers for the given deployment.
 // tqTypes controls which task queue types to poll; it defaults to workflow only.
 // Pollers run continuously until all TQ types are registered.
-func (env *VersioningTestEnv) pollUntilRegistered(tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) {
-	s := env.versioningTestContext
+func (env *VersioningTestEnv) pollUntilRegistered(ctx context.Context, tv *testvars.TestVars, tqTypes ...enumspb.TaskQueueType) {
 	if len(tqTypes) == 0 {
 		tqTypes = []enumspb.TaskQueueType{tqTypeWf}
 	}
-	pollCtx, cancel := context.WithCancel(s.Context())
+	pollCtx, cancel := context.WithCancel(ctx)
 	for _, tqType := range tqTypes {
 		go func() {
 			for pollCtx.Err() == nil {
@@ -427,7 +407,7 @@ func (env *VersioningTestEnv) pollUntilRegistered(tv *testvars.TestVars, tqTypes
 				case tqTypeWf:
 					env.idlePollWorkflow(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
-					env.idlePollActivity(tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollActivity(ctx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeNexus:
 					env.idlePollNexus(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				default:
@@ -438,17 +418,17 @@ func (env *VersioningTestEnv) pollUntilRegistered(tv *testvars.TestVars, tqTypes
 	}
 
 	// Wait until the version is visible and all requested task queue types are registered.
-	s.Await(func(s *versioningTestContext) {
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			s.NoError(err)
+			env.NoError(err)
 			return
 		}
-		s.NoError(err)
+		env.NoError(err)
 		tqName := tv.TaskQueue().GetName()
 		for _, tqType := range tqTypes {
 			found := false
@@ -458,42 +438,37 @@ func (env *VersioningTestEnv) pollUntilRegistered(tv *testvars.TestVars, tqTypes
 					break
 				}
 			}
-			s.True(found)
+			env.True(found)
 		}
 	}, 30*time.Second, 500*time.Millisecond)
 	cancel()
 }
 
-func (env *VersioningTestEnv) unsetCurrentDeployment(tv *testvars.TestVars) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
-	defer cancel()
-
-	s.Await(func(s *versioningTestContext) {
+func (env *VersioningTestEnv) unsetCurrentDeployment(ctx context.Context, tv *testvars.TestVars) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		req := &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 		}
 		_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(s.Context(), err) {
-			s.NoError(err)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err) {
+			env.NoError(err)
 			return
 		}
-		s.NoError(err)
+		env.NoError(err)
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	env.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
-	env.waitForDeploymentDataPropagation(tv, versionStatusDraining, false, tqTypeWf)
+	env.waitForDeploymentDataPropagationQueryWorkerDeployment(ctx, tv)
+	env.waitForDeploymentDataPropagation(ctx, tv, versionStatusDraining, false, tqTypeWf)
 }
 
-func (env *VersioningTestEnv) setRampingDeployment(
+func (env *VersioningTestEnv) setRampingDeployment(ctx context.Context,
 	tv *testvars.TestVars,
 	percentage float32,
 	rampUnversioned bool,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	bid := tv.BuildID()
@@ -502,7 +477,7 @@ func (env *VersioningTestEnv) setRampingDeployment(
 	}
 	failedPrecondition := serviceerror.NewFailedPreconditionf(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues, tv.DeploymentVersionStringV32()).Error()
 
-	s.Await(func(s *versioningTestContext) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		req := &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
@@ -510,31 +485,30 @@ func (env *VersioningTestEnv) setRampingDeployment(
 		}
 		req.BuildId = bid
 		_, err := env.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, req)
-		if env.shouldRetryWorkerDeploymentRPC(s.Context(), err, failedPrecondition) {
-			s.NoError(err)
+		if env.shouldRetryWorkerDeploymentRPC(ctx, err, failedPrecondition) {
+			env.NoError(err)
 			return
 		}
-		s.NoError(err)
+		env.NoError(err)
 	}, 60*time.Second, 500*time.Millisecond)
 
 	// Wait for propagation to complete since we have tests using async entity workflows to set the current version
-	env.waitForDeploymentDataPropagationQueryWorkerDeployment(tv)
+	env.waitForDeploymentDataPropagationQueryWorkerDeployment(ctx, tv)
 }
 
-func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(tv *testvars.TestVars) {
-	s := env.versioningTestContext
+func (env *VersioningTestEnv) waitForDeploymentDataPropagationQueryWorkerDeployment(ctx context.Context, tv *testvars.TestVars) {
 	if versioning3DeploymentWorkflowVersion == workerdeployment.AsyncSetCurrentAndRamping {
-		s.Await(func(s *versioningTestContext) {
-			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
-			if env.shouldRetryWorkerDeploymentRPC(s.Context(), err) {
-				s.NoError(err)
+			if env.shouldRetryWorkerDeploymentRPC(ctx, err) {
+				env.NoError(err)
 				return
 			}
-			s.NoError(err)
-			s.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
+			env.NoError(err)
+			env.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
 		}, 10*time.Second, 500*time.Millisecond)
 	}
 }
@@ -557,6 +531,7 @@ func (env *VersioningTestEnv) shouldRetryWorkerDeploymentRPC(ctx context.Context
 }
 
 func (env *VersioningTestEnv) updateTaskQueueDeploymentData(
+	ctx context.Context,
 	tv *testvars.TestVars,
 	isCurrent bool,
 	ramp float32,
@@ -564,7 +539,7 @@ func (env *VersioningTestEnv) updateTaskQueueDeploymentData(
 	timeSinceUpdate time.Duration,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
-	env.syncTaskQueueDeploymentData(tv, isCurrent, ramp, rampUnversioned, time.Now().Add(-timeSinceUpdate), tqTypes...)
+	env.syncTaskQueueDeploymentData(ctx, tv, isCurrent, ramp, rampUnversioned, time.Now().Add(-timeSinceUpdate), tqTypes...)
 	var status versionStatus
 	if isCurrent {
 		status = versionStatusCurrent
@@ -577,30 +552,30 @@ func (env *VersioningTestEnv) updateTaskQueueDeploymentData(
 		status = versionStatusNil
 	}
 
-	env.waitForDeploymentDataPropagation(tv, status, rampUnversioned, tqTypes...)
+	env.waitForDeploymentDataPropagation(ctx, tv, status, rampUnversioned, tqTypes...)
 
 }
 
 // updateTaskQueueDeploymentDataWithRoutingConfig updates the deployment data for the requested TQ types
 // and also waits for the data to propagate to all the relevant partitions.
 // TODO (Shivam): Update the name of this one.
-func (env *VersioningTestEnv) updateTaskQueueDeploymentDataWithRoutingConfig(
+func (env *VersioningTestEnv) updateTaskQueueDeploymentDataWithRoutingConfig(ctx context.Context,
 	tv *testvars.TestVars,
 	routingConfig *deploymentpb.RoutingConfig,
 	upsertVersions map[string]*deploymentspb.WorkerDeploymentVersionData,
 	forgetVersions []string,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
-	env.syncTaskQueueDeploymentDataWithRoutingConfig(tv, routingConfig, upsertVersions, forgetVersions, tqTypes...)
+	env.syncTaskQueueDeploymentDataWithRoutingConfig(ctx, tv, routingConfig, upsertVersions, forgetVersions, tqTypes...)
 
 	// We need to know what the status of the version we are adding/forgetting is so that we can wait for it to propagate.
 	for _, version := range upsertVersions {
 		if version.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT {
-			env.waitForDeploymentDataPropagation(tv, versionStatusCurrent, false, tqTypes...)
+			env.waitForDeploymentDataPropagation(ctx, tv, versionStatusCurrent, false, tqTypes...)
 		} else if version.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING {
-			env.waitForDeploymentDataPropagation(tv, versionStatusRamping, false, tqTypes...)
+			env.waitForDeploymentDataPropagation(ctx, tv, versionStatusRamping, false, tqTypes...)
 		} else if version.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
-			env.waitForDeploymentDataPropagation(tv, versionStatusInactive, false, tqTypes...)
+			env.waitForDeploymentDataPropagation(ctx, tv, versionStatusInactive, false, tqTypes...)
 		}
 	}
 }
@@ -608,12 +583,11 @@ func (env *VersioningTestEnv) updateTaskQueueDeploymentDataWithRoutingConfig(
 // getTaskQueueDeploymentData gets the deployment data for a given TQ type. The data is always
 // returned from the WF type root partition, so no need to wait for propagation before calling this
 // function.
-func (env *VersioningTestEnv) getTaskQueueDeploymentData(
+func (env *VersioningTestEnv) getTaskQueueDeploymentData(ctx context.Context,
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
 ) *persistencespb.DeploymentData {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	resp, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
@@ -622,19 +596,18 @@ func (env *VersioningTestEnv) getTaskQueueDeploymentData(
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 		})
-	s.NoError(err)
+	env.NoError(err)
 	return resp.GetUserData().GetData().GetPerType()[int32(tqType)].GetDeploymentData()
 }
 
-func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(
+func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(ctx context.Context,
 	tv *testvars.TestVars,
 	routingConfig *deploymentpb.RoutingConfig,
 	upsertVersions map[string]*deploymentspb.WorkerDeploymentVersionData,
 	forgetVersions []string,
 	t ...enumspb.TaskQueueType,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	deploymentName := tv.DeploymentVersion().GetDeploymentName()
@@ -651,16 +624,15 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentDataWithRoutingConfig(
 			ForgetVersions:      forgetVersions,
 		})
 
-	s.NoError(err)
+	env.NoError(err)
 }
 
 // rollbackTaskQueueToVersion simulates routing config lag by rolling back the task queue user data
 // to an older version with revision number 0. This is used to test that workflows correctly use
 // inherited revision numbers instead of falling back to the (stale) current task queue version.
-func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
+func (env *VersioningTestEnv) rollbackTaskQueueToVersion(ctx context.Context,
 	tv *testvars.TestVars,
 ) {
-	s := env.versioningTestContext
 
 	cleanup := env.InjectHook(testhooks.NewHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true))
 	defer cleanup()
@@ -670,25 +642,26 @@ func (env *VersioningTestEnv) rollbackTaskQueueToVersion(
 		CurrentVersionChangedTime: timestamp.TimePtr(time.Now().Add(1 * time.Minute)),
 		RevisionNumber:            0,
 	}
-	env.syncTaskQueueDeploymentDataWithRoutingConfig(tv, rc, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): {
+	env.syncTaskQueueDeploymentDataWithRoutingConfig(ctx, tv, rc, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): {
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}}, nil, tqTypeWf)
 
 	// Verify that the rollback propagated to all partitions
-	s.Await(func(s *versioningTestContext) {
-		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(s.Context(), &matchingservice.GetTaskQueueUserDataRequest{
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
+		ms, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 		})
-		s.NoError(err)
+		env.NoError(err)
 		current, currentRevisionNumber, _, _, _, _, _, _ := worker_versioning.CalculateTaskQueueVersioningInfo(ms.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData())
-		s.Equal(tv.DeploymentVersion().GetBuildId(), current.GetBuildId())
-		s.Equal(int64(0), currentRevisionNumber)
+		env.Equal(tv.DeploymentVersion().GetBuildId(), current.GetBuildId())
+		env.Equal(int64(0), currentRevisionNumber)
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
+	ctx context.Context,
 	tv *testvars.TestVars,
 	isCurrent bool,
 	ramp float32,
@@ -696,8 +669,7 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
 	updateTime time.Time,
 	t ...enumspb.TaskQueueType,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	v := tv.DeploymentVersion()
@@ -729,18 +701,17 @@ func (env *VersioningTestEnv) syncTaskQueueDeploymentData(
 				},
 			},
 		})
-	s.NoError(err)
+	env.NoError(err)
 }
 
-func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(
+func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(ctx context.Context,
 	tv *testvars.TestVars,
 	deploymentName string,
 	forgetUnversionedRamp bool,
 	revisionNumber int64,
 	t ...enumspb.TaskQueueType,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	v := tv.DeploymentVersion()
@@ -755,16 +726,16 @@ func (env *VersioningTestEnv) forgetDeploymentVersionsFromDeploymentData(
 			DeploymentName: deploymentName,
 			ForgetVersions: []string{tv.BuildID()},
 		})
-	s.NoError(err)
+	env.NoError(err)
 }
 
 func (env *VersioningTestEnv) forgetTaskQueueDeploymentVersion(
+	ctx context.Context,
 	tv *testvars.TestVars,
 	t enumspb.TaskQueueType,
 	forgetUnversionedRamp bool,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
 	v := tv.DeploymentVersion()
@@ -780,56 +751,55 @@ func (env *VersioningTestEnv) forgetTaskQueueDeploymentVersion(
 				ForgetVersion: v,
 			},
 		})
-	s.NoError(err)
+	env.NoError(err)
 }
 
-func (env *VersioningTestEnv) verifyWorkflowVersioning(tv *testvars.TestVars,
+func (env *VersioningTestEnv) verifyWorkflowVersioning(ctx context.Context, tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	override *workflowpb.VersioningOverride,
 	transition *workflowpb.DeploymentVersionTransition,
 ) {
-	s := env.versioningTestContext
 	dwf, err := env.FrontendClient().DescribeWorkflowExecution(
-		s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 			},
 		})
-	s.NoError(err)
+	env.NoError(err)
 
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
-	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
+	env.Equal(behavior.String(), versioningInfo.GetBehavior().String())
 	var v *deploymentspb.WorkerDeploymentVersion
 	if versioningInfo.GetVersion() != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		v, err = worker_versioning.WorkerDeploymentVersionFromStringV31(versioningInfo.GetVersion())
-		s.NoError(err)
-		s.NotNil(versioningInfo.GetDeploymentVersion()) // make sure we are always populating this whenever Version string is populated
+		env.NoError(err)
+		env.NotNil(versioningInfo.GetDeploymentVersion()) // make sure we are always populating this whenever Version string is populated
 	}
 	if dv := versioningInfo.GetDeploymentVersion(); dv != nil {
 		v = worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(dv))
 	}
 	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(v)
 	if !deployment.Equal(actualDeployment) {
-		s.Fail(fmt.Sprintf("deployment version mismatch. expected: {%s}, actual: {%s}",
+		env.Fail(fmt.Sprintf("deployment version mismatch. expected: {%s}, actual: {%s}",
 			deployment,
 			actualDeployment,
 		))
 	}
 
 	// v0.32 override
-	s.Equal(override.GetAutoUpgrade(), versioningInfo.GetVersioningOverride().GetAutoUpgrade())
-	s.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
-	s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
-	s.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
+	env.Equal(override.GetAutoUpgrade(), versioningInfo.GetVersioningOverride().GetAutoUpgrade())
+	env.Equal(override.GetPinned().GetVersion().GetBuildId(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetBuildId())
+	env.Equal(override.GetPinned().GetVersion().GetDeploymentName(), versioningInfo.GetVersioningOverride().GetPinned().GetVersion().GetDeploymentName())
+	env.Equal(override.GetPinned().GetBehavior(), versioningInfo.GetVersioningOverride().GetPinned().GetBehavior())
 	if worker_versioning.OverrideIsPinned(override) {
-		s.Equal(override.GetPinned().GetVersion().GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
+		env.Equal(override.GetPinned().GetVersion().GetDeploymentName(), dwf.WorkflowExecutionInfo.GetWorkerDeploymentName())
 	}
 
 	if !versioningInfo.GetVersionTransition().Equal(transition) {
-		s.Fail(fmt.Sprintf("version transition mismatch. expected: {%s}, actual: {%s}",
+		env.Fail(fmt.Sprintf("version transition mismatch. expected: {%s}, actual: {%s}",
 			transition,
 			versioningInfo.GetVersionTransition(),
 		))
@@ -840,7 +810,6 @@ func (env *VersioningTestEnv) startWorkflow(
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
 ) string {
-	s := env.versioningTestContext
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.Any().String(),
 		Namespace:          env.Namespace().String(),
@@ -852,7 +821,7 @@ func (env *VersioningTestEnv) startWorkflow(
 	}
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err0)
+	env.NoError(err0)
 	return we.GetRunId()
 }
 
@@ -902,8 +871,7 @@ func (env *VersioningTestEnv) doPollWftAndHandle(
 	async chan<- struct{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -918,7 +886,7 @@ func (env *VersioningTestEnv) doPollWftAndHandle(
 	}
 	if async == nil {
 		resp, err := f()
-		s.NoError(err)
+		env.NoError(err)
 		return poller, resp
 	}
 	go func() {
@@ -934,8 +902,7 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(
 	async chan<- any,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -950,7 +917,7 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(
 	}
 	if async == nil {
 		resp, err := f()
-		s.NoError(err)
+		env.NoError(err)
 		return poller, resp
 	}
 	go func() {
@@ -966,8 +933,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(
 	async chan<- any,
 	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondNexusTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -982,7 +948,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(
 	}
 	if async == nil {
 		resp, err := f()
-		s.NoError(err)
+		env.NoError(err)
 		return poller, resp
 	}
 	go func() {
@@ -1021,12 +987,11 @@ func (env *VersioningTestEnv) doPollActivityAndHandle(
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
-	s := env.versioningTestContext
 	f := func() error {
 		return env.doPollActivityAndHandleErr(tv, versioned, handler)
 	}
 	if async == nil {
-		s.NoError(f())
+		env.NoError(f())
 	} else {
 		go func() {
 			_ = f() // errors are surfaced via test context timeout on WaitForChannel
@@ -1040,8 +1005,7 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 	versioned bool,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1057,15 +1021,14 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 		}).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.T().Error(unexpectedTaskMessage)
+			env.T().Error(unexpectedTaskMessage)
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
@@ -1078,15 +1041,14 @@ func (env *VersioningTestEnv) idlePollUnversionedActivity(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{}).HandleTask(
 		tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				env.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.Fail(unexpectedTaskMessage)
+				env.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
@@ -1094,14 +1056,13 @@ func (env *VersioningTestEnv) idlePollUnversionedActivity(
 	)
 }
 
-func (env *VersioningTestEnv) idlePollActivity(
+func (env *VersioningTestEnv) idlePollActivity(ctx context.Context,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1110,12 +1071,12 @@ func (env *VersioningTestEnv) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				env.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.T().Error(unexpectedTaskMessage)
+				env.T().Error(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
-		taskpoller.WithContext(s.Context()),
+		taskpoller.WithContext(ctx),
 	)
 }
 
@@ -1127,8 +1088,7 @@ func (env *VersioningTestEnv) idlePollNexus(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollNexusTask(
 		&workflowservice.PollNexusTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1136,7 +1096,7 @@ func (env *VersioningTestEnv) idlePollNexus(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 			if task != nil {
-				s.T().Error(unexpectedTaskMessage)
+				env.T().Error(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
@@ -1145,17 +1105,16 @@ func (env *VersioningTestEnv) idlePollNexus(
 	)
 }
 
-func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
+func (env *VersioningTestEnv) verifyWorkflowStickyQueue(ctx context.Context,
 	tv *testvars.TestVars,
 ) {
-	s := env.versioningTestContext
 	ms, err := env.GetTestCluster().HistoryClient().GetMutableState(
-		s.Context(), &historyservice.GetMutableStateRequest{
+		ctx, &historyservice.GetMutableStateRequest{
 			NamespaceId: env.NamespaceID().String(),
 			Execution:   tv.WorkflowExecution(),
 		})
-	s.NoError(err)
-	s.Equal(tv.StickyTaskQueue().GetName(), ms.StickyTaskQueue.GetName())
+	env.NoError(err)
+	env.Equal(tv.StickyTaskQueue().GetName(), ms.StickyTaskQueue.GetName())
 }
 
 // Sticky queue needs to be created in server before tasks can schedule in it. Call to this method
@@ -1163,15 +1122,14 @@ func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
 func (env *VersioningTestEnv) warmUpSticky(
 	tv *testvars.TestVars,
 ) {
-	s := env.versioningTestContext
-	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.StickyTaskQueue(),
 		}).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Fail("sticky task is not expected")
+			env.Fail("sticky task is not expected")
 			return nil, nil
 		},
 		taskpoller.WithTimeout(ver3MinPollTime),
@@ -1179,17 +1137,16 @@ func (env *VersioningTestEnv) warmUpSticky(
 }
 
 // TODO (Shivam): Clean up this function once sync entity workflows have been removed.
-func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
+func (env *VersioningTestEnv) waitForDeploymentDataPropagation(ctx context.Context,
 	tv *testvars.TestVars,
 	status versionStatus,
 	unversionedRamp bool,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
-	s := env.versioningTestContext
 	v := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
-	s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
+	env.NotEmpty(v, "versioning tests require setting explicit number of partitions")
 	count, ok := v[0].Value.(int)
-	s.True(ok, "partition count is not an int")
+	env.True(ok, "partition count is not an int")
 	partitionCount := count
 
 	type partAndType struct {
@@ -1203,20 +1160,20 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(env.NamespaceID().String(), tv.TaskQueue().GetName())
-	s.Await(func(s *versioningTestContext) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		for pt := range remaining {
-			s.NoError(err)
+			env.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
 			res, err := env.GetTestCluster().MatchingClient().GetTaskQueueUserData(
-				s.Context(),
+				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   env.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			env.NoError(err)
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
 				deploymentsData := perTypes[int32(pt.tp)].GetDeploymentData().GetDeploymentsData()
@@ -1267,48 +1224,43 @@ func (env *VersioningTestEnv) waitForDeploymentDataPropagation(
 				}
 			}
 		}
-		s.Empty(remaining)
+		env.Empty(remaining)
 	}, 30*time.Second, 500*time.Millisecond)
 }
 
-func (env *VersioningTestEnv) validateBacklogCount(
+func (env *VersioningTestEnv) validateBacklogCount(ctx context.Context,
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
 	expectedCount int64,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	var resp *workflowservice.DescribeTaskQueueResponse
 	var err error
 
-	s.Await(func(s *versioningTestContext) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		resp, err = env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
 			TaskQueueType: tqType,
 			ReportStats:   true,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
+		env.NoError(err)
+		env.NotNil(resp)
 		priorityStats, ok := resp.GetStatsByPriorityKey()[3]
-		s.True(ok)
-		s.Equal(expectedCount, priorityStats.GetApproximateBacklogCount())
+		env.True(ok)
+		env.Equal(expectedCount, priorityStats.GetApproximateBacklogCount())
 	}, 6*time.Second, 500*time.Millisecond)
 }
 
-func (env *VersioningTestEnv) verifyVersioningSAs(
+func (env *VersioningTestEnv) verifyVersioningSAs(ctx context.Context,
 	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	executionStatus enumspb.WorkflowExecutionStatus,
 	usedBuilds ...*testvars.TestVars,
 ) {
-	s := env.versioningTestContext
-	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
-	defer cancel()
-
-	s.Await(func(s *versioningTestContext) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
 		var query string
 		if behavior != vbUnspecified {
 			query = fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s' AND ExecutionStatus = '%s'",
@@ -1321,36 +1273,36 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 			Namespace: env.Namespace().String(),
 			Query:     query,
 		})
-		s.NoError(err)
-		s.NotEmpty(resp.GetExecutions())
+		env.NoError(err)
+		env.NotEmpty(resp.GetExecutions())
 		if len(resp.GetExecutions()) > 0 {
 			w := resp.GetExecutions()[0]
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
-				s.True(ok)
+				env.True(ok)
 				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-				s.NoError(err)
+				env.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
 					searchAttr = searchAttrAny.([]string)
 				}
 				if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-					s.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
+					env.Contains(searchAttr, worker_versioning.PinnedBuildIdSearchAttribute(tv.DeploymentVersionStringV32()))
 				}
 			}
 
 			if len(usedBuilds) > 0 {
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
-				s.True(ok)
+				env.True(ok)
 				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, false)
-				s.NoError(err)
+				env.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {
 					versionAttr = versionAttrAny.([]string)
 				}
 				for _, b := range usedBuilds {
-					s.Contains(versionAttr, b.DeploymentVersionStringV32())
+					env.Contains(versionAttr, b.DeploymentVersionStringV32())
 				}
 			}
 
@@ -1361,17 +1313,16 @@ func (env *VersioningTestEnv) verifyVersioningSAs(
 
 // validatePinnedVersionExistsInTaskQueue validates that the version, to be pinned, exists in the task queue.
 // TODO (future improvement): This can be further extended to validate the presence of any version instead of using the GetTaskQueueUserData RPC.
-func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(tv *testvars.TestVars) {
-	s := env.versioningTestContext
-	s.Await(func(s *versioningTestContext) {
-		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(s.Context(), &matchingservice.CheckTaskQueueVersionMembershipRequest{
+func (env *VersioningTestEnv) validatePinnedVersionExistsInTaskQueue(ctx context.Context, tv *testvars.TestVars) {
+	env.Await(ctx, func(ctx context.Context, env *VersioningTestEnv) {
+		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   env.NamespaceID().String(),
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: tqTypeWf,
 			Version:       worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
 		})
-		s.NoError(err)
-		s.True(resp.GetIsMember())
+		env.NoError(err)
+		env.True(resp.GetIsMember())
 	}, 10*time.Second, 500*time.Millisecond)
 
 }
