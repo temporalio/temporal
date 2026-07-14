@@ -14,9 +14,14 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
-var trailingFailureSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
+const (
+	temporalRepository    = "temporalio/temporal"
+	summaryArtifactPrefix = "test-summary-json--"
+	summaryFileSuffix     = "test-summary.json"
+	summaryKindOOM        = "OOM"
+)
 
-const summaryKindOOM = "OOM"
+var trailingFailureSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
 type testSummary struct {
 	Rows []summaryRow `json:"rows"`
@@ -32,7 +37,7 @@ func getFailures(ctx context.Context, runID int64) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	artifacts, err := github.ListRunArtifacts(ctx, "temporalio/temporal", runID)
+	artifacts, err := github.ListRunArtifacts(ctx, temporalRepository, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,11 +50,11 @@ func getFailures(ctx context.Context, runID int64) ([]string, error) {
 
 	var failures []string
 	for _, artifact := range artifacts {
-		if artifact.Expired || !strings.HasPrefix(artifact.Name, "test-summary-json--") {
+		if artifact.Expired || !strings.HasPrefix(artifact.Name, summaryArtifactPrefix) {
 			continue
 		}
 
-		zipPath, err := github.DownloadArtifact(ctx, "temporalio/temporal", artifact.ID, tempDir)
+		zipPath, err := github.DownloadArtifact(ctx, temporalRepository, artifact.ID, tempDir)
 		if err != nil {
 			continue
 		}
@@ -73,7 +78,7 @@ func failuresFromZip(zipPath string) ([]string, error) {
 
 	var failures []string
 	for _, file := range reader.File {
-		if file.FileInfo().IsDir() || !strings.HasSuffix(file.Name, "test-summary.json") {
+		if file.FileInfo().IsDir() || !strings.HasSuffix(file.Name, summaryFileSuffix) {
 			continue
 		}
 
