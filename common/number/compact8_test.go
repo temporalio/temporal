@@ -23,12 +23,12 @@ func (s *compact8Suite) SetupTest() {
 func (s *compact8Suite) TestDecodeKnownValues() {
 	s.Equal(int64(0), DecodeCompact8(0))
 	// Subnormals: e=0, m << 5
-	s.Equal(int64(32), DecodeCompact8(1))    // 1 << 5
-	s.Equal(int64(64), DecodeCompact8(2))    // 2 << 5
-	s.Equal(int64(352), DecodeCompact8(11))  // 11 << 5
+	s.Equal(int64(32), DecodeCompact8(1))   // 1 << 5
+	s.Equal(int64(64), DecodeCompact8(2))   // 2 << 5
+	s.Equal(int64(352), DecodeCompact8(11)) // 11 << 5
 	// e=1 (bytes 12-23): (12+m) << 5
-	s.Equal(int64(384), DecodeCompact8(12))  // 12 << 5
-	s.Equal(int64(736), DecodeCompact8(23))  // 23 << 5
+	s.Equal(int64(384), DecodeCompact8(12)) // 12 << 5
+	s.Equal(int64(736), DecodeCompact8(23)) // 23 << 5
 	// e=2 (bytes 24-35): (12+m) << 6
 	s.Equal(int64(768), DecodeCompact8(24))  // 12 << 6
 	s.Equal(int64(1472), DecodeCompact8(35)) // 23 << 6
@@ -58,7 +58,7 @@ func (s *compact8Suite) TestEncodeRoundsDown() {
 }
 
 func (s *compact8Suite) TestRoundtrip() {
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		decoded := DecodeCompact8(Compact8(b))
 		reencoded := EncodeCompact8(decoded)
 		s.Equalf(Compact8(b), reencoded, "byte=%d decoded=%d", b, decoded)
@@ -67,7 +67,7 @@ func (s *compact8Suite) TestRoundtrip() {
 
 func (s *compact8Suite) TestMonotonic() {
 	prev := int64(0)
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		v := DecodeCompact8(Compact8(b))
 		s.GreaterOrEqualf(v, prev, "byte=%d", b)
 		prev = v
@@ -77,7 +77,7 @@ func (s *compact8Suite) TestMonotonic() {
 func (s *compact8Suite) TestStrictlyIncreasing() {
 	// Every byte should decode to a strictly larger value than the previous
 	prev := int64(-1)
-	for b := 0; b < 256; b++ {
+	for b := range 256 {
 		v := DecodeCompact8(Compact8(b))
 		s.Greaterf(v, prev, "byte=%d", b)
 		prev = v
@@ -85,7 +85,7 @@ func (s *compact8Suite) TestStrictlyIncreasing() {
 }
 
 func (s *compact8Suite) TestRoundDown() {
-	for b := 0; b < 255; b++ {
+	for b := range 255 {
 		decoded := DecodeCompact8(Compact8(b))
 		nextDecoded := DecodeCompact8(Compact8(b + 1))
 		if nextDecoded <= decoded+1 {
