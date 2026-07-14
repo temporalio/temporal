@@ -44,9 +44,10 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:     newClusterPool(sharedSize, false, 0),
-		dedicated:  newClusterPool(dedicatedSize, true, 0),
-		eventsFile: eventsFile,
+		shared:           newClusterPool(sharedSize, false, 0),
+		legacyDedicated:  newClusterPool(dedicatedSize, true, 0),
+		testEnvDedicated: newClusterPool(1, true, 0), // limited to 1 to avoid OOM kill
+		eventsFile:       eventsFile,
 	}
 }
 
@@ -94,6 +95,18 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
 	t.Cleanup(slot.release)
+	return cluster
+}
+
+func (p *clusterPool) getFresh(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+	slot := p.reserveSlot(t)
+	slot.tearDown(t)
+	cluster := createCluster()
+	t.Cleanup(func() {
+		if err := cluster.tearDownTestCluster(); err != nil {
+			t.Logf("Failed to tear down cluster: %v", err)
+		}
+	})
 	return cluster
 }
 
@@ -168,11 +181,20 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	s.leaseCount = 0
 }
 
+func (s *clusterPoolSlot) tearDown(t *testing.T) {
+	s.Lock()
+	defer s.Unlock()
+	s.tearDownLocked(t)
+}
+
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	suiteScoped sync.Map
+	shared *clusterPool
+	// legacyDedicated is used by FunctionalTestBase.SetupSuiteWithCluster.
+	legacyDedicated *clusterPool
+	// testEnvDedicated serializes TestEnv dedicated cluster use.
+	testEnvDedicated *clusterPool
+	suiteScoped      sync.Map
 
 	eventsFile *os.File
 }
@@ -227,16 +249,16 @@ type clusterRequest struct {
 	clusterOpts       []TestClusterOption
 }
 
-// mustBeFresh reports whether the request requires a brand-new cluster that
-// cannot be reused.
-func (r clusterRequest) mustBeFresh() bool {
-	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+// hasClusterOpts reports whether the request has cluster-construction options
+// that cannot be reset on a running cluster.
+func (r clusterRequest) hasClusterOpts() bool {
+	return len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
 func (r clusterRequest) needsDedicated() bool {
-	return r.dedicated || r.mustBeFresh()
+	return r.dedicated || r.needWorkerService || len(r.dynamicConfig) > 0 || r.hasClusterOpts()
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -251,7 +273,7 @@ func (r clusterRequest) reason() string {
 	switch {
 	case r.dedicatedReason != "":
 		return r.dedicatedReason
-	case r.mustBeFresh():
+	case r.needWorkerService || len(r.dynamicConfig) > 0 || r.hasClusterOpts():
 		return "custom config"
 	default:
 		return "dedicated (pooled)"
@@ -330,23 +352,15 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	req.kind = clusterKindDedicated
-	if req.mustBeFresh() {
-		// Custom config or fx options require a fresh cluster (can't reuse).
-		p.dedicated.reserveSlot(t)
-		cluster := p.createCluster(t, req)
-
-		// Register cleanup to tear down the cluster when the test completes.
-		t.Cleanup(func() {
-			if err := cluster.tearDownTestCluster(); err != nil {
-				t.Logf("Failed to tear down cluster: %v", err)
-			}
+	req.needWorkerService = true
+	if req.hasClusterOpts() {
+		return p.testEnvDedicated.getFresh(t, func() *FunctionalTestBase {
+			return p.createCluster(t, req)
 		})
-
-		return cluster
 	}
 
-	// If no custom config is provided, reuse an existing cluster.
-	return p.dedicated.get(t, func() *FunctionalTestBase {
+	return p.testEnvDedicated.get(t, func() *FunctionalTestBase {
+		req.dynamicConfig = nil
 		return p.createCluster(t, req)
 	})
 }

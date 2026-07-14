@@ -58,6 +58,33 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	})
 }
 
+func TestClusterPool_FreshClusterOptionReplacesIdlePooledCluster(t *testing.T) {
+	p := newClusterPool(1, true, 0)
+	slot := p.allSlots[0]
+	var created int
+	createCluster := func() *FunctionalTestBase {
+		created++
+		return &FunctionalTestBase{}
+	}
+
+	t.Run("uses pooled cluster", func(t *testing.T) {
+		cluster := p.get(t, createCluster)
+		require.Same(t, cluster, slot.cluster)
+	})
+
+	pooledCluster := slot.cluster
+	require.NotNil(t, pooledCluster)
+
+	t.Run("uses fresh cluster", func(t *testing.T) {
+		cluster := p.getFresh(t, createCluster)
+		require.NotSame(t, pooledCluster, cluster)
+		require.Nil(t, slot.cluster)
+	})
+
+	require.Nil(t, slot.cluster)
+	require.Equal(t, 2, created)
+}
+
 func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {
 	// maxLeases is already reached after the first acquire, but the slot is still active.
 	p := newClusterPool(1, false, 1)

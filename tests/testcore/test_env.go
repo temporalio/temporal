@@ -253,24 +253,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			if !canBeNamespaceScoped(override.setting.Precedence()) {
-				dedicatedGuard.record("global dynamic config used")
-			}
-			startupConfig[override.setting.Key()] = override.value
-		}
-	}
-
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
 		dedicated:         options.dedicatedCluster,
 		needWorkerService: options.needWorkerService,
 		dedicatedReason:   options.dedicatedReason,
-		dynamicConfig:     startupConfig,
+		dynamicConfig:     globalDynamicConfigSettingsByKey(options.dynamicConfigSettings),
 		clusterOpts:       options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
@@ -327,11 +315,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Cleanup(func() { tl.FailOnError(prev) })
 	}
 
-	// For shared clusters, apply all dynamic config settings as overrides.
-	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		for _, override := range options.dynamicConfigSettings {
-			env.OverrideDynamicConfig(override.setting, override.value)
-		}
+	// Apply dynamic config settings as test-scoped overrides.
+	for _, override := range options.dynamicConfigSettings {
+		env.OverrideDynamicConfig(override.setting, override.value)
 	}
 	if options.historyTaskRecorder {
 		recorder := cluster.GetHistoryTaskRecorder()
@@ -339,6 +325,23 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	return env
+}
+
+func globalDynamicConfigSettingsByKey(settings []dynamicConfigOverride) map[dynamicconfig.Key]any {
+	if len(settings) == 0 {
+		return nil
+	}
+	var byKey map[dynamicconfig.Key]any
+	for _, override := range settings {
+		if canBeNamespaceScoped(override.setting.Precedence()) {
+			continue
+		}
+		if byKey == nil {
+			byKey = make(map[dynamicconfig.Key]any, len(settings))
+		}
+		byKey[override.setting.Key()] = override.value
+	}
+	return byKey
 }
 
 // Use test env-specific namespace here for test isolation.
