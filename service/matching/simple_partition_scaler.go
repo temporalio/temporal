@@ -43,8 +43,9 @@ type simplePartitionScaler struct {
 
 func newSimplePartitionScaler(cfg scalerCfg, ts clock.TimeSource) *simplePartitionScaler {
 	return &simplePartitionScaler{
-		cfg: cfg,
-		ts:  ts,
+		cfg:      cfg,
+		ts:       ts,
+		trackers: make(map[time.Duration]*taskTracker),
 	}
 }
 

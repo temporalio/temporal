@@ -20,7 +20,18 @@ env:
 
 jobs:
   check-review-eligibility:
-    if: github.event.pull_request.draft == false
+    if: >-
+      (
+        github.event.action != 'labeled' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
+        github.event.action == 'labeled' &&
+        (
+          github.event.label.name == 'request-claude-review' ||
+          github.event.label.name == 'skip-claude-review'
+        )
+      )
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
@@ -31,7 +42,7 @@ jobs:
     steps:
       - name: Generate app token
         id: generate_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
@@ -214,7 +225,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -224,6 +234,7 @@ jobs:
       - name: Claude PR review
         uses: anthropics/claude-code-action@v1
         with:
+          github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: ${{ github.event.action != 'labeled' }}
           prompt: |
