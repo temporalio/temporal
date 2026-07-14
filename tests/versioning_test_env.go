@@ -109,7 +109,9 @@ func (env *VersioningTestEnv) findVersionTaskQueue(
 	return nil
 }
 
-func (env *VersioningTestEnv) pollAndQueryWorkflow(t require.TestingT,
+func (env *VersioningTestEnv) pollAndQueryWorkflow(
+	ctx context.Context,
+	t testing.TB,
 	tv *testvars.TestVars,
 	sticky bool,
 ) {
@@ -119,7 +121,7 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(t require.TestingT,
 			return &workflowservice.RespondQueryTaskCompletedRequest{}, nil
 		})
 
-	_, err := env.queryWorkflow(tv)
+	_, err := env.queryWorkflow(ctx, tv)
 	require.NoError(t, err)
 
 	<-queryResultCh
@@ -148,7 +150,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
 	env.waitForDeploymentDataPropagation(ctx, t, tv, versionStatusInactive, false, tqTypeWf)
 	env.setCurrentDeployment(ctx, t, tv)
 
-	runID := env.startWorkflow(t, tv, override)
+	runID := env.startWorkflow(ctx, t, tv, override)
 	execution := tv.WithRunID(runID).WorkflowExecution()
 
 	env.WaitForChannel(wftCompleted)
@@ -174,7 +176,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
 	env.waitForDeploymentDataPropagation(ctx, t, tv, versionStatusInactive, false, tqTypeWf)
 	env.setCurrentDeployment(ctx, t, tv)
 
-	runID := env.startWorkflow(t, tv, nil)
+	runID := env.startWorkflow(ctx, t, tv, nil)
 	execution := tv.WithRunID(runID).WorkflowExecution()
 
 	env.WaitForChannel(wftCompleted)
@@ -184,7 +186,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
 
 func (env *VersioningTestEnv) pollAndDispatchNexusTask(
 	ctx context.Context,
-	t require.TestingT,
+	t testing.TB,
 	tv *testvars.TestVars,
 	nexusRequest *matchingservice.DispatchNexusTaskRequest,
 ) {
@@ -284,7 +286,7 @@ func (env *VersioningTestEnv) completeWorkflowTask(
 	require.NoError(t, err)
 }
 
-func (env *VersioningTestEnv) pollUntilChildWorkflowTask(t require.TestingT,
+func (env *VersioningTestEnv) pollUntilChildWorkflowTask(t testing.TB,
 	tv *testvars.TestVars,
 	childWorkflowID string,
 	handleChild func(*workflowservice.PollWorkflowTaskQueueResponse) *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -397,11 +399,11 @@ func (env *VersioningTestEnv) pollUntilRegistered(ctx context.Context, t testing
 			for pollCtx.Err() == nil {
 				switch tqType {
 				case tqTypeWf:
-					env.idlePollWorkflow(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollWorkflow(pollCtx, t, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeAct:
-					env.idlePollActivity(ctx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollActivity(ctx, t, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				case tqTypeNexus:
-					env.idlePollNexus(pollCtx, tv, true, ver3MinPollTime, "should not get any tasks yet")
+					env.idlePollNexus(pollCtx, t, tv, true, ver3MinPollTime, "should not get any tasks yet")
 				default:
 					panic("invalid task queue type")
 				}
@@ -820,7 +822,9 @@ func (env *VersioningTestEnv) verifyWorkflowVersioning(
 	}
 }
 
-func (env *VersioningTestEnv) startWorkflow(t require.TestingT,
+func (env *VersioningTestEnv) startWorkflow(
+	ctx context.Context,
+	t require.TestingT,
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
 ) string {
@@ -834,12 +838,13 @@ func (env *VersioningTestEnv) startWorkflow(t require.TestingT,
 		VersioningOverride: override,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(ctx, request)
 	require.NoError(t, err0)
 	return we.GetRunId()
 }
 
 func (env *VersioningTestEnv) queryWorkflow(
+	ctx context.Context,
 	tv *testvars.TestVars,
 ) (*workflowservice.QueryWorkflowResponse, error) {
 	request := &workflowservice.QueryWorkflowRequest{
@@ -848,7 +853,7 @@ func (env *VersioningTestEnv) queryWorkflow(
 		Query:     tv.Query(),
 	}
 
-	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout)
+	shortCtx, cancel := context.WithTimeout(ctx, common.MinLongPollTimeout)
 	defer cancel()
 	response, err := env.FrontendClient().QueryWorkflow(shortCtx, request)
 	return response, err
@@ -857,7 +862,7 @@ func (env *VersioningTestEnv) queryWorkflow(
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
 // will be closed when the task is handled.
 // Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
-func (env *VersioningTestEnv) pollWftAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) pollWftAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- struct{},
@@ -866,7 +871,7 @@ func (env *VersioningTestEnv) pollWftAndHandle(t require.TestingT,
 	return env.doPollWftAndHandle(t, tv, true, sticky, async, handler)
 }
 
-func (env *VersioningTestEnv) unversionedPollWftAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) unversionedPollWftAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- struct{},
@@ -878,14 +883,14 @@ func (env *VersioningTestEnv) unversionedPollWftAndHandle(t require.TestingT,
 // doPollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
 // will be closed when the task is handled.
 // Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
-func (env *VersioningTestEnv) doPollWftAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) doPollWftAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	sticky bool,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -910,13 +915,13 @@ func (env *VersioningTestEnv) doPollWftAndHandle(t require.TestingT,
 	return nil, nil
 }
 
-func (env *VersioningTestEnv) pollWftAndHandleQueries(t require.TestingT,
+func (env *VersioningTestEnv) pollWftAndHandleQueries(t testing.TB,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- any,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -941,13 +946,13 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(t require.TestingT,
 	return nil, nil
 }
 
-func (env *VersioningTestEnv) pollNexusTaskAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) pollNexusTaskAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- any,
 	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	f := func() (*workflowservice.RespondNexusTaskCompletedResponse, error) {
 		tq := tv.TaskQueue()
 		if sticky {
@@ -972,7 +977,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(t require.TestingT,
 	return nil, nil
 }
 
-func (env *VersioningTestEnv) unversionedPollActivityAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) unversionedPollActivityAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -980,7 +985,7 @@ func (env *VersioningTestEnv) unversionedPollActivityAndHandle(t require.Testing
 	env.doPollActivityAndHandle(t, tv, false, async, handler)
 }
 
-func (env *VersioningTestEnv) pollActivityAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) pollActivityAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -989,20 +994,21 @@ func (env *VersioningTestEnv) pollActivityAndHandle(t require.TestingT,
 }
 
 func (env *VersioningTestEnv) pollActivityAndHandleErr(
+	t testing.TB,
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
-	return env.doPollActivityAndHandleErr(tv, true, handler)
+	return env.doPollActivityAndHandleErr(t, tv, true, handler)
 }
 
-func (env *VersioningTestEnv) doPollActivityAndHandle(t require.TestingT,
+func (env *VersioningTestEnv) doPollActivityAndHandle(t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
 	f := func() error {
-		return env.doPollActivityAndHandleErr(tv, versioned, handler)
+		return env.doPollActivityAndHandleErr(t, tv, versioned, handler)
 	}
 	if async == nil {
 		require.NoError(t, f())
@@ -1015,11 +1021,12 @@ func (env *VersioningTestEnv) doPollActivityAndHandle(t require.TestingT,
 }
 
 func (env *VersioningTestEnv) doPollActivityAndHandleErr(
+	t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) error {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, err := poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1030,19 +1037,20 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 //nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollWorkflow(
 	ctx context.Context,
+	t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 		}).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			env.T().Error(unexpectedTaskMessage)
+			t.Errorf("%s", unexpectedTaskMessage)
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
@@ -1051,12 +1059,12 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 }
 
 func (env *VersioningTestEnv) idlePollUnversionedActivity(
-	t require.TestingT,
+	t testing.TB,
 	tv *testvars.TestVars,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{}).HandleTask(
 		tv,
@@ -1073,12 +1081,13 @@ func (env *VersioningTestEnv) idlePollUnversionedActivity(
 
 func (env *VersioningTestEnv) idlePollActivity(
 	ctx context.Context,
+	t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1087,7 +1096,7 @@ func (env *VersioningTestEnv) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				env.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				env.T().Error(unexpectedTaskMessage)
+				t.Errorf("%s", unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
@@ -1099,12 +1108,13 @@ func (env *VersioningTestEnv) idlePollActivity(
 //nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollNexus(
 	ctx context.Context,
+	t testing.TB,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollNexusTask(
 		&workflowservice.PollNexusTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
@@ -1112,7 +1122,7 @@ func (env *VersioningTestEnv) idlePollNexus(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 			if task != nil {
-				env.T().Error(unexpectedTaskMessage)
+				t.Errorf("%s", unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
@@ -1137,10 +1147,10 @@ func (env *VersioningTestEnv) verifyWorkflowStickyQueue(
 
 // Sticky queue needs to be created in server before tasks can schedule in it. Call to this method
 // create the sticky queue by polling it.
-func (env *VersioningTestEnv) warmUpSticky(t require.TestingT,
+func (env *VersioningTestEnv) warmUpSticky(t testing.TB,
 	tv *testvars.TestVars,
 ) {
-	poller := taskpoller.New(env.T(), env.FrontendClient(), env.Namespace().String())
+	poller := taskpoller.New(t, env.FrontendClient(), env.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.StickyTaskQueue(),

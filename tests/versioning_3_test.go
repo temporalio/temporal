@@ -101,11 +101,11 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 		tv := env.Tv()
 
 		tv2 := tv.WithBuildIDNumber(2)
-		go env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
+		go env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
 
 		// Start a versioned poller for the first version so that it registers the version in the task queue.
 		pollerCtx, cancelPoller := context.WithCancel(s.Context())
-		go env.idlePollWorkflow(pollerCtx, tv, true, ver3MinPollTime, "first deployment should not receive any task. It is just creating a version in the task queue.")
+		go env.idlePollWorkflow(pollerCtx, s.T(), tv, true, ver3MinPollTime, "first deployment should not receive any task. It is just creating a version in the task queue.")
 
 		// Wait for the version to be present in the task queue
 		env.validatePinnedVersionExistsInTaskQueue(s.Context(), s.T(), tv)
@@ -113,8 +113,8 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 		// Cancel the poller after condition is met
 		cancelPoller()
 
-		env.startWorkflow(s.T(), tv, tv.VersioningOverridePinned())
-		env.idlePollWorkflow(s.Context(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
+		env.startWorkflow(s.Context(), s.T(), tv, tv.VersioningOverridePinned())
+		env.idlePollWorkflow(s.Context(), s.T(), tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
 
 		// Sleeping to let the pollers arrive to server before ending the test.
 		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -124,9 +124,9 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 	s.runTestWithMatchingBehavior(func(env *VersioningTestEnv, s *Versioning3Suite) {
 		tv := env.Tv()
-		go env.idlePollWorkflow(s.Context(), tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
+		go env.idlePollWorkflow(s.Context(), s.T(), tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
 
-		env.startWorkflow(s.T(), tv, nil)
+		env.startWorkflow(s.Context(), s.T(), tv, nil)
 
 		// Sleeping to let the pollers arrive to server before ending the test.
 		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -157,9 +157,9 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 		}}, []string{}, tqTypeWf)
 
-		env.startWorkflow(s.T(), tv, nil)
+		env.startWorkflow(s.Context(), s.T(), tv, nil)
 
-		env.idlePollWorkflow(s.Context(), tvOldDeployment,
+		env.idlePollWorkflow(s.Context(), s.T(), tvOldDeployment,
 			true,
 			ver3MinPollTime,
 			"old deployment should not receive unpinned task",
@@ -288,7 +288,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *VersioningTestEnv
 	// Wait for the version to be present in the task queue. Version existence is required before it can be set as an override.
 	env.validatePinnedVersionExistsInTaskQueue(s.Context(), s.T(), tv)
 
-	runID := env.startWorkflow(s.T(), tv, tv.VersioningOverridePinned())
+	runID := env.startWorkflow(s.Context(), s.T(), tv, tv.VersioningOverridePinned())
 
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
@@ -354,7 +354,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 	// create version v1 and make it current
 	idlePollerDone := make(chan struct{})
 	go func() {
-		env.idlePollWorkflow(s.Context(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		env.idlePollWorkflow(s.Context(), s.T(), tv, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
 		close(idlePollerDone)
 	}()
 	env.setCurrentDeployment(s.Context(), s.T(), tv)
@@ -367,7 +367,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 			return env.respondCompleteWorkflow(tv, vbPinned), nil
 		})
 
-	env.startWorkflow(s.T(), tv, tv.VersioningOverridePinned())
+	env.startWorkflow(s.Context(), s.T(), tv, tv.VersioningOverridePinned())
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
@@ -375,7 +375,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 	idlePollerDone = make(chan struct{})
 	tv2 := tv.WithBuildIDNumber(2)
 	go func() {
-		env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
+		env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "should not have gotten any tasks since there are none")
 		close(idlePollerDone)
 	}()
 	env.setCurrentDeployment(s.Context(), s.T(), tv2)
@@ -399,12 +399,12 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 			versionStr = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(tv.Deployment()))
 		}
 
-		_, err := env.queryWorkflow(tv)
+		_, err := env.queryWorkflow(s.Context(), tv)
 		s.Error(err)
 		s.ErrorContains(err, fmt.Sprintf(matching.ErrBlackholedQuery, versionStr, versionStr))
 	} else {
 		// since the version still has pollers, the query should succeed
-		env.pollAndQueryWorkflow(s.T(), tv, false)
+		env.pollAndQueryWorkflow(s.Context(), s.T(), tv, false)
 	}
 
 	if rollback {
@@ -425,7 +425,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *VersioningTestEnv,
 		env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv, versionStatusRamping, false, tqTypeWf)
 
 		// the version has pollers and is ramping making the query succeed
-		env.pollAndQueryWorkflow(s.T(), tv, false)
+		env.pollAndQueryWorkflow(s.Context(), s.T(), tv, false)
 
 	}
 }
@@ -456,7 +456,7 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(env *VersioningTestEnv, s
 		s.True(resp.GetIsMember())
 	}, 10*time.Second, 500*time.Millisecond)
 
-	runID := env.startWorkflow(s.T(), tv, tv.VersioningOverridePinned())
+	runID := env.startWorkflow(s.Context(), s.T(), tv, tv.VersioningOverridePinned())
 
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
@@ -464,7 +464,7 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(env *VersioningTestEnv, s
 		env.verifyWorkflowStickyQueue(s.Context(), s.T(), tv.WithRunID(runID))
 	}
 
-	env.pollAndQueryWorkflow(s.T(), tv, sticky)
+	env.pollAndQueryWorkflow(s.Context(), s.T(), tv, sticky)
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
@@ -497,7 +497,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(env *VersioningTestEnv, sticky bool
 	env.setCurrentDeployment(s.Context(), s.T(), tv)
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv, versionStatusCurrent, false, tqTypeWf)
 
-	runID := env.startWorkflow(s.T(), tv, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv, nil)
 
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbUnpinned, tv.Deployment(), nil, nil)
@@ -507,18 +507,18 @@ func (s *Versioning3Suite) testUnpinnedQuery(env *VersioningTestEnv, sticky bool
 
 	pollerDone := make(chan struct{})
 	go func() {
-		env.idlePollWorkflow(s.Context(), tv2, true, 5*time.Second, "new deployment should not receive query")
+		env.idlePollWorkflow(s.Context(), s.T(), tv2, true, 5*time.Second, "new deployment should not receive query")
 		close(pollerDone)
 	}()
-	env.pollAndQueryWorkflow(s.T(), tv, sticky)
+	env.pollAndQueryWorkflow(s.Context(), s.T(), tv, sticky)
 	env.WaitForChannel(pollerDone) // wait for the idle poller to complete to not interfere with the next poller
 
 	env.setCurrentDeployment(s.Context(), s.T(), tv2)
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv2, versionStatusCurrent, false, tqTypeWf)
 
-	go env.idlePollWorkflow(s.Context(), tv, true, ver3MinPollTime, "old deployment should not receive query")
+	go env.idlePollWorkflow(s.Context(), s.T(), tv, true, ver3MinPollTime, "old deployment should not receive query")
 	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
-	env.pollAndQueryWorkflow(s.T(), tv2, false)
+	env.pollAndQueryWorkflow(s.Context(), s.T(), tv2, false)
 }
 
 func (s *Versioning3Suite) TestPinnedWorkflowWithLateActivityPoller() {
@@ -546,7 +546,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *Version
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv, versionStatusInactive, false, tqTypeWf)
 
 	override := tv.VersioningOverridePinned()
-	env.startWorkflow(s.T(), tv, override)
+	env.startWorkflow(s.Context(), s.T(), tv, override)
 
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbUnpinned, tv.Deployment(), override, nil)
@@ -607,7 +607,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(env *VersioningTestEnv, sticky b
 
 	env.setCurrentDeployment(s.Context(), s.T(), tv)
 
-	runID := env.startWorkflow(s.T(), tv, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv, nil)
 
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv, vbUnpinned, tv.Deployment(), nil, nil)
@@ -647,7 +647,7 @@ func (s *Versioning3Suite) TestSearchByUsedVersion() {
 		})
 
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv, versionStatusInactive, false, tqTypeWf)
-	env.startWorkflow(s.T(), tv, tv.VersioningOverridePinned())
+	env.startWorkflow(s.Context(), s.T(), tv, tv.VersioningOverridePinned())
 	<-wftCompleted
 
 	env.verifyVersioningSAs(s.Context(), s.T(), tv, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv)
@@ -1168,7 +1168,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): {
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}}, []string{}, tqTypeWf, tqTypeAct)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 
 	env.pollWftAndHandle(s.T(), tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -1273,7 +1273,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		sourceTransition = &workflowpb.DeploymentVersionTransition{Version: "__unversioned__"}
 	}
 
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 
 	if !unversionedSrc {
 		// sourceV is v1, set current version to it
@@ -1310,7 +1310,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING,
 	}}, []string{}, tqTypeWf, tqTypeAct)
 	// poll activity from v2 worker, this should start a transition but should not immediately start the activity.
-	go env.idlePollActivity(s.Context(), tv2, true, time.Minute, "v2 worker should not receive the activity")
+	go env.idlePollActivity(s.Context(), s.T(), tv2, true, time.Minute, "v2 worker should not receive the activity")
 
 	s.Await(func(s *Versioning3Suite) {
 		dwf, err := env.FrontendClient().DescribeWorkflowExecution(
@@ -1428,7 +1428,7 @@ func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment(env *VersioningTest
 	}}, []string{}, tqTypeNexus)
 
 	// Pollers of tv1 are there but should not get any task
-	go env.idlePollNexus(s.Context(), tv1, true, ver3MinPollTime, "nexus task should not go to the old deployment")
+	go env.idlePollNexus(s.Context(), s.T(), tv1, true, ver3MinPollTime, "nexus task should not go to the old deployment")
 
 	env.pollAndDispatchNexusTask(s.Context(), s.T(), tv2, nexusRequest)
 }
@@ -1449,7 +1449,7 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): {
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}}, []string{}, tqTypeWf, tqTypeAct)
-	env.startWorkflow(s.T(), tv, nil)
+	env.startWorkflow(s.Context(), s.T(), tv, nil)
 
 	poller, resp := env.pollWftAndHandle(s.T(), tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -1522,7 +1522,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv1.DeploymentVersion().GetBuildId(): {
 		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
 	}}, []string{}, tqTypeWf, tqTypeAct)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 
 	env.pollWftAndHandle(s.T(), tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -1597,7 +1597,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	time.Sleep(time.Millisecond * 200) //nolint:forbidigo
 
 	// Pollers of d1 are there, but should not get any task
-	go env.idlePollActivity(s.Context(), tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
+	go env.idlePollActivity(s.Context(), s.T(), tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
 
 	act2To4Err := make(chan error, 1)
 	go func() {
@@ -1606,7 +1606,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			// 3-4. The new d2 poller should trigger the third activity to be redirected, but the activity should
 			// not start until transition completes in the next wft.
 			// Repeating the handler so it processes all the three activities
-			err := env.pollActivityAndHandleErr(tv2,
+			err := env.pollActivityAndHandleErr(s.T(), tv2,
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					// Activity should not start until the transition is completed
 					if !transitionCompleted.Load() {
@@ -1716,7 +1716,7 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 		}}, []string{}, tqTypeAct)
 	}
 
-	env.startWorkflow(s.T(), tvWf, nil)
+	env.startWorkflow(s.Context(), s.T(), tvWf, nil)
 
 	env.pollWftAndHandle(s.T(), tvWf, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -2180,7 +2180,7 @@ func (s *Versioning3Suite) TestOneTimeOverride_PendingWorkflowTaskRoutesToTarget
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 	env.pollUntilRegistered(s.Context(), s.T(), tv2)
 
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 
 	env.updateVersioningOverride(s.Context(), s.T(), execution, s.makeOneTimeOverride(tv2))
@@ -2896,7 +2896,7 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 
 		if !noRampingVersion {
 			// Register v2 poller before setting it as ramping
-			env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+			env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
 			// Set v2 as ramping at 0%: no workflows move via hash, only via UseRampingVersion CaN
 			env.setRampingDeployment(s.Context(), s.T(), tv2, 0, false)
 			env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv2, versionStatusRamping, false, tqTypeWf)
@@ -2982,7 +2982,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return env.respondEmptyWft(tv1, false, vbPinned), nil
 			})
-		env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+		env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
 		env.setRampingDeployment(s.Context(), s.T(), tv2, 0, false)
 		env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv2, versionStatusRamping, false, tqTypeWf)
 		env.triggerNormalWFT(s.Context(), s.T(), tv1, execution)
@@ -3079,7 +3079,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return env.respondEmptyWft(tv1, false, vbPinned), nil
 			})
-		env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+		env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
 		env.setRampingDeployment(s.Context(), s.T(), tv2, 0, false)
 		env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv2, versionStatusRamping, false, tqTypeWf)
 		env.triggerNormalWFT(s.Context(), s.T(), tv1, execution)
@@ -3156,7 +3156,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 				return env.respondEmptyWft(tv1, false, vbPinned), nil
 			})
-		env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
+		env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "should not get any tasks yet")
 		env.setRampingDeployment(s.Context(), s.T(), tv2, 0, false)
 		env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv2, versionStatusRamping, false, tqTypeWf)
 		env.triggerNormalWFT(s.Context(), s.T(), tv1, execution)
@@ -3830,7 +3830,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 	// Start v0 workers to ensure they never receive a task
 	idlePollerCtx, idlePollerCancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer idlePollerCancel()
-	go env.idlePollWorkflow(idlePollerCtx, tv0, true, ver3MinPollTime, "workflows should not go to the old deployment")
+	go env.idlePollWorkflow(idlePollerCtx, s.T(), tv0, true, ver3MinPollTime, "workflows should not go to the old deployment")
 
 	// Rollback the userData to v0 to simulate routing config lag within a single partition.
 	env.rollbackTaskQueueToVersion(s.Context(), s.T(), tv0)
@@ -3881,7 +3881,7 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv0, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	// Start a workflow on v0.
-	env.startWorkflow(s.T(), tv0, nil)
+	env.startWorkflow(s.Context(), s.T(), tv0, nil)
 
 	// Poll for the workflow task on v0.
 	env.pollWftAndHandle(s.T(), tv0, false, nil,
@@ -3972,7 +3972,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv0, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
 
 	// Start a workflow on v0.
-	env.startWorkflow(s.T(), tv0, nil)
+	env.startWorkflow(s.Context(), s.T(), tv0, nil)
 
 	// Let a controlled poller complete the workflow task on v0 and schedule another workflow task.
 	env.pollWftAndHandle(s.T(), tv0, false, nil,
@@ -4014,7 +4014,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 
 	// Start an idle activity poller on v0. This poller should not receive any activity tasks
 	//nolint:testifylint
-	go env.idlePollActivity(s.Context(), tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
+	go env.idlePollActivity(s.Context(), s.T(), tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
 
 	// Start a poller on v1
 	activityTaskCh := make(chan struct{}, 1)
@@ -4217,7 +4217,7 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 	//nolint:testifylint
 	idlePollerCtx, idlePollerCancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer idlePollerCancel()
-	go env.idlePollWorkflow(idlePollerCtx, tv0Child, true, 10*time.Second, "workflow should not go to the old deployment")
+	go env.idlePollWorkflow(idlePollerCtx, s.T(), tv0Child, true, 10*time.Second, "workflow should not go to the old deployment")
 
 	// Unblock parent to start the child
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "startChild", nil))
@@ -4368,7 +4368,7 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 
 	idlePollerCtx, idlePollerCancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer idlePollerCancel()
-	go env.idlePollWorkflow(idlePollerCtx, tv0, true, 10*time.Second, "workflow should not go to the old deployment")
+	go env.idlePollWorkflow(idlePollerCtx, s.T(), tv0, true, 10*time.Second, "workflow should not go to the old deployment")
 
 	// Signal the workflow to trigger CAN
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "triggerCAN", nil))
@@ -4573,7 +4573,7 @@ func (s *Versioning3Suite) testRetryNoBounceBack(env *VersioningTestEnv, testCon
 	// Start v0 pollers and ensure they don't receive a task
 	idlePollerCtx, idlePollerCancel := context.WithTimeout(s.Context(), 10*time.Second)
 	defer idlePollerCancel()
-	go env.idlePollWorkflow(idlePollerCtx, tv0, true, 10*time.Second, "v0 poller should not receive a task")
+	go env.idlePollWorkflow(idlePollerCtx, s.T(), tv0, true, 10*time.Second, "v0 poller should not receive a task")
 
 	// Verify that the rollback propagated to all partitions
 	s.Await(func(s *Versioning3Suite) {
@@ -4886,7 +4886,7 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv1, versionStatusCurrent, false, tqTypeWf)
 
 	// Start workflow with autoUpgrade behavior without any poller
-	env.startWorkflow(s.T(), tv1, nil)
+	env.startWorkflow(s.Context(), s.T(), tv1, nil)
 
 	// Ensure the task is backlogged by checking stats
 	env.validateBacklogCount(s.Context(), s.T(), tv1, tqTypeWf, 1)
@@ -4966,7 +4966,7 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(env *VersioningTest
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: tv1.WorkflowID(),
 	}
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution.RunId = runID
 
 	// Poll first workflow task and schedule two activities
@@ -5010,7 +5010,7 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(env *VersioningTest
 	}
 
 	// Poll the second activity to cause transition to v1.
-	env.idlePollActivity(s.Context(), tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
+	env.idlePollActivity(s.Context(), s.T(), tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
 
 	// Print workflow describe and history
@@ -5110,7 +5110,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -5233,7 +5233,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 
 	setCurrentInMatching(tv1, 1)
 
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.pollWftAndHandle(s.T(), tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5347,7 +5347,7 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 
 	setCurrentVersion(tv1)
 
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.pollWftAndHandle(s.T(), tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5478,7 +5478,7 @@ func (s *Versioning3Suite) TestOverride_SuppressesTargetVersionChangedSignal() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	env.startWorkflow(s.T(), tv1, nil)
+	env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -5536,7 +5536,7 @@ func (s *Versioning3Suite) TestAutoUpgrade_SuppressesTargetVersionChangedSignal(
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (AutoUpgrade on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbUnpinned, tv1.Deployment(), nil, nil)
@@ -5587,7 +5587,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -5688,7 +5688,7 @@ func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -5841,17 +5841,17 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT handled by async poller (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Register v2, set v2 as current (revision increments)
-	env.idlePollWorkflow(s.Context(), tv2, true, ver3MinPollTime, "v2 poller registration")
+	env.idlePollWorkflow(s.Context(), s.T(), tv2, true, ver3MinPollTime, "v2 poller registration")
 	env.setCurrentDeployment(s.Context(), s.T(), tv2)
 
 	// Register v3, set v3 as current (revision increments again)
-	env.idlePollWorkflow(s.Context(), tv3, true, ver3MinPollTime, "v3 poller registration")
+	env.idlePollWorkflow(s.Context(), s.T(), tv3, true, ver3MinPollTime, "v3 poller registration")
 	env.setCurrentDeployment(s.Context(), s.T(), tv3)
 
 	// Trigger WFT — target should be v3 with a high revision
@@ -5924,7 +5924,7 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	// Set a new v4 as current — this produces a revision strictly higher than
 	// the declined revision, simulating an up-to-date partition with fresh data.
 	tv4 := tv1.WithBuildIDNumber(4)
-	env.idlePollWorkflow(s.Context(), tv4, true, ver3MinPollTime, "v4 poller registration")
+	env.idlePollWorkflow(s.Context(), s.T(), tv4, true, ver3MinPollTime, "v4 poller registration")
 	env.setCurrentDeployment(s.Context(), s.T(), tv4)
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv4, versionStatusCurrent, false, tqTypeWf)
 
@@ -5978,7 +5978,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 	env.waitForDeploymentDataPropagation(s.Context(), s.T(), tv1, versionStatusInactive, false, tqTypeWf)
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -6212,7 +6212,7 @@ func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
@@ -6356,7 +6356,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnvers
 	env.setCurrentDeployment(s.Context(), s.T(), tv1)
 
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
-	runID := env.startWorkflow(s.T(), tv1, nil)
+	runID := env.startWorkflow(s.Context(), s.T(), tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
 	env.WaitForChannel(wftCompleted)
 	env.verifyWorkflowVersioning(s.Context(), s.T(), tv1, vbPinned, tv1.Deployment(), nil, nil)
