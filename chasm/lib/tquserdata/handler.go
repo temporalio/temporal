@@ -20,6 +20,7 @@ type (
 		NamespaceID   namespace.ID
 		TaskQueueName string
 		Data          *persistencespb.TaskQueueUserData
+		KnownVersion  int64
 	}
 )
 
@@ -32,11 +33,12 @@ func executionKey(nsID namespace.ID, taskQueueName string) chasm.ExecutionKey {
 	}
 }
 
-// Get reads the user data for a task-queue family from its CHASM component.
+// Get reads the versioned user data for a task-queue family from its CHASM
+// component. Returns a NotFound error if the component does not exist.
 //
 // These handlers call the CHASM engine, which lives on history shards, so they
 // must run inside a history request context (where the engine is installed).
-func Get(ctx context.Context, req GetRequest) (*persistencespb.TaskQueueUserData, error) {
+func Get(ctx context.Context, req GetRequest) (*persistencespb.VersionedTaskQueueUserData, error) {
 	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*UserData](executionKey(req.NamespaceID, req.TaskQueueName)),
@@ -46,14 +48,14 @@ func Get(ctx context.Context, req GetRequest) (*persistencespb.TaskQueueUserData
 }
 
 // Set writes the user data for a task-queue family, creating the component on
-// first write.
-func Set(ctx context.Context, req SetRequest) (*persistencespb.TaskQueueUserData, error) {
+// first write, and returns the new versioned value.
+func Set(ctx context.Context, req SetRequest) (*persistencespb.VersionedTaskQueueUserData, error) {
 	result, err := chasm.UpdateWithStartExecution(
 		ctx,
 		executionKey(req.NamespaceID, req.TaskQueueName),
 		NewUserData,
 		(*UserData).Set,
-		req.Data,
+		SetInput{Data: req.Data, KnownVersion: req.KnownVersion},
 	)
 	if err != nil {
 		return nil, err

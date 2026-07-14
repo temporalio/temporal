@@ -363,6 +363,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GenerateLastHistoryReplicationTa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).GenerateLastHistoryReplicationTasks), varargs...)
 }
 
+// GetChasmTaskQueueUserData mocks base method.
+func (m *MockHistoryServiceClient) GetChasmTaskQueueUserData(ctx context.Context, in *historyservice.GetChasmTaskQueueUserDataRequest, opts ...grpc.CallOption) (*historyservice.GetChasmTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetChasmTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetChasmTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChasmTaskQueueUserData indicates an expected call of GetChasmTaskQueueUserData.
+func (mr *MockHistoryServiceClientMockRecorder) GetChasmTaskQueueUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmTaskQueueUserData", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetChasmTaskQueueUserData), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) GetDLQMessages(ctx context.Context, in *historyservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1503,6 +1523,26 @@ func (mr *MockHistoryServiceClientMockRecorder) UpdateActivityOptions(ctx, in an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateActivityOptions), varargs...)
 }
 
+// UpdateChasmTaskQueueUserData mocks base method.
+func (m *MockHistoryServiceClient) UpdateChasmTaskQueueUserData(ctx context.Context, in *historyservice.UpdateChasmTaskQueueUserDataRequest, opts ...grpc.CallOption) (*historyservice.UpdateChasmTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateChasmTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*historyservice.UpdateChasmTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateChasmTaskQueueUserData indicates an expected call of UpdateChasmTaskQueueUserData.
+func (mr *MockHistoryServiceClientMockRecorder) UpdateChasmTaskQueueUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChasmTaskQueueUserData", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateChasmTaskQueueUserData), varargs...)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) UpdateWorkflowExecution(ctx context.Context, in *historyservice.UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1983,6 +2023,21 @@ func (m *MockHistoryServiceServer) GenerateLastHistoryReplicationTasks(arg0 cont
 func (mr *MockHistoryServiceServerMockRecorder) GenerateLastHistoryReplicationTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).GenerateLastHistoryReplicationTasks), arg0, arg1)
+}
+
+// GetChasmTaskQueueUserData mocks base method.
+func (m *MockHistoryServiceServer) GetChasmTaskQueueUserData(arg0 context.Context, arg1 *historyservice.GetChasmTaskQueueUserDataRequest) (*historyservice.GetChasmTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChasmTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetChasmTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChasmTaskQueueUserData indicates an expected call of GetChasmTaskQueueUserData.
+func (mr *MockHistoryServiceServerMockRecorder) GetChasmTaskQueueUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChasmTaskQueueUserData", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetChasmTaskQueueUserData), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.
@@ -2837,6 +2892,21 @@ func (m *MockHistoryServiceServer) UpdateActivityOptions(arg0 context.Context, a
 func (mr *MockHistoryServiceServerMockRecorder) UpdateActivityOptions(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateActivityOptions), arg0, arg1)
+}
+
+// UpdateChasmTaskQueueUserData mocks base method.
+func (m *MockHistoryServiceServer) UpdateChasmTaskQueueUserData(arg0 context.Context, arg1 *historyservice.UpdateChasmTaskQueueUserDataRequest) (*historyservice.UpdateChasmTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateChasmTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UpdateChasmTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateChasmTaskQueueUserData indicates an expected call of UpdateChasmTaskQueueUserData.
+func (mr *MockHistoryServiceServerMockRecorder) UpdateChasmTaskQueueUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChasmTaskQueueUserData", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateChasmTaskQueueUserData), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

@@ -26,6 +26,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/tquserdata"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2230,6 +2231,38 @@ func (h *Handler) CompleteNexusOperationChasm(
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+// GetChasmTaskQueueUserData reads task queue user data from the CHASM tquserdata component.
+func (h *Handler) GetChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.GetChasmTaskQueueUserDataRequest,
+) (*historyservice.GetChasmTaskQueueUserDataResponse, error) {
+	userData, err := tquserdata.Get(ctx, tquserdata.GetRequest{
+		NamespaceID:   namespace.ID(request.GetNamespaceId()),
+		TaskQueueName: request.GetTaskQueue(),
+	})
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.GetChasmTaskQueueUserDataResponse{UserData: userData}, nil
+}
+
+// UpdateChasmTaskQueueUserData writes task queue user data to the CHASM tquserdata component.
+func (h *Handler) UpdateChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.UpdateChasmTaskQueueUserDataRequest,
+) (*historyservice.UpdateChasmTaskQueueUserDataResponse, error) {
+	userData, err := tquserdata.Set(ctx, tquserdata.SetRequest{
+		NamespaceID:   namespace.ID(request.GetNamespaceId()),
+		TaskQueueName: request.GetTaskQueue(),
+		Data:          request.GetUserData(),
+		KnownVersion:  request.GetKnownVersion(),
+	})
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.UpdateChasmTaskQueueUserDataResponse{UserData: userData}, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

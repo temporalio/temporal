@@ -219,6 +219,20 @@ func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	return c.client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.GetChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetChasmTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientGetChasmTaskQueueUserData")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetChasmTaskQueueUserData(ctx, request, opts...)
+}
+
 func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
@@ -987,6 +1001,20 @@ func (c *metricClient) UpdateActivityOptions(
 	}()
 
 	return c.client.UpdateActivityOptions(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.UpdateChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UpdateChasmTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUpdateChasmTaskQueueUserData")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateChasmTaskQueueUserData(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkflowExecution(

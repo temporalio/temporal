@@ -286,6 +286,13 @@ func NewEngine(
 	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
+	// POC (Option A): route task queue user data reads/writes to the CHASM
+	// tquserdata component (via history) instead of the Astra-backed table.
+	// Gated by a global flag (default off) so tests and unconfigured clusters
+	// keep the legacy DB path.
+	if historyClient != nil && config.EnableChasmTaskQueueUserData() {
+		taskManager = newChasmUserDataStore(taskManager, historyClient)
+	}
 	e := &matchingEngineImpl{
 		status:                 common.DaemonStatusInitialized,
 		taskManager:            taskManager,

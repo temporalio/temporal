@@ -107,6 +107,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.GenerateLastHistoryReplicationTasksResponse:
 		return nil
+	case *historyservice.GetChasmTaskQueueUserDataRequest:
+		return nil
+	case *historyservice.GetChasmTaskQueueUserDataResponse:
+		return nil
 	case *historyservice.GetDLQMessagesRequest:
 		return nil
 	case *historyservice.GetDLQMessagesResponse:
@@ -451,6 +455,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetUpdateRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UpdateActivityOptionsResponse:
+		return nil
+	case *historyservice.UpdateChasmTaskQueueUserDataRequest:
+		return nil
+	case *historyservice.UpdateChasmTaskQueueUserDataResponse:
 		return nil
 	case *historyservice.UpdateWorkflowExecutionRequest:
 		return []tag.Tag{

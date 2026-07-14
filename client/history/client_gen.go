@@ -295,6 +295,26 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	return response, nil
 }
 
+func (c *clientImpl) GetChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.GetChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetChasmTaskQueueUserDataResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetTaskQueue())
+	var response *historyservice.GetChasmTaskQueueUserDataResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetChasmTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
@@ -1459,6 +1479,26 @@ func (c *clientImpl) UpdateActivityOptions(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.UpdateActivityOptions(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) UpdateChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.UpdateChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateChasmTaskQueueUserDataResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetTaskQueue())
+	var response *historyservice.UpdateChasmTaskQueueUserDataResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UpdateChasmTaskQueueUserData(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

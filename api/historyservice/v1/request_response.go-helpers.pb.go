@@ -5998,3 +5998,151 @@ func (this *CancelNexusOperationResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type GetChasmTaskQueueUserDataRequest to the protobuf v3 wire format
+func (val *GetChasmTaskQueueUserDataRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetChasmTaskQueueUserDataRequest from the protobuf v3 wire format
+func (val *GetChasmTaskQueueUserDataRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetChasmTaskQueueUserDataRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetChasmTaskQueueUserDataRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetChasmTaskQueueUserDataRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetChasmTaskQueueUserDataRequest
+	switch t := that.(type) {
+	case *GetChasmTaskQueueUserDataRequest:
+		that1 = t
+	case GetChasmTaskQueueUserDataRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetChasmTaskQueueUserDataResponse to the protobuf v3 wire format
+func (val *GetChasmTaskQueueUserDataResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetChasmTaskQueueUserDataResponse from the protobuf v3 wire format
+func (val *GetChasmTaskQueueUserDataResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetChasmTaskQueueUserDataResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetChasmTaskQueueUserDataResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetChasmTaskQueueUserDataResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetChasmTaskQueueUserDataResponse
+	switch t := that.(type) {
+	case *GetChasmTaskQueueUserDataResponse:
+		that1 = t
+	case GetChasmTaskQueueUserDataResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateChasmTaskQueueUserDataRequest to the protobuf v3 wire format
+func (val *UpdateChasmTaskQueueUserDataRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateChasmTaskQueueUserDataRequest from the protobuf v3 wire format
+func (val *UpdateChasmTaskQueueUserDataRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateChasmTaskQueueUserDataRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateChasmTaskQueueUserDataRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateChasmTaskQueueUserDataRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateChasmTaskQueueUserDataRequest
+	switch t := that.(type) {
+	case *UpdateChasmTaskQueueUserDataRequest:
+		that1 = t
+	case UpdateChasmTaskQueueUserDataRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateChasmTaskQueueUserDataResponse to the protobuf v3 wire format
+func (val *UpdateChasmTaskQueueUserDataResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateChasmTaskQueueUserDataResponse from the protobuf v3 wire format
+func (val *UpdateChasmTaskQueueUserDataResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateChasmTaskQueueUserDataResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateChasmTaskQueueUserDataResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateChasmTaskQueueUserDataResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateChasmTaskQueueUserDataResponse
+	switch t := that.(type) {
+	case *UpdateChasmTaskQueueUserDataResponse:
+		that1 = t
+	case UpdateChasmTaskQueueUserDataResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

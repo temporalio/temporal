@@ -251,6 +251,21 @@ func (c *retryableClient) GenerateLastHistoryReplicationTasks(
 	return resp, err
 }
 
+func (c *retryableClient) GetChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.GetChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetChasmTaskQueueUserDataResponse, error) {
+	var resp *historyservice.GetChasmTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetChasmTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
@@ -1085,6 +1100,21 @@ func (c *retryableClient) UpdateActivityOptions(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateActivityOptions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateChasmTaskQueueUserData(
+	ctx context.Context,
+	request *historyservice.UpdateChasmTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateChasmTaskQueueUserDataResponse, error) {
+	var resp *historyservice.UpdateChasmTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateChasmTaskQueueUserData(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

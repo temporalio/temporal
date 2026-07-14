@@ -54,42 +54,45 @@ func TestUserData_SetAndGet(t *testing.T) {
 		},
 	}
 
-	comp, err := NewUserData(ctx, data)
+	comp, err := NewUserData(ctx, SetInput{Data: data, KnownVersion: 0})
 	require.NoError(t, err)
 
 	got, err := comp.Get(ctx, nil)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Contains(t, got.GetPerType(), int32(1))
+	require.Contains(t, got.GetData().GetPerType(), int32(1))
+	require.Equal(t, int64(1), got.GetVersion())
 
 	// Get returns a clone: mutating it must not affect stored state.
-	got.PerType = nil
+	got.Data.PerType = nil
 	got2, err := comp.Get(ctx, nil)
 	require.NoError(t, err)
-	require.Contains(t, got2.GetPerType(), int32(1))
+	require.Contains(t, got2.GetData().GetPerType(), int32(1))
 }
 
 func TestUserData_Set_Replaces(t *testing.T) {
 	ctx := newTestContext(t)
 
-	comp, err := NewUserData(ctx, &persistencespb.TaskQueueUserData{})
+	comp, err := NewUserData(ctx, SetInput{Data: &persistencespb.TaskQueueUserData{}, KnownVersion: 0})
 	require.NoError(t, err)
 
 	updated := &persistencespb.TaskQueueUserData{
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{2: {}},
 	}
-	out, err := comp.Set(ctx, updated)
+	out, err := comp.Set(ctx, SetInput{Data: updated, KnownVersion: 1})
 	require.NoError(t, err)
-	require.Contains(t, out.GetPerType(), int32(2))
+	require.Contains(t, out.GetData().GetPerType(), int32(2))
+	require.Equal(t, int64(2), out.GetVersion())
 
 	got, err := comp.Get(ctx, nil)
 	require.NoError(t, err)
-	require.Contains(t, got.GetPerType(), int32(2))
+	require.Contains(t, got.GetData().GetPerType(), int32(2))
+	require.Equal(t, int64(2), got.GetVersion())
 }
 
 func TestUserData_LifecycleAlwaysRunning(t *testing.T) {
 	ctx := newTestContext(t)
-	comp, err := NewUserData(ctx, &persistencespb.TaskQueueUserData{})
+	comp, err := NewUserData(ctx, SetInput{Data: &persistencespb.TaskQueueUserData{}})
 	require.NoError(t, err)
 	require.Equal(t, chasm.LifecycleStateRunning, comp.LifecycleState(ctx))
 }
