@@ -37,6 +37,7 @@ readonly SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 readonly SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 readonly SNAPSHOT_FILE="${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}"
 readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
+readonly CLUSTER_EVENTS_FILE="${CLUSTER_EVENTS_FILE:-${TEMPORAL_TEST_CLUSTER_EVENTS_FILE:-.testoutput/test-cluster-events.jsonl}}"
 
 # Heap profile config.
 # Capture before the termination threshold so the diagnostic profile is usually
@@ -167,6 +168,52 @@ print_process_diagnostics() {
   done
 }
 
+print_cluster_event_summary() {
+  echo "--- Cluster Events ---"
+  if [[ ! -s "$CLUSTER_EVENTS_FILE" ]]; then
+    echo "(cluster events not available at $CLUSTER_EVENTS_FILE)"
+    return
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "(jq not available; showing raw recent events)"
+    tail -20 "$CLUSTER_EVENTS_FILE"
+    return
+  fi
+
+  echo "Top cluster creations by suite/kind/reason:"
+  jq -r 'select(.event == "created") | [.suite, .kind, .reason] | @tsv' "$CLUSTER_EVENTS_FILE" \
+    | sort \
+    | uniq -c \
+    | sort -nr \
+    | head -20 \
+    || true
+
+  echo
+  echo "Recent cluster lifecycle events:"
+  tail -200 "$CLUSTER_EVENTS_FILE" \
+    | jq -r '
+      [
+        .timestamp,
+        .event,
+        ("cluster=" + (.cluster_id|tostring)),
+        ("seq=" + (.cluster_sequence|tostring)),
+        .suite,
+        .cluster_kind,
+        .cluster_reason,
+        ("created=" + (.clusters_created|tostring)),
+        ("live=" + (.live_clusters|tostring)),
+        ("rssMB=" + (((.proc_VmRSS_kb // 0) / 1024)|floor|tostring)),
+        ("heapAllocMB=" + (((.heap_alloc_bytes // 0) / 1048576)|floor|tostring)),
+        ("heapSysMB=" + (((.heap_sys_bytes // 0) / 1048576)|floor|tostring)),
+        ("stackSysMB=" + (((.stack_sys_bytes // 0) / 1048576)|floor|tostring)),
+        .test
+      ] | @tsv
+    ' \
+    | tail -25 \
+    || true
+}
+
 capture_runtime_diagnostics() {
   local memory_pct="$1"
   local diagnostics_path_prefix heap_debug_file diagnostics_file
@@ -244,6 +291,8 @@ $(ps -eo pid,%mem,rss:10,comm --sort=-rss | head -10)
 
 --- Memory Summary ---
 $(free -m)
+
+$(print_cluster_event_summary)
 
 $optional_heap_profile_section
 

@@ -68,6 +68,8 @@ type (
 
 		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
 
+		clusterEvent clusterEvent
+
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
@@ -270,12 +272,15 @@ func (s *FunctionalTestBase) TearDownSuite() {
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
 	// Reserve a slot from the dedicated test cluster pool.
 	testClusterRouter.dedicated.reserveSlot(s.T())
-	s.setupCluster(options...)
-	clusterRequest{
+	req := clusterRequest{
 		kind:              clusterKindDedicated,
 		dedicatedReason:   "legacy-suite",
 		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
-	}.recordCreation(s.T())
+	}
+	s.clusterEvent = newClusterEvent(s.T(), req)
+	s.clusterEvent.record("build-start")
+	s.setupCluster(options...)
+	s.clusterEvent.record("created")
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
@@ -465,8 +470,10 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 	if s.testCluster == nil {
 		return nil
 	}
+	s.clusterEvent.record("teardown-start")
 	err := s.testCluster.TearDownCluster()
 	s.testCluster = nil
+	s.clusterEvent.record("teardown-done")
 	return err
 }
 

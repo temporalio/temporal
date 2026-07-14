@@ -5,15 +5,25 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/metrics"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
 var testClusterRouter *clusterRouter
+var testClusterEventCounters clusterEventCounters
+
+type clusterEventCounters struct {
+	nextID  atomic.Int64
+	created atomic.Int64
+	live    atomic.Int64
+}
 
 func init() {
 	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
@@ -258,18 +268,143 @@ func (r clusterRequest) reason() string {
 	}
 }
 
-// recordCreation appends one JSON Lines event per test-cluster creation so a CI
-// run can be queried for which suite created how many clusters of each kind, and
-// why. Events fall back to the test log when no events file is configured.
-func (r clusterRequest) recordCreation(t *testing.T) {
+type clusterEvent struct {
+	id       int64
+	sequence int64
+	suite    string
+	test     string
+	kind     string
+	reason   string
+	worker   bool
+}
+
+func newClusterEvent(t *testing.T, req clusterRequest) clusterEvent {
 	suite, _, _ := strings.Cut(t.Name(), "/")
-	line, err := json.Marshal(map[string]any{
-		"suite":  suite,
-		"test":   t.Name(),
-		"kind":   r.kind,
-		"reason": r.reason(),
-		"worker": r.needWorkerService,
-	})
+	sequence := testClusterEventCounters.created.Add(1)
+	return clusterEvent{
+		id:       testClusterEventCounters.nextID.Add(1),
+		sequence: sequence,
+		suite:    suite,
+		test:     t.Name(),
+		kind:     req.kind,
+		reason:   req.reason(),
+		worker:   req.needWorkerService,
+	}
+}
+
+// record appends lifecycle events with process memory counters so CI artifacts
+// can correlate cluster churn with the test binary's memory high-water marks.
+func (e clusterEvent) record(event string) {
+	if e.id == 0 {
+		return
+	}
+
+	liveClusters := testClusterEventCounters.live.Load()
+	if event == "created" {
+		liveClusters = testClusterEventCounters.live.Add(1)
+	} else if event == "teardown-done" {
+		liveClusters = testClusterEventCounters.live.Add(-1)
+	}
+
+	fields := map[string]any{
+		"event":            event,
+		"timestamp":        time.Now().UTC().Format(time.RFC3339Nano),
+		"cluster_id":       e.id,
+		"cluster_sequence": e.sequence,
+		"suite":            e.suite,
+		"test":             e.test,
+		"cluster_kind":     e.kind,
+		"cluster_reason":   e.reason,
+		"worker":           e.worker,
+		"clusters_created": testClusterEventCounters.created.Load(),
+		"live_clusters":    liveClusters,
+	}
+	if event == "created" {
+		fields["kind"] = e.kind
+		fields["reason"] = e.reason
+	}
+	addClusterMemoryFields(fields)
+
+	writeClusterEvent(fields)
+}
+
+func addClusterMemoryFields(fields map[string]any) {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	fields["goroutines"] = runtime.NumGoroutine()
+	fields["heap_alloc_bytes"] = mem.HeapAlloc
+	fields["heap_sys_bytes"] = mem.HeapSys
+	fields["heap_released_bytes"] = mem.HeapReleased
+	fields["stack_sys_bytes"] = mem.StackSys
+	fields["sys_bytes"] = mem.Sys
+
+	for name, value := range runtimeMetricValues(
+		"/memory/classes/total:bytes",
+		"/memory/classes/heap/objects:bytes",
+		"/memory/classes/heap/free:bytes",
+		"/memory/classes/heap/released:bytes",
+		"/memory/classes/heap/stacks:bytes",
+		"/memory/classes/os-stacks:bytes",
+	) {
+		fields["runtime_metric_"+name] = value
+	}
+
+	for name, value := range procSelfStatusValues("VmRSS", "VmHWM", "VmSize", "VmData", "RssAnon", "RssFile", "Threads") {
+		fields["proc_"+name+"_kb"] = value
+	}
+}
+
+func runtimeMetricValues(names ...string) map[string]uint64 {
+	samples := make([]metrics.Sample, len(names))
+	for i, name := range names {
+		samples[i].Name = name
+	}
+	metrics.Read(samples)
+
+	values := make(map[string]uint64, len(samples))
+	for _, sample := range samples {
+		if sample.Value.Kind() == metrics.KindUint64 {
+			values[strings.NewReplacer("/", "_", ":", "_").Replace(strings.TrimPrefix(sample.Name, "/"))] = sample.Value.Uint64()
+		}
+	}
+	return values
+}
+
+func procSelfStatusValues(keys ...string) map[string]uint64 {
+	contents, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return nil
+	}
+
+	wanted := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		wanted[key] = struct{}{}
+	}
+
+	values := make(map[string]uint64, len(keys))
+	for _, line := range strings.Split(string(contents), "\n") {
+		key, rest, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		if _, ok := wanted[key]; !ok {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+		value, err := strconv.ParseUint(fields[0], 10, 64)
+		if err == nil {
+			values[key] = value
+		}
+	}
+	return values
+}
+
+func writeClusterEvent(fields map[string]any) {
+	line, err := json.Marshal(fields)
 	if err != nil {
 		return
 	}
@@ -354,6 +489,8 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
+	tbase.clusterEvent = newClusterEvent(t, req)
+	tbase.clusterEvent.record("build-start")
 
 	// The worker service is off unless the request explicitly needs it.
 	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
@@ -366,7 +503,7 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	opts = append(opts, req.clusterOpts...)
 
 	tbase.setupCluster(opts...)
-	req.recordCreation(t)
+	tbase.clusterEvent.record("created")
 
 	return tbase
 }
