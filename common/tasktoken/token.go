@@ -31,10 +31,6 @@ func NewWorkflowTaskToken(
 }
 
 // NewStandaloneActivityTaskToken builds a task token for a standalone activity.
-// The token fields must match what matching produces in the poll token. Matching gets WorkflowId
-// and RunId from AddActivityTaskRequest.Execution (empty for standalone activities) and ActivityId
-// from RecordActivityTaskStartedResponse. ScheduledEventId, Clock, Version, and StartVersion are
-// unused for standalone activities.
 func NewStandaloneActivityTaskToken(
 	namespaceID string,
 	activityID string,
