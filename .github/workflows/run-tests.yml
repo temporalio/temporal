@@ -475,12 +475,18 @@ jobs:
           - name: cass-es-shard1-no-race
             cmd: make TEST_RACE_FLAG=off functional-test-coverage
             gorace: ""
+            heap_profile_capture_threshold: 90
+            oom_termination_threshold: 94
           - name: cass-es-shard1-no-coverage
             cmd: make functional-test-no-coverage
             gorace: ""
+            heap_profile_capture_threshold: 75
+            oom_termination_threshold: 88
           - name: cass-es-shard1-race-history0
             cmd: make functional-test-coverage
             gorace: history_size=0
+            heap_profile_capture_threshold: 75
+            oom_termination_threshold: 94
     env:
       PERSISTENCE_TYPE: nosql
       PERSISTENCE_DRIVER: cassandra
@@ -489,7 +495,6 @@ jobs:
       CONTAINERS: cassandra elasticsearch
       TEST_TOTAL_SHARDS: 3
       TEST_SHARD_INDEX: 1
-      OOM_TERMINATION_THRESHOLD: 94
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -519,6 +524,8 @@ jobs:
           ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           GORACE: ${{ matrix.gorace }}
+          HEAP_PROFILE_CAPTURE_THRESHOLD: ${{ matrix.heap_profile_capture_threshold }}
+          OOM_TERMINATION_THRESHOLD: ${{ matrix.oom_termination_threshold }}
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
