@@ -778,6 +778,13 @@ func TestShouldRecalculateCurrentRetryInterval(t *testing.T) {
 			retryIntervalSource:  activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE,
 		},
 		{
+			name:                 "unspecified source (pre-existing attempt state) is preserved",
+			status:               activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			updateFields:         map[string]struct{}{"retryPolicy.initialInterval": {}},
+			currentRetryInterval: durationpb.New(retryInterval),
+			retryIntervalSource:  activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED,
+		},
+		{
 			name:                 "started activity is not in retry backoff",
 			status:               activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			updateFields:         map[string]struct{}{"retryPolicy.initialInterval": {}},

@@ -737,7 +737,10 @@ func (a *Activity) UpdateActivityExecutionOptions(
 //   - the update touches the retry policy: either RestoreOriginal (which replaces the whole policy),
 //     or the update mask includes "retryPolicy" or one of its subfields;
 //   - the pending interval is still policy-derived (CurrentRetryIntervalSource is RETRY_POLICY).
-//     A worker-provided NextRetryDelay override is preserved regardless of its value.
+//     A worker-provided NextRetryDelay override is preserved regardless of its value. An
+//     UNSPECIFIED source (attempt state persisted before this field existed) is treated the same
+//     as an override, since we can no longer tell whether it was policy-derived or a worker
+//     override, and preserving it is the safer default.
 func (a *Activity) shouldRecalculateCurrentRetryInterval(
 	attempt *activitypb.ActivityAttemptState,
 	restoreOriginal bool,
