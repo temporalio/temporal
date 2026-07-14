@@ -4113,7 +4113,7 @@ func testBackfillReprocessesCompletedAction(
 	t *testing.T,
 	newContext contextFactory,
 	paused bool,
-	rangeRadius int,
+	intervalsOnEachSide int,
 ) {
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
@@ -4157,14 +4157,14 @@ func testBackfillReprocessesCompletedAction(
 		patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Pause: "test completed-action backfill"})
 	}
 
-	radius := time.Duration(rangeRadius) * fastInterval
+	rangeOffset := time.Duration(intervalsOnEachSide) * fastInterval
 	patchSchedule(ctx, t, s, sid, backfillPatch(
-		completedTime.Add(-radius),
-		completedTime.Add(radius),
+		completedTime.Add(-rangeOffset),
+		completedTime.Add(rangeOffset),
 		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 	))
 
-	expectedRuns := int32(2 + 2*rangeRadius)
+	expectedRuns := int32(2 + 2*intervalsOnEachSide)
 	await.RequireTruef(t, func() bool { return runs.Load() == expectedRuns }, neverWindow, pollInterval,
 		"backfill should reprocess the completed action exactly once")
 
