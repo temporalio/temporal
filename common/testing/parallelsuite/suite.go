@@ -30,50 +30,24 @@ type testingSuite interface {
 
 // TestScope provides the context and test handles for a test or await attempt.
 type TestScope interface {
-	require.TestingT
 	Context() context.Context
 	TB() testing.TB
+	Require() *require.Assertions
+	AssertionT() require.TestingT
 }
 
-type scope struct {
-	ctx     context.Context
-	tb      testing.TB
-	assertT require.TestingT
-}
-
-type testScopeWithContext struct {
+type contextScope struct {
 	TestScope
 	ctx context.Context
 }
 
-// NewTestScope creates a test scope from its context and test handles.
-func NewTestScope(ctx context.Context, tb testing.TB, assertT require.TestingT) TestScope {
-	return scope{ctx: ctx, tb: tb, assertT: assertT}
-}
-
-// WithContext returns a scope that uses ctx and delegates test failures to scope.
+// WithContext returns a scope that uses ctx and delegates assertions to scope.
 func WithContext(scope TestScope, ctx context.Context) TestScope {
-	return testScopeWithContext{TestScope: scope, ctx: ctx}
+	return contextScope{TestScope: scope, ctx: ctx}
 }
 
-func (s testScopeWithContext) Context() context.Context {
+func (s contextScope) Context() context.Context {
 	return s.ctx
-}
-
-func (s scope) Context() context.Context {
-	return s.ctx
-}
-
-func (s scope) TB() testing.TB {
-	return s.tb
-}
-
-func (s scope) Errorf(format string, args ...any) {
-	s.assertT.Errorf(format, args...)
-}
-
-func (s scope) FailNow() {
-	s.assertT.FailNow()
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -138,9 +112,14 @@ func (s *Suite[T]) TB() testing.TB {
 	return s.T()
 }
 
-// Scope returns the current test or await-attempt scope.
-func (s *Suite[T]) Scope() TestScope {
-	return NewTestScope(s.Context(), s.TB(), s.assertT)
+// Require returns assertions bound to the active test or await attempt.
+func (s *Suite[T]) Require() *require.Assertions {
+	return s.Assertions
+}
+
+// AssertionT returns the active assertion target.
+func (s *Suite[T]) AssertionT() require.TestingT {
+	return s.assertT
 }
 
 // Context returns the test-scoped context (created from [testcontext]).

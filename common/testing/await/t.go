@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type attemptFailed struct{}
@@ -31,6 +33,16 @@ func (t *T) Context() context.Context {
 // TB returns the test handle running the await loop.
 func (t *T) TB() testing.TB {
 	return t.tb
+}
+
+// Require returns assertions bound to the current attempt.
+func (t *T) Require() *require.Assertions {
+	return require.New(t)
+}
+
+// AssertionT returns the current attempt as an assertion target.
+func (t *T) AssertionT() require.TestingT {
+	return t
 }
 
 // Fail marks the current attempt as failed without stopping it.
