@@ -1,131 +1,80 @@
 package validate_test
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/server/api/protohelpers/validate"
+	"go.temporal.io/server/api/protohelpers/validation"
 )
 
-// startRequest is a representative production validator: a handful of required
-// fields, everything else optional. Declaring it exercises the exhaustive
-// struct — every field must be assigned a rule or the code below fails the
-// exhaustiveness test.
-var startRequest = validate.StartWorkflowExecutionRequest{
-	Namespace:                    validate.Required(),
-	WorkflowId:                   validate.Required(),
-	WorkflowType:                 validate.Required(),
-	TaskQueue:                    validate.Required(),
-	RequestId:                    validate.Required(),
-	Input:                        validate.Optional(),
-	WorkflowExecutionTimeout:     validate.Optional(),
-	WorkflowRunTimeout:           validate.Optional(),
-	WorkflowTaskTimeout:          validate.Optional(),
-	Identity:                     validate.Optional(),
-	WorkflowIdReusePolicy:        validate.Optional(),
-	WorkflowIdConflictPolicy:     validate.Optional(),
-	RetryPolicy:                  validate.Optional(),
-	CronSchedule:                 validate.Optional(),
-	Memo:                         validate.Optional(),
-	SearchAttributes:             validate.Optional(),
-	Header:                       validate.Optional(),
-	RequestEagerExecution:        validate.Optional(),
-	ContinuedFailure:             validate.Optional(),
-	LastCompletionResult:         validate.Optional(),
-	WorkflowStartDelay:           validate.Optional(),
-	CompletionCallbacks:          validate.Optional(),
-	UserMetadata:                 validate.Optional(),
-	Links:                        validate.Optional(),
-	VersioningOverride:           validate.Optional(),
-	OnConflictOptions:            validate.Optional(),
-	Priority:                     validate.Optional(),
-	EagerWorkerDeploymentOptions: validate.Optional(),
-	TimeSkippingConfig:           validate.Optional(),
-}
-
-func validRequest() *workflowservice.StartWorkflowExecutionRequest {
-	return &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    "ns",
-		WorkflowId:   "wf-1",
-		WorkflowType: &commonpb.WorkflowType{Name: "T"},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: "tq"},
-		RequestId:    "req-1",
-	}
-}
-
-func TestValidate_Valid(t *testing.T) {
-	require.NoError(t, startRequest.Validate(validRequest()))
-}
-
-func TestValidate_MissingRequired(t *testing.T) {
-	req := validRequest()
-	req.WorkflowId = ""
-	req.TaskQueue = nil
-
-	err := startRequest.Validate(req)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "workflow_id: expected a non-empty value")
-	require.ErrorContains(t, err, "task_queue: expected a non-empty value")
-	require.NotContains(t, err.Error(), "namespace", "set fields must not be flagged")
-}
-
-// TestValidate_Exhaustive proves startRequest assigns a rule to every field: a
-// missing rule would surface as a "no rule specified" violation. This is the
-// production analogue of the matcher's exhaustiveness guard.
-func TestValidate_Exhaustive(t *testing.T) {
-	err := startRequest.Validate(&workflowservice.StartWorkflowExecutionRequest{})
-	require.Error(t, err) // required fields are unset
-	require.NotContains(t, err.Error(), "no rule specified")
-}
-
-func TestValidate_MissingRuleIsCaught(t *testing.T) {
-	// A validator that forgets fields must fail loudly rather than silently
-	// pass them.
-	incomplete := validate.StartWorkflowExecutionRequest{Namespace: validate.Required()}
-	err := incomplete.Validate(validRequest())
-	require.Error(t, err)
-	require.ErrorContains(t, err, "workflow_id: no rule specified")
-}
-
-func TestValidate_Oneof(t *testing.T) {
-	v := validate.Command{
-		CommandType:       validate.Required(),
-		Attributes:        validate.Required(), // a oneof member must be set
-		UserMetadata:      validate.Optional(),
-		EventGroupMarkers: validate.Optional(),
+// TestValidate_TypedAndCrossField shows typed field validators, access to the
+// parent message for cross-field checks, and the field name in errors.
+func TestValidate_TypedAndCrossField(t *testing.T) {
+	v := validate.CommandFieldValidators{
+		CommandType: validation.Field[commandpb.Command](func(name string, ct enumspb.CommandType) error {
+			if ct == enumspb.COMMAND_TYPE_UNSPECIFIED {
+				return fmt.Errorf("%s is required", name)
+			}
+			return nil
+		}),
+		UserMetadata:      validation.Field[commandpb.Command](func(string, *sdkpb.UserMetadata) error { return nil }),
+		EventGroupMarkers: validation.Field[commandpb.Command](func(string, []*sdkpb.EventGroupMarker) error { return nil }),
+		// Cross-field: a set command_type requires matching attributes.
+		Attributes: func(req *commandpb.Command, name string, attr any) error {
+			if attr == nil {
+				return fmt.Errorf("%s: required for command_type %v", name, req.GetCommandType())
+			}
+			return nil
+		},
 	}
 
-	// Missing oneof member.
-	err := v.Validate(&commandpb.Command{CommandType: enumspb.COMMAND_TYPE_START_TIMER})
-	require.ErrorContains(t, err, "attributes: expected a non-empty value")
+	err := v.ValidateAndNormalize(&commandpb.Command{CommandType: enumspb.COMMAND_TYPE_START_TIMER})
+	require.ErrorContains(t, err, "attributes: required for command_type")
 
-	// Oneof member set.
-	ok := &commandpb.Command{
+	require.NoError(t, v.ValidateAndNormalize(&commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 		Attributes: &commandpb.Command_StartTimerCommandAttributes{
 			StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{TimerId: "t"},
 		},
-	}
-	require.NoError(t, v.Validate(ok))
+	}))
 }
 
-func TestValidate_Custom(t *testing.T) {
-	v := validate.Memo{
-		Fields: validate.Custom(func(got any) error {
-			if len(got.(map[string]*commonpb.Payload)) > 3 {
-				return errors.New("too many memo fields")
+// TestValidate_Normalize shows a field validator mutating the message in place.
+func TestValidate_Normalize(t *testing.T) {
+	v := validate.MemoFieldValidators{
+		Fields: func(m *commonpb.Memo, _ string, _ map[string]*commonpb.Payload) error {
+			delete(m.Fields, "drop-me") // normalize away a sentinel key
+			return nil
+		},
+	}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"keep": {}, "drop-me": {}}}
+	require.NoError(t, v.ValidateAndNormalize(memo))
+	require.NotContains(t, memo.Fields, "drop-me")
+	require.Contains(t, memo.Fields, "keep")
+}
+
+// TestValidate_Registry shows type-based dispatch through the registry.
+func TestValidate_Registry(t *testing.T) {
+	reg := validation.NewValidatorRegistry()
+	require.NoError(t, validate.MemoFieldValidators{
+		Fields: validation.Field[commonpb.Memo](func(_ string, fields map[string]*commonpb.Payload) error {
+			if len(fields) > 3 {
+				return fmt.Errorf("too many memo fields: %d", len(fields))
 			}
 			return nil
 		}),
-	}
-	require.NoError(t, v.Validate(&commonpb.Memo{Fields: map[string]*commonpb.Payload{"a": {}}}))
+	}.RegisterValidator(reg))
 
-	big := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"a": {}, "b": {}, "c": {}, "d": {}}}
-	require.ErrorContains(t, v.Validate(big), "too many memo fields")
+	require.NoError(t, validation.ValidateAndNormalize(reg, &commonpb.Memo{Fields: map[string]*commonpb.Payload{"a": {}}}))
+	require.ErrorContains(t, validation.ValidateAndNormalize(reg,
+		&commonpb.Memo{Fields: map[string]*commonpb.Payload{"a": {}, "b": {}, "c": {}, "d": {}}}), "too many memo fields")
+
+	// A type with no registered validator is reported, not silently passed.
+	require.ErrorContains(t, validation.ValidateAndNormalize(reg, &commandpb.Command{}), "no validator registered")
 }

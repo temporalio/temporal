@@ -5,129 +5,237 @@ package validate
 import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	validation "go.temporal.io/server/api/protohelpers/validation"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
-// StartWorkflowExecutionRequest is an exhaustive validator for *workflowservicepb.StartWorkflowExecutionRequest. Every field must be
-// assigned a Rule; an unset field fails validation.
-type StartWorkflowExecutionRequest struct {
-	Namespace                    Rule
-	WorkflowId                   Rule
-	WorkflowType                 Rule
-	TaskQueue                    Rule
-	Input                        Rule
-	WorkflowExecutionTimeout     Rule
-	WorkflowRunTimeout           Rule
-	WorkflowTaskTimeout          Rule
-	Identity                     Rule
-	RequestId                    Rule
-	WorkflowIdReusePolicy        Rule
-	WorkflowIdConflictPolicy     Rule
-	RetryPolicy                  Rule
-	CronSchedule                 Rule
-	Memo                         Rule
-	SearchAttributes             Rule
-	Header                       Rule
-	RequestEagerExecution        Rule
-	ContinuedFailure             Rule
-	LastCompletionResult         Rule
-	WorkflowStartDelay           Rule
-	CompletionCallbacks          Rule
-	UserMetadata                 Rule
-	Links                        Rule
-	VersioningOverride           Rule
-	OnConflictOptions            Rule
-	Priority                     Rule
-	EagerWorkerDeploymentOptions Rule
-	TimeSkippingConfig           Rule
+// StartWorkflowExecutionRequestFieldValidators validates every field of *workflowservicepb.StartWorkflowExecutionRequest. Fill each
+// field with a validation.FieldValidator (e.g. via validation.Field); the
+// exhaustive struct forces a decision for every proto field.
+type StartWorkflowExecutionRequestFieldValidators struct {
+	Namespace                    validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, string]
+	WorkflowId                   validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, string]
+	WorkflowType                 validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.WorkflowType]
+	TaskQueue                    validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *taskqueuepb.TaskQueue]
+	Input                        validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.Payloads]
+	WorkflowExecutionTimeout     validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *durationpb.Duration]
+	WorkflowRunTimeout           validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *durationpb.Duration]
+	WorkflowTaskTimeout          validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *durationpb.Duration]
+	Identity                     validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, string]
+	RequestId                    validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, string]
+	WorkflowIdReusePolicy        validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, enumspb.WorkflowIdReusePolicy]
+	WorkflowIdConflictPolicy     validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, enumspb.WorkflowIdConflictPolicy]
+	RetryPolicy                  validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.RetryPolicy]
+	CronSchedule                 validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, string]
+	Memo                         validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.Memo]
+	SearchAttributes             validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.SearchAttributes]
+	Header                       validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.Header]
+	RequestEagerExecution        validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, bool]
+	ContinuedFailure             validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *failurepb.Failure]
+	LastCompletionResult         validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.Payloads]
+	WorkflowStartDelay           validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *durationpb.Duration]
+	CompletionCallbacks          validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, []*commonpb.Callback]
+	UserMetadata                 validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *sdkpb.UserMetadata]
+	Links                        validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, []*commonpb.Link]
+	VersioningOverride           validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *workflowpb.VersioningOverride]
+	OnConflictOptions            validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *workflowpb.OnConflictOptions]
+	Priority                     validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.Priority]
+	EagerWorkerDeploymentOptions validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *deploymentpb.WorkerDeploymentOptions]
+	TimeSkippingConfig           validation.FieldValidator[workflowservicepb.StartWorkflowExecutionRequest, *commonpb.TimeSkippingConfig]
 }
 
-// Validate returns an error describing every field of actual that violates v.
-func (v StartWorkflowExecutionRequest) Validate(actual *workflowservicepb.StartWorkflowExecutionRequest) error {
-	e := newEval("StartWorkflowExecutionRequest")
-	e.field("namespace", v.Namespace, actual.GetNamespace())
-	e.field("workflow_id", v.WorkflowId, actual.GetWorkflowId())
-	e.field("workflow_type", v.WorkflowType, actual.GetWorkflowType())
-	e.field("task_queue", v.TaskQueue, actual.GetTaskQueue())
-	e.field("input", v.Input, actual.GetInput())
-	e.field("workflow_execution_timeout", v.WorkflowExecutionTimeout, actual.GetWorkflowExecutionTimeout())
-	e.field("workflow_run_timeout", v.WorkflowRunTimeout, actual.GetWorkflowRunTimeout())
-	e.field("workflow_task_timeout", v.WorkflowTaskTimeout, actual.GetWorkflowTaskTimeout())
-	e.field("identity", v.Identity, actual.GetIdentity())
-	e.field("request_id", v.RequestId, actual.GetRequestId())
-	e.field("workflow_id_reuse_policy", v.WorkflowIdReusePolicy, actual.GetWorkflowIdReusePolicy())
-	e.field("workflow_id_conflict_policy", v.WorkflowIdConflictPolicy, actual.GetWorkflowIdConflictPolicy())
-	e.field("retry_policy", v.RetryPolicy, actual.GetRetryPolicy())
-	e.field("cron_schedule", v.CronSchedule, actual.GetCronSchedule())
-	e.field("memo", v.Memo, actual.GetMemo())
-	e.field("search_attributes", v.SearchAttributes, actual.GetSearchAttributes())
-	e.field("header", v.Header, actual.GetHeader())
-	e.field("request_eager_execution", v.RequestEagerExecution, actual.GetRequestEagerExecution())
-	e.field("continued_failure", v.ContinuedFailure, actual.GetContinuedFailure())
-	e.field("last_completion_result", v.LastCompletionResult, actual.GetLastCompletionResult())
-	e.field("workflow_start_delay", v.WorkflowStartDelay, actual.GetWorkflowStartDelay())
-	e.field("completion_callbacks", v.CompletionCallbacks, actual.GetCompletionCallbacks())
-	e.field("user_metadata", v.UserMetadata, actual.GetUserMetadata())
-	e.field("links", v.Links, actual.GetLinks())
-	e.field("versioning_override", v.VersioningOverride, actual.GetVersioningOverride())
-	e.field("on_conflict_options", v.OnConflictOptions, actual.GetOnConflictOptions())
-	e.field("priority", v.Priority, actual.GetPriority())
-	e.field("eager_worker_deployment_options", v.EagerWorkerDeploymentOptions, actual.GetEagerWorkerDeploymentOptions())
-	e.field("time_skipping_config", v.TimeSkippingConfig, actual.GetTimeSkippingConfig())
-	return e.err()
+// ValidateAndNormalize runs every field validator on req in order.
+func (v StartWorkflowExecutionRequestFieldValidators) ValidateAndNormalize(req *workflowservicepb.StartWorkflowExecutionRequest) error {
+	if err := v.Namespace(req, "namespace", req.GetNamespace()); err != nil {
+		return err
+	}
+	if err := v.WorkflowId(req, "workflow_id", req.GetWorkflowId()); err != nil {
+		return err
+	}
+	if err := v.WorkflowType(req, "workflow_type", req.GetWorkflowType()); err != nil {
+		return err
+	}
+	if err := v.TaskQueue(req, "task_queue", req.GetTaskQueue()); err != nil {
+		return err
+	}
+	if err := v.Input(req, "input", req.GetInput()); err != nil {
+		return err
+	}
+	if err := v.WorkflowExecutionTimeout(req, "workflow_execution_timeout", req.GetWorkflowExecutionTimeout()); err != nil {
+		return err
+	}
+	if err := v.WorkflowRunTimeout(req, "workflow_run_timeout", req.GetWorkflowRunTimeout()); err != nil {
+		return err
+	}
+	if err := v.WorkflowTaskTimeout(req, "workflow_task_timeout", req.GetWorkflowTaskTimeout()); err != nil {
+		return err
+	}
+	if err := v.Identity(req, "identity", req.GetIdentity()); err != nil {
+		return err
+	}
+	if err := v.RequestId(req, "request_id", req.GetRequestId()); err != nil {
+		return err
+	}
+	if err := v.WorkflowIdReusePolicy(req, "workflow_id_reuse_policy", req.GetWorkflowIdReusePolicy()); err != nil {
+		return err
+	}
+	if err := v.WorkflowIdConflictPolicy(req, "workflow_id_conflict_policy", req.GetWorkflowIdConflictPolicy()); err != nil {
+		return err
+	}
+	if err := v.RetryPolicy(req, "retry_policy", req.GetRetryPolicy()); err != nil {
+		return err
+	}
+	if err := v.CronSchedule(req, "cron_schedule", req.GetCronSchedule()); err != nil {
+		return err
+	}
+	if err := v.Memo(req, "memo", req.GetMemo()); err != nil {
+		return err
+	}
+	if err := v.SearchAttributes(req, "search_attributes", req.GetSearchAttributes()); err != nil {
+		return err
+	}
+	if err := v.Header(req, "header", req.GetHeader()); err != nil {
+		return err
+	}
+	if err := v.RequestEagerExecution(req, "request_eager_execution", req.GetRequestEagerExecution()); err != nil {
+		return err
+	}
+	if err := v.ContinuedFailure(req, "continued_failure", req.GetContinuedFailure()); err != nil {
+		return err
+	}
+	if err := v.LastCompletionResult(req, "last_completion_result", req.GetLastCompletionResult()); err != nil {
+		return err
+	}
+	if err := v.WorkflowStartDelay(req, "workflow_start_delay", req.GetWorkflowStartDelay()); err != nil {
+		return err
+	}
+	if err := v.CompletionCallbacks(req, "completion_callbacks", req.GetCompletionCallbacks()); err != nil {
+		return err
+	}
+	if err := v.UserMetadata(req, "user_metadata", req.GetUserMetadata()); err != nil {
+		return err
+	}
+	if err := v.Links(req, "links", req.GetLinks()); err != nil {
+		return err
+	}
+	if err := v.VersioningOverride(req, "versioning_override", req.GetVersioningOverride()); err != nil {
+		return err
+	}
+	if err := v.OnConflictOptions(req, "on_conflict_options", req.GetOnConflictOptions()); err != nil {
+		return err
+	}
+	if err := v.Priority(req, "priority", req.GetPriority()); err != nil {
+		return err
+	}
+	if err := v.EagerWorkerDeploymentOptions(req, "eager_worker_deployment_options", req.GetEagerWorkerDeploymentOptions()); err != nil {
+		return err
+	}
+	if err := v.TimeSkippingConfig(req, "time_skipping_config", req.GetTimeSkippingConfig()); err != nil {
+		return err
+	}
+	return nil
 }
 
-// StartWorkflowExecutionResponse is an exhaustive validator for *workflowservicepb.StartWorkflowExecutionResponse. Every field must be
-// assigned a Rule; an unset field fails validation.
-type StartWorkflowExecutionResponse struct {
-	RunId               Rule
-	FirstExecutionRunId Rule
-	Started             Rule
-	Status              Rule
-	EagerWorkflowTask   Rule
-	Link                Rule
+// RegisterValidator adds v to registry for type-based dispatch.
+func (v StartWorkflowExecutionRequestFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservicepb.StartWorkflowExecutionRequest](registry, v)
 }
 
-// Validate returns an error describing every field of actual that violates v.
-func (v StartWorkflowExecutionResponse) Validate(actual *workflowservicepb.StartWorkflowExecutionResponse) error {
-	e := newEval("StartWorkflowExecutionResponse")
-	e.field("run_id", v.RunId, actual.GetRunId())
-	e.field("first_execution_run_id", v.FirstExecutionRunId, actual.GetFirstExecutionRunId())
-	e.field("started", v.Started, actual.GetStarted())
-	e.field("status", v.Status, actual.GetStatus())
-	e.field("eager_workflow_task", v.EagerWorkflowTask, actual.GetEagerWorkflowTask())
-	e.field("link", v.Link, actual.GetLink())
-	return e.err()
+// StartWorkflowExecutionResponseFieldValidators validates every field of *workflowservicepb.StartWorkflowExecutionResponse. Fill each
+// field with a validation.FieldValidator (e.g. via validation.Field); the
+// exhaustive struct forces a decision for every proto field.
+type StartWorkflowExecutionResponseFieldValidators struct {
+	RunId               validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, string]
+	FirstExecutionRunId validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, string]
+	Started             validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, bool]
+	Status              validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, enumspb.WorkflowExecutionStatus]
+	EagerWorkflowTask   validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, *workflowservicepb.PollWorkflowTaskQueueResponse]
+	Link                validation.FieldValidator[workflowservicepb.StartWorkflowExecutionResponse, *commonpb.Link]
 }
 
-// Memo is an exhaustive validator for *commonpb.Memo. Every field must be
-// assigned a Rule; an unset field fails validation.
-type Memo struct {
-	Fields Rule
+// ValidateAndNormalize runs every field validator on req in order.
+func (v StartWorkflowExecutionResponseFieldValidators) ValidateAndNormalize(req *workflowservicepb.StartWorkflowExecutionResponse) error {
+	if err := v.RunId(req, "run_id", req.GetRunId()); err != nil {
+		return err
+	}
+	if err := v.FirstExecutionRunId(req, "first_execution_run_id", req.GetFirstExecutionRunId()); err != nil {
+		return err
+	}
+	if err := v.Started(req, "started", req.GetStarted()); err != nil {
+		return err
+	}
+	if err := v.Status(req, "status", req.GetStatus()); err != nil {
+		return err
+	}
+	if err := v.EagerWorkflowTask(req, "eager_workflow_task", req.GetEagerWorkflowTask()); err != nil {
+		return err
+	}
+	if err := v.Link(req, "link", req.GetLink()); err != nil {
+		return err
+	}
+	return nil
 }
 
-// Validate returns an error describing every field of actual that violates v.
-func (v Memo) Validate(actual *commonpb.Memo) error {
-	e := newEval("Memo")
-	e.field("fields", v.Fields, actual.GetFields())
-	return e.err()
+// RegisterValidator adds v to registry for type-based dispatch.
+func (v StartWorkflowExecutionResponseFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[workflowservicepb.StartWorkflowExecutionResponse](registry, v)
 }
 
-// Command is an exhaustive validator for *commandpb.Command. Every field must be
-// assigned a Rule; an unset field fails validation.
-type Command struct {
-	CommandType       Rule
-	UserMetadata      Rule
-	EventGroupMarkers Rule
-	Attributes        Rule
+// MemoFieldValidators validates every field of *commonpb.Memo. Fill each
+// field with a validation.FieldValidator (e.g. via validation.Field); the
+// exhaustive struct forces a decision for every proto field.
+type MemoFieldValidators struct {
+	Fields validation.FieldValidator[commonpb.Memo, map[string]*commonpb.Payload]
 }
 
-// Validate returns an error describing every field of actual that violates v.
-func (v Command) Validate(actual *commandpb.Command) error {
-	e := newEval("Command")
-	e.field("command_type", v.CommandType, actual.GetCommandType())
-	e.field("user_metadata", v.UserMetadata, actual.GetUserMetadata())
-	e.field("event_group_markers", v.EventGroupMarkers, actual.GetEventGroupMarkers())
-	e.field("attributes", v.Attributes, actual.GetAttributes())
-	return e.err()
+// ValidateAndNormalize runs every field validator on req in order.
+func (v MemoFieldValidators) ValidateAndNormalize(req *commonpb.Memo) error {
+	if err := v.Fields(req, "fields", req.GetFields()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RegisterValidator adds v to registry for type-based dispatch.
+func (v MemoFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[commonpb.Memo](registry, v)
+}
+
+// CommandFieldValidators validates every field of *commandpb.Command. Fill each
+// field with a validation.FieldValidator (e.g. via validation.Field); the
+// exhaustive struct forces a decision for every proto field.
+type CommandFieldValidators struct {
+	CommandType       validation.FieldValidator[commandpb.Command, enumspb.CommandType]
+	UserMetadata      validation.FieldValidator[commandpb.Command, *sdkpb.UserMetadata]
+	EventGroupMarkers validation.FieldValidator[commandpb.Command, []*sdkpb.EventGroupMarker]
+	Attributes        validation.FieldValidator[commandpb.Command, any]
+}
+
+// ValidateAndNormalize runs every field validator on req in order.
+func (v CommandFieldValidators) ValidateAndNormalize(req *commandpb.Command) error {
+	if err := v.CommandType(req, "command_type", req.GetCommandType()); err != nil {
+		return err
+	}
+	if err := v.UserMetadata(req, "user_metadata", req.GetUserMetadata()); err != nil {
+		return err
+	}
+	if err := v.EventGroupMarkers(req, "event_group_markers", req.GetEventGroupMarkers()); err != nil {
+		return err
+	}
+	if err := v.Attributes(req, "attributes", req.GetAttributes()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RegisterValidator adds v to registry for type-based dispatch.
+func (v CommandFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[commandpb.Command](registry, v)
 }

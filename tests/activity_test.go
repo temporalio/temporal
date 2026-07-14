@@ -373,28 +373,19 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	env := testcore.NewEnv(s.T())
-	id := "functional-heartbeat-test"
-	wt := "functional-heartbeat-test-type"
-	tl := "functional-heartbeat-test-taskqueue"
-	identity := "worker1"
+	tv := env.Tv()
 	activityName := "activity_timer"
-
-	workflowType := &commonpb.WorkflowType{Name: wt}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	header := &commonpb.Header{
 		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample data")},
 	}
 
+	// Workflow id, type, task queue, and identity all come from the environment's
+	// test-variable defaults; only the test-specific fields are set here.
 	request := env.Requests().StartWorkflowExecution(&workflowservice.StartWorkflowExecutionRequest{
-		WorkflowId:          id,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
 		Header:              header,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
 	})
 
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
@@ -415,7 +406,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             convert.Int32ToString(activityCounter),
 					ActivityType:           &commonpb.ActivityType{Name: activityName},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					TaskQueue:              tv.TaskQueue(),
 					Input:                  payloads.EncodeString("activity-input"),
 					Header:                 header,
 					ScheduleToCloseTimeout: durationpb.New(15 * time.Second),
@@ -439,7 +430,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	activityExecutedCount := 0
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		for i := range 10 {
 			env.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
@@ -458,8 +449,8 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	poller := &testcore.TaskPoller{
 		Client:              env.FrontendClient(),
 		Namespace:           env.Namespace().String(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.ClientIdentity(),
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
 		Logger:              env.Logger,
@@ -482,7 +473,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 
 	// go over history and verify that the activity task scheduled event has header on it
 	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
-		WorkflowId: id,
+		WorkflowId: tv.WorkflowID(),
 		RunId:      we.GetRunId(),
 	})
 

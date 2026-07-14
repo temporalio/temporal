@@ -607,10 +607,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errRequestNotSet
 	}
 
-	// Exhaustive presence check for required fields; every field is classified
-	// in startWorkflowRequestRules, so new proto fields force a decision there.
-	if err := startWorkflowRequestRules.Validate(request); err != nil {
-		return nil, serviceerror.NewInvalidArgument(err.Error())
+	// Exhaustive, typed pre-validation; every field is classified in
+	// startWorkflowRequestValidator, so new proto fields force a decision there.
+	if err := startWorkflowRequestValidator.ValidateAndNormalize(request); err != nil {
+		return nil, err
 	}
 
 	// Apply defaults before validation; must be first for idempotency on internal retries.
