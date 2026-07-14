@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"time"
 
@@ -218,8 +217,6 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		MaxIterations:                     math.MaxInt, // hard limit disabled by default; warn-only
-		WarnIterations:                    DefaultWarnIterations,
 		Version:                           TriggerImmediatelyTimestamp,
 	}
 
@@ -1180,7 +1177,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 		if err != nil {
 			// An over-excluded spec won't resolve until it's edited, so return a
 			// non-retryable code: retrying would just re-burn the compute bound each call.
-			return nil, serviceerror.NewFailedPrecondition(err.Error())
+			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		t1 = res.Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {

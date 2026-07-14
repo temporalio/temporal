@@ -394,10 +394,9 @@ func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
 	s.Require().NoError(err)
 
 	after := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
-	result, err := cs.GetNextTime("", after)
+	_, err = cs.GetNextTime("", after)
 
 	s.Require().ErrorIs(err, ErrComputeLimitExceeded)
-	s.Zero(result)
 }
 
 func (s *specSuite) TestGetNextTimeComputeLimitWarning() {

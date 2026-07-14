@@ -361,9 +361,9 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 		// maxCalendarYear. Disabled by default (maxIterations == math.MaxInt); an operator can
 		// lower it to re-enable enforcement. Well-formed specs resolve in a handful of iterations.
 		if iterations >= maxIterations {
-			return GetNextTimeResult{ComputeLimitWarning: warned}, ErrComputeLimitExceeded
+			return GetNextTimeResult{ComputeLimitWarning: true}, ErrComputeLimitExceeded
 		}
-		if !warned && iterations >= warnIterations {
+		if iterations >= warnIterations {
 			warned = true
 		}
 		nominal = cs.rawNextTime(after)

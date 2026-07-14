@@ -3431,11 +3431,10 @@ error and stopping the schedule.`,
 	)
 	SchedulerSpecWarnIterations = NewGlobalIntSetting(
 		"scheduler.specWarnIterations",
-		7*24*60*60,
+		24*60*60,
 		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
 while searching for a schedule's next action time before emitting a warning (metric + log). It
-is non-fatal: the search continues past this threshold. Defaults to a weeks' worth of
-one-second ticks.`,
+is non-fatal: the search continues past this threshold.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

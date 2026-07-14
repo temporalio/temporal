@@ -224,7 +224,7 @@ func (s *SpecProcessorImpl) checkNextScheduleResult(
 
 	// special case: broken or pathological spec
 	// in this particular case, just swallow the error and log.
-	// The schedule will just degrade to return nothing.
+	// The spec will just degrade to return nothing.
 	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
 		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
 		newTaggedLogger(s.logger, scheduler).Warn(
