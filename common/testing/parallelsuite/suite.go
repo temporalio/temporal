@@ -28,6 +28,54 @@ type testingSuite interface {
 	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
 }
 
+// TestScope provides the context and test handles for a test or await attempt.
+type TestScope interface {
+	require.TestingT
+	Context() context.Context
+	TB() testing.TB
+}
+
+type testScope struct {
+	ctx     context.Context
+	tb      testing.TB
+	assertT require.TestingT
+}
+
+type testScopeWithContext struct {
+	TestScope
+	ctx context.Context
+}
+
+// NewTestScope creates a test scope from its context and test handles.
+func NewTestScope(ctx context.Context, tb testing.TB, assertT require.TestingT) TestScope {
+	return testScope{ctx: ctx, tb: tb, assertT: assertT}
+}
+
+// WithContext returns a scope that uses ctx and delegates test failures to scope.
+func WithContext(scope TestScope, ctx context.Context) TestScope {
+	return testScopeWithContext{TestScope: scope, ctx: ctx}
+}
+
+func (s testScopeWithContext) Context() context.Context {
+	return s.ctx
+}
+
+func (s testScope) Context() context.Context {
+	return s.ctx
+}
+
+func (s testScope) TB() testing.TB {
+	return s.tb
+}
+
+func (s testScope) Errorf(format string, args ...any) {
+	s.assertT.Errorf(format, args...)
+}
+
+func (s testScope) FailNow() {
+	s.assertT.FailNow()
+}
+
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
 //
 // It enforces a strict rule: a test method (or subtest) must either use assertions
@@ -40,6 +88,7 @@ type Suite[T testingSuite] struct {
 
 	guardT      guardT
 	runParallel bool
+	assertT     require.TestingT
 	ctx         context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
 	ctxOnce     sync.Once
 }
@@ -70,6 +119,7 @@ func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.Testin
 	if assertT == nil {
 		assertT = g
 	}
+	s.assertT = assertT
 	s.Assertions = require.New(assertT)
 	s.ProtoAssertions = protorequire.New(assertT)
 	s.HistoryRequire = historyrequire.New(assertT)
@@ -81,6 +131,16 @@ func (s *Suite[T]) T() *testing.T {
 		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
 	}
 	return s.guardT.T
+}
+
+// TB returns the underlying test handle.
+func (s *Suite[T]) TB() testing.TB {
+	return s.T()
+}
+
+// Scope returns the current test or await-attempt scope.
+func (s *Suite[T]) Scope() TestScope {
+	return NewTestScope(s.Context(), s.TB(), s.assertT)
 }
 
 // Context returns the test-scoped context (created from [testcontext]).

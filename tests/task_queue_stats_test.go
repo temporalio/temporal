@@ -325,8 +325,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	// Set current version
 	s.setCurrentVersion(env, deploymentName, currentBuildID)
 	env.waitForTaskQueueVersioningInfo(
-		s.Context(),
-		s.T(),
+		s.Scope(),
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,

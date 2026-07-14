@@ -28,6 +28,11 @@ func (t *T) Context() context.Context {
 	return t.tb.Context()
 }
 
+// TB returns the test handle running the await loop.
+func (t *T) TB() testing.TB {
+	return t.tb
+}
+
 // Fail marks the current attempt as failed without stopping it.
 func (t *T) Fail() {
 	t.failed = true
