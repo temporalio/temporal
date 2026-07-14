@@ -44,7 +44,7 @@ type startArgs struct {
 type invocationTraceContext struct {
 	operationTag      string // "StartOperation" or "CancelOperation"
 	namespaceName     string // source (caller) namespace
-	targetNamespaceID string // target namespace of the endpoint's worker target, if any
+	targetNamespaceID string
 	requestID         string
 	operation         string
 	endpointName      string
