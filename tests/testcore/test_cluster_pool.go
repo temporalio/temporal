@@ -250,9 +250,9 @@ type clusterRequest struct {
 }
 
 // requiresOneOffCluster reports whether the request has cluster-construction
-// options that cannot be reset on a running cluster.
+// state that cannot be reset on a running cluster.
 func (r clusterRequest) requiresOneOffCluster() bool {
-	return len(r.clusterOpts) > 0
+	return len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
@@ -352,8 +352,8 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	// TestEnv dedicated requests normally reuse one exclusive worker-enabled cluster.
-	// Only cluster-construction options use a one-off cluster because they cannot be
-	// reset after startup.
+	// Cluster-construction options and global dynamic config use a one-off cluster
+	// because they cannot be reset reliably after startup.
 	req.kind = clusterKindDedicated
 	req.needWorkerService = true // always enable the worker service on dedicated clusters
 

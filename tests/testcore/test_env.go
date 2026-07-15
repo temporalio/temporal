@@ -252,13 +252,17 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
+	globalDynamicConfig := globalDynamicConfigOverrides(options.dynamicConfigSettings)
+	if len(globalDynamicConfig) > 0 {
+		dedicatedGuard.record("global dynamic config used")
+	}
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
 		dedicated:           options.dedicatedCluster,
 		needWorkerService:   options.needWorkerService,
 		dedicatedReason:     options.dedicatedReason,
-		globalDynamicConfig: globalDynamicConfigOverrides(options.dynamicConfigSettings),
+		globalDynamicConfig: globalDynamicConfig,
 		clusterOpts:         options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
@@ -315,8 +319,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Cleanup(func() { tl.FailOnError(prev) })
 	}
 
-	// Apply dynamic config settings as test-scoped overrides.
+	// Apply namespace-scoped dynamic config settings as test-scoped overrides.
 	for _, override := range options.dynamicConfigSettings {
+		if !canBeNamespaceScoped(override.setting.Precedence()) {
+			continue
+		}
 		env.OverrideDynamicConfig(override.setting, override.value)
 	}
 	if options.historyTaskRecorder {
