@@ -2,9 +2,11 @@ package testcore
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 )
 
 func TestClusterPool_GlobalOverridesSurviveTestCleanup(t *testing.T) {
@@ -83,6 +85,39 @@ func TestClusterPool_OneOffClusterReplacesIdlePooledCluster(t *testing.T) {
 
 	require.Nil(t, slot.cluster)
 	require.Equal(t, 2, created)
+}
+
+func TestClusterPool_ReservedSlotBlocksNextExclusiveOwner(t *testing.T) {
+	p := newClusterPool(1, true, 0)
+	acquired := make(chan struct{})
+	parentT := t
+
+	t.Run("reserved", func(t *testing.T) {
+		p.reserveSlot(t)
+
+		go func() {
+			p.reserveSlot(parentT)
+			close(acquired)
+		}()
+
+		require.Never(t, func() bool {
+			select {
+			case <-acquired:
+				return true
+			default:
+				return false
+			}
+		}, 50*time.Millisecond, 5*time.Millisecond)
+	})
+
+	await.RequireTrue(t, func() bool {
+		select {
+		case <-acquired:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestClusterPool_MaxLeasesWaitsForActiveLeases(t *testing.T) {

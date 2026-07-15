@@ -44,10 +44,9 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:                       newClusterPool(sharedSize, false, 0),
-		legacySuiteDedicatedClusters: newClusterPool(dedicatedSize, true, 0),
-		exclusiveTestEnvCluster:      newClusterPool(1, true, 0), // limited to 1 to avoid OOM kill
-		eventsFile:                   eventsFile,
+		shared:     newClusterPool(sharedSize, false, 0),
+		dedicated:  newClusterPool(dedicatedSize, true, 0),
+		eventsFile: eventsFile,
 	}
 }
 
@@ -189,12 +188,10 @@ func (s *clusterPoolSlot) tearDown(t *testing.T) {
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared *clusterPool
-	// legacySuiteDedicatedClusters is used by FunctionalTestBase.SetupSuiteWithCluster.
-	legacySuiteDedicatedClusters *clusterPool
-	// exclusiveTestEnvCluster serializes TestEnv dedicated cluster use.
-	exclusiveTestEnvCluster *clusterPool
-	suiteScoped             sync.Map
+	shared    *clusterPool
+	dedicated *clusterPool
+
+	suiteScoped sync.Map
 
 	eventsFile *os.File
 }
@@ -345,12 +342,12 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
-	// TestEnv dedicated requests are serialized through one slot to reduce peak memory,
+	// TestEnv dedicated requests take exclusive ownership of a dedicated pool slot,
 	// but still use fresh clusters so state cannot leak between unrelated tests.
 	req.kind = clusterKindDedicated
 	req.needWorkerService = true // always enable the worker service on dedicated clusters
 
-	return p.exclusiveTestEnvCluster.getOneOff(t, func() *FunctionalTestBase {
+	return p.dedicated.getOneOff(t, func() *FunctionalTestBase {
 		return p.createCluster(t, req)
 	})
 }
