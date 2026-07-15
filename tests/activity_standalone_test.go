@@ -7977,6 +7977,103 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.Empty(t, pollResp.GetTaskToken(),
 			"activity must not dispatch within the extended start_delay after unpause")
 	})
+
+	// Symmetric to ExtendsDispatch: while paused before the first attempt, start_delay can also be
+	// retracted after the original window has elapsed, so unpause dispatches immediately.
+	s.Run("UpdateWhilePaused_AfterWindow_RetractsDispatch", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		originalDelay := 10 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(originalDelay),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+			Reason:     "test-pause",
+		})
+		require.NoError(t, err)
+
+		// Retract to zero while paused: the first attempt never started, so start_delay is editable.
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(0)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().UnpauseActivityExecution(s.Context(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		// With the delay retracted, unpause dispatches immediately rather than waiting out the original 10s.
+		pollCtx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		defer cancel()
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.NoError(t, err)
+		require.NotEmpty(t, pollResp.GetTaskToken(),
+			"activity must dispatch immediately after the start_delay is retracted")
+	})
+
+	// Not paused and past the delay window: the activity has been dispatched to matching (worker just
+	// hasn't polled it), so start_delay is consumed and no longer editable.
+	s.Run("UpdateAfterWindow_NotPaused_Rejected", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startDelay := 1 * time.Second
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			StartDelay:          durationpb.New(startDelay),
+		})
+		require.NoError(t, err)
+
+		// Do not poll: the activity dispatches to matching at startDelay but no worker starts it.
+		// 2s > startDelay (1s) so firstDispatchTime is firmly in the past.
+		time.Sleep(2 * time.Second) //nolint:forbidigo
+
+		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace:       env.Namespace().String(),
+			ActivityId:      activityID,
+			RunId:           startResp.RunId,
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(60 * time.Second)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
+		})
+		require.Error(t, err)
+		var failedPrecond *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPrecond)
+		require.Contains(t, failedPrecond.Message, "start_delay")
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestUpdateActivityExecutionOptions() {
