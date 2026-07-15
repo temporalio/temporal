@@ -1508,6 +1508,8 @@ func (a *Activity) RecordHeartbeat(
 		response.ActivityReset = true
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		response.ActivityPaused = true
+	default:
+		// no-op
 	}
 	return response, nil
 }
