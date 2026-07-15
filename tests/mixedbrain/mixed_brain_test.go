@@ -119,6 +119,7 @@ func TestMixedBrain(t *testing.T) {
 	var conn *grpc.ClientConn
 	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
+	chaosInterval := processChaosInterval(t)
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
@@ -163,6 +164,14 @@ func TestMixedBrain(t *testing.T) {
 		createNexusEndpoint(st, conn, nexusEndpoint, throughput.namespace, "omes-"+runID+"-"+throughput.name)
 
 		proxy = startFrontendProxy(st, portsCurrent.frontendAddr(), portsRelease.frontendAddr())
+		startProcessChaos(
+			st,
+			conn,
+			chaosInterval,
+			[]portSet{portsCurrent, portsRelease},
+			processChaosTarget{name: "current", proc: procCurrent},
+			processChaosTarget{name: "release", proc: procRelease},
+		)
 
 		for _, scenario := range scenarios {
 			st.Run(scenario.name, func(sst *testing.T) {

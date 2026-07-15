@@ -2,6 +2,8 @@ package mixedbrain
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -23,26 +25,53 @@ import (
 )
 
 type serverProcess struct {
-	name     string
-	cmd      *exec.Cmd
-	cancel   context.CancelFunc
-	logFile  *os.File
-	logPath  string
-	done     chan error
-	stopOnce sync.Once
+	mu      sync.Mutex
+	name    string
+	binary  string
+	config  string
+	cmd     *exec.Cmd
+	cancel  context.CancelFunc
+	logFile *os.File
+	logPath string
+	done    chan error
 }
 
 func startServerProcess(t *testing.T, name, binary, configDir, logPath string) *serverProcess {
 	t.Helper()
 	t.Logf("Starting %s: %s", name, binary)
+	p := &serverProcess{
+		name:    name,
+		binary:  binary,
+		config:  configDir,
+		logPath: logPath,
+	}
+	require.NoError(t, p.start(t.Context(), false))
+	return p
+}
 
-	logFile, err := os.Create(logPath)
-	require.NoError(t, err)
+func (p *serverProcess) start(ctx context.Context, appendLog bool) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(t.Context())
-	cmd := exec.CommandContext(ctx, binary,
+	if p.cmd != nil {
+		return fmt.Errorf("%s is already running", p.name)
+	}
+
+	flag := os.O_CREATE | os.O_WRONLY
+	if appendLog {
+		flag |= os.O_APPEND
+	} else {
+		flag |= os.O_TRUNC
+	}
+	logFile, err := os.OpenFile(p.logPath, flag, 0644)
+	if err != nil {
+		return err
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	cmd := exec.CommandContext(runCtx, p.binary,
 		"--root", "/",
-		"--config", configDir,
+		"--config", p.config,
 		"--allow-no-auth",
 		"start",
 	)
@@ -52,38 +81,83 @@ func startServerProcess(t *testing.T, name, binary, configDir, logPath string) *
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = 15 * time.Second
 
-	require.NoError(t, cmd.Start())
+	if err := cmd.Start(); err != nil {
+		cancel()
+		_ = logFile.Close()
+		return err
+	}
 
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 
-	return &serverProcess{
-		name:    name,
-		cmd:     cmd,
-		cancel:  cancel,
-		logFile: logFile,
-		logPath: logPath,
-		done:    done,
-	}
+	p.cmd = cmd
+	p.cancel = cancel
+	p.logFile = logFile
+	p.done = done
+	return nil
 }
 
 // stop is idempotent: it may be called explicitly and again via t.Cleanup.
 func (p *serverProcess) stop() {
-	p.stopOnce.Do(func() {
-		p.cancel()
-		<-p.done
-		_ = p.logFile.Close()
-	})
+	_ = p.stopErr()
+}
+
+func (p *serverProcess) stopErr() error {
+	p.mu.Lock()
+	if p.cmd == nil {
+		p.mu.Unlock()
+		return nil
+	}
+	cancel := p.cancel
+	done := p.done
+	logFile := p.logFile
+	p.cmd = nil
+	p.cancel = nil
+	p.done = nil
+	p.logFile = nil
+	p.mu.Unlock()
+
+	cancel()
+	err := <-done
+	_ = logFile.Close()
+	return classifyProcessExit(err)
+}
+
+func (p *serverProcess) restart(ctx context.Context) error {
+	if err := p.stopErr(); err != nil {
+		return err
+	}
+	return p.start(ctx, true)
 }
 
 func (p *serverProcess) requireAlive(t *testing.T) {
 	t.Helper()
+	p.mu.Lock()
+	done := p.done
+	p.mu.Unlock()
+	if done == nil {
+		t.Fatalf("%s is not running (logs: %s)", p.name, p.logPath)
+	}
 	select {
-	case err := <-p.done:
-		p.done <- err // put back so stop() doesn't deadlock
+	case err := <-done:
+		done <- err // put back so stop() doesn't deadlock
 		t.Fatalf("%s exited unexpectedly: %v (logs: %s)", p.name, err, p.logPath)
 	default:
 	}
+}
+
+func classifyProcessExit(err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return err
+	}
+	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() && ws.Signal() == syscall.SIGTERM {
+		return nil
+	}
+	return err
 }
 
 func registerNamespace(t *testing.T, conn *grpc.ClientConn, namespace string) {
@@ -136,40 +210,65 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 // discovered each other. Reachable members use raw ringpop addresses (membership ports).
 func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, portSets ...portSet) {
 	t.Helper()
+	require.NoError(t, waitForClusterFormationErr(t.Context(), conn, timeout, portSets...))
+}
 
+func waitForClusterFormationErr(ctx context.Context, conn *grpc.ClientConn, timeout time.Duration, portSets ...portSet) error {
 	client := adminservice.NewAdminServiceClient(conn)
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
 
-	require.Eventually(t, func() bool {
-		resp, err := client.DescribeCluster(t.Context(), &adminservice.DescribeClusterRequest{})
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		ok, err := clusterFormed(ctx, client, portSets...)
 		if err != nil {
-			return false
+			return err
 		}
-		membership := resp.GetMembershipInfo()
-		if membership == nil {
-			return false
-		}
-
-		seen := map[int]bool{}
-		for _, member := range membership.GetReachableMembers() {
-			_, portStr, err := net.SplitHostPort(member)
-			if err != nil {
-				continue
-			}
-			port, err := strconv.Atoi(portStr)
-			if err != nil {
-				continue
-			}
-			seen[port] = true
+		if ok {
+			return nil
 		}
 
-		for _, ps := range portSets {
-			for _, port := range ps.membershipPorts() {
-				if !seen[port] {
-					t.Logf("Waiting for cluster formation: port %d not yet visible", port)
-					return false
-				}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("cluster did not form within %v", timeout)
+		case <-ticker.C:
+		}
+	}
+}
+
+func clusterFormed(ctx context.Context, client adminservice.AdminServiceClient, portSets ...portSet) (bool, error) {
+	resp, err := client.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return false, nil
+	}
+	membership := resp.GetMembershipInfo()
+	if membership == nil {
+		return false, nil
+	}
+
+	seen := map[int]bool{}
+	for _, member := range membership.GetReachableMembers() {
+		_, portStr, err := net.SplitHostPort(member)
+		if err != nil {
+			continue
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue
+		}
+		seen[port] = true
+	}
+
+	for _, ps := range portSets {
+		for _, port := range ps.membershipPorts() {
+			if !seen[port] {
+				return false, nil
 			}
 		}
-		return true
-	}, timeout, time.Second, "cluster did not form within %v", timeout)
+	}
+	return true, nil
 }
