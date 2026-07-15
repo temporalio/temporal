@@ -1351,9 +1351,9 @@ var (
 	PollerScaleDecisionCounter = NewCounterDef(
 		"poller_scale_decision",
 		WithDescription(
-			"Count of poller scaling decisions made by a physical task queue manager, broken down by reason "+
-				"(scale up/down/hold). Emitted only when the opt-in dynamic config matching.enablePollerScalingDecisionMetrics "+
-				"is enabled. Dimensions: namespace, taskqueue, task_type, poller_scale_decision"),
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 

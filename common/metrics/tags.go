@@ -29,7 +29,7 @@ const (
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
-	pollerScaleDecisionTag  = "poller_scale_decision"
+	pollerScaleDecisionTag  = "decision"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -336,16 +336,22 @@ func TaskAddResultTag(result string) Tag {
 }
 
 const (
-	PollerScaleDecisionScaleDownIdle   = "scale_down_idle"
-	PollerScaleDecisionScaleUpBacklog  = "scale_up_backlog"
-	PollerScaleDecisionScaleUpTaskRate = "scale_up_task_rate"
-	PollerScaleDecisionHoldRateLimited = "hold_rate_limited"
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
 )
 
-// PollerScaleDecisionTag records why a physical task queue manager decided to scale pollers
-// up, down, or hold steady. See metrics.PollerScaleDecisionCounter.
-func PollerScaleDecisionTag(reason string) Tag {
-	return Tag{Key: pollerScaleDecisionTag, Value: reason}
+const (
+	PollerScaleReasonIdle        ReasonString = "idle"
+	PollerScaleReasonBacklog     ReasonString = "backlog"
+	PollerScaleReasonTaskRate    ReasonString = "task_rate"
+	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
