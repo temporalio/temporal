@@ -191,10 +191,10 @@ SignalLoop:
  20 WorkflowTaskScheduled
  21 WorkflowExecutionSignaled
  22 WorkflowExecutionTerminated`, historyEvents)
-
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *SizeLimitSuite) {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
 				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -213,10 +213,11 @@ SignalLoop:
 			)
 			s.NoError(err1)
 			if len(resp.Executions) == 1 {
-				return true
+				return
 			}
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
+			s.Fail("condition was false")
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -422,10 +423,10 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowExecutionTerminated`, historyEvents)
-
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *SizeLimitSuite) {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
 				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -444,10 +445,11 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 			)
 			s.NoError(err1)
 			if len(resp.Executions) == 1 {
-				return true
+				return
 			}
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
+			s.Fail("condition was false")
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -527,10 +529,10 @@ SignalLoop:
  10 WorkflowExecutionSignaled
  11 WorkflowExecutionSignaled
  12 WorkflowExecutionTerminated`, historyEvents)
-
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *SizeLimitSuite) {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
 				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -549,10 +551,11 @@ SignalLoop:
 			)
 			s.NoError(err1)
 			if len(resp.Executions) == 1 {
-				return true
+				return
 			}
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
+			s.Fail("condition was false")
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

@@ -260,8 +260,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 	endTime := time.Now().UnixNano()
 
 	var executions []*workflowpb.WorkflowExecutionInfo
-
-	s.Eventually(func() bool {
+	s.Await(func(s *ArchivalSuite) {
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
 			Namespace: env.archivalNamespace.String(),
 			PageSize:  2,
@@ -275,9 +274,10 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			request.NextPageToken = response.NextPageToken
 		}
 		if len(executions) == numRuns {
-			return true
+			return
 		}
-		return false
+		s.Fail("condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 
 	for _, execution := range executions {
@@ -309,15 +309,17 @@ func (s *ArchivalSuite) TestCustomArchiver() {
 
 	// Use custom archiver namespace to trigger custom archiver
 	s.startAndFinishWorkflow(env, workflowID, workflowType, taskQueue, env.customArchiverNamespace, numActivities, numRuns)
-
 	// Verify custom archiver's Archive method was called at least once
-	s.Eventually(func() bool {
-		called := env.customHistoryArchiveCalled.Load()
-		return called > 0
-	}, 10*time.Second, 500*time.Millisecond, "Custom history archiver Archive method should have been called")
-	s.Eventually(func() bool {
+	s.Awaitf(
+		func(s *ArchivalSuite) {
+			called := env.customHistoryArchiveCalled.Load()
+			s.Positive(called)
+
+		}, 10*time.Second, 500*time.Millisecond, "Custom history archiver Archive method should have been called")
+	s.Awaitf(func(s *ArchivalSuite) {
 		called := env.customVisibilityArchiveCalled.Load()
-		return called > 0
+		s.Positive(called)
+
 	}, 10*time.Second, 500*time.Millisecond, "Custom visibility archiver Archive method should have been called")
 }
 
@@ -336,8 +338,7 @@ func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID nam
 		visibilityURI.Scheme(),
 	)
 	s.NoError(err)
-
-	s.Eventually(func() bool {
+	s.Await(func(s *ArchivalSuite) {
 		var historyResponse *archiver.GetHistoryResponse
 		historyResponse, err = historyArchiver.Get(s.Context(), historyURI, &archiver.GetHistoryRequest{
 			NamespaceID: namespaceID.String(),
@@ -346,10 +347,12 @@ func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID nam
 			PageSize:    1,
 		})
 		if err != nil {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 		if len(historyResponse.HistoryBatches) == 0 {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 		var visibilityResponse *archiver.QueryVisibilityResponse
 		visibilityResponse, err = visibilityArchiver.Query(
@@ -367,12 +370,14 @@ func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID nam
 			searchattribute.NameTypeMap{},
 		)
 		if err != nil {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 		if len(visibilityResponse.Executions) > 0 {
-			return true
+			return
 		}
-		return false
+		s.Fail("condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -382,8 +387,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 		workflowInfo.execution.WorkflowId,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-
-	s.Eventually(func() bool {
+	s.Await(func(s *ArchivalSuite) {
 		_, err := env.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			s.Context(),
 			&persistence.ReadHistoryBranchRequest{
@@ -396,10 +400,11 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 			},
 		)
 		if common.IsNotFoundError(err) {
-			return true
+			return
 		}
 		s.NoError(err)
-		return false
+		s.Fail("condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -413,14 +418,14 @@ func (s *ArchivalSuite) mutableStateIsDeleted(env *archivalTestEnv, namespaceID 
 		RunID:       execution.RunId,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
-
-	s.Eventually(func() bool {
+	s.Await(func(s *ArchivalSuite) {
 		_, err := env.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(s.Context(), request)
 		if common.IsNotFoundError(err) {
-			return true
+			return
 		}
 		s.NoError(err)
-		return false
+		s.Fail("condition was false")
+
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
@@ -548,7 +553,6 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 		s.NoError(err)
 	}
-
 	s.True(workflowComplete)
 	for run := 1; run < numRuns; run++ {
 		s.NotEqual(workflowInfos[run-1].execution, workflowInfos[run].execution)

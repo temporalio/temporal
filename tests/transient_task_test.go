@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -286,21 +285,21 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDropTask, testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	env.Logger.Info("PollAndProcessWorkflowTask (drop)", tag.Error(err))
 	env.NoError(err)
-
 	// Wait for the workflow task timeout to actually fire before polling for stage 5
 	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
-	env.EventuallyWithT(func(c *assert.CollectT) {
-		events := env.GetHistory(env.Namespace().String(), workflowExecution)
-		// Look for WorkflowTaskTimedOut event (should be event 21)
-		timedOutFound := false
-		for _, event := range events {
-			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
-				timedOutFound = true
-				break
+	s.Await(
+		func(s *TransientTaskSuite) {
+			events := env.GetHistory(env.Namespace().String(), workflowExecution)
+			// Look for WorkflowTaskTimedOut event (should be event 21)
+			timedOutFound := false
+			for _, event := range events {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
+					timedOutFound = true
+					break
+				}
 			}
-		}
-		assert.True(c, timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
-	}, 15*time.Second, 500*time.Millisecond)
+			s.True(timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
+		}, 15*time.Second, 500*time.Millisecond)
 
 	// stage 5: process task after timeout and complete workflow
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands, testcore.WithRetries(3))

@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -76,8 +74,8 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 		DeploymentName: tv.DeploymentSeries(),
 		BuildId:        tv.BuildID(),
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkflowAliasSearchAttributeTestSuite) {
+		a := s
 		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
 			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
@@ -130,33 +128,32 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	_, err := s.createWorkflow(env, env.Tv(), nil)
 	s.NoError(err)
-
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
+	s.Await(
+		func(s *WorkflowAliasSearchAttributeTestSuite) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
 			resp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     "WorkflowId = 'workflow'",
 			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, resp.GetExecutions(), 1)
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Len(resp.GetExecutions(), 1)
 
 			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Len(queriedResp.GetExecutions(), 1)
 
 			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     "WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = 'workflow'",
 			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+			s.NoError(err)
+			s.NotNil(resp)
+			s.Len(queriedResp.GetExecutions(), 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -185,25 +182,24 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 
 	_, err = s.createWorkflow(env, env.Tv(), sa)
 	s.NoError(err)
-
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
+	s.Await(
+		func(s *WorkflowAliasSearchAttributeTestSuite) {
 			// Filter by WorkflowId to isolate this test's workflow from other tests
 			queriedResp, err := env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = 'workflow'", sadefs.TemporalWorkflowVersioningBehavior),
 			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+			s.NoError(err)
+			s.NotNil(queriedResp)
+			s.Len(queriedResp.GetExecutions(), 1)
 
 			queriedResp, err = env.SdkClient().ListWorkflow(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     "WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = 'workflow'",
 			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+			s.NoError(err)
+			s.NotNil(queriedResp)
+			s.Len(queriedResp.GetExecutions(), 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

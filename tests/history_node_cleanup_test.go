@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -262,7 +263,8 @@ func captureCurrentBranchToken(ctx context.Context, env *testcore.TestEnv, workf
 
 // waitForMutableStateGone polls until GetWorkflowExecution returns NotFound for the given runID.
 func waitForMutableStateGone(ctx context.Context, env *testcore.TestEnv, shardID int32, execMgr persistence.ExecutionManager, workflowID, runID string) {
-	env.Eventually(func() bool {
+	//nolint:staticcheck // SA1019: testcore.TestEnv exposes T for helper assertions.
+	await.RequireTruef(env.T(), func() bool {
 		_, err := execMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: env.NamespaceID().String(),

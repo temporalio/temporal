@@ -1016,14 +1016,15 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(
 		WorkflowTaskTimeout: 1 * time.Second,
 	}, wf)
 	s.NoError(err)
-
 	// MS should have the correct build ID after finishing the first WFT
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *VersioningIntegSuite) {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 			s.NoError(err)
 			if len(dw.GetPendingActivities()) == 0 {
-				return false
+				s.Fail("condition was false")
+				return
 			}
 			if versionedWf {
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
@@ -1032,7 +1033,8 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(
 				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
-			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()) //nolint:staticcheck // SA1019: old worker versioning
+
 		},
 		10*time.Second,
 		50*time.Millisecond,
@@ -1059,14 +1061,15 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(
 	defer w1.Stop()
 
 	env.WaitForChannel(failedTask)
-
 	// After scheduling the second time, now pending activity should be assigned to v2
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *VersioningIntegSuite) {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Len(dw.GetPendingActivities(), 1)
-			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			s.Equal(v2, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()) //nolint:staticcheck // SA1019: old worker versioning
+
 		},
 		10*time.Second,
 		50*time.Millisecond,
@@ -1098,14 +1101,15 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(
 	defer w2.Stop()
 
 	env.WaitForChannel(timedoutTask)
-
 	// After scheduling the third time, now pending activity should be assigned to v3
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *VersioningIntegSuite) {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Len(dw.GetPendingActivities(), 1)
-			return v3 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			s.Equal(v3, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()) //nolint:staticcheck // SA1019: old worker versioning
+
 		},
 		10*time.Second,
 		50*time.Millisecond,
@@ -1227,14 +1231,15 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(
 	s.NoError(err)
 
 	env.WaitForChannel(failedTask)
-
 	// MS should have the correct build ID after finishing the first WFT
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *VersioningIntegSuite) {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 			s.NoError(err)
 			if len(dw.GetPendingActivities()) == 0 {
-				return false
+				s.Fail("condition was false")
+				return
 			}
 			if versionedWf {
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
@@ -1243,7 +1248,8 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(
 				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
-			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			s.Equal(v1, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()) //nolint:staticcheck // SA1019: old worker versioning
+
 		},
 		10*time.Second,
 		50*time.Millisecond,
@@ -1275,14 +1281,15 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(
 	s.waitForAssignmentRulePropagation(env, actTq, rule)
 
 	env.WaitForChannel(timedoutTask)
-
 	// After scheduling the second time, now pending activity should be assigned to v2
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *VersioningIntegSuite) {
 			dw, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
 			s.NoError(err)
 			s.Len(dw.GetPendingActivities(), 1)
-			return v2 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
+			s.Equal(v2, dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()) //nolint:staticcheck // SA1019: old worker versioning
+
 		},
 		10*time.Second,
 		50*time.Millisecond,

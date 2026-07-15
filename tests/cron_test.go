@@ -123,7 +123,6 @@ func (s *CronTestSuite) TestCronWorkflow_Failed_Infinite() {
 	env.Logger.Info("Process first cron run which completes")
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
-
 	s.True(seeRetry)
 }
 
@@ -468,12 +467,13 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	s.Equal(1, <-wfCh)
 	durationNear(time.Since(ts), targetBackoffDuration)
 	ts = time.Now()
-
 	// let first run finish, then check execution and history of second run
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *CronTestClientSuite) {
 			exec = s.listOpenWorkflowExecutions(env, startTs, time.Now(), id, 1)[0]
-			return exec.GetExecution().GetRunId() != firstRunID
+			s.NotEqual(exec.GetExecution().GetRunId(), firstRunID)
+
 		},
 		targetBackoffDuration+tolerance,
 		250*time.Millisecond,
@@ -577,8 +577,8 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 func (s *CronTestClientSuite) listOpenWorkflowExecutions(env *testcore.TestEnv, start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListOpenWorkflowExecutionsResponse
-	s.Eventuallyf(
-		func() bool {
+	s.Awaitf(
+		func(s *CronTestClientSuite) {
 			var err error
 			resp, err = env.SdkClient().ListOpenWorkflow(
 				s.Context(), &workflowservice.ListOpenWorkflowExecutionsRequest{
@@ -596,7 +596,8 @@ func (s *CronTestClientSuite) listOpenWorkflowExecutions(env *testcore.TestEnv, 
 				},
 			)
 			s.NoError(err)
-			return len(resp.GetExecutions()) == expectedNumber
+			s.Len(resp.GetExecutions(), expectedNumber)
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -610,8 +611,8 @@ func (s *CronTestClientSuite) listOpenWorkflowExecutions(env *testcore.TestEnv, 
 func (s *CronTestClientSuite) listClosedWorkflowExecutions(env *testcore.TestEnv, start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListClosedWorkflowExecutionsResponse
-	s.Eventuallyf(
-		func() bool {
+	s.Awaitf(
+		func(s *CronTestClientSuite) {
 			var err error
 			resp, err = env.SdkClient().ListClosedWorkflow(
 				s.Context(),
@@ -630,7 +631,8 @@ func (s *CronTestClientSuite) listClosedWorkflowExecutions(env *testcore.TestEnv
 				},
 			)
 			s.NoError(err)
-			return len(resp.GetExecutions()) == expectedNumber
+			s.Len(resp.GetExecutions(), expectedNumber)
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

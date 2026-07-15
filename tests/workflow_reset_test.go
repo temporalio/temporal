@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -378,18 +376,20 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 		},
 	})
 	s.NoError(err)
-
 	// Wait for batch operation to complete
-	s.Eventually(func() bool {
-		resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
-			Namespace: env.Namespace().String(),
-			JobId:     batchJobID,
-		})
-		if err != nil {
-			return false
-		}
-		return resp.State == enumspb.BATCH_OPERATION_STATE_COMPLETED
-	}, 20*time.Second, 1*time.Second, "Batch operation should complete")
+	s.Awaitf(
+		func(s *WorkflowResetSuite) {
+			resp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+				Namespace: env.Namespace().String(),
+				JobId:     batchJobID,
+			})
+			if err != nil {
+				s.Fail("condition was false")
+				return
+			}
+			s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.State)
+
+		}, 20*time.Second, 1*time.Second, "Batch operation should complete")
 
 	// Get the new run IDs after reset
 	// The workflows should be terminated and new runs started
@@ -630,8 +630,8 @@ func (s *WorkflowResetSuite) startVersionedPollerAndValidate(
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkflowResetSuite) {
+		a := s
 		resp, err := env.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
 			s.Context(),
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{

@@ -13,8 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -44,7 +42,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
@@ -107,8 +104,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 		WorkflowTaskTimeout: time.Second,
 	}, "workflow")
 	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *NexusWorkflowTestSuite) {
 		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -117,7 +113,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			},
 			Identity: "test",
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
 			TaskToken: pollResp.TaskToken,
@@ -135,7 +131,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 				},
 			},
 		})
-		require.NoError(t, err)
+		s.NoError(err)
 	}, time.Second*20, time.Millisecond*200)
 
 	// Poll and wait for the "started" event to be recorded.
@@ -235,27 +231,27 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 		},
 	})
 	s.NoError(err)
-
 	// Poll and wait for the cancelation request to go through.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, desc.PendingNexusOperations, 2)
-		op1 := desc.PendingNexusOperations[0]
-		require.Equal(t, scheduledEvent.EventId, op1.ScheduledEventId)
-		require.Equal(t, endpointName, op1.Endpoint)
-		require.Equal(t, "service", op1.Service)
-		require.Equal(t, "operation", op1.Operation)
-		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op1.State)
-		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, op1.CancellationInfo.State)
-		op2 := desc.PendingNexusOperations[1]
-		require.Equal(t, secondScheduledEventID, op2.ScheduledEventId)
-		require.Equal(t, endpointName, op2.Endpoint)
-		require.Equal(t, "service", op2.Service)
-		require.Equal(t, "operation", op2.Operation)
-		require.Equal(t, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op2.State)
-		require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op2.CancellationInfo.State)
-	}, time.Second*5, time.Millisecond*30)
+	s.Await(
+		func(s *NexusWorkflowTestSuite) {
+			desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Len(desc.PendingNexusOperations, 2)
+			op1 := desc.PendingNexusOperations[0]
+			s.Equal(scheduledEvent.EventId, op1.ScheduledEventId)
+			s.Equal(endpointName, op1.Endpoint)
+			s.Equal("service", op1.Service)
+			s.Equal("operation", op1.Operation)
+			s.Equal(enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op1.State)
+			s.Equal(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, op1.CancellationInfo.State)
+			op2 := desc.PendingNexusOperations[1]
+			s.Equal(secondScheduledEventID, op2.ScheduledEventId)
+			s.Equal(endpointName, op2.Endpoint)
+			s.Equal("service", op2.Service)
+			s.Equal("operation", op2.Operation)
+			s.Equal(enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED, op2.State)
+			s.Equal(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, op2.CancellationInfo.State)
+		}, time.Second*5, time.Millisecond*30)
 
 	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
 	s.NoError(err)
@@ -868,7 +864,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 	// The callback delivers BEFORE we respond to the Nexus start request — the caller's
 	// history must fabricate a NEXUS_OPERATION_STARTED event carrying the synthesized link.
 	var startedEvent *historypb.HistoryEvent
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *NexusWorkflowTestSuite) {
 		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: callerRun.GetID(),
 			RunId:      callerRun.GetRunID(),
@@ -879,7 +875,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 				return
 			}
 		}
-		require.Fail(t, "missing NEXUS_OPERATION_STARTED event on caller workflow")
+		s.Fail("missing NEXUS_OPERATION_STARTED event on caller workflow")
 	}, 10*time.Second, 100*time.Millisecond)
 
 	expectedLink := &commonpb.Link_Activity{
@@ -1039,12 +1035,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	w.RegisterWorkflow(callerWF)
 	s.NoError(w.Start())
 	defer w.Stop()
-
 	// Wait for the handler to be called by checking for the NexusOperationStarted event.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
-		historyrequire.New(t).RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
-	}, time.Second*10, time.Millisecond*200)
+	s.Await(
+		func(s *NexusWorkflowTestSuite) {
+			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+			s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+		}, time.Second*10, time.Millisecond*200)
 
 	// Completion request fails if the result payload is too large.
 	largeCompletion := nexusrpc.CompleteOperationOptions{
@@ -1555,12 +1551,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
-
 	// Wait for the handler to be called by checking for the NexusOperationStarted event.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
-		historyrequire.New(t).RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
-	}, time.Second*10, time.Millisecond*200)
+	s.Await(
+		func(s *NexusWorkflowTestSuite) {
+			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+			s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+		}, time.Second*10, time.Millisecond*200)
 
 	// Send a valid - failed completion request.
 	completion := nexusrpc.CompleteOperationOptions{
@@ -1959,14 +1955,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
-
 	// Wait for the cancel to be requested before unblocking the start.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, desc.PendingNexusOperations, 1)
-		require.NotNil(t, desc.PendingNexusOperations[0].CancellationInfo)
-	}, time.Second*10, time.Millisecond*100)
+	s.Await(
+		func(s *NexusWorkflowTestSuite) {
+			desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Len(desc.PendingNexusOperations, 1)
+			s.NotNil(desc.PendingNexusOperations[0].CancellationInfo)
+		}, time.Second*10, time.Millisecond*100)
 
 	env.SendToChannel(canStartCh)
 	env.WaitForChannel(cancelSentCh)
@@ -2029,8 +2025,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 
 	// Wait for the NexusOperationStarted event and find the WFT completed after it for reset.
 	var wftCompletedEventID int64
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		hr := historyrequire.New(t)
+	s.Await(func(s *NexusWorkflowTestSuite) {
+		hr := s.HistoryRequire
 		hist := env.GetHistory(env.Namespace().String(), wfExec)
 		opStartedEvent := hr.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 		if opStartedEvent == nil {
@@ -2039,7 +2035,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 		wftCompletedIdx := slices.IndexFunc(hist, func(e *historypb.HistoryEvent) bool {
 			return e.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED && e.EventId > opStartedEvent.EventId
 		})
-		require.Positive(t, wftCompletedIdx, "expected WorkflowTaskCompleted after NexusOperationStarted")
+		s.Positive(wftCompletedIdx, "expected WorkflowTaskCompleted after NexusOperationStarted")
 		wftCompletedEventID = hist[wftCompletedIdx].EventId
 	}, time.Second*10, time.Millisecond*200)
 
@@ -2282,13 +2278,13 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEna
 
 		if tc.checkPendingError != nil {
 			var f *failurepb.Failure
-			s.EventuallyWithT(func(t *assert.CollectT) {
+			s.Await(func(s *NexusWorkflowTestSuite) {
 				desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-				require.NoError(t, err)
-				require.Len(t, desc.PendingNexusOperations, 1)
+				s.NoError(err)
+				s.Len(desc.PendingNexusOperations, 1)
 				if len(desc.PendingNexusOperations) > 0 {
 					f = desc.PendingNexusOperations[0].LastAttemptFailure
-					require.NotNil(t, f)
+					s.NotNil(f)
 				}
 			}, 10*time.Second, 100*time.Millisecond)
 			tc.checkPendingError(s, converter.FailureToError(f))
@@ -2554,19 +2550,18 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 
 	err = env.SdkClient().SignalWorkflow(ctx, handlerWorkflowID, "", "test-signal", nil)
 	s.NoError(err)
-
-	s.EventuallyWithT(func(ct *assert.CollectT) {
+	s.Await(func(s *NexusWorkflowTestSuite) {
 		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: handlerWorkflowID,
 			},
 		})
-		require.NoError(ct, err)
-		require.Len(ct, resp.Callbacks, 1)
-		require.Equal(ct, enumspb.CALLBACK_STATE_FAILED, resp.Callbacks[0].State)
-		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
-		require.Equal(ct, "handler error (NOT_FOUND): workflow execution already completed", resp.Callbacks[0].LastAttemptFailure.Message)
+		s.NoError(err)
+		s.Len(resp.Callbacks, 1)
+		s.Equal(enumspb.CALLBACK_STATE_FAILED, resp.Callbacks[0].State)
+		s.NotNil(resp.Callbacks[0].LastAttemptFailure)
+		s.Equal("handler error (NOT_FOUND): workflow execution already completed", resp.Callbacks[0].LastAttemptFailure.Message)
 	}, 3*time.Second, 200*time.Millisecond)
 }
 
@@ -2914,14 +2909,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmE
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
-
 	// Verify the pending operation has the expected timeout.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, descResp.PendingNexusOperations, 1)
-		require.Equal(t, 10*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
-	}, time.Second*10, time.Millisecond*200)
+	s.Await(
+		func(s *NexusWorkflowTestSuite) {
+			descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+			s.NoError(err)
+			s.Len(descResp.PendingNexusOperations, 1)
+			s.Equal(10*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
+		}, time.Second*10, time.Millisecond*200)
 
 	// Wait for the workflow to fail due to the timeout.
 	err = run.Get(ctx, nil)

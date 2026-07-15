@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -108,10 +109,11 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// wait for backlog to be >= maxBacklog
 	wfBacklogCount := int64(0)
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *TaskQueueSuite) {
 			wfBacklogCount = s.getBacklogCount(env, tv)
-			return wfBacklogCount >= maxBacklog
+			s.GreaterOrEqual(wfBacklogCount, maxBacklog)
+
 		},
 		5*time.Second,
 		200*time.Millisecond,
@@ -119,15 +121,16 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// terminate all those workflow executions so that all the tasks in the backlog are invalid
 	var wfList []*workflowpb.WorkflowExecutionInfo
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *TaskQueueSuite) {
 			listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 				Namespace: env.Namespace().String(),
 				Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
 			})
 			s.NoError(err)
 			wfList = listResp.GetExecutions()
-			return len(wfList) == maxBacklog
+			s.Len(wfList, maxBacklog)
+
 		},
 		5*time.Second,
 		200*time.Millisecond,
@@ -151,12 +154,13 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 		err := workers[i].Start()
 		s.NoError(err)
 	}
-
 	// wait for backlog to be 0
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *TaskQueueSuite) {
 			wfBacklogCount = s.getBacklogCount(env, tv)
-			return wfBacklogCount == 0
+			s.Zero(wfBacklogCount)
+
 		},
 		timeToDrain,
 		500*time.Millisecond,
@@ -446,7 +450,6 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		}, workflowFn)
 		s.NoError(err)
 	}
-
 	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "tasks with dynamic config didn't complete")
 	s.Len(runTimes, taskCount, "task count mismatch")
 
@@ -501,7 +504,6 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		}, workflowFn)
 		s.NoError(err)
 	}
-
 	s.True(common.AwaitWaitGroup(&wg, drainTimeout), "tasks with API override didn't complete")
 	s.Len(runTimes, taskCount, "task count mismatch after API override")
 
@@ -1053,7 +1055,8 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	} {
-		s.Eventually(func() bool {
+		//nolint:staticcheck // SA1019: testcore.TestEnv exposes T for helper assertions.
+		await.RequireTruef(s.T(), func() bool {
 			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: s.NamespaceID().String(),
@@ -1184,9 +1187,9 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		)
 		s.NoError(err)
 	}()
-
 	// Wait for nexus poller to arrive at root partition before dispatching.
-	s.Eventually(func() bool {
+	//nolint:staticcheck // SA1019: testcore.TestEnv exposes T for helper assertions.
+	await.RequireTruef(s.T(), func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
@@ -1286,9 +1289,9 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		s.NoError(err)
 		close(wftDone)
 	}()
-
 	// Wait for poller to arrive at root partition before starting workflow.
-	s.Eventually(func() bool {
+	//nolint:staticcheck // SA1019: testcore.TestEnv exposes T for helper assertions.
+	await.RequireTruef(s.T(), func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
@@ -1344,9 +1347,9 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 		s.NoError(err)
 		close(queryDone)
 	}()
-
 	// Wait for query poller to arrive before issuing query.
-	s.Eventually(func() bool {
+	//nolint:staticcheck // SA1019: testcore.TestEnv exposes T for helper assertions.
+	await.RequireTruef(s.T(), func() bool {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 			s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
 				NamespaceId: s.NamespaceID().String(),
@@ -1443,22 +1446,24 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 			}{resp, err}
 		})
 	}
-
 	// Keep calling ShutdownWorker until all polls are cancelled and complete.
 	// Polls register asynchronously, so we retry until all are caught.
-	s.Eventually(func() bool {
-		_, err := env.FrontendClient().ShutdownWorker(s.Context(), &workflowservice.ShutdownWorkerRequest{
-			Namespace:         env.Namespace().String(),
-			StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
-			Identity:          tv.WorkerIdentity(),
-			Reason:            "graceful shutdown test",
-			WorkerInstanceKey: workerInstanceKey,
-			TaskQueue:         tv.TaskQueue().GetName(),
-		})
-		s.NoError(err)
-		// Check if all polls have completed (short timeout to just check status)
-		return common.AwaitWaitGroup(&wg, 50*time.Millisecond)
-	}, 30*time.Second, 200*time.Millisecond, "polls did not complete after repeated shutdown attempts")
+	s.Awaitf(
+		func(s *TaskQueueSuite) {
+			_, err := env.FrontendClient().ShutdownWorker(s.Context(), &workflowservice.ShutdownWorkerRequest{
+				Namespace:         env.Namespace().String(),
+				StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+				Identity:          tv.WorkerIdentity(),
+				Reason:            "graceful shutdown test",
+				WorkerInstanceKey: workerInstanceKey,
+				TaskQueue:         tv.TaskQueue().GetName(),
+			})
+			s.NoError(err)
+			s.True(
+				// Check if all polls have completed (short timeout to just check status)
+				common.AwaitWaitGroup(&wg, 50*time.Millisecond))
+
+		}, 30*time.Second, 200*time.Millisecond, "polls did not complete after repeated shutdown attempts")
 
 	close(pollResults)
 
@@ -1569,20 +1574,21 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
 	})
 	s.NoError(err)
 	s.Positive(rootResp.GetVersion())
-
 	// partition_id=1 routes to a non-root partition via the mangled name /_sys/<queue>/1.
 	// Non-root partitions replicate user data from root asynchronously, so poll until the
 	// version matches. TaskQueueSuite sets MatchingNumTaskqueueWritePartitions=4, so
 	// partition 1 always exists.
-	s.Eventually(func() bool {
-		resp, err := env.AdminClient().GetTaskQueueUserData(s.Context(), &adminservice.GetTaskQueueUserDataRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     tv.TaskQueue().GetName(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			PartitionId:   1,
-		})
-		return err == nil && resp.GetVersion() == rootResp.GetVersion()
-	}, 15*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *TaskQueueSuite) {
+			resp, err := env.AdminClient().GetTaskQueueUserData(s.Context(), &adminservice.GetTaskQueueUserDataRequest{
+				Namespace:     env.Namespace().String(),
+				TaskQueue:     tv.TaskQueue().GetName(),
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   1,
+			})
+			s.True(err == nil && resp.GetVersion() == rootResp.GetVersion())
+
+		}, 15*time.Second, 200*time.Millisecond)
 
 	resp, err := env.AdminClient().GetTaskQueueUserData(s.Context(), &adminservice.GetTaskQueueUserDataRequest{
 		Namespace:     env.Namespace().String(),

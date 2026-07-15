@@ -388,15 +388,16 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	}, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
-
 	// Wait for all activities to complete, generating many event batches.
-	s.Eventually(func() bool {
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
-		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30
-	}, 10*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *QueryWorkflowSuite) {
+			resp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+			})
+			s.True(err == nil && resp.GetWorkflowExecutionInfo().GetHistoryLength() > 30)
+
+		}, 10*time.Second, 200*time.Millisecond)
 
 	// Stop worker so the query goes through the non-sticky path.
 	queryWorker.Stop()
@@ -417,7 +418,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 
 	// Poll for the query task on the normal (non-sticky) task queue.
 	var pollResp *workflowservice.PollWorkflowTaskQueueResponse
-	s.Eventually(func() bool {
+	s.Await(func(s *QueryWorkflowSuite) {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 3*time.Second)
 		defer pollCancel()
 		pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -425,7 +426,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test-worker",
 		})
-		return err == nil && len(pollResp.GetTaskToken()) > 0
+		s.True(err == nil && len(pollResp.GetTaskToken()) > 0)
+
 	}, 20*time.Second, 100*time.Millisecond)
 
 	s.NotNil(pollResp.GetHistory())

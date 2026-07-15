@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -108,29 +106,31 @@ func (s *PrioritySuite) TestActivity_Basic() {
 		)
 		s.NoError(err)
 	}
-
 	// wait for activity tasks to appear in the matching backlog (from transfer queue)
-	s.Eventually(func() bool {
-		res, err := env.AdminClient().DescribeTaskQueuePartition(s.Context(), &adminservice.DescribeTaskQueuePartitionRequest{
-			Namespace: env.Namespace().String(),
-			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-				TaskQueue:     env.Tv().TaskQueue().Name,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
-			},
-			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
-		})
-		if err != nil {
-			return false
-		}
-		var count int64
-		for _, versionInfoInternal := range res.VersionsInfoInternal {
-			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
-				count += st.ApproximateBacklogCount
+	s.Await(
+		func(s *PrioritySuite) {
+			res, err := env.AdminClient().DescribeTaskQueuePartition(s.Context(), &adminservice.DescribeTaskQueuePartitionRequest{
+				Namespace: env.Namespace().String(),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     env.Tv().TaskQueue().Name,
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+				},
+				BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+			})
+			if err != nil {
+				s.Fail("condition was false")
+				return
 			}
-		}
-		return count == N*Levels
-	}, 10*time.Second, 100*time.Millisecond)
+			var count int64
+			for _, versionInfoInternal := range res.VersionsInfoInternal {
+				for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
+					count += st.ApproximateBacklogCount
+				}
+			}
+			s.Equal(N*Levels, count)
+
+		}, 10*time.Second, 100*time.Millisecond)
 
 	// process activity tasks
 	var runs []int
@@ -207,7 +207,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 	}
 
 	processActivity := func() {
-		s.EventuallyWithT(func(c *assert.CollectT) {
+		s.Await(func(s *PrioritySuite) {
 			_, err := env.TaskPoller().PollAndHandleActivityTask(
 				env.Tv(),
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -217,7 +217,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 				},
 				taskpoller.WithContext(s.Context()),
 			)
-			assert.NoError(c, err)
+			s.NoError(err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -278,13 +278,15 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 		},
 	})
 	stickyCtx, stickyCancel := context.WithCancel(s.Context())
-	go stickyPoller.HandleTask(env.Tv(), taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) // nolint:errcheck
+	go stickyPoller.HandleTask(env.Tv(), taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) //nolint:errcheck
 	// wait for poll to reach matching service and load the queue
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		res, err := describeSticky()
-		require.NoError(c, err)
-		require.NotEmpty(c, res.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetPollers())
-	}, 5*time.Second, 10*time.Millisecond)
+	s. // nolint:errcheck
+		Await(
+			func(s *PrioritySuite) {
+				res, err := describeSticky()
+				s.NoError(err)
+				s.NotEmpty(res.VersionsInfoInternal[""].GetPhysicalTaskQueueInfo().GetPollers())
+			}, 5*time.Second, 10*time.Millisecond)
 	// cancel as soon as it's registered
 	s.T().Log("canceling sticky poll")
 	stickyCancel()
@@ -332,10 +334,10 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 
 	// after 1 millisecond, we should have N tasks queued on the sticky queue at normal priority
 	s.T().Log("checking sticky backlog")
-	s.EventuallyWithT(func(c *assert.CollectT) {
+	s.Await(func(s *PrioritySuite) {
 		res, err := describeSticky()
-		require.NoError(c, err)
-		require.EqualValues(c, N, res.VersionsInfoInternal[""].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
+		s.NoError(err)
+		s.EqualValues(N, res.VersionsInfoInternal[""].PhysicalTaskQueueInfo.TaskQueueStats.ApproximateBacklogCount)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// create N more workflows at high priority and N at lower
@@ -464,8 +466,7 @@ func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {
 		},
 	})
 	s.NoError(err)
-
-	s.Eventually(func() bool {
+	s.Await(func(s *FairnessSuite) {
 		resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     env.Tv().TaskQueue().Name,
@@ -473,7 +474,8 @@ func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {
 			BatchSize:     10,
 			MinPass:       1,
 		})
-		return err == nil && len(resp.GetTasks()) == 1
+		s.True(err == nil && len(resp.GetTasks()) == 1)
+
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
@@ -644,27 +646,27 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 	}
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
 		s.T().Helper()
-		s.EventuallyWithT(func(c *assert.CollectT) {
+		s.Await(func(s *FairnessSuite) {
 			tasksOnDraining, tasksOnActive, loadedOnDraining, loadedOnActive, _, err := s.countTasksByDrainingActive(env, tp)
-			require.NoError(c, err)
-			require.Equal(c, onDraining, tasksOnDraining)
-			require.Equal(c, onActive, tasksOnActive)
+			s.NoError(err)
+			s.Equal(onDraining, tasksOnDraining)
+			s.Equal(onActive, tasksOnActive)
 			// ensure that expected tasks are actually loaded to avoid poller getting regular
 			// task before draining loads
 			if tasksOnDraining > 0 {
-				require.NotZero(c, loadedOnDraining)
+				s.NotZero(loadedOnDraining)
 			}
 			if tasksOnActive > 0 {
-				require.NotZero(c, loadedOnActive)
+				s.NotZero(loadedOnActive)
 			}
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 	waitForNoDraining := func(tp enumspb.TaskQueueType) {
 		s.T().Helper()
-		s.EventuallyWithT(func(c *assert.CollectT) {
+		s.Await(func(s *FairnessSuite) {
 			_, _, _, _, hasDraining, err := s.countTasksByDrainingActive(env, tp)
-			require.NoError(c, err)
-			require.False(c, hasDraining, "draining queue should be unloaded after drain completes")
+			s.NoError(err)
+			s.False(hasDraining, "draining queue should be unloaded after drain completes")
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 
@@ -684,7 +686,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 20)
 
 	processWft := func() {
-		s.EventuallyWithT(func(c *assert.CollectT) {
+		s.Await(func(s *FairnessSuite) {
 			_, err := env.TaskPoller().PollAndHandleWorkflowTask(
 				env.Tv(),
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -713,7 +715,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 				},
 				taskpoller.WithContext(s.Context()),
 			)
-			assert.NoError(c, err)
+			s.NoError(err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -751,7 +753,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 
 	// process activities 1/3 at a time
 	processActivity := func() {
-		s.EventuallyWithT(func(c *assert.CollectT) {
+		s.Await(func(s *FairnessSuite) {
 			_, err := env.TaskPoller().PollAndHandleActivityTask(
 				env.Tv(),
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -761,7 +763,7 @@ func (s *FairnessSuite) testMigration(env *testcore.TestEnv, newMatcher, fairnes
 				},
 				taskpoller.WithContext(s.Context()),
 			)
-			assert.NoError(c, err)
+			s.NoError(err)
 		}, 5*time.Second, time.Millisecond)
 	}
 
@@ -861,18 +863,19 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 		Priority:     originalPriority,
 	})
 	s.NoError(err)
-
 	// Wait for workflow task to be backlogged.
-	s.Eventually(func() bool {
-		resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     env.Tv().TaskQueue().Name,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			BatchSize:     10,
-			MinPass:       1,
-		})
-		return err == nil && len(resp.GetTasks()) == 1
-	}, 10*time.Second, 100*time.Millisecond)
+	s.Await(
+		func(s *FairnessSuite) {
+			resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
+				Namespace:     env.Namespace().String(),
+				TaskQueue:     env.Tv().TaskQueue().Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				BatchSize:     10,
+				MinPass:       1,
+			})
+			s.True(err == nil && len(resp.GetTasks()) == 1)
+
+		}, 10*time.Second, 100*time.Millisecond)
 
 	// Update workflow options to set a new priority.
 	updateResp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -953,18 +956,19 @@ func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTas
 		}
 	}
 	s.Equal(1, obsoleteWorkflowTaskCount, "Expected 1 workflow task to be obsolete")
-
 	// Wait for activity task to be backlogged
-	s.Eventually(func() bool {
-		resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     env.Tv().TaskQueue().Name,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			BatchSize:     10,
-			MinPass:       1,
-		})
-		return err == nil && len(resp.GetTasks()) == 1
-	}, 10*time.Second, 100*time.Millisecond)
+	s.Await(
+		func(s *FairnessSuite) {
+			resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
+				Namespace:     env.Namespace().String(),
+				TaskQueue:     env.Tv().TaskQueue().Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				BatchSize:     10,
+				MinPass:       1,
+			})
+			s.True(err == nil && len(resp.GetTasks()) == 1)
+
+		}, 10*time.Second, 100*time.Millisecond)
 
 	// Update activity options to set a new priority
 	_, err = env.FrontendClient().UpdateActivityOptions(s.Context(), &workflowservice.UpdateActivityOptionsRequest{

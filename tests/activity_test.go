@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -694,7 +692,6 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			break
 		}
 	}
-
 	s.True(workflowComplete)
 }
 
@@ -1438,12 +1435,12 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *ActivityTestSuite) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.NotNil(t, description.PendingActivities[0].LastFailure)
-		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		s.NoError(err)
+		s.Len(description.PendingActivities, 1)
+		s.NotNil(description.PendingActivities[0].LastFailure)
+		s.Equal("mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)
@@ -1470,12 +1467,12 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *ActivityTestSuite) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), run.GetID(), run.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.NotNil(t, description.PendingActivities[0].LastFailure)
-		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
+		s.NoError(err)
+		s.Len(description.PendingActivities, 1)
+		s.NotNil(description.PendingActivities[0].LastFailure)
+		s.Equal("mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
 		500*time.Millisecond)

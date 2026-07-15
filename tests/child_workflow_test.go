@@ -1149,19 +1149,20 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_Terminate
 	s.Equal(tvChild.WorkflowID(), startedAttrs.GetWorkflowExecution().GetWorkflowId())
 	s.Equal(tvChild.WorkflowType().GetName(), startedAttrs.GetWorkflowType().GetName())
 	s.NotEqual(existingChildResp.GetRunId(), startedAttrs.GetWorkflowExecution().GetRunId())
-
 	// The old execution should be terminated once the child start is migrated to
 	// conflict=TERMINATE_EXISTING for the running-workflow case.
-	s.Eventually(func() bool {
-		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: tvChild.WorkflowID(),
-				RunId:      existingChildResp.GetRunId(),
-			},
-		})
-		return err == nil && resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-	}, 10*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ChildWorkflowSuite) {
+			resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: tvChild.WorkflowID(),
+					RunId:      existingChildResp.GetRunId(),
+				},
+			})
+			s.True(err == nil && resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+
+		}, 10*time.Second, 200*time.Millisecond)
 }
 
 func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {

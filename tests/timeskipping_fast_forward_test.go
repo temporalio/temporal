@@ -109,18 +109,19 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 		}, nil
 	})
 	s.NoError(err)
-
 	// Wait for the fast-forward's TimeSkippingTimerTask to fire while the activity is still in
 	// flight. With timer1=29:58 and fast-forward=30m, the regenerated fast-forward task's wall
 	// VisibilityTime is at startTime+2s; the executor hits this within seconds of WT2
 	// closing. B3 not fixed: the executor emits the disable transition regardless of
 	// the in-flight activity, flipping Enabled=false / HasReached=true on the fast-forward.
-	s.Eventually(func() bool {
-		ms := s.getMutableState(env, tv.WorkflowID(), runID)
-		tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
-		ff := tsi.GetFastForwardInfo()
-		return ff != nil && ff.GetHasReached()
-	}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while activity is in-flight (B3 path)")
+	s.Awaitf(
+		func(s *TimeSkippingFastForwardFunctionalSuite) {
+			ms := s.getMutableState(env, tv.WorkflowID(), runID)
+			tsi := ms.State.ExecutionInfo.GetTimeSkippingInfo()
+			ff := tsi.GetFastForwardInfo()
+			s.True(ff != nil && ff.GetHasReached())
+
+		}, 30*time.Second, 200*time.Millisecond, "expected fastForward timer task to fire while activity is in-flight (B3 path)")
 
 	// AT1: complete the activity.
 	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
@@ -313,7 +314,6 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 
 	second := transitions[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	s.True(second.GetDisabledAfterFastForward(), "second transition must be the fast-forward-disable event")
-
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED), "pause event must be in history")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED), "unpause event must be in history")
 	s.True(hasEventType(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED), "workflow must complete")

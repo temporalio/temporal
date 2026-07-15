@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -147,8 +145,8 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 
 	// verify open visibility
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
+	s.Await(
+		func(s *WorkflowMemoTestSuite) {
 			resp, err1 := env.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
@@ -160,8 +158,8 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 					WorkflowId: id,
 				}},
 			})
-			require.NoError(t, err1)
-			require.Len(t, resp.Executions, 1)
+			s.NoError(err1)
+			s.Len(resp.Executions, 1)
 			openExecutionInfo = resp.Executions[0]
 		},
 		testcore.WaitForESToSettle,
@@ -199,8 +197,8 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 
 	// verify closed visibility
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
+	s.Await(
+		func(s *WorkflowMemoTestSuite) {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
@@ -212,8 +210,8 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 					WorkflowId: id,
 				}},
 			})
-			require.NoError(t, err1)
-			require.Len(t, resp.Executions, 1)
+			s.NoError(err1)
+			s.Len(resp.Executions, 1)
 			closedExecutionInfo = resp.Executions[0]
 		},
 		testcore.WaitForESToSettle,

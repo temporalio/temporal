@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 const (
@@ -30,11 +31,11 @@ func sourceRoot() string {
 func cloneRepo(t *testing.T, url, destDir, ref string) {
 	t.Helper()
 	t.Logf("Cloning %s at %s...", url, ref)
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+	await.Requiref(testcontext.For(t), t, func(collect *await.T) {
 		_ = os.RemoveAll(destDir)
 		out, err := exec.CommandContext(t.Context(), "git", "clone", "--filter=blob:none", url, destDir).CombinedOutput()
 		require.NoError(collect, err, "git clone failed:\n%s", out)
-	}, retryTimeout, 2*time.Second, "git clone "+filepath.Base(url))
+	}, retryTimeout, 2*time.Second, "git clone %s", filepath.Base(url))
 
 	out, err := exec.CommandContext(t.Context(), "git", "-C", destDir, "checkout", ref).CombinedOutput()
 	require.NoError(t, err, "git checkout %s failed:\n%s", ref, out)
@@ -90,7 +91,7 @@ func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
 
 	t.Log("Resolving release tags...")
 	var version semver.Version
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+	await.Requiref(testcontext.For(t), t, func(collect *await.T) {
 		out, err := exec.CommandContext(t.Context(), "git", "ls-remote", "--tags", "--refs", temporalRepo).CombinedOutput()
 		require.NoError(collect, err, "git ls-remote failed:\n%s", out)
 

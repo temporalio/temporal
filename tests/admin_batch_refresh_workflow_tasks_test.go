@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -106,16 +104,16 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	s.NoError(err)
 	err = workflowRun2.Get(s.Context(), &out)
 	s.NoError(err)
-
 	// Wait for workflows to be visible
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			Query:     "WorkflowType='simpleWorkflow'",
-		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, resp.GetCount(), int64(2))
-	}, 10*time.Second, 500*time.Millisecond)
+	s.Await(
+		func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
+			resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     "WorkflowType='simpleWorkflow'",
+			})
+			s.NoError(err)
+			s.GreaterOrEqual(resp.GetCount(), int64(2))
+		}, 10*time.Second, 500*time.Millisecond)
 
 	// Start admin batch operation using visibility query
 	resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{

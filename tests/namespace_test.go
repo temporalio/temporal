@@ -73,16 +73,16 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 
-		return true
 	}, 20*time.Second, time.Second)
 }
 
@@ -117,16 +117,16 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 
-		return true
 	}, 20*time.Second, time.Second)
 }
 
@@ -160,16 +160,16 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 
-		return true
 	}, 20*time.Second, time.Second)
 }
 
@@ -256,14 +256,15 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false // namespace still exists
+			s.Fail("condition was false")
+			return
+			// namespace still exists
 		}
 
 		for _, execution := range executions {
@@ -274,10 +275,12 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 				},
 			})
 			if !errors.As(err, &notFound) {
-				return false // should never happen
+				s.Fail("condition was false")
+				return
+				// should never happen
 			}
 		}
-		return true
+
 	}, 20*time.Second, time.Second)
 }
 
@@ -349,14 +352,15 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		_, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false // namespace still exists
+			s.Fail("condition was false")
+			return
+			// namespace still exists
 		}
 
 		for _, execution := range executions {
@@ -367,10 +371,12 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 				},
 			})
 			if !errors.As(err, &notFound) {
-				return false // should never happen
+				s.Fail("condition was false")
+				return
+				// should never happen
 			}
 		}
-		return true
+
 	}, 20*time.Second, time.Second)
 }
 
@@ -420,7 +426,7 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 
 	// Cache is populated by the periodic refresh, so the weak path should eventually succeed.
 	var weakResp *workflowservice.DescribeNamespaceResponse
-	s.Eventually(func() bool {
+	s.Await(func(s *namespaceTestSuite) {
 		weakResp, err = env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
 			Namespace:       nsName,
 			WeakConsistency: true,
@@ -429,7 +435,8 @@ func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
 		if err != nil && !errors.As(err, &nsNotFound) {
 			s.Failf("unexpected error", "Expected NamespaceNotFound error, got: %v", err)
 		}
-		return err == nil
+		s.NoError(err)
+
 	}, 5*testcore.NamespaceCacheRefreshInterval, 100*time.Millisecond) //nolint:forbidigo
 
 	strongResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{

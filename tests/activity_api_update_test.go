@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -100,12 +98,11 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *ActivityAPIUpdateClientTestSuite) {
 		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, int32(1), startedActivityCount.Load())
+		s.NoError(err)
+		s.Len(description.GetPendingActivities(), 1)
+		s.Equal(int32(1), startedActivityCount.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
@@ -130,12 +127,11 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.Len(description.PendingActivities, 1)
 
 	activityUpdated <- struct{}{}
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *ActivityAPIUpdateClientTestSuite) {
 		description, err = env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Empty(t, description.GetPendingActivities())
-		require.Equal(t, int32(2), startedActivityCount.Load())
+		s.NoError(err)
+		s.Empty(description.GetPendingActivities())
+		s.Equal(int32(2), startedActivityCount.Load())
 	}, 3*time.Second, 100*time.Millisecond)
 
 	var out string
@@ -175,15 +171,15 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
-
 	// wait for activity to start (and fail)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, int32(1), startedActivityCount.Load())
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.GetPendingActivities(), 1)
+			s.Equal(int32(1), startedActivityCount.Load())
 
-	}, 2*time.Second, 200*time.Millisecond)
+		}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout
 	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
@@ -200,14 +196,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	resp, err := env.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
-
 	// activity should fail immediately
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Empty(t, description.GetPendingActivities())
-		require.Equal(t, int32(1), startedActivityCount.Load())
-	}, 2*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Empty(description.GetPendingActivities())
+			s.Equal(int32(1), startedActivityCount.Load())
+		}, 2*time.Second, 200*time.Millisecond)
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
@@ -259,11 +255,11 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
-
 	// wait for activity to start (and fail)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		require.NotZero(t, startedActivityCount.Load())
-	}, 10*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			s.NotZero(startedActivityCount.Load())
+		}, 10*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout, make it longer
 	// also update retry policy interval, make it shorter
@@ -290,14 +286,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.Equal(int64(newScheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
 	// check that field we didn't update is the same
 	s.Equal(int64(scheduleToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
-
 	// now activity should succeed
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Empty(t, description.GetPendingActivities())
-		require.Equal(t, int32(2), startedActivityCount.Load())
-	}, 5*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Empty(description.GetPendingActivities())
+			s.Equal(int32(2), startedActivityCount.Load())
+		}, 5*time.Second, 200*time.Millisecond)
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
@@ -345,14 +341,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
-
 	// wait for activity to start (and fail)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.GetPendingActivities(), 1)
-		require.Equal(t, int32(1), startedActivityCount.Load())
-	}, 10*time.Second, 500*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.GetPendingActivities(), 1)
+			s.Equal(int32(1), startedActivityCount.Load())
+		}, 10*time.Second, 500*time.Millisecond)
 
 	// update activity options, set retry policy to 1000 attempts
 	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
@@ -371,14 +367,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	resp, err := env.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
-
 	// check that the update was successful
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, int32(1000), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
-	}, 3*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.PendingActivities, 1)
+			s.Equal(int32(1000), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		}, 3*time.Second, 200*time.Millisecond)
 
 	// reset activity options to default
 	updateRequest.ActivityOptions = nil
@@ -387,14 +383,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	resp, err = env.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
-
 	// check that the update was successful
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, int32(defaultMaximumAttempts), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
-	}, 3*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.PendingActivities, 1)
+			s.Equal(int32(defaultMaximumAttempts), description.PendingActivities[0].GetActivityOptions().GetRetryPolicy().GetMaximumAttempts())
+		}, 3*time.Second, 200*time.Millisecond)
 
 	// update activity options again, this time set retry interval to 1 second
 	newScheduleToCloseTimeout := 10 * time.Second
@@ -412,14 +408,14 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 
 	// let activity finish
 	activityUpdated <- struct{}{}
-
 	// wait for activity to finish
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		require.NoError(t, err)
-		require.Empty(t, description.GetPendingActivities())
-		require.Equal(t, int32(2), startedActivityCount.Load())
-	}, 3*time.Second, 100*time.Millisecond)
+	s.Await(
+		func(s *ActivityAPIUpdateClientTestSuite) {
+			description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Empty(description.GetPendingActivities())
+			s.Equal(int32(2), startedActivityCount.Load())
+		}, 3*time.Second, 100*time.Millisecond)
 
 	var out string
 	err = workflowRun.Get(ctx, &out)

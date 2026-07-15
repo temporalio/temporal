@@ -375,9 +375,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
+		s.Len(initialChildExecutions, 1)
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -396,9 +396,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 	s.NoError(err)
 
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		s.Len(childExecutionsAfterReset1, 1)
+
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Let the second child finish by sending a signal.
@@ -440,9 +441,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
+		s.Len(initialChildExecutions, 1)
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -462,9 +463,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		s.Len(childExecutionsAfterReset1, 1)
+
 	}, 5*time.Second, 100*time.Millisecond)
 
 	err = env.SdkClient().SignalWorkflow(s.Context(), childExecutionsAfterReset1[0].WorkflowId, childExecutionsAfterReset1[0].RunId, "continue", "")
@@ -497,9 +499,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
+		s.Len(initialChildExecutions, 1)
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -521,9 +523,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
-		return len(childExecutionsAfterReset1) == 1
+		s.Len(childExecutionsAfterReset1, 1)
+
 	}, 5*time.Second, 100*time.Millisecond)
 
 	err = env.SdkClient().SignalWorkflow(s.Context(), childExecutionsAfterReset1[0].WorkflowId, childExecutionsAfterReset1[0].RunId, "continue", "")
@@ -563,13 +566,15 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
 		if len(initialChildExecutions) == 0 {
-			return false
+			s.Fail("condition was false")
+			return
 		}
 		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChildInit(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
-		return resetRequest.WorkflowTaskFinishEventId != 0
+		s.NotZero(resetRequest.WorkflowTaskFinishEventId)
+
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// resetting the new workflow execution after child-1 while child-1 is still running
@@ -604,9 +609,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
+		s.Len(initialChildExecutions, 1)
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -622,11 +627,12 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 	// Let the child finish now
 	err = env.SdkClient().SignalWorkflow(s.Context(), initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId, "continue", "")
 	s.NoError(err)
-
 	// Wait for the child to complete.
-	s.Eventually(func() bool {
-		return s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId) != 0
-	}, 5*time.Second, 100*time.Millisecond)
+	s.Await(
+		func(s *WorkflowResetWithChildSuite) {
+			s.NotZero(s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId))
+
+		}, 5*time.Second, 100*time.Millisecond)
 
 	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
@@ -651,9 +657,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
-		return len(initialChildExecutions) == 1
+		s.Len(initialChildExecutions, 1)
 
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -672,9 +678,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 
 	// Wait until the parent has recorded the child's terminated event and a subsequent WFT completed.
 	var wftAfterChildTerminated int64
-	s.Eventually(func() bool {
+	s.Await(func(s *WorkflowResetWithChildSuite) {
 		wftAfterChildTerminated = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
-		return wftAfterChildTerminated != 0
+		s.NotZero(wftAfterChildTerminated)
+
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// resetting the new workflow execution after child initiation.

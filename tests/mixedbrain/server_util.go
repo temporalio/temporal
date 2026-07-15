@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/testing/await"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -90,8 +91,7 @@ func registerNamespace(t *testing.T, conn *grpc.ClientConn, namespace string) {
 	t.Helper()
 
 	client := workflowservice.NewWorkflowServiceClient(conn)
-
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		_, err := client.RegisterNamespace(t.Context(), &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        namespace,
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
@@ -108,8 +108,7 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 	t.Helper()
 
 	client := operatorservice.NewOperatorServiceClient(conn)
-
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		_, err := client.CreateNexusEndpoint(t.Context(), &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -138,8 +137,7 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 	t.Helper()
 
 	client := adminservice.NewAdminServiceClient(conn)
-
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		resp, err := client.DescribeCluster(t.Context(), &adminservice.DescribeClusterRequest{})
 		if err != nil {
 			return false

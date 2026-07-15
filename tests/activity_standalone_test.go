@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -2871,7 +2872,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 func (env *standaloneActivityEnv) eventuallyTerminated(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -2883,7 +2884,7 @@ func (env *standaloneActivityEnv) eventuallyTerminated(ctx context.Context, t *t
 
 func (env *standaloneActivityEnv) eventuallyTimedOut(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		resp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -2895,7 +2896,7 @@ func (env *standaloneActivityEnv) eventuallyTimedOut(ctx context.Context, t *tes
 
 func (env *standaloneActivityEnv) eventuallyDeleted(ctx context.Context, t *testing.T, activityID, runID string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		_, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -4686,15 +4687,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
 		t.Helper()
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
+		s.Await(
+			func(s *standaloneActivityTestSuite) {
 				var err error
 				resp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					PageSize:  pageSize,
 					Query:     query,
 				})
-				return err == nil && len(resp.GetExecutions()) >= 1
+				s.True(err == nil && len(resp.GetExecutions()) >= 1)
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4757,15 +4759,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		require.NoError(t, err)
 
 		var resp *workflowservice.ListActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
+		s.Await(
+			func(s *standaloneActivityTestSuite) {
 				var err error
 				resp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					PageSize:  10,
 					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
 				})
-				return err == nil && len(resp.GetExecutions()) >= 1
+				s.True(err == nil && len(resp.GetExecutions()) >= 1)
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4837,15 +4840,16 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			})
 			require.NoError(t, err)
 		}
-
 		// Wait for both activities to be indexed in Elasticsearch before testing pagination
-		s.Eventually(
-			func() bool {
+		s.Await(
+
+			func(s *standaloneActivityTestSuite) {
 				countResp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
 				})
-				return err == nil && countResp.GetCount() == 2
+				s.True(err == nil && countResp.GetCount() == 2)
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4895,13 +4899,14 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 
 	verifyCountQuery := func(t *testing.T, query string, expectedCount int) {
 		t.Helper()
-		s.Eventually(
-			func() bool {
+		s.Await(
+			func(s *standaloneActivityTestSuite) {
 				resp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					Query:     query,
 				})
-				return err == nil && resp.GetCount() == int64(expectedCount)
+				s.True(err == nil && resp.GetCount() == int64(expectedCount))
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4937,14 +4942,15 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 
 		query := fmt.Sprintf("ActivityType = '%s' GROUP BY ExecutionStatus", groupByType.Name)
 		var resp *workflowservice.CountActivityExecutionsResponse
-		s.Eventually(
-			func() bool {
+		s.Await(
+			func(s *standaloneActivityTestSuite) {
 				var err error
 				resp, err = env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					Query:     query,
 				})
-				return err == nil && resp.GetCount() == 3
+				s.True(err == nil && resp.GetCount() == 3)
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -4968,16 +4974,17 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			},
 		})
 		require.NoError(t, err)
-
-		s.Eventually(func() bool {
+		s.Await(func(s *standaloneActivityTestSuite) {
 			descResp, err := env.OperatorClient().ListSearchAttributes(s.Context(), &operatorservice.ListSearchAttributesRequest{
 				Namespace: env.Namespace().String(),
 			})
 			if err != nil {
-				return false
+				s.Fail("condition was false")
+				return
 			}
 			_, ok := descResp.CustomAttributes[customSAName]
-			return ok
+			s.True(ok)
+
 		}, 10*time.Second, 100*time.Millisecond)
 
 		for i := range 2 {
@@ -4998,14 +5005,14 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			})
 			require.NoError(t, err)
 		}
-
-		s.Eventually(
-			func() bool {
+		s.Await(
+			func(s *standaloneActivityTestSuite) {
 				resp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
 					Namespace: env.Namespace().String(),
 					Query:     fmt.Sprintf("%s = '%s'", customSAName, customSAValue),
 				})
-				return err == nil && resp.GetCount() == 2
+				s.True(err == nil && resp.GetCount() == 2)
+
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
@@ -5920,16 +5927,17 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 		}, startDelay+scheduleToStartTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToStartTimeout")
+		await.
 
-		// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
-		require.Eventually(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			})
-			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		}, 10*time.Second, 100*time.Millisecond)
+			// Now wait for the ScheduleToStart timeout to actually fire (measured from after delay).
+			RequireTrue(t, func() bool {
+				resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.RunId,
+				})
+				return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			}, 10*time.Second, 100*time.Millisecond)
 	})
 
 	t.Run("ScheduleToCloseTimeoutExtended", func(t *testing.T) {
@@ -5974,16 +5982,17 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			return err != nil || descResp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 		}, startDelay+scheduleToCloseTimeout-timerSafetyMargin, 100*time.Millisecond,
 			"activity should not time out before startDelay + scheduleToCloseTimeout")
+		await.
 
-		// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
-		require.Eventually(t, func() bool {
-			resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  env.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      startResp.RunId,
-			})
-			return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
-		}, 10*time.Second, 100*time.Millisecond)
+			// Now wait for the ScheduleToClose timeout to actually fire (measured from after delay).
+			RequireTrue(t, func() bool {
+				resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.RunId,
+				})
+				return err == nil && resp.GetInfo().GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+			}, 10*time.Second, 100*time.Millisecond)
 	})
 
 	t.Run("CancelDuringDelay", func(t *testing.T) {

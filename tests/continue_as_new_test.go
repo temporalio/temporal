@@ -350,9 +350,8 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 			}
 		}
 	}()
-
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *ContinueAsNewTestSuite) {
 			descResp, err := env.FrontendClient().DescribeWorkflowExecution(
 				s.Context(),
 				&workflowservice.DescribeWorkflowExecutionRequest{
@@ -363,8 +362,10 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 				},
 			)
 			s.NoError(err)
-			return descResp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
-				descResp.GetWorkflowExecutionInfo().Execution.GetRunId() != we.RunId // validate that workflow did continue as new
+			s.True(descResp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT &&
+				descResp.GetWorkflowExecutionInfo().Execution.GetRunId() != we.RunId)
+
+			// validate that workflow did continue as new
 		},
 		time.Second*10,
 		time.Millisecond*50,

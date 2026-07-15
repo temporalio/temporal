@@ -121,8 +121,8 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	openCount := 0
 
 	var historyLength int64
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *WorkflowVisibilityTestSuite) {
 			resp, err3 := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
@@ -137,19 +137,19 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			closedCount = len(resp.Executions)
 			if closedCount == 1 {
 				historyLength = resp.Executions[0].HistoryLength
-				return true
+				return
 			}
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
+			s.Fail("condition was false")
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.Equal(1, closedCount)
 	s.Equal(int64(5), historyLength)
-
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *WorkflowVisibilityTestSuite) {
 			resp, err4 := env.FrontendClient().ListOpenWorkflowExecutions(s.Context(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
@@ -163,10 +163,11 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			s.NoError(err4)
 			openCount = len(resp.Executions)
 			if openCount == 1 {
-				return true
+				return
 			}
 			env.Logger.Info("Open WorkflowExecution is not yet visible")
-			return false
+			s.Fail("condition was false")
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

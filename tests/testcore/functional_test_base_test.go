@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -43,7 +44,7 @@ func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {
 	defer func() { _ = conn.Close() }()
 
 	healthClient := healthpb.NewHealthClient(conn)
-	s.Eventually(
+	await.RequireTrue(s.T(),
 		func() bool {
 			resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
 				Service: worker.ServiceName,

@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -112,8 +110,8 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(env *VersioningTest
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(env *VersioningTestEnv, tv *testvars.TestVars, expectedTaskQueues int) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		respV, _ := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
@@ -130,8 +128,8 @@ func (s *WorkerDeploymentSuite) ensureCreateVersionInDeployment(
 	v := tv.DeploymentVersionString()
 	ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
 	defer cancel()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		res, _ := env.FrontendClient().DescribeWorkerDeployment(ctx,
 			&workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
@@ -156,8 +154,8 @@ func (s *WorkerDeploymentSuite) ensureCreateDeployment(
 ) {
 	ctx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
 	defer cancel()
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		res, _ := env.FrontendClient().DescribeWorkerDeployment(ctx,
 			&workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      env.Namespace().String(),
@@ -173,8 +171,8 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(env *VersioningTestEnv, tv 
 }
 
 func (s *WorkerDeploymentSuite) waitForDeploymentVersion(env *VersioningTestEnv, tv *testvars.TestVars) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
@@ -208,17 +206,17 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, env.Tv().ClientIdentity())
 	s.NoError(err)
-
 	// Verify if the state is intact even after a CAN
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+		}, time.Second*10, time.Millisecond*1000)
 }
 
 func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
@@ -270,17 +268,17 @@ func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
 
 	err = env.SendSignal(env.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, env.Tv().ClientIdentity())
 	s.NoError(err)
-
 	// Verify that the override state is used after CAN
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal("override-manager-identity", resp.GetWorkerDeploymentInfo().GetManagerIdentity())
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal("override-manager-identity", resp.GetWorkerDeploymentInfo().GetManagerIdentity())
+		}, time.Second*10, time.Millisecond*1000)
 }
 
 func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
@@ -350,9 +348,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 	s.ensureCreateVersionInDeployment(env, firstVersion)
 
 	go s.pollFromDeployment(env, secondVersion)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
@@ -394,13 +391,12 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 		// waiting for 1ms to start the next version later.
 		startTime := time.Now()
 		waitTime := 1 * time.Millisecond
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			require.Greater(t, time.Since(startTime), waitTime)
+		s.Await(func(s *WorkerDeploymentSuite) {
+			s.Greater(time.Since(startTime), waitTime)
 		}, 10*time.Second, 1000*time.Millisecond)
 	}
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
@@ -432,17 +428,18 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 
 	var cT []byte
 	// No current deployment version set.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
 
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
-		cT = resp.GetConflictToken()
-	}, time.Second*10, time.Millisecond*1000)
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+			cT = resp.GetConflictToken()
+		}, time.Second*10, time.Millisecond*1000)
 
 	s.ensureCreateVersionInDeployment(env, firstVersion)
 	// Set first version as current version
@@ -453,9 +450,8 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		ConflictToken:  cT,
 	})
 	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
@@ -477,9 +473,8 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		IgnoreMissingTaskQueues: true, // here until we have 'has version started' safeguard in place
 	})
 	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: env.Tv().DeploymentSeries(),
@@ -497,17 +492,19 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 	// Start deployment version workflow + worker-deployment workflow.
 	go s.pollFromDeployment(env, env.Tv())
 
-	cTWrong, _ := time.Now().MarshalBinary() // wrong token
+	cTWrong, _ := time.Now().MarshalBinary()
 	// Wait until deployment exists
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
-	}, time.Second*10, time.Millisecond*1000)
+	s. // wrong token
+		Await(
+			func(s *WorkerDeploymentSuite) {
+				a := s
+				resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+					Namespace:      env.Namespace().String(),
+					DeploymentName: env.Tv().DeploymentSeries(),
+				})
+				a.NoError(err)
+				a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+			}, time.Second*10, time.Millisecond*1000)
 
 	// Set first version as current version with wrong token
 	_, err := env.FrontendClient().SetWorkerDeploymentCurrentVersion(s.Context(), &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -1802,21 +1799,21 @@ func (s *WorkerDeploymentSuite) TestDeleteVersion_ServerDeleteMaxVersionsReached
 	pollerCancel2 := s.startDeploymentPoller(env, tv2)
 	s.ensureCreateVersionInDeployment(env, tv2)
 	pollerCancel2()
-
 	// Verify that the worker deployment only has one version in it's version summaries.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
-		a.Equal(tv2.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion().GetBuildId())
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), 1)
+			a.Equal(tv2.ExternalDeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetDeploymentVersion().GetBuildId())
 
-		// Also verify that the last modifier identity is not set to the identity of the worker-deployment workflow.
-		a.NotEqual(env.Tv().ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
-	}, time.Second*5, time.Millisecond*200)
+			// Also verify that the last modifier identity is not set to the identity of the worker-deployment workflow.
+			a.NotEqual(env.Tv().ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+		}, time.Second*5, time.Millisecond*200)
 }
 
 // Should see that the current version of the task queues becomes unversioned
@@ -1998,8 +1995,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	// Wait for all version workflows to appear (must run in the test goroutine due to assertions)
 	for i := range tqs {
 		tvI := env.Tv().WithTaskQueueNumber(i)
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			a := require.New(t)
+		s.Await(func(s *WorkerDeploymentSuite) {
+			a := s
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 				Namespace: env.Namespace().String(),
 				Version:   tvI.DeploymentVersionString(),
@@ -2162,25 +2159,24 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 				}
 			}
 		}()
-
 		// Wait for all task queues to be added to versions
+		s.Await(
 
-		// Wait for the versions to be created
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			a := require.New(t)
-			resp, err := env.FrontendClient().DescribeWorkerDeployment(pollCtx, &workflowservice.DescribeWorkerDeploymentRequest{
-				Namespace:      env.Namespace().String(),
-				DeploymentName: dn,
-			})
-			a.NoError(err)
-			a.NotNil(resp.GetWorkerDeploymentInfo())
-			a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), i+1)
-		}, 3*time.Minute, 500*time.Millisecond)
+			// Wait for the versions to be created
+			func(s *WorkerDeploymentSuite) {
+				a := s
+				resp, err := env.FrontendClient().DescribeWorkerDeployment(pollCtx, &workflowservice.DescribeWorkerDeploymentRequest{
+					Namespace:      env.Namespace().String(),
+					DeploymentName: dn,
+				})
+				a.NoError(err)
+				a.NotNil(resp.GetWorkerDeploymentInfo())
+				a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), i+1)
+			}, 3*time.Minute, 500*time.Millisecond)
 
 		fmt.Printf(">>> Time taken version %d added: %v\n", i, time.Since(start))
-
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			a := require.New(t)
+		s.Await(func(s *WorkerDeploymentSuite) {
+			a := s
 			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(pollCtx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 				Namespace:         env.Namespace().String(),
 				DeploymentVersion: env.Tv().WithBuildIDNumber(i).ExternalDeploymentVersion(),
@@ -2237,8 +2233,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 
 	// Wait for the routing update status to be completed
 	var latestRoutingConfig *deploymentpb.RoutingConfig
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: dn,
@@ -2604,17 +2600,17 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 			LastModifierIdentity: tv2.ClientIdentity(),
 		},
 	})
-
 	// wait for v1 to be drained
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: env.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: env.Namespace().String(),
+				Version:   tv1.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
 
 	// Verify that the drainageStatus of v1 has been updated in the VersionSummaries
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -2723,17 +2719,17 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 	// Set version v1 as the current version; this shall drain out v2
 	newCurrentV1UpdateTime := timestamppb.Now()
 	s.setCurrentVersion(env, tv1, true, "")
-
 	// Verify that v2 is drained
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: env.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: env.Namespace().String(),
+				Version:   tv2.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
 
 	// verify if the right information is set in the DescribeWorkerDeployment response
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -2791,17 +2787,17 @@ func (s *WorkerDeploymentSuite) TestDrainRollbackedVersion() {
 
 	newCurrentV3UpdateTime := timestamppb.Now()
 	s.setCurrentVersion(env, tv3, true, "")
-
 	// Verify that v1 is drained eventually
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: env.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: env.Namespace().String(),
+				Version:   tv1.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
 
 	// Verify that v1, which was rolled back to being current previously, is drained with it's information present
 	// in the deployment workflow.
@@ -2965,17 +2961,17 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
 			LastModifierIdentity: tv2.ClientIdentity(),
 		},
 	})
-
 	// wait for v1 to be drained
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: env.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: env.Namespace().String(),
+				Version:   tv1.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+		}, time.Second*10, time.Millisecond*1000)
 
 	// Verify that the drainageStatus of v1 has been updated in the VersionSummaries
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -3119,35 +3115,35 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 
 	// Stop the poller so it doesn't keep polling
 	pollerCancel()
-
 	// Wait for pollers going away
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     env.Tv().TaskQueue(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		})
-		require.NoError(t, err)
-		require.Empty(t, resp.Pollers)
-	}, 5*time.Second, time.Second)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+				Namespace:     env.Namespace().String(),
+				TaskQueue:     env.Tv().TaskQueue(),
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			})
+			s.NoError(err)
+			s.Empty(resp.Pollers)
+		}, 5*time.Second, time.Second)
 
 	// delete succeeds
 	s.tryDeleteVersion(env, env.Tv(), "")
-
 	// deployment version does not exist in the deployment list
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.NoError(err)
-		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			//nolint:staticcheck // SA1019 deprecated Version will clean up later
-			a.NotEqual(env.Tv().DeploymentVersionString(), vs.Version)
-			a.False(proto.Equal(env.Tv().ExternalDeploymentVersion(), vs.GetDeploymentVersion()))
-		}
-	}, time.Second*5, time.Millisecond*200)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.NoError(err)
+			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				//nolint:staticcheck // SA1019 deprecated Version will clean up later
+				a.NotEqual(env.Tv().DeploymentVersionString(), vs.Version)
+				a.False(proto.Equal(env.Tv().ExternalDeploymentVersion(), vs.GetDeploymentVersion()))
+			}
+		}, time.Second*5, time.Millisecond*200)
 
 	// Deleting the worker deployment should succeed since there are no associated versions left
 	_, err = env.FrontendClient().DeleteWorkerDeployment(s.Context(), &workflowservice.DeleteWorkerDeploymentRequest{
@@ -3156,37 +3152,36 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		Identity:       env.Tv().ClientIdentity(),
 	})
 	s.NoError(err)
-
 	// Describe Worker Deployment should give not found
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		_, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      env.Namespace().String(),
-			DeploymentName: env.Tv().DeploymentSeries(),
-		})
-		a.Error(err)
-		var nfe *serviceerror.NotFound
-		a.ErrorAs(err, &nfe)
-	}, time.Second*5, time.Millisecond*200)
-
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			_, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      env.Namespace().String(),
+				DeploymentName: env.Tv().DeploymentSeries(),
+			})
+			a.Error(err)
+			var nfe *serviceerror.NotFound
+			a.ErrorAs(err, &nfe)
+		}, time.Second*5, time.Millisecond*200)
 	// ListDeployments should not show the closed/deleted Worker Deployment
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-		listResp, err := env.FrontendClient().ListWorkerDeployments(s.Context(), &workflowservice.ListWorkerDeploymentsRequest{
-			Namespace: env.Namespace().String(),
-		})
-		a.NoError(err)
-		for _, dInfo := range listResp.GetWorkerDeployments() {
-			a.NotEqual(env.Tv().DeploymentSeries(), dInfo.GetName())
-		}
-	}, time.Second*5, time.Millisecond*200)
+	s.Await(
+		func(s *WorkerDeploymentSuite) {
+			a := s
+			listResp, err := env.FrontendClient().ListWorkerDeployments(s.Context(), &workflowservice.ListWorkerDeploymentsRequest{
+				Namespace: env.Namespace().String(),
+			})
+			a.NoError(err)
+			for _, dInfo := range listResp.GetWorkerDeployments() {
+				a.NotEqual(env.Tv().DeploymentSeries(), dInfo.GetName())
+			}
+		}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
 	env := s.newTestEnv()
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		_, err := env.FrontendClient().DeleteWorkerDeployment(s.Context(), &workflowservice.DeleteWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: env.Tv().DeploymentSeries(),
@@ -3201,8 +3196,8 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 
 	// Start deployment workflow 1 and wait for the deployment version and deployment workflow to exist
 	go s.pollFromDeployment(env, env.Tv())
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: env.Namespace().String(),
 			Version:   env.Tv().DeploymentVersionString(),
@@ -3210,9 +3205,8 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_InvalidDelete() {
 		a.NoError(err)
 		a.Equal(env.Tv().DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion()) //nolint:staticcheck // SA1019: old worker versioning
 	}, time.Second*5, time.Millisecond*200)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      env.Namespace().String(),
 			DeploymentName: env.Tv().DeploymentSeries(),
@@ -3621,8 +3615,8 @@ func (s *WorkerDeploymentSuite) validateWorkerDeploymentCount(
 	request *workflowservice.ListWorkerDeploymentsRequest,
 	expectedCount int,
 ) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		a := s
 		actualDeploymentSummaries, err := s.listWorkerDeployments(env, request)
 		a.NoError(err)
 		a.Len(actualDeploymentSummaries, expectedCount)

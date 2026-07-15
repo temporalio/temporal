@@ -1469,13 +1469,14 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(opts []testcore.Te
 			},
 		},
 	}
-
 	// Assert visibility is correct
-	s.Eventually(
-		func() bool {
+	s.Await(
+
+		func(s *SignalWorkflowTestSuite) {
 			listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
 			s.NoError(err)
-			return len(listResp.Executions) == 1
+			s.Len(listResp.Executions, 1)
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -1492,12 +1493,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(opts []testcore.Te
 		Identity: identity,
 	})
 	s.NoError(err)
-
-	s.Eventually(
-		func() bool {
+	s.Await(
+		func(s *SignalWorkflowTestSuite) {
 			listResp, err := env.FrontendClient().ListOpenWorkflowExecutions(env.Context(), listOpenRequest)
 			s.NoError(err)
-			return len(listResp.Executions) == 0
+			s.Empty(listResp.Executions)
+
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

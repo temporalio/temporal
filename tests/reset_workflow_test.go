@@ -262,15 +262,14 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 	s.runWorkflowWithPoller(env, tv)
 
 	var historyEvents []*historypb.HistoryEvent
-	s.Eventually(func() bool {
+	s.Await(func(s *ResetWorkflowTestSuite) {
 		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
 		})
 		lastEvent := historyEvents[len(historyEvents)-1]
 		s.NotNil(historyEvents)
-
-		return lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 
 	}, 2*time.Second, 200*time.Millisecond)
 
@@ -283,7 +282,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 
 	// wait till workflow is closed
 	closedCount := 0
-	s.Eventually(func() bool {
+	s.Await(func(s *ResetWorkflowTestSuite) {
 		resp, err := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 100,
@@ -300,8 +299,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 		if closedCount == 0 {
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
 		}
-
-		return closedCount > 0
+		s.Positive(closedCount)
 
 	}, 5*time.Second, 500*time.Millisecond)
 	s.Equal(1, closedCount)
@@ -976,16 +974,17 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	env.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
-
 	// wait for your workflow and its CaN to complete
-	s.Eventually(func() bool {
-		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
-		})
-		s.NoError(err)
-		return resp.GetCount() >= 2
-	}, 30*time.Second, time.Second)
+	s.Await(
+		func(s *ResetWorkflowTestSuite) {
+			resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: env.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowId = \"%s\" AND ExecutionStatus != \"Running\"", run.GetID()),
+			})
+			s.NoError(err)
+			s.GreaterOrEqual(resp.GetCount(), 2)
+
+		}, 30*time.Second, time.Second)
 
 	wfExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -1119,7 +1118,6 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	})
 	env.Logger.Info("Poll and process second workflow task", tag.Error(err))
 	s.NoError(err)
-
 	s.True(workflowComplete)
 
 	descResp, descErr := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{

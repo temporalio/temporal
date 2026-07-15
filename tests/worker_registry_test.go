@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -412,21 +410,21 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_SendHeartbeatViaPollNexusTa
 			WorkerHeartbeat: []*workerpb.WorkerHeartbeat{heartbeat},
 		})
 	}()
-
 	// Verify heartbeat was registered.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
-			Namespace: env.Namespace().String(),
-			Query:     fmt.Sprintf("WorkerInstanceKey='%s'", nexusWorkerKey),
-		})
-		require.NoError(t, err)
+	s.Awaitf(
+		func(s *WorkerRegistryTestSuite) {
+			resp, err := env.FrontendClient().ListWorkers(s.Context(), &workflowservice.ListWorkersRequest{
+				Namespace: env.Namespace().String(),
+				Query:     fmt.Sprintf("WorkerInstanceKey='%s'", nexusWorkerKey),
+			})
+			s.NoError(err)
 
-		workers := resp.GetWorkersInfo()
-		require.Len(t, workers, 1)
+			workers := resp.GetWorkersInfo() //nolint:staticcheck // SA1019: old worker registry API
+			s.Len(workers, 1)
 
-		workerHeartbeat := workers[0].GetWorkerHeartbeat()
-		require.Equal(t, heartbeat.WorkerInstanceKey, workerHeartbeat.WorkerInstanceKey)
-		require.Equal(t, heartbeat.TaskQueue, workerHeartbeat.TaskQueue)
-		require.Equal(t, heartbeat.TotalStickyCacheHit, workerHeartbeat.TotalStickyCacheHit)
-	}, 2*time.Minute, 100*time.Millisecond, "Worker heartbeat should be registered via PollNexusTaskQueue")
+			workerHeartbeat := workers[0].GetWorkerHeartbeat()
+			s.Equal(heartbeat.WorkerInstanceKey, workerHeartbeat.WorkerInstanceKey)
+			s.Equal(heartbeat.TaskQueue, workerHeartbeat.TaskQueue)
+			s.Equal(heartbeat.TotalStickyCacheHit, workerHeartbeat.TotalStickyCacheHit)
+		}, 2*time.Minute, 100*time.Millisecond, "Worker heartbeat should be registered via PollNexusTaskQueue")
 }

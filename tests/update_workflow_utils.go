@@ -4,12 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -101,7 +102,8 @@ func sendUpdateInternal(
 
 func waitUpdateAdmitted(s testcore.Env, tv *testvars.TestVars) {
 	s.T().Helper()
-	require.EventuallyWithTf(s.T(), func(collect *assert.CollectT) {
+	//nolint:staticcheck // SA1019: testcore.Env exposes T for helper assertions.
+	await.Requiref(testcontext.For(s.T()), s.T(), func(collect *await.T) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace:  s.Namespace().String(),
 			UpdateRef:  tv.UpdateRef(),

@@ -111,11 +111,12 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 		"unblock-child",
 		nil,
 	))
-
 	// verify that the parent workflow completes soon after the number of pending child workflows drops
-	s.Eventually(func() bool {
-		return future.Get(s.Context(), nil) == nil
-	}, 20*time.Second, 500*time.Millisecond)
+	s.Await(
+		func(s *ClientMiscTestSuite) {
+			s.NoError(future.Get(s.Context(), nil))
+
+		}, 20*time.Second, 500*time.Millisecond)
 }
 
 // TestTooManyPendingActivities verifies that we don't allow users to schedule new activities when they've already
@@ -406,7 +407,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	// wait until wf started and sticky is set
 	var stickyQueue string
-	s.Eventually(func() bool {
+	s.Await(func(s *ClientMiscTestSuite) {
 		ms, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -416,8 +417,10 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 		})
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
-		// verify workflow has sticky task queue
-		return stickyQueue != "" && stickyQueue != env.WorkerTaskQueue()
+		s.True(
+			// verify workflow has sticky task queue
+			stickyQueue != "" && stickyQueue != env.WorkerTaskQueue())
+
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker
@@ -1010,18 +1013,18 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 
 			s.NotNil(workflowRun)
 			s.NotEmpty(workflowRun.GetRunID())
-
-			s.Eventually(func() bool {
+			s.Await(func(s *ClientMiscTestSuite) {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
 				iter := env.SdkClient().GetWorkflowHistory(s.Context(), workflowRun.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 				for iter.HasNext() {
 					evt, err := iter.Next()
 					s.NoError(err)
 					if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-						return true
+						return
 					}
 				}
-				return false
+				s.Fail("condition was false")
+
 			}, 10*time.Second, 200*time.Millisecond)
 
 			// stop old worker
@@ -1172,13 +1175,14 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 		Reason: "test",
 	})
 	s.NoError(err)
-
 	// latest run should complete successfully
-	s.Eventually(func() bool {
-		workflowRun = env.SdkClient().GetWorkflow(s.Context(), workflowRun.GetID(), "")
-		err = workflowRun.Get(s.Context(), &result)
-		return err == nil && result == 1
-	}, 5*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ClientMiscTestSuite) {
+			workflowRun = env.SdkClient().GetWorkflow(s.Context(), workflowRun.GetID(), "")
+			err = workflowRun.Get(s.Context(), &result)
+			s.True(err == nil && result == 1)
+
+		}, 5*time.Second, 200*time.Millisecond)
 }
 
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
@@ -1258,7 +1262,11 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(env.GetHistory(env.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond) //nolint:forbidigo
+	s.Await(
+		func(s *ClientMiscTestSuite) {
+			s.GreaterOrEqual(len(env.GetHistory(env.Namespace().String(), ex)), 10)
+
+		}, 5*time.Second, 100*time.Millisecond) //nolint:forbidigo
 
 	w1.Stop()
 
@@ -1275,9 +1283,12 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	// unblock the workflow
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "wait", nil))
-
 	// wait until we see three calls to badact
-	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ClientMiscTestSuite) {
+			s.GreaterOrEqual(badcount.Load(), 3)
+
+		}, 10*time.Second, 200*time.Millisecond)
 
 	// at this point act2 should have been invokved once also
 	s.Equal(int32(1), act2count.Load())
@@ -1302,12 +1313,13 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
 		sadefs.ExecutionStatus, "Running",
 		sadefs.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
-	s.Eventually(func() bool {
+	s.Await(func(s *ClientMiscTestSuite) {
 		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: env.Namespace().String(),
 			Query:     query,
 		})
-		return err == nil && len(resp.Executions) == 1
+		s.True(err == nil && len(resp.Executions) == 1)
+
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
@@ -1327,13 +1339,14 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		},
 	})
 	s.NoError(err)
-
 	// now it can complete on v3. (need to loop since runid will be resolved early and we need
 	// to re-resolve to pick up the new run instead of the terminated one)
-	s.Eventually(func() bool {
-		var out string
-		return env.SdkClient().GetWorkflow(s.Context(), run.GetID(), "").Get(s.Context(), &out) == nil && out == "done 3!"
-	}, 10*time.Second, 200*time.Millisecond)
+	s.Await(
+		func(s *ClientMiscTestSuite) {
+			var out string
+			s.True(env.SdkClient().GetWorkflow(s.Context(), run.GetID(), "").Get(s.Context(), &out) == nil && out == "done 3!")
+
+		}, 10*time.Second, 200*time.Millisecond)
 
 	s.Equal(int32(1), act1count.Load()) // we should not see an addition run of act1
 	s.Equal(int32(2), act2count.Load()) // we should see an addition run of act2 (reset point was before it)
