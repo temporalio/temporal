@@ -597,7 +597,8 @@ func (h *Handler) ListNexusEndpoints(ctx context.Context, request *matchingservi
 // RecordWorkerHeartbeat receive heartbeat request from the worker.
 func (h *Handler) RecordWorkerHeartbeat(
 	_ context.Context, request *matchingservice.RecordWorkerHeartbeatRequest,
-) (*matchingservice.RecordWorkerHeartbeatResponse, error) {
+) (_ *matchingservice.RecordWorkerHeartbeatResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	nsName := h.namespaceName(nsID)
 
@@ -608,7 +609,8 @@ func (h *Handler) RecordWorkerHeartbeat(
 // ListWorkers retrieves a list of workers in the specified namespace that match the provided filters.
 func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
-) (*matchingservice.ListWorkersResponse, error) {
+) (_ *matchingservice.ListWorkersResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	listRequest := request.GetListRequest()
 	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
@@ -656,7 +658,8 @@ func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerLis
 
 func (h *Handler) UpdateFairnessState(
 	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateFairnessState(ctx, request)
 }
 
@@ -680,13 +683,15 @@ func (h *Handler) reportForwardedPerTaskQueueCounter(opMetrics metrics.Handler, 
 
 func (h *Handler) UpdateTaskQueueConfig(
 	ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest,
-) (*matchingservice.UpdateTaskQueueConfigResponse, error) {
+) (_ *matchingservice.UpdateTaskQueueConfigResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.UpdateTaskQueueConfig(ctx, request)
 }
 
 func (h *Handler) DescribeWorker(
 	_ context.Context, request *matchingservice.DescribeWorkerRequest,
-) (*matchingservice.DescribeWorkerResponse, error) {
+) (_ *matchingservice.DescribeWorkerResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
 	nsID := namespace.ID(request.GetNamespaceId())
 	hb, err := h.workersRegistry.DescribeWorker(
 		nsID, request.Request.GetWorkerInstanceKey())
