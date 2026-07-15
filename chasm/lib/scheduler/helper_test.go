@@ -36,8 +36,8 @@ const (
 
 // newLegacySpecBuilder builds a legacy SpecBuilder with the given warn/max compute-limit bounds.
 // A value of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
-func newLegacySpecBuilder(warn, max int) *legacyscheduler.SpecBuilder {
-	return legacyscheduler.NewSpecBuilder(func() int { return warn }, func() int { return max })
+func newLegacySpecBuilder(warnIter, maxIter int) *legacyscheduler.SpecBuilder {
+	return legacyscheduler.NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
 }
 
 // defaultSchedule returns a protobuf definition for a schedule matching this

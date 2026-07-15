@@ -13,8 +13,8 @@ import (
 
 // newSpecBuilderForTest builds a SpecBuilder with the given warn/max compute-limit bounds. A value
 // of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
-func newSpecBuilderForTest(warn, max int) *SpecBuilder {
-	return NewSpecBuilder(func() int { return warn }, func() int { return max })
+func newSpecBuilderForTest(warnIter, maxIter int) *SpecBuilder {
+	return NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
 }
 
 type specSuite struct {
