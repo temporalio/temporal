@@ -81,51 +81,46 @@ func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv
 	opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}))
 	env := testcore.NewEnv(t, opts...)
 	t.Cleanup(func() {
-		deleteAllSchedules(t, env)
+		ctx, cancel := context.WithTimeout(chasmContextFactory(testcore.NewContext()), 30*time.Second)
+		defer cancel()
+
+		var scheduleIDs []string
+		var nextPageToken []byte
+		for {
+			response, err := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+				Namespace:       env.Namespace().String(),
+				MaximumPageSize: 1000,
+				NextPageToken:   nextPageToken,
+			})
+			if err != nil {
+				reportScheduleCleanupError(t, fmt.Errorf("list schedules: %w", err))
+				return
+			}
+			for _, schedule := range response.GetSchedules() {
+				scheduleIDs = append(scheduleIDs, schedule.GetScheduleId())
+			}
+			nextPageToken = response.GetNextPageToken()
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
+
+		var cleanupErr error
+		for _, scheduleID := range scheduleIDs {
+			_, err := env.FrontendClient().DeleteSchedule(ctx, &workflowservice.DeleteScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: scheduleID,
+				Identity:   "test cleanup",
+			})
+			var notFoundErr *serviceerror.NotFound
+			if err != nil && !errors.As(err, &notFoundErr) {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete schedule %q: %w", scheduleID, err))
+			}
+			cleanupErr = errors.Join(cleanupErr, forceDeleteScheduleExecutions(ctx, env, scheduleID))
+		}
+		reportScheduleCleanupError(t, cleanupErr)
 	})
 	return env
-}
-
-func deleteAllSchedules(t *testing.T, env *testcore.TestEnv) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(chasmContextFactory(testcore.NewContext()), 30*time.Second)
-	defer cancel()
-
-	var scheduleIDs []string
-	var nextPageToken []byte
-	for {
-		response, err := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
-			Namespace:       env.Namespace().String(),
-			MaximumPageSize: 1000,
-			NextPageToken:   nextPageToken,
-		})
-		if err != nil {
-			reportScheduleCleanupError(t, fmt.Errorf("list schedules: %w", err))
-			return
-		}
-		for _, schedule := range response.GetSchedules() {
-			scheduleIDs = append(scheduleIDs, schedule.GetScheduleId())
-		}
-		nextPageToken = response.GetNextPageToken()
-		if len(nextPageToken) == 0 {
-			break
-		}
-	}
-
-	var cleanupErr error
-	for _, scheduleID := range scheduleIDs {
-		_, err := env.FrontendClient().DeleteSchedule(ctx, &workflowservice.DeleteScheduleRequest{
-			Namespace:  env.Namespace().String(),
-			ScheduleId: scheduleID,
-			Identity:   "test cleanup",
-		})
-		var notFoundErr *serviceerror.NotFound
-		if err != nil && !errors.As(err, &notFoundErr) {
-			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete schedule %q: %w", scheduleID, err))
-		}
-		cleanupErr = errors.Join(cleanupErr, forceDeleteScheduleExecutions(ctx, env, scheduleID))
-	}
-	reportScheduleCleanupError(t, cleanupErr)
 }
 
 func registerScheduleExecutionCleanup(t *testing.T, env *testcore.TestEnv, scheduleID string) {
