@@ -283,6 +283,17 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 	}
 }
 
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
+	if config == nil {
+		return nil
+	}
+	if err := ValidateTimeSkippingConfig(config); err != nil {
+		return err
+	}
+	c.root.backend.SetTimeSkippingConfig(config)
+	return nil
+}
+
 // ContextWithValue returns a new Context with the given key-value pair added.
 // Added key-value pairs will be accessible via the Value() method on the returned Context,
 // and the behavior of the key-value pair is the same as context.Context.WithValue().

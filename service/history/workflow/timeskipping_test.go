@@ -2,18 +2,18 @@ package workflow
 
 import (
 	"context"
-	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
@@ -535,6 +535,43 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	})
 }
 
+// TestSetTimeSkippingConfig verifies the dispatcher: a nil TimeSkippingInfo routes to the
+// init path (creating it), while an existing TimeSkippingInfo routes to the update path.
+func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
+	s.Run("InitsWhenTimeSkippingInfoNil", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(cfg)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi, "nil TimeSkippingInfo must be initialized")
+		s.True(proto.Equal(cfg, tsi.GetConfig()))
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("UpdatesWhenTimeSkippingInfoExists", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		newCfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(newCfg)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(newCfg, tsi.GetConfig()), "config must be replaced in place")
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(),
+			"update must preserve accumulated skipped duration")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+}
+
 // TestWrapExecutionTimes covers the three invariants of wrapExecutionTimes:
 // a nil/zero skipped duration is a no-op; a non-zero duration shifts every *set*
 // execution timestamp forward by exactly that duration; unset timestamps stay unset.
@@ -701,7 +738,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(t1, tr.TargetTime)
+		s.Equal(t1, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -712,7 +749,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(2*time.Hour), tr.TargetTime)
+		s.Equal(baseTime.Add(2*time.Hour), tr.GetTargetTime())
 	})
 
 	s.Run("UserTimer_PlusEarlierFastForward_TargetIsFastForward", func() {
@@ -723,7 +760,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime)
+		s.Equal(fastForwardTarget, tr.GetTargetTime())
 		// The fast-forward is the earliest target (earlier than the timer), so skipping to it
 		// consumes the budget and disables time skipping on this transition.
 		s.True(tr.DisabledAfterFastForward)
@@ -740,7 +777,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTime, tr.TargetTime)
+		s.Equal(execTime, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -783,7 +820,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(schedTime, tr.TargetTime)
+		s.Equal(schedTime, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -802,7 +839,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(early, tr.TargetTime)
+		s.Equal(early, tr.GetTargetTime())
 	})
 
 	s.Run("ActivityBackoff_PlusEarlierTimer_TargetIsTimer", func() {
@@ -816,7 +853,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(timerTime, tr.TargetTime)
+		s.Equal(timerTime, tr.GetTargetTime())
 	})
 
 	s.Run("RunTimeoutIsATarget", func() {
@@ -826,7 +863,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime)
+		s.Equal(runTimeout, tr.GetTargetTime())
 	})
 
 	s.Run("ExecutionTimeoutIsATarget", func() {
@@ -836,7 +873,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTimeout, tr.TargetTime)
+		s.Equal(execTimeout, tr.GetTargetTime())
 	})
 
 	s.Run("EarliestOfRunAndExecutionTimeoutWins", func() {
@@ -847,7 +884,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime, "the earlier run timeout must win")
+		s.Equal(runTimeout, tr.GetTargetTime(), "the earlier run timeout must win")
 	})
 
 	s.Run("ExpiredTimeoutsAreNotTargets", func() {
@@ -866,7 +903,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime, "skip is bounded by the earlier run timeout")
+		s.Equal(runTimeout, tr.GetTargetTime(), "skip is bounded by the earlier run timeout")
 		s.False(tr.DisabledAfterFastForward, "fast-forward not reached: it was not the chosen target")
 	})
 
@@ -878,7 +915,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime)
+		s.Equal(fastForwardTarget, tr.GetTargetTime())
 		s.True(tr.DisabledAfterFastForward, "fast-forward is the earliest target: skipping to it disables time skipping")
 	})
 
@@ -890,7 +927,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTimeout, tr.TargetTime, "skip is bounded by the earlier execution timeout")
+		s.Equal(execTimeout, tr.GetTargetTime(), "skip is bounded by the earlier execution timeout")
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -904,7 +941,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime, "a zero-valued timeout must not cap the skip")
+		s.Equal(fastForwardTarget, tr.GetTargetTime(), "a zero-valued timeout must not cap the skip")
 		// The fast-forward is the only (and therefore earliest) target, so it is reached and
 		// time skipping is disabled.
 		s.True(tr.DisabledAfterFastForward)
@@ -918,7 +955,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(baseTime, tr.TargetTime)
+		s.Equal(baseTime, tr.GetTargetTime())
 		s.True(tr.DisabledAfterFastForward)
 	})
 }
@@ -964,162 +1001,6 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			s.False(needRegen, "a non-workflow must never skip time (policy %v)", policy)
 			s.False(s.mutableState.timeSkippingInfoUpdated, "a non-workflow must not change state (policy %v)", policy)
 		}
-	})
-}
-
-// TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
-// its constructor, validity check, earliest-future-time tracking, and fast-forward
-// gating. It needs no mutable state, so it is a plain test rather than a suite method.
-func TestTimeSkippingTransition(t *testing.T) {
-	t.Parallel()
-	base := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
-
-	t.Run("New sets only the current time", func(t *testing.T) {
-		tr := NewTimeSkippingTransition(base)
-		require.Equal(t, base, tr.CurrentTime)
-		require.True(t, tr.TargetTime.IsZero())
-		require.False(t, tr.DisabledAfterFastForward)
-		require.False(t, tr.IsValid(), "a transition with no target and no disable signal is invalid")
-	})
-
-	// Invariant 1: every method is nil-safe — on a nil receiver, and (for GateByFastForward)
-	// on a nil/absent fast-forward argument.
-	t.Run("nil safe", func(t *testing.T) {
-		var nilTr *timeSkippingTransition
-		require.False(t, nilTr.IsValid(), "nil transition is never valid")
-		require.NotPanics(t, func() { nilTr.TrackEarliestFutureTime(base.Add(time.Hour)) })
-		require.NotPanics(t, func() {
-			nilTr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-		})
-
-		// A nil or empty fast-forward must be a no-op, not a spurious disable. A nil proto
-		// timestamp's AsTime() is the Unix epoch (not the Go zero time), so this guards against
-		// treating "no fast-forward" as a past target.
-		tr := NewTimeSkippingTransition(base)
-		require.NotPanics(t, func() { tr.GateByFastForward(nil) })
-		tr.GateByFastForward(nil)
-		require.True(t, tr.TargetTime.IsZero())
-		require.False(t, tr.DisabledAfterFastForward)
-
-		tr.GateByFastForward(&persistencespb.FastForwardInfo{}) // non-nil ff, nil target time
-		require.True(t, tr.TargetTime.IsZero())
-		require.False(t, tr.DisabledAfterFastForward)
-		require.False(t, tr.IsValid())
-	})
-
-	// Invariant 2: TrackEarliestFutureTime keeps the earliest strictly-trackable future time
-	// and ignores anything that is not a usable future skip target.
-	t.Run("earliest future time", func(t *testing.T) {
-		t.Run("ignores zero and past candidates", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.TrackEarliestFutureTime(time.Time{})          // zero candidate
-			tr.TrackEarliestFutureTime(base.Add(-time.Hour)) // past candidate
-			require.True(t, tr.TargetTime.IsZero())
-		})
-
-		t.Run("keeps the earliest of several future candidates", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
-			require.Equal(t, base.Add(3*time.Hour), tr.TargetTime)
-
-			tr.TrackEarliestFutureTime(base.Add(time.Hour)) // earlier wins
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
-
-			tr.TrackEarliestFutureTime(base.Add(2 * time.Hour)) // later is ignored
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
-		})
-
-		t.Run("accepts a candidate equal to the current time", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.TrackEarliestFutureTime(base)
-			require.Equal(t, base, tr.TargetTime)
-		})
-	})
-
-	// Invariant 3: the fast-forward target is taken — and disables time skipping — exactly when
-	// it is the earliest target (nothing earlier tracked). When a real candidate is earlier the
-	// fast-forward is not reached and skipping stays enabled. An absent/reached/zero fast-forward
-	// is a no-op.
-	t.Run("fast-forward fallback and gating", func(t *testing.T) {
-		t.Run("taken as the target and disables when nothing earlier exists", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
-			require.True(t, tr.DisabledAfterFastForward)
-			require.True(t, tr.IsValid())
-		})
-
-		t.Run("an earlier tracked target wins over a later fast-forward", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.TrackEarliestFutureTime(base.Add(time.Hour))
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(3 * time.Hour))})
-			require.Equal(t, base.Add(time.Hour), tr.TargetTime)
-			require.False(t, tr.DisabledAfterFastForward)
-		})
-
-		t.Run("an earlier fast-forward wins over a later tracked target and disables", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, base.Add(time.Hour).Equal(tr.TargetTime))
-			require.True(t, tr.DisabledAfterFastForward)
-		})
-
-		t.Run("ignores an already-reached fast-forward", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{
-				HasReached: true,
-				TargetTime: timestamppb.New(base.Add(time.Hour)),
-			})
-			require.True(t, tr.TargetTime.IsZero())
-			require.False(t, tr.DisabledAfterFastForward)
-		})
-
-		t.Run("ignores a zero-valued target time", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(time.Time{})})
-			require.True(t, tr.TargetTime.IsZero())
-			require.False(t, tr.DisabledAfterFastForward)
-		})
-
-		t.Run("target equal to current disables and sets the target", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base)})
-			require.True(t, base.Equal(tr.TargetTime))
-			require.True(t, tr.DisabledAfterFastForward)
-			require.True(t, tr.IsValid())
-		})
-
-		t.Run("past target disables as a bare signal", func(t *testing.T) {
-			tr := NewTimeSkippingTransition(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(-time.Hour))})
-			require.True(t, tr.TargetTime.IsZero(), "a past target is not a future skip target")
-			require.True(t, tr.DisabledAfterFastForward)
-			require.True(t, tr.IsValid())
-		})
-	})
-
-	// Invariant 4: without a current time the transition is always invalid and no setter can
-	// make it valid — every field is relative to the current time.
-	t.Run("no current time always invalid", func(t *testing.T) {
-		t.Run("a directly-set target is still invalid", func(t *testing.T) {
-			tr := &timeSkippingTransition{TargetTime: base.Add(time.Hour)}
-			require.False(t, tr.IsValid())
-		})
-
-		t.Run("a directly-set disable signal is still invalid", func(t *testing.T) {
-			tr := &timeSkippingTransition{DisabledAfterFastForward: true}
-			require.False(t, tr.IsValid())
-		})
-
-		t.Run("setters are no-ops without a current time", func(t *testing.T) {
-			tr := &timeSkippingTransition{}
-			tr.TrackEarliestFutureTime(base)
-			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
-			require.True(t, tr.TargetTime.IsZero())
-			require.False(t, tr.DisabledAfterFastForward)
-			require.False(t, tr.IsValid())
-		})
 	})
 }
 
@@ -1317,5 +1198,141 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 			},
 		)
 		s.Equal(fixedBase.Add(skipped), event.GetEventTime().AsTime())
+	})
+}
+
+// TestChasmContextNowReflectsAccumulatedSkippedDuration verifies the end-to-end delegation with a
+// real mutable state: once it has accumulated skipped duration its Now() returns virtual time, and
+// a CHASM Context built over that mutable state (as its NodeBackend) reflects the same virtual time
+// via Context.Now -> Node.Now -> backend.Now.
+func (s *mutableStateSuite) TestChasmContextNowReflectsAccumulatedSkippedDuration() {
+	const accumulatedSkip = 3 * time.Hour
+	baseTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+
+	ts := clock.NewEventTimeSource()
+	ts.Update(baseTime)
+	s.mutableState.timeSource = ts
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+		AccumulatedSkippedDuration: durationpb.New(accumulatedSkip),
+	}
+	s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+	s.Require().Equal(baseTime.Add(accumulatedSkip), s.mutableState.Now(),
+		"sanity: the real mutable state reports virtual time")
+
+	// Build a CHASM tree backed by the real mutable state, then a CHASM context over it.
+	// Context.Now delegates through Node.Now -> backend.Now (== mutableState.Now).
+	node := chasm.NewEmptyTree(
+		chasm.NewRegistry(s.logger),
+		s.mutableState,
+		chasm.DefaultPathEncoder,
+		s.logger,
+		metrics.NoopMetricsHandler,
+	)
+	ctx := chasm.NewMutableContext(context.Background(), node)
+
+	s.Equal(baseTime.Add(accumulatedSkip), ctx.Now(nil),
+		"CHASM Context.Now must reflect the mutable state's virtual time")
+}
+
+// TestRecordTimeSkippingTransition covers the CHASM-execution entry point for applying a
+// time-skipping transition: it is a no-op for workflow-based executions (which use events) and for
+// invalid transitions, accumulates the skipped duration for a valid transition, and disables the
+// config while marking the fast-forward reached when the transition is a fast-forward completion.
+func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
+	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// asChasmExecution swaps in a chasm tree whose archetype is not a workflow, so IsWorkflow()
+	// is false and the transition is applied. asWorkflowExecution keeps IsWorkflow() true.
+	asChasmExecution := func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
+		s.mutableState.chasmTree = mockChasmTree
+	}
+	asWorkflowExecution := func() {
+		mockChasmTree := historyi.NewMockChasmTree(s.controller)
+		mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+		s.mutableState.chasmTree = mockChasmTree
+	}
+
+	s.Run("WorkflowExecutionIsNoOp", func() {
+		asWorkflowExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.TrackEarliestFutureTime(baseTime.Add(2 * time.Hour))
+		s.Require().True(tr.IsValid(), "the transition itself is valid; the workflow gate is what suppresses it")
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "workflow executions use events, not this path")
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("InvalidTransitionIsNoOp", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		// A nil transition and a transition with no target are both invalid and must not mutate state.
+		s.mutableState.RecordTimeSkippingTransition(nil)
+		s.mutableState.RecordTimeSkippingTransition(chasm.NewTimeSkippingTransition(baseTime))
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("ValidTransitionAccumulatesDuration", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.TrackEarliestFutureTime(baseTime.Add(2 * time.Hour)) // skips 2h
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(3*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "1h pre-existing + 2h skipped")
+		s.True(tsi.GetConfig().GetEnabled(), "a plain skip must leave time skipping enabled")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("DisabledAfterFastForwardDisablesConfigAndMarksReached", func() {
+		asChasmExecution()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(baseTime.Add(time.Hour)),
+				HasReached: false,
+			},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		tr := chasm.NewTimeSkippingTransition(baseTime)
+		tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(baseTime.Add(time.Hour))})
+		s.Require().True(tr.DisabledAfterFastForward)
+
+		s.mutableState.RecordTimeSkippingTransition(tr)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Equal(2*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration(), "1h pre-existing + 1h skipped to the fast-forward")
+		s.False(tsi.GetConfig().GetEnabled(), "reaching the fast-forward disables time skipping")
+		s.True(tsi.GetFastForwardInfo().GetHasReached(), "the fast-forward must be marked reached")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
 }

@@ -8,10 +8,10 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*TimeSkippingTimerTask)(nil)
+var _ Task = (*TimeSkippingFastForwardTimerTask)(nil)
 
 type (
-	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
+	// TimeSkippingFastForwardTimerTask wakes a workflow when the fast-forward configured
 	// on its TimeSkippingConfig should take effect.
 	//
 	// EventID identifies the event (WorkflowExecutionStartedEvent or
@@ -19,7 +19,7 @@ type (
 	// It is matched against TimeSkippingInfo.FastForward.SourceEventId at
 	// firing time to detect superseded tasks: re-configuring the fast-forward emits a new task
 	// with a new EventID, and the old task is silently dropped on mismatch.
-	TimeSkippingTimerTask struct {
+	TimeSkippingFastForwardTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
@@ -27,35 +27,35 @@ type (
 	}
 )
 
-func (t *TimeSkippingTimerTask) GetKey() Key {
+func (t *TimeSkippingFastForwardTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
 }
 
-func (t *TimeSkippingTimerTask) GetTaskID() int64 {
+func (t *TimeSkippingFastForwardTimerTask) GetTaskID() int64 {
 	return t.TaskID
 }
 
-func (t *TimeSkippingTimerTask) SetTaskID(id int64) {
+func (t *TimeSkippingFastForwardTimerTask) SetTaskID(id int64) {
 	t.TaskID = id
 }
 
-func (t *TimeSkippingTimerTask) GetVisibilityTime() time.Time {
+func (t *TimeSkippingFastForwardTimerTask) GetVisibilityTime() time.Time {
 	return t.VisibilityTimestamp
 }
 
-func (t *TimeSkippingTimerTask) SetVisibilityTime(visibilityTime time.Time) {
+func (t *TimeSkippingFastForwardTimerTask) SetVisibilityTime(visibilityTime time.Time) {
 	t.VisibilityTimestamp = visibilityTime
 }
 
-func (t *TimeSkippingTimerTask) GetCategory() Category {
+func (t *TimeSkippingFastForwardTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (t *TimeSkippingTimerTask) GetType() enumsspb.TaskType {
+func (t *TimeSkippingFastForwardTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TIMESKIPPING_TIMER
 }
 
-func (t *TimeSkippingTimerTask) String() string {
+func (t *TimeSkippingFastForwardTimerTask) String() string {
 	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, EventID: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,

@@ -10,7 +10,7 @@ func TestGetTimerTaskEventID_TimeSkippingTimerTask(t *testing.T) {
 	t.Parallel()
 
 	const eventID = int64(123)
-	task := &TimeSkippingTimerTask{EventID: eventID}
+	task := &TimeSkippingFastForwardTimerTask{EventID: eventID}
 
 	gotEventID, ok := GetTimerTaskEventID(task)
 	require.True(t, ok)

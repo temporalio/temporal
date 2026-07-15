@@ -112,7 +112,7 @@ func GetTimerTaskEventID(
 		return getChasmTaskEventID()
 	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
-	case *TimeSkippingTimerTask:
+	case *TimeSkippingFastForwardTimerTask:
 		eventID = task.EventID
 	case *ChasmTaskPure:
 		return getChasmTaskEventID()

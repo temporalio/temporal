@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -22,23 +23,26 @@ var _ NodeBackend = (*MockNodeBackend)(nil)
 // fields (thread-safe).
 type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
-	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
-	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
-	HandleGetCurrentVersion           func() int64
-	HandleNextTransitionCount         func() int64
-	HandleGetApproximatePersistedSize func() int
-	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
-	HandleGetWorkflowKey              func() definition.WorkflowKey
-	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
-	HandleIsWorkflow                  func() bool
-	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
-	HandleGetNexusUpdateCompletion    func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
-	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
-	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
-	HandleGenerateEventLoadToken      func(event *historypb.HistoryEvent) ([]byte, error)
-	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
-	HandleGetNamespaceEntry           func() *namespace.Namespace
-	HandleEndpointRegistry            func() EndpointRegistry
+	HandleGetExecutionState            func() *persistencespb.WorkflowExecutionState
+	HandleGetExecutionInfo             func() *persistencespb.WorkflowExecutionInfo
+	HandleGetCurrentVersion            func() int64
+	HandleNextTransitionCount          func() int64
+	HandleGetApproximatePersistedSize  func() int
+	HandleCurrentVersionedTransition   func() *persistencespb.VersionedTransition
+	HandleGetWorkflowKey               func() definition.WorkflowKey
+	HandleUpdateWorkflowStateStatus    func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
+	HandleIsWorkflow                   func() bool
+	HandleGetNexusCompletion           func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleGetNexusUpdateCompletion     func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleAddHistoryEvent              func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleLoadHistoryEvent             func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
+	HandleGenerateEventLoadToken       func(event *historypb.HistoryEvent) ([]byte, error)
+	HandleHasAnyBufferedEvent          func(filter func(*historypb.HistoryEvent) bool) bool
+	HandleGetNamespaceEntry            func() *namespace.Namespace
+	HandleEndpointRegistry             func() EndpointRegistry
+	HandleSetTimeSkippingConfig        func(config *commonpb.TimeSkippingConfig)
+	HandleNow                          func() time.Time
+	HandleRecordTimeSkippingTransition func(transition *TimeSkippingTransition)
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -251,4 +255,29 @@ func (m *MockNodeBackend) NumTasksAdded() int {
 		count += len(ts)
 	}
 	return count
+}
+
+func (m *MockNodeBackend) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if m.HandleSetTimeSkippingConfig != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.HandleSetTimeSkippingConfig(config)
+	}
+}
+
+func (m *MockNodeBackend) Now() time.Time {
+	if m.HandleNow != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.HandleNow()
+	}
+	return time.Now()
+}
+
+func (m *MockNodeBackend) RecordTimeSkippingTransition(transition *TimeSkippingTransition) {
+	if m.HandleRecordTimeSkippingTransition != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.HandleRecordTimeSkippingTransition(transition)
+	}
 }
