@@ -368,6 +368,18 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	})
 	t.Run("Backfill", func(t *testing.T) {
 		t.Parallel()
+		t.Run("ReprocessCompletedActionExactTimePaused", func(t *testing.T) {
+			t.Parallel()
+			testBackfillReprocessesCompletedAction(t, newContext, true, 0)
+		})
+		t.Run("ReprocessCompletedActionExactTimeActive", func(t *testing.T) {
+			t.Parallel()
+			testBackfillReprocessesCompletedAction(t, newContext, false, 0)
+		})
+		t.Run("ReprocessCompletedActionInRange", func(t *testing.T) {
+			t.Parallel()
+			testBackfillReprocessesCompletedAction(t, newContext, true, 1)
+		})
 		t.Run("SkipOverlap", func(t *testing.T) { t.Parallel(); testBackfillWithSkipOverlap(t, newContext) })
 		t.Run("BufferOneOverlap", func(t *testing.T) { t.Parallel(); testBackfillWithBufferOneOverlap(t, newContext) })
 		t.Run("MultiRangeCountedExactlyOnce", func(t *testing.T) { t.Parallel(); testMultiRangeBackfillCountedExactlyOnce(t, newContext) })
@@ -4151,6 +4163,75 @@ func testTriggerImmediatelyAfterActionsExhausted(t *testing.T, newContext contex
 	require.NotEmpty(t, desc.Info.RecentActions, "RecentActions should include the manual trigger")
 	require.Equal(t, int64(0), desc.Schedule.State.RemainingActions,
 		"manual trigger must not consume a LimitedActions slot")
+}
+
+func testBackfillReprocessesCompletedAction(
+	t *testing.T,
+	newContext contextFactory,
+	paused bool,
+	intervalsOnEachSide int,
+) {
+	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-backfill-reprocess")
+	wid := testcore.RandomizeStr("sched-backfill-reprocess-wf")
+	wt := testcore.RandomizeStr("sched-backfill-reprocess-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(s.Context())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec: intervalSpec(fastInterval),
+		State: &schedulepb.ScheduleState{
+			LimitedActions:   true,
+			RemainingActions: 1,
+		},
+		Action: startWorkflowAction(s, wid, wt),
+	})
+
+	var completedTime time.Time
+	await.RequireTruef(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil {
+			return false
+		}
+		for _, action := range desc.GetInfo().GetRecentActions() {
+			if action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				completedTime = action.GetScheduleTime().AsTime()
+				return true
+			}
+		}
+		return false
+	}, awaitTimeout, pollInterval, "the automatic action should complete")
+	require.Equal(t, int32(1), runs.Load())
+
+	if paused {
+		patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Pause: "test completed-action backfill"})
+	}
+
+	rangeOffset := time.Duration(intervalsOnEachSide) * fastInterval
+	patchSchedule(ctx, t, s, sid, backfillPatch(
+		completedTime.Add(-rangeOffset),
+		completedTime.Add(rangeOffset),
+		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+	))
+
+	expectedRuns := int32(2 + 2*intervalsOnEachSide)
+	await.RequireTruef(t, func() bool { return runs.Load() == expectedRuns }, neverWindow, pollInterval,
+		"backfill should reprocess the completed action exactly once")
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(expectedRuns), desc.GetInfo().GetActionCount())
+	require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+	require.Equal(t, paused, desc.GetSchedule().GetState().GetPaused())
 }
 
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
