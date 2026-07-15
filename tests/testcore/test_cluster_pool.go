@@ -249,16 +249,10 @@ type clusterRequest struct {
 	clusterOpts         []TestClusterOption
 }
 
-// requiresOneOffCluster reports whether the request has cluster-construction
-// state that cannot be reset on a running cluster.
-func (r clusterRequest) requiresOneOffCluster() bool {
-	return len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
-}
-
 // needsDedicated reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
 func (r clusterRequest) needsDedicated() bool {
-	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || r.requiresOneOffCluster()
+	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -273,7 +267,7 @@ func (r clusterRequest) reason() string {
 	switch {
 	case r.dedicatedReason != "":
 		return r.dedicatedReason
-	case r.needWorkerService || len(r.globalDynamicConfig) > 0 || r.requiresOneOffCluster():
+	case r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0:
 		return "custom config"
 	default:
 		return "dedicated"
