@@ -928,7 +928,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		// as they have only 1 partition.
 		return nil
 	} else {
-		if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
+		if float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio() {
 			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
 			// since those (currently) don't get backlogged.
 			delta = 1

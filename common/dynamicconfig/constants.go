@@ -1512,6 +1512,12 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),
