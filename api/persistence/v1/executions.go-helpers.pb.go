@@ -1119,9 +1119,10 @@ func (this *WorkflowPauseInfo) Equal(that interface{}) bool {
 
 var (
 	TimeSkippingDisabledReason_shorthandValue = map[string]int32{
-		"Unspecified":        0,
-		"FastForwardReached": 1,
-		"CircuitBreaker":     2,
+		"Unspecified":           0,
+		"FastForwardReached":    1,
+		"CircuitBreakerWindow":  2,
+		"CircuitBreakerSession": 3,
 	}
 )
 

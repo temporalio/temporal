@@ -327,9 +327,13 @@ enum TimeSkippingDisabledReason {
   TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED = 0;
   // The fast-forward target was reached (its wall-clock or virtual budget was exhausted).
   TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED = 1;
-  // The busy-loop circuit breaker tripped: skips fired faster than a real worker cycle
-  // for too many consecutive rounds, so time skipping was disabled to restore backpressure.
-  TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER = 2;
+  // The circuit breaker's rate guard tripped: too many skips fired within one real-time window
+  // (a fast busy loop), so time skipping was disabled to restore backpressure.
+  TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW = 2;
+  // The circuit breaker's per-session guard tripped: the run exceeded its cap on total skip
+  // transitions for the current session (a session is one continuous period of time skipping being
+  // enabled; the count is cleared each time the config is (re)initialized or updated).
+  TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION = 3;
 }
 
 message TimeSkippingInfo {
@@ -361,9 +365,17 @@ message TimeSkippingInfo {
   // limiter: skip_window_start_real_time is the real (wall-clock) start of the current counting
   // window, and skip_window_count is the number of skip transitions in it. When the count exceeds
   // the per-namespace max-skips-per-window, time skipping is disabled for the run. Persisted here so
-  // the window survives mutable-state eviction/reload mid-loop. Reset when a fast-forward is (re)armed.
+  // the window survives mutable-state eviction/reload mid-loop. Reset when the config is (re)initialized or updated.
   google.protobuf.Timestamp skip_window_start_real_time = 7;
   int32 skip_window_count = 8;
+
+  // Total number of skip transitions in the current time-skipping session, where a session is one
+  // continuous period of time skipping being enabled. Cleared whenever the config is (re)initialized
+  // or updated, so it is not propagated across runs. When it exceeds the per-namespace
+  // max-skips-per-session, time skipping is disabled for the run
+  // (disabled_reason = CIRCUIT_BREAKER_SESSION). This is a backstop for a run that skips
+  // slowly-but-endlessly, staying under the busy-loop window rate yet never stopping.
+  int32 session_skip_count = 9;
 }
 
 message FastForwardInfo {

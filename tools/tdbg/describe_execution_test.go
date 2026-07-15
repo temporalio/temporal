@@ -42,7 +42,7 @@ func TestDescribeExecution_DumpsTimeSkippingInfo(t *testing.T) {
 				// Enabled defaults to false: a run the circuit breaker has tripped.
 				Config:                     &commonpb.TimeSkippingConfig{FastForward: durationpb.New(1500 * time.Hour)},
 				AccumulatedSkippedDuration: durationpb.New(72 * time.Hour),
-				DisabledReason:             persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER,
+				DisabledReason:             persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW,
 				SkipWindowCount:            25,
 				FastForwardInfo: &persistencespb.FastForwardInfo{
 					TargetTime: timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
@@ -78,5 +78,5 @@ func TestDescribeExecution_DumpsTimeSkippingInfo(t *testing.T) {
 	require.Contains(t, stdout, "accumulatedSkippedDuration")
 	require.Contains(t, stdout, "fastForwardInfo")
 	require.Contains(t, stdout, "skipWindowCount")
-	require.Contains(t, stdout, "TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER")
+	require.Contains(t, stdout, "TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW")
 }

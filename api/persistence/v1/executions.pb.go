@@ -44,9 +44,13 @@ const (
 	TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED TimeSkippingDisabledReason = 0
 	// The fast-forward target was reached (its wall-clock or virtual budget was exhausted).
 	TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED TimeSkippingDisabledReason = 1
-	// The busy-loop circuit breaker tripped: skips fired faster than a real worker cycle
-	// for too many consecutive rounds, so time skipping was disabled to restore backpressure.
-	TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER TimeSkippingDisabledReason = 2
+	// The circuit breaker's rate guard tripped: too many skips fired within one real-time window
+	// (a fast busy loop), so time skipping was disabled to restore backpressure.
+	TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW TimeSkippingDisabledReason = 2
+	// The circuit breaker's per-session guard tripped: the run exceeded its cap on total skip
+	// transitions for the current session (a session is one continuous period of time skipping being
+	// enabled; the count is cleared each time the config is (re)initialized or updated).
+	TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION TimeSkippingDisabledReason = 3
 )
 
 // Enum value maps for TimeSkippingDisabledReason.
@@ -54,12 +58,14 @@ var (
 	TimeSkippingDisabledReason_name = map[int32]string{
 		0: "TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED",
 		1: "TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED",
-		2: "TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER",
+		2: "TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW",
+		3: "TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION",
 	}
 	TimeSkippingDisabledReason_value = map[string]int32{
-		"TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED":          0,
-		"TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED": 1,
-		"TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER":      2,
+		"TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED":             0,
+		"TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED":    1,
+		"TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW":  2,
+		"TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION": 3,
 	}
 )
 
@@ -75,8 +81,10 @@ func (x TimeSkippingDisabledReason) String() string {
 		return "Unspecified"
 	case TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED:
 		return "FastForwardReached"
-	case TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER:
-		return "CircuitBreaker"
+	case TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW:
+		return "CircuitBreakerWindow"
+	case TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION:
+		return "CircuitBreakerSession"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -1253,11 +1261,18 @@ type TimeSkippingInfo struct {
 	// limiter: skip_window_start_real_time is the real (wall-clock) start of the current counting
 	// window, and skip_window_count is the number of skip transitions in it. When the count exceeds
 	// the per-namespace max-skips-per-window, time skipping is disabled for the run. Persisted here so
-	// the window survives mutable-state eviction/reload mid-loop. Reset when a fast-forward is (re)armed.
+	// the window survives mutable-state eviction/reload mid-loop. Reset when the config is (re)initialized or updated.
 	SkipWindowStartRealTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=skip_window_start_real_time,json=skipWindowStartRealTime,proto3" json:"skip_window_start_real_time,omitempty"`
 	SkipWindowCount         int32                  `protobuf:"varint,8,opt,name=skip_window_count,json=skipWindowCount,proto3" json:"skip_window_count,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Total number of skip transitions in the current time-skipping session, where a session is one
+	// continuous period of time skipping being enabled. Cleared whenever the config is (re)initialized
+	// or updated, so it is not propagated across runs. When it exceeds the per-namespace
+	// max-skips-per-session, time skipping is disabled for the run
+	// (disabled_reason = CIRCUIT_BREAKER_SESSION). This is a backstop for a run that skips
+	// slowly-but-endlessly, staying under the busy-loop window rate yet never stopping.
+	SessionSkipCount int32 `protobuf:"varint,9,opt,name=session_skip_count,json=sessionSkipCount,proto3" json:"session_skip_count,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1335,6 +1350,13 @@ func (x *TimeSkippingInfo) GetSkipWindowStartRealTime() *timestamppb.Timestamp {
 func (x *TimeSkippingInfo) GetSkipWindowCount() int32 {
 	if x != nil {
 		return x.SkipWindowCount
+	}
+	return 0
+}
+
+func (x *TimeSkippingInfo) GetSessionSkipCount() int32 {
+	if x != nil {
+		return x.SessionSkipCount
 	}
 	return 0
 }
@@ -5168,7 +5190,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xac\x05\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xda\x05\n" +
 	"\x10TimeSkippingInfo\x12B\n" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
@@ -5176,7 +5198,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransition\x12g\n" +
 	"\x0fdisabled_reason\x18\x06 \x01(\x0e2>.temporal.server.api.persistence.v1.TimeSkippingDisabledReasonR\x0edisabledReason\x12X\n" +
 	"\x1bskip_window_start_real_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x17skipWindowStartRealTime\x12*\n" +
-	"\x11skip_window_count\x18\b \x01(\x05R\x0fskipWindowCountJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x89\x02\n" +
+	"\x11skip_window_count\x18\b \x01(\x05R\x0fskipWindowCount\x12,\n" +
+	"\x12session_skip_count\x18\t \x01(\x05R\x10sessionSkipCountJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x89\x02\n" +
 	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +
@@ -5517,11 +5540,12 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId*\xb6\x01\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId*\xf8\x01\n" +
 	"\x1aTimeSkippingDisabledReason\x12-\n" +
 	")TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED\x10\x00\x126\n" +
-	"2TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED\x10\x01\x121\n" +
-	"-TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER\x10\x02B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"2TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED\x10\x01\x128\n" +
+	"4TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW\x10\x02\x129\n" +
+	"5TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION\x10\x03B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_executions_proto_rawDescOnce sync.Once
