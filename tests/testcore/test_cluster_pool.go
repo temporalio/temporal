@@ -296,19 +296,17 @@ func (r clusterRequest) reason() string {
 	}
 }
 
-type clusterCreationEvent struct {
-	Suite  string `json:"suite"`
-	Test   string `json:"test"`
-	Kind   string `json:"kind"`
-	Reason string `json:"reason"`
-	Worker bool   `json:"worker"`
-}
-
 // recordCreation appends one JSON Lines event per test-cluster creation so a CI
 // run can be queried for which suite created how many clusters of each kind, and
 // why. Events fall back to the test log when no events file is configured.
 func (p *clusterRouter) recordCreation(t *testing.T, req clusterRequest) {
-	line, err := json.Marshal(clusterCreationEvent{
+	line, err := json.Marshal(struct {
+		Suite  string `json:"suite"`
+		Test   string `json:"test"`
+		Kind   string `json:"kind"`
+		Reason string `json:"reason"`
+		Worker bool   `json:"worker"`
+	}{
 		Suite:  suiteRootName(t),
 		Test:   t.Name(),
 		Kind:   req.kind,

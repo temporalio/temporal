@@ -128,7 +128,10 @@ func TestClusterPool_RecordsOneOffClusterKind(t *testing.T) {
 
 	_, err = eventsFile.Seek(0, 0)
 	require.NoError(t, err)
-	var event clusterCreationEvent
+	var event struct {
+		Kind   string `json:"kind"`
+		Reason string `json:"reason"`
+	}
 	require.NoError(t, json.NewDecoder(eventsFile).Decode(&event))
 	require.Equal(t, clusterKindOneOff, event.Kind)
 	require.Equal(t, "custom history shard count used", event.Reason)
