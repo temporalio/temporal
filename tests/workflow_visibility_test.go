@@ -27,7 +27,7 @@ func TestWorkflowVisibilityTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowVisibilityTestSuite) TestVisibility() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions

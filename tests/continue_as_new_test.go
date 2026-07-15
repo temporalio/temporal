@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -39,7 +38,7 @@ func TestContinueAsNewTestSuite(t *testing.T) {
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-continue-as-new-workflow-test"
 	wt := "functional-continue-as-new-workflow-test-type"
@@ -179,7 +178,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-continue-as-new-workflow-run-timeout-test"
 	wt := "functional-continue-as-new-workflow-run-timeout-test-type"
@@ -284,7 +283,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-continue-as-new-workflow-execution-timeout-test"
 	wt := "functional-continue-as-new-workflow-execution-timeout-test-type"
@@ -374,7 +373,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 }
 
 func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-wf-continue-as-new-task-id-test"
 	wt := "functional-wf-continue-as-new-task-id-type"
@@ -474,7 +473,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 // The task poller sends this command over gRPC verbatim, which is how we simulate an SDK that does
 // support the flag.
 func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	// Disable the minimal continue-as-new interval so the only backoff applied to the new run is the
 	// one we explicitly request. Otherwise the server enforces WorkflowIdReuseMinimalInterval and the
@@ -541,7 +540,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithDelayStart() {
 		}, nil
 	}
 
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// Process the first workflow task: it issues a continue-as-new with a delayed start.
@@ -726,7 +725,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 }
 
 func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-child-workflow-with-continue-as-new-test-parent"
 	childID := "functional-child-workflow-with-continue-as-new-test-child"
@@ -845,7 +844,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 }
 
 func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTerminate() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-parent"
 	childID := "functional-child-workflow-with-continue-as-new-parent-terminate-test-child"
@@ -986,7 +985,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 }
 
 func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	id := testcore.RandomizeStr(s.T().Name())
 	wt := "test-continue-as-new-internal-taskqueue-type"
@@ -1013,7 +1012,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// Workflow logic: try to continue as new on internal task queue
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 	continueAsNewAttempted := false
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		env.Logger.Info("Processing workflow task", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
@@ -1079,7 +1078,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 // WorkflowExecutionAlreadyStarted error) report the original (head-of-chain) run id in
 // first_execution_run_id, even though the current run id is the post-CAN run.
 func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
 
 	id := "functional-start-after-can-first-run-test"
@@ -1107,7 +1106,7 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 
 	// Drive exactly one CAN. After the WT completes, the second run is RUNNING with no further
 	// pollers, so the subsequent StartWorkflowExecution calls below land on a live workflow.
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -1164,7 +1163,7 @@ func (s *ContinueAsNewTestSuite) TestStartAfterContinueAsNew_FirstExecutionRunId
 // not from B. After the reset, dedup responses against the workflow id should report A as the
 // FirstExecutionRunId, even though the workflow's most recent prior chain head was B.
 func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_FirstExecutionRunId() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
 
 	id := "functional-reset-non-current-different-chain-test"
@@ -1190,7 +1189,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_Firs
 	s.NoError(err)
 	chain1RunID := we0.RunId
 
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -1276,7 +1275,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunFromDifferentChain_Firs
 // still report the head of the chain (the original run id), and so should subsequent
 // Start/dedup interactions against the resulting workflow.
 func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunAfterContinueAsNew_FirstExecutionRunId() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, time.Duration(0))
 
 	id := "functional-reset-non-current-after-can-test"
@@ -1302,7 +1301,7 @@ func (s *ContinueAsNewTestSuite) TestResetOfNonCurrentRunAfterContinueAsNew_Firs
 	originalRunID := we0.RunId
 
 	// Drive one CAN so the original run becomes non-current.
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{

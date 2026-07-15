@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -20,7 +21,7 @@ func TestTLSFunctionalSuite(t *testing.T) {
 	parallelsuite.Run(t, &TLSFunctionalSuite{})
 }
 
-func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	baseOpts := []testcore.TestOption{
 		testcore.WithMTLS(),
 	}
@@ -28,7 +29,7 @@ func (s *TLSFunctionalSuite) newTestEnv(opts ...testcore.TestOption) *testcore.T
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Track auth info
 	calls := s.trackAuthInfoByCall(env)
@@ -43,7 +44,7 @@ func (s *TLSFunctionalSuite) TestGRPCMTLS() {
 }
 
 func (s *TLSFunctionalSuite) TestHTTPMTLS() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	if env.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}

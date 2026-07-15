@@ -55,12 +55,12 @@ type chasmTestEnv struct {
 
 // newChasmTestEnv creates a chasmTestEnv backed by a dedicated cluster with
 // EnableChasm and VisibilityEnableUnifiedQueryConverter overridden for the test.
-func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
+func newChasmTestEnv(t *testing.T, unified bool) (chasmTestEnv, *testvars.TestVars) {
 	t.Helper()
 
 	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
 	// creation per test, unlike passing startup dynamic config.
-	env := testcore.NewEnv(
+	env, tv := testcore.NewEnv(
 		t,
 		testcore.WithDedicatedCluster(),
 		testcore.WithWorkerService("delete namespace workflow"),
@@ -72,23 +72,23 @@ func newChasmTestEnv(t *testing.T, unified bool) chasmTestEnv {
 	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(env.Context())
 	require.NoError(t, err)
 
-	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}
+	return chasmTestEnv{TestEnv: env, chasmCtx: chasmCtx}, tv
 }
 
 // forBothConverters runs fn as two parallel subtests, one with the legacy visibility
 // query converter and one with the unified converter.
 // TODO: Remove once we have fully migrated to the unified query converter.
-func (s *ChasmSuite) forBothConverters(fn func(*ChasmSuite, chasmTestEnv)) {
+func (s *ChasmSuite) forBothConverters(fn func(*ChasmSuite, chasmTestEnv, *testvars.TestVars)) {
 	for _, unified := range []bool{false, true} {
 		s.Run(fmt.Sprintf("unified=%v", unified), func(ss *ChasmSuite) {
-			fn(ss, newChasmTestEnv(ss.T(), unified))
+			cenv, tv := newChasmTestEnv(ss.T(), unified)
+			fn(ss, cenv, tv)
 		})
 	}
 }
 
 func (s *ChasmSuite) TestNewPayloadStore() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -107,8 +107,7 @@ func (s *ChasmSuite) TestNewPayloadStore() {
 }
 
 func (s *ChasmSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -154,8 +153,7 @@ func (s *ChasmSuite) TestNewPayloadStore_ConflictPolicy_UseExisting() {
 }
 
 func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -195,8 +193,7 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -238,8 +235,7 @@ func (s *ChasmSuite) TestPayloadStore_PureTask() {
 }
 
 func (s *ChasmSuite) TestListExecutions() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -365,8 +361,7 @@ func (s *ChasmSuite) TestListExecutions() {
 }
 
 func (s *ChasmSuite) TestCountExecutions_GroupBy() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -465,8 +460,7 @@ func (s *ChasmSuite) TestCountExecutions_GroupBy() {
 }
 
 func (s *ChasmSuite) TestListWorkflowExecutions() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
 
@@ -529,8 +523,7 @@ func (s *ChasmSuite) TestListWorkflowExecutions() {
 }
 
 func (s *ChasmSuite) TestPayloadStoreForceDelete() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
 
@@ -613,8 +606,7 @@ func (s *ChasmSuite) TestPayloadStoreForceDelete() {
 }
 
 func (s *ChasmSuite) TestDeletePayloadStore_RunningExecution() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
 
@@ -676,8 +668,7 @@ func (s *ChasmSuite) TestDeletePayloadStore_RunningExecution() {
 }
 
 func (s *ChasmSuite) TestListExecutions_ExecutionStatusAsAlias() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
 
@@ -748,8 +739,7 @@ func (s *ChasmSuite) TestListExecutions_ExecutionStatusAsAlias() {
 }
 
 func (s *ChasmSuite) TestTaskQueuePreallocatedSearchAttribute() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -797,8 +787,7 @@ func (s *ChasmSuite) TestTaskQueuePreallocatedSearchAttribute() {
 }
 
 func (s *ChasmSuite) TestMutableStateRebuilder() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
 
@@ -854,8 +843,7 @@ func (s *ChasmSuite) TestMutableStateRebuilder() {
 }
 
 func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -930,8 +918,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_UpdateExisting() {
 }
 
 func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -981,8 +968,7 @@ func (s *ChasmSuite) TestUpdateWithStartExecution_CreateNew() {
 }
 
 func (s *ChasmSuite) TestPayloadStore_ApproximateExecutionSize() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
 		defer cancel()
@@ -1050,8 +1036,7 @@ func (s *ChasmSuite) TestPayloadStore_ApproximateExecutionSize() {
 // TestNamespaceDelete_WithChasmExecutions verifies that running CHASM executions are cleaned
 // up when their namespace is deleted, exercising the DeleteExecution history service API.
 func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
-	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv) {
-		tv := testvars.New(ss.T())
+	s.forBothConverters(func(ss *ChasmSuite, cenv chasmTestEnv, tv *testvars.TestVars) {
 
 		// Register a fresh namespace for this test.
 		var namespaceSuffix [4]byte

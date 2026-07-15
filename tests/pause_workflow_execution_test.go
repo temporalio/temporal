@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -58,11 +59,11 @@ func TestPauseWorkflowExecutionSuite(t *testing.T) {
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs and
 // registers the workflows/activities the tests use.
-func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *pauseWorkflowExecutionEnv {
+func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) (*pauseWorkflowExecutionEnv, *testvars.TestVars) {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	}
-	testEnv := testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	testEnv, tv := testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 
 	env := &pauseWorkflowExecutionEnv{
 		TestEnv:             testEnv,
@@ -123,7 +124,7 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 	env.SdkWorker().RegisterWorkflow(env.workflowWithFailingActivity)
 	env.SdkWorker().RegisterActivity(env.failingActivity)
 
-	return env
+	return env, tv
 }
 
 // failingActivity is an activity that fails until activityShouldSucceed is set to true.
@@ -164,7 +165,7 @@ func (env *pauseWorkflowExecutionEnv) workflowWithFailingActivity(ctx workflow.C
 // 5. Unblock the activity to complete the workflow.
 // 6. Assert that the workflow is completed.
 func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -278,7 +279,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 //  4. Only now start a worker for the task queue, and assert the workflow actually
 //     receives a workflow task and completes.
 func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingWorkflowTaskAtPauseTime() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// A dedicated, unpolled task queue keeps the first workflow task pending until
 	// we deliberately start a worker for it below.
@@ -387,8 +388,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution_PendingW
 //     unrelated reason: Temporal never allows a terminal command in the same
 //     batch as buffered events, regardless of pause.)
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskSurvivesPause() {
-	env := s.newTestEnv()
-	tv := env.Tv()
+	env, tv := s.newTestEnv()
 
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.RequestID(),
@@ -461,8 +461,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 // workflow must remain correctly paused (no new task scheduled) until unpaused,
 // at which point a fresh workflow task becomes available.
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskTimesOutWhilePaused() {
-	env := s.newTestEnv()
-	tv := env.Tv()
+	env, tv := s.newTestEnv()
 
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.RequestID(),
@@ -555,8 +554,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 // paused gate that skips scheduling a follow-up after any in-flight
 // resolution), so no retry task is scheduled until the workflow is unpaused.
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflowTaskFailsWhilePaused() {
-	env := s.newTestEnv()
-	tv := env.Tv()
+	env, tv := s.newTestEnv()
 
 	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.RequestID(),
@@ -652,7 +650,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecution_StartedWorkflow
 // CloseTime (i.e. nil "End" time), just like a running workflow. A paused workflow
 // must not be reported with the Go zero time as its CloseTime.
 func (s *PauseWorkflowExecutionSuite) TestListWorkflowExecutionsPausedHasNoCloseTime() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := testcore.RandomizeStr("pause-wf-list-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -720,7 +718,7 @@ func (s *PauseWorkflowExecutionSuite) TestListWorkflowExecutionsPausedHasNoClose
 // 7. Unpause the workflow
 // 8. Verify workflow completes successfully
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Reset the activity success flag for this test
 	env.activityShouldSucceed.Store(false)
@@ -885,7 +883,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowAndActivity() {
 // 4. Unpause the workflow (while the activity is still paused)
 // 5. Verify the activity remains paused and the workflow is running
 func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowKeepsActivityPaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	env.activityShouldSucceed.Store(false)
 
@@ -982,7 +980,7 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowKeepsActivityPaused() {
 }
 
 func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -1073,7 +1071,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 // - fails when the request id is too long.
 // - fails when the dynamic config is disabled.
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidation() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	namespaceName := env.Namespace().String()
 
@@ -1150,7 +1148,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionRequestValidatio
 // - fails when the reason is too long.
 // - fails when the request id is too long.
 func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidation() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	namespaceName := env.Namespace().String()
 
@@ -1205,7 +1203,7 @@ func (s *PauseWorkflowExecutionSuite) TestUnpauseWorkflowExecutionRequestValidat
 }
 
 func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-wf-" + s.T().Name()),
@@ -1304,7 +1302,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 // The bug is timing-sensitive. It often does not reproduce on a single run.
 // Run with -count=N (e.g. -count=50) to reliably observe failures.
 func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	const (
 		tickActivityName = "pause-race-tick-activity"
@@ -1437,7 +1435,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseDuringInFlightWorkflowTask() {
 // is rejected at the client with a FailedPrecondition error, and that the same
 // update succeeds once the workflow is unpaused.
 func (s *PauseWorkflowExecutionSuite) TestUpdateWorkflowWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	const (
 		updateName         = "pause-update-handler"
@@ -1539,7 +1537,7 @@ func (s *PauseWorkflowExecutionSuite) TestUpdateWorkflowWhilePaused() {
 // buffered (recorded in history without scheduling a workflow task), and the
 // buffered signal is delivered once the workflow is unpaused.
 func (s *PauseWorkflowExecutionSuite) TestSignalWithStartWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-sws-wf-" + s.T().Name()),
@@ -1610,7 +1608,7 @@ func (s *PauseWorkflowExecutionSuite) TestSignalWithStartWhilePaused() {
 // workflow is paused are buffered in order and delivered in a single workflow
 // task once the workflow is unpaused.
 func (s *PauseWorkflowExecutionSuite) TestSignalBufferingOrderWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	const (
 		signalName            = "ordered-signal"
@@ -1728,7 +1726,7 @@ func (s *PauseWorkflowExecutionSuite) TestSignalBufferingOrderWhilePaused() {
 // request id is a no-op (succeeds without error and adds no second pause event),
 // unlike a pause with a new request id which fails with "already paused".
 func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-idempotent-wf-" + s.T().Name()),
@@ -1798,7 +1796,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
 // TestTerminateWhilePaused asserts that a paused workflow can still be terminated
 // (terminate is terminal and bypasses workflow-task scheduling).
 func (s *PauseWorkflowExecutionSuite) TestTerminateWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-terminate-wf-" + s.T().Name()),
@@ -1847,7 +1845,7 @@ func (s *PauseWorkflowExecutionSuite) TestTerminateWhilePaused() {
 // targets the latest run of the workflow: with a continued-as-new chain, only
 // the latest run is paused while the closed original run is unaffected.
 func (s *PauseWorkflowExecutionSuite) TestPauseLatestRunEmptyRunId() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	const latestRunWorkflowName = "pause-latest-run-workflow"
 	// A workflow whose first run immediately continues-as-new, leaving the
@@ -1929,7 +1927,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseLatestRunEmptyRunId() {
 // TestRunTimeoutWhilePaused asserts that a workflow's run timeout is not
 // suppressed by pause: a paused workflow still TIMED_OUT on wall-clock.
 func (s *PauseWorkflowExecutionSuite) TestRunTimeoutWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	s.assertPausedWorkflowTimesOut(env, sdkclient.StartWorkflowOptions{
 		ID:                 testcore.RandomizeStr("pause-run-timeout-wf-" + s.T().Name()),
 		TaskQueue:          env.WorkerTaskQueue(),
@@ -1940,7 +1938,7 @@ func (s *PauseWorkflowExecutionSuite) TestRunTimeoutWhilePaused() {
 // TestExecutionTimeoutWhilePaused asserts that a workflow's execution timeout is
 // not suppressed by pause: a paused workflow still TIMED_OUT on wall-clock.
 func (s *PauseWorkflowExecutionSuite) TestExecutionTimeoutWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	s.assertPausedWorkflowTimesOut(env, sdkclient.StartWorkflowOptions{
 		ID:                       testcore.RandomizeStr("pause-execution-timeout-wf-" + s.T().Name()),
 		TaskQueue:                env.WorkerTaskQueue(),
@@ -1956,7 +1954,7 @@ func (s *PauseWorkflowExecutionSuite) TestExecutionTimeoutWhilePaused() {
 // signals at unpause is an open design question and is intentionally not
 // asserted here.
 func (s *PauseWorkflowExecutionSuite) TestCancelWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	const cancelWorkflowName = "pause-cancel-workflow"
 	// A workflow that blocks until its context is canceled, then returns the
@@ -2035,7 +2033,7 @@ func (s *PauseWorkflowExecutionSuite) TestCancelWhilePaused() {
 // and is not carried onto the reset run — while the original run is terminated
 // by the reset.
 func (s *PauseWorkflowExecutionSuite) TestResetWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("pause-reset-wf-" + s.T().Name()),
@@ -2128,7 +2126,7 @@ func (s *PauseWorkflowExecutionSuite) TestResetWhilePaused() {
 // pending activities by bumping their stamp; it does not mark the activity
 // itself as paused.
 func (s *PauseWorkflowExecutionSuite) TestActivityRetryDeferredWhilePaused() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	env.activityShouldSucceed.Store(false)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{

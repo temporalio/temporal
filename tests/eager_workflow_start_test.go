@@ -116,7 +116,7 @@ func (s *EagerWorkflowTestSuite) getWorkflowStringResult(env *testcore.TestEnv, 
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
 	// response.
 	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{
@@ -142,7 +142,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
@@ -158,7 +158,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() 
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
@@ -182,7 +182,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
 	response := s.startEagerWorkflow(env, request)
 	task := response.GetEagerWorkflowTask()
@@ -199,7 +199,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() 
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 	// reset reuse minimal interval to allow workflow termination
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	env, _ := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
@@ -216,7 +216,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
 	// response.
 	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{

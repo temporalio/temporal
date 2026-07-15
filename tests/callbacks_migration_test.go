@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -29,7 +30,7 @@ func TestCallbacksMigrationSuite(t *testing.T) {
 	parallelsuite.Run(t, &CallbacksMigrationSuite{})
 }
 
-func (s *CallbacksMigrationSuite) newTestEnv() *testcore.TestEnv {
+func (s *CallbacksMigrationSuite) newTestEnv() (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(
@@ -59,13 +60,13 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Enabled_Mid_WF() {
 	// 4. Send signal to unblock workflow and let it complete
 	// 5. Verify callback is invoked successfully
 
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
-	workflowID := env.Tv().WorkflowID()
+	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
@@ -168,7 +169,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	// 5. Send signal to unblock workflow and let it complete
 	// 6. Verify callback is invoked successfully despite EnableCHASMCallbacks being disabled
 
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// Enable CHASM for this test
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
@@ -178,7 +179,7 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_CHASM_Disabled_Mid_WF() 
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
-	workflowID := env.Tv().WorkflowID()
+	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
@@ -278,13 +279,13 @@ func (s *CallbacksMigrationSuite) TestWorkflowCallbacks_MixedCallbacks() {
 	// 5. Send signal to unblock workflow and let it complete
 	// 6. Verify both callbacks (HSM and CHASM) are invoked successfully
 
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	workflowType := "blockingWorkflow"
-	workflowID := env.Tv().WorkflowID()
+	workflowID := tv.WorkflowID()
 
 	ch1 := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),

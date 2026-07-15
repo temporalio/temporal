@@ -30,7 +30,7 @@ func TestActivityAPIBatchSecurityTestSuite(t *testing.T) {
 // running in a task queue that is not the internal per-namespace task queue
 // cannot schedule an activity on the internal per-namespace task queue.
 func (s *ActivityAPIBatchSecurityTestSuite) TestScheduleActivityOnPerNSTQ_Blocked() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	id := testcore.RandomizeStr(s.T().Name())
 	wt := "test-schedule-activity-per-ns-tq-type"
@@ -53,7 +53,7 @@ func (s *ActivityAPIBatchSecurityTestSuite) TestScheduleActivityOnPerNSTQ_Blocke
 	})
 	s.NoError(err)
 
-	tv := env.Tv().WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 
 	// Workflow task handler that tries to schedule an activity on the internal per-ns task queue.
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {

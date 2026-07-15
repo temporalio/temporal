@@ -70,7 +70,7 @@ func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction Acti
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	// activity reset is called after multiple attempts,
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -151,7 +151,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	// activity reset is called while activity is running
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -226,7 +226,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	// reset is called while activity is in retry
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -305,7 +305,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	// reset is called while activity is in retry
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -441,7 +441,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
 	// 2. First invocation of activity sets heartbeat details and fails upon request.
 	// 3. Second invocation triggers waits to be triggered, and then send new heartbeat until requested to finish.
 	// 6. Once workflow completes -- we're done.
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	activityRetryPolicy := &temporal.RetryPolicy{
 		InitialInterval:    1 * time.Second,

@@ -269,7 +269,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 	}
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
-		env := newNexusTestEnv(s.T(), useTemporalFailures)
+		env, _ := newNexusTestEnv(s.T(), useTemporalFailures)
 		endpoint := env.createNexusEndpoint(env.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
@@ -400,7 +400,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		// This still needs a dedicated cluster because of SetOnAuthorize/SetOnGetClaims.
-		env := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
+		env, _ := newNexusTestEnv(s.T(), useTemporalFailures, testcore.WithDedicatedCluster())
 		env.SetOnAuthorize(func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 			if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName && (c == nil || c.Subject != "test") {
 				return authorization.Result{Decision: authorization.DecisionDeny}, nil
@@ -530,7 +530,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 	}
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
-		env := newNexusTestEnv(s.T(), useTemporalFailures)
+		env, _ := newNexusTestEnv(s.T(), useTemporalFailures)
 		endpoint := env.createNexusEndpoint(env.Context(), s.T(), tc.endpointName, testcore.RandomizeStr("task-queue"))
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
@@ -611,7 +611,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_SupportsVersioning(useTemporalFailures bool) {
-	env := newNexusTestEnv(s.T(), useTemporalFailures,
+	env, _ := newNexusTestEnv(s.T(), useTemporalFailures,
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
 		// UpdateWorkerBuildIdCompatibility is the v0.1 (Version Set-based) API gated by DataAPIs.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
@@ -666,7 +666,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 // with client-name in gRPC metadata, the matching service emits nexus_task_requests with a
 // client_name tag. This proves the header propagates e2e: SDK → frontend → matching.
 func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFailures bool) {
-	env := newNexusTestEnv(s.T(), useTemporalFailures)
+	env, _ := newNexusTestEnv(s.T(), useTemporalFailures)
 	const expectedClientName = "temporal-go"
 	taskQueue := testcore.RandomizeStr("tq")
 

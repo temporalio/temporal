@@ -31,7 +31,7 @@ func TestTransientTaskSuite(t *testing.T) {
 }
 
 func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-transient-workflow-task-timeout-test"
 	wt := "functional-transient-workflow-task-timeout-test-type"
@@ -122,7 +122,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 }
 
 func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-transient-workflow-task-history-size-test"
 	wt := "functional-transient-workflow-task-history-size-test-type"
@@ -344,7 +344,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 }
 
 func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-no-transient-workflow-task-after-flush-buffered-events-test"
 	wt := "functional-no-transient-workflow-task-after-flush-buffered-events-test-type"

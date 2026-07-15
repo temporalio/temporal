@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -114,7 +115,7 @@ func (w *internalRulesTestWorkflow) ActivityFuncForPrePause() (string, error) {
 	return "done!", nil
 }
 
-func (s *ActivityApiRulesClientTestSuite) newTestEnv() *testcore.TestEnv {
+func (s *ActivityApiRulesClientTestSuite) newTestEnv() (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowRulesAPIsEnabled, true),
 	)
@@ -133,7 +134,7 @@ func (s *ActivityApiRulesClientTestSuite) createWorkflow(env *testcore.TestEnv, 
 }
 
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Initial state - no rules
 	nsResp, err := env.FrontendClient().ListWorkflowRules(s.Context(), &workflowservice.ListWorkflowRulesRequest{
@@ -250,7 +251,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 }
 
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	testWorkflow := newInternalRulesTestWorkflow(env)
 	env.SdkWorker().RegisterWorkflow(testWorkflow.WorkflowFuncForRetryActivity)
@@ -365,7 +366,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 }
 
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// overall test execution plan:
 	// 1. start workflow
@@ -498,7 +499,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 }
 
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// overall test execution plan:
 	// 1. create rule to pause activity

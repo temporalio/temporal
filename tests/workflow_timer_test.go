@@ -26,7 +26,7 @@ func TestWorkflowTimerTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowTimerTestSuite) TestCancelTimer() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-cancel-timer-test"
 	wt := "functional-cancel-timer-test-type"
@@ -150,7 +150,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 }
 
 func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-cancel-timer-fired-and-buffered-test"
 	wt := "functional-cancel-timer-fired-and-buffered-test-type"

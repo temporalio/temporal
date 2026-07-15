@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -36,7 +35,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 	if testWithChasm {
 		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
 	}
-	env := testcore.NewEnv(s.T(), opts...)
+	env, tv := testcore.NewEnv(s.T(), opts...)
 
 	if testWithChasm {
 		configValues := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())
@@ -45,7 +44,6 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 		s.True(configValue, "EnableChasm config should be true")
 	}
 
-	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
 		err := workflow.SideEffect(

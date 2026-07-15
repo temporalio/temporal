@@ -83,7 +83,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 		},
 	} {
 		s.Run(tc.name, func(s *PurgeDLQTasksSuite) {
-			env := testcore.NewEnv(s.T(), tc.envOptions...)
+			env, _ := testcore.NewEnv(s.T(), tc.envOptions...)
 			defaultQueueKey := persistencetest.GetQueueKey(s.T())
 
 			queueKey := persistence.QueueKey{

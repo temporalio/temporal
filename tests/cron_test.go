@@ -46,7 +46,7 @@ func TestCronTestClientSuite(t *testing.T) {
 }
 
 func (s *CronTestSuite) TestCronWorkflow_Failed_Infinite() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-wf-cron-failed-infinite-test"
 	wt := "functional-wf-cron-failed-infinite-type"
@@ -128,7 +128,7 @@ func (s *CronTestSuite) TestCronWorkflow_Failed_Infinite() {
 }
 
 func (s *CronTestSuite) TestCronWorkflow() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-wf-cron-test"
 	wt := "functional-wf-cron-type"
@@ -368,7 +368,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 
 	// Continue-as-new is not tested (behavior is currently not correct)
 
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-wf-cron-failed-test"
 	cronSchedule := "@every 3s"

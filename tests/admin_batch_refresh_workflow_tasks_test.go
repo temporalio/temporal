@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -31,7 +32,7 @@ func TestAdminBatchRefreshWorkflowTasksTestSuite(t *testing.T) {
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
 // Additional per-test options may be passed in opts.
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	// Use a higher limit for general tests to avoid interference from batch operations
 	// that haven't completed yet. The isolation test (A_SeparateLimitFromFrontendBatchOperation)
 	// explicitly sets limit to 1 to verify frontend and admin batch ops use separate limits.
@@ -58,7 +59,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(env *testcore.T
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_RefreshWorkflowTasks_Success() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
@@ -92,7 +93,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_RefreshWorkflowTasks_WithVisibilityQuery() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
@@ -133,7 +134,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoOperation() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Request without operation should fail
 	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
@@ -149,7 +150,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoNamespace() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Request without namespace should fail
 	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
@@ -168,7 +169,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoJobId() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Request without job_id should fail
 	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
@@ -187,7 +188,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoExecutionsOrQuery() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	// Request without executions or visibility_query should fail
 	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
@@ -204,7 +205,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0_SeparateLimitFromFrontendBatchOperation() {
-	env := s.newTestEnv(
+	env, _ := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1),
 	)

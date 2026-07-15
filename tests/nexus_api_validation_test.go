@@ -30,7 +30,7 @@ func TestNexusAPIValidationTestSuite(t *testing.T) {
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := testcore.RandomizeStr("task-queue")
 	namespace := "namespace not/found"
@@ -51,7 +51,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceTooLong() {
-	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
+	env, _ := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
 	taskQueue := testcore.RandomizeStr("task-queue")
 
 	var namespace strings.Builder
@@ -177,7 +177,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 	}
 
 	testFn := func(s *NexusAPIValidationTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
-		env := newNexusTestEnv(s.T(), false,
+		env, _ := newNexusTestEnv(s.T(), false,
 			testcore.WithDynamicConfig(dynamicconfig.ExposeAuthorizerErrors, tc.exposeAuthorizerErrors),
 		)
 		taskQueue := testcore.RandomizeStr("task-queue")
@@ -223,7 +223,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 	input := strings.Repeat("a", (2*1024*1024)-10)
 
 	testFn := func(s *NexusAPIValidationTestSuite, dispatchOnlyByEndpoint bool) {
-		env := newNexusTestEnv(s.T(), false)
+		env, _ := newNexusTestEnv(s.T(), false)
 		taskQueue := testcore.RandomizeStr("task-queue")
 		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 
@@ -253,7 +253,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenMatchesRequestNamespace() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -281,7 +281,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Verifies
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_ValidateOperationTokenLength() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -313,7 +313,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_Valida
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -361,7 +361,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {
-	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
+	env, _ := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
 	u := getDispatchByEndpointURL(env.HttpAPIAddress(), uuid.NewString())
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)

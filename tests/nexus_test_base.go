@@ -18,6 +18,7 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -26,11 +27,12 @@ type NexusTestEnv struct {
 	useTemporalFailures bool
 }
 
-func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.TestOption) *NexusTestEnv {
+func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.TestOption) (*NexusTestEnv, *testvars.TestVars) {
+	testEnv, tv := testcore.NewEnv(t, opts...)
 	return &NexusTestEnv{
-		TestEnv:             testcore.NewEnv(t, opts...),
+		TestEnv:             testEnv,
 		useTemporalFailures: useTemporalFailures,
-	}
+	}, tv
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {

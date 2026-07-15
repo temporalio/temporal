@@ -45,8 +45,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 	}
 
 	s.Run("StartWorkflowExecution records UserMetadata", func(s *UserMetadataSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := env.Tv()
+		env, tv := testcore.NewEnv(s.T())
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
@@ -67,8 +66,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 	})
 
 	s.Run("SignalWithStartWorkflowExecution records UserMetadata", func(s *UserMetadataSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := env.Tv()
+		env, tv := testcore.NewEnv(s.T())
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
@@ -90,8 +88,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 	})
 
 	s.Run("ExecuteMultiOperation records UserMetadata", func(s *UserMetadataSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := env.Tv()
+		env, tv := testcore.NewEnv(s.T())
 		metadata := prepareTestUserMetadata()
 		startWorkflowRequest := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),

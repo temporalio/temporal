@@ -37,7 +37,7 @@ type CommonSuite struct {
 func (s *CommonSuite) TestListOrdering() {
 	// The nexus endpoints table is cluster-global; this test asserts exact table
 	// versions and entry counts, so it needs a cluster with no concurrent writers.
-	env := newNexusTestEnv(s.T(), false,
+	env, _ := newNexusTestEnv(s.T(), false,
 		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
 	)
 	ctx := s.Context()
@@ -120,7 +120,7 @@ type MatchingSuite struct {
 }
 
 func (s *MatchingSuite) TestCreate() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 	ctx := s.Context()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	entry := env.createNexusEndpoint(s.Context(), s.T(), endpointName, "unused")
@@ -148,7 +148,7 @@ func (s *MatchingSuite) TestCreate() {
 }
 
 func (s *MatchingSuite) TestUpdate() {
-	env := newNexusTestEnv(s.T(), false)
+	env, tv := newNexusTestEnv(s.T(), false)
 	updatedName := testcore.RandomizedNexusEndpoint(s.T().Name() + "-updated")
 	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T())
 	type testcase struct {
@@ -168,7 +168,7 @@ func (s *MatchingSuite) TestUpdate() {
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
 								NamespaceId: env.NamespaceID().String(),
-								TaskQueue:   env.Tv().TaskQueue().Name,
+								TaskQueue:   tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -193,7 +193,7 @@ func (s *MatchingSuite) TestUpdate() {
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
 								NamespaceId: env.NamespaceID().String(),
-								TaskQueue:   env.Tv().TaskQueue().Name,
+								TaskQueue:   tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -215,7 +215,7 @@ func (s *MatchingSuite) TestUpdate() {
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
 								NamespaceId: env.NamespaceID().String(),
-								TaskQueue:   env.Tv().TaskQueue().Name,
+								TaskQueue:   tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -238,7 +238,7 @@ func (s *MatchingSuite) TestUpdate() {
 }
 
 func (s *MatchingSuite) TestDelete() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T())
 	type testcase struct {
 		name       string
@@ -279,7 +279,7 @@ func (s *MatchingSuite) TestDelete() {
 func (s *MatchingSuite) TestList() {
 	// The nexus endpoints table is cluster-global; this test asserts exact entry
 	// ordering and counts, so it needs a cluster with no concurrent writers.
-	env := newNexusTestEnv(s.T(), false,
+	env, _ := newNexusTestEnv(s.T(), false,
 		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
 	)
 	ctx := s.Context()
@@ -435,7 +435,7 @@ type OperatorSuite struct {
 }
 
 func (s *OperatorSuite) TestCreate() {
-	env := newNexusTestEnv(s.T(), false)
+	env, tv := newNexusTestEnv(s.T(), false)
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 	type testcase struct {
 		name      string
@@ -452,7 +452,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -479,7 +479,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -498,7 +498,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -518,7 +518,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -538,7 +538,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -557,7 +557,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -577,7 +577,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: "missing-namespace",
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -710,7 +710,7 @@ func (s *OperatorSuite) TestCreate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -735,7 +735,7 @@ func (s *OperatorSuite) TestCreate() {
 }
 
 func (s *OperatorSuite) TestUpdate() {
-	env := newNexusTestEnv(s.T(), false)
+	env, tv := newNexusTestEnv(s.T(), false)
 	updatedName := testcore.RandomizedNexusEndpoint(s.T().Name() + "-updated")
 	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T())
 	type testcase struct {
@@ -755,7 +755,7 @@ func (s *OperatorSuite) TestUpdate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -780,7 +780,7 @@ func (s *OperatorSuite) TestUpdate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -802,7 +802,7 @@ func (s *OperatorSuite) TestUpdate() {
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: env.Namespace().String(),
-								TaskQueue: env.Tv().TaskQueue().Name,
+								TaskQueue: tv.TaskQueue().Name,
 							},
 						},
 					},
@@ -824,7 +824,7 @@ func (s *OperatorSuite) TestUpdate() {
 }
 
 func (s *OperatorSuite) TestDelete() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T())
 	type testcase struct {
 		name      string
@@ -865,7 +865,7 @@ func (s *OperatorSuite) TestDelete() {
 func (s *OperatorSuite) TestList() {
 	// The nexus endpoints table is cluster-global; this test asserts exact entry
 	// ordering, so it needs a cluster with no concurrent writers.
-	env := newNexusTestEnv(s.T(), false,
+	env, _ := newNexusTestEnv(s.T(), false,
 		testcore.WithDynamicConfig(dynamicconfig.NexusEndpointListMaxPageSize, 1000),
 	)
 	ctx := s.Context()
@@ -972,7 +972,7 @@ func (s *OperatorSuite) TestList() {
 }
 
 func (s *OperatorSuite) TestGet() {
-	env := newNexusTestEnv(s.T(), false)
+	env, _ := newNexusTestEnv(s.T(), false)
 	endpoint := env.createRandomNexusEndpoint(s.Context(), s.T())
 
 	type testcase struct {

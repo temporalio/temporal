@@ -156,14 +156,14 @@ func TestClusterShutdownLeak(t *testing.T) {
 func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
-		env := testcore.NewEnv(t,
+		env, tv := testcore.NewEnv(t,
 			testcore.WithDedicatedCluster(),
 			testcore.WithWorkerService("leak regression test"))
 
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(
 			context.Background(),
-			sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()},
+			sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().GetName()},
 			smokeWorkflow,
 		)
 		require.NoError(t, err)

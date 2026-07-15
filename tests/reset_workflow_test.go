@@ -45,7 +45,7 @@ func TestResetWorkflowTestSuite(t *testing.T) {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-reset-workflow-test"
 	wt := "functional-reset-workflow-test-type"
@@ -240,10 +240,9 @@ func (s *ResetWorkflowTestSuite) runWorkflowWithPoller(env *testcore.TestEnv, tv
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	startTime := time.Now().UTC()
-	tv := testvars.New(s.T())
 	tv.WorkerIdentity()
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
@@ -339,21 +338,21 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowAfterTimeout() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyDefault() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 	}
 	t.run()
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -361,11 +360,11 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -373,11 +372,11 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplySignal() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_NONE,
 	}
@@ -385,11 +384,11 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeNoneReapplyNone() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	}
@@ -397,11 +396,11 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyAll() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplySignal() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	}
@@ -409,11 +408,11 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplySignal() 
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ExcludeSignalReapplyNone() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	t := resetTest{
 		ResetWorkflowTestSuite: s,
 		env:                    env,
-		tv:                     testvars.New(s.T()),
+		tv:                     tv,
 		reapplyExcludeTypes:    []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL},
 		reapplyType:            enumspb.RESET_REAPPLY_TYPE_NONE,
 	}
@@ -717,14 +716,12 @@ func (t *resetTest) run() {
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsReappliedOnReset() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	s.testResetWorkflowSignalReapplyBuffer(env, tv, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsDroppedOnReset() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	s.testResetWorkflowSignalReapplyBuffer(env, tv, enumspb.RESET_REAPPLY_TYPE_NONE)
 }
 
@@ -838,7 +835,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_Schedule() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-schedule"
 	workflowTypeName := "functional-reset-workflow-test-schedule-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-taskqueue"
@@ -846,7 +843,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_Schedule() {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-schedule-to-start"
 	workflowTypeName := "functional-reset-workflow-test-schedule-to-start-type"
 	taskQueueName := "functional-reset-workflow-test-schedule-to-start-taskqueue"
@@ -854,7 +851,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_ScheduleToStart(
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_WorkflowTask_Start() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	workflowID := "functional-reset-workflow-test-start"
 	workflowTypeName := "functional-reset-workflow-test-start-type"
 	taskQueueName := "functional-reset-workflow-test-start-taskqueue"
@@ -973,7 +970,7 @@ func CaNOnceWorkflow(ctx workflow.Context, input string) (string, error) {
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	env.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{TaskQueue: env.WorkerTaskQueue()}, CaNOnceWorkflow, "")
@@ -1039,7 +1036,7 @@ func CaNChainSignalWorkflow(ctx workflow.Context, count int) (string, error) {
 func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissing() {
 	// Speed up the transfer/visibility queues so the async DeleteExecutionTask for the closed current
 	// run is processed promptly. Mirrors the delete-execution suite (tests/workflow_delete_execution_test.go).
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	)
@@ -1161,7 +1158,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowByRunID_CurrentExecutionMissin
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true))
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true))
 
 	// This test verifies that ExternalPayloadSize and ExternalPayloadCount are correctly
 	// tracked when a workflow is reset. It resets to a point before the activity completes,
@@ -1243,7 +1240,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		}}, nil
 	}
 
-	tv := testvars.New(s.T()).WithTaskQueue(taskQueue)
+	tv = tv.WithTaskQueue(taskQueue)
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
 	// Process first workflow task to schedule activities

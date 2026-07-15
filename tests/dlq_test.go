@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/testutils"
@@ -72,7 +73,7 @@ func TestDLQSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &DLQSuite{}) //nolint:staticcheck // SA1019: DLQ tests use dedicated clusters with fault injection and worker-service DLQ jobs.
 }
 
-func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
+func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) (*dlqTestEnv, *testvars.TestVars) {
 	w := &dlqTestEnv{}
 	testPrefix := "dlq-test-terminal-wfts-"
 	w.failingWorkflowIDPrefix.Store(&testPrefix)
@@ -92,7 +93,8 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 			},
 		}),
 	}
-	w.TestEnv = testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	var tv *testvars.TestVars
+	w.TestEnv, tv = testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
 
 	var err error
@@ -123,7 +125,7 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 		},
 	))
 
-	return w
+	return w, tv
 }
 
 func (env *dlqTestEnv) runTdbg(ctx context.Context, args []string) error {
@@ -140,7 +142,7 @@ func (s *DLQSuite) myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) TestReadArtificialDLQTasks() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	namespaceID := "test-namespace"
 	workflowID := "test-workflow-id"
@@ -252,7 +254,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 // DLQ, this test then purges the DLQ and verifies that the task was deleted.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestPurgeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq purge workflow"))
+	env, _ := s.newTestEnv(testcore.WithWorkerService("dlq purge workflow"))
 
 	_, dlqMessageID := s.executeDoomedWorkflow(env)
 
@@ -281,7 +283,7 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 // above test is more for testing specific CLI flags when reading from the DLQ.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestMergeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
+	env, _ := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
 
 	// Verify that we can execute a normal workflow.
 	run := s.executeWorkflow(env, "dlq-test-ok-workflow-id")
@@ -324,7 +326,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
+	env, _ := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
 	env.deleteBlockCh = make(chan any)
 
 	// Execute several doomed workflows.
@@ -342,7 +344,7 @@ func (s *DLQSuite) TestCancelRunningMerge() {
 }
 
 func (s *DLQSuite) TestListQueues() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	targetCluster := "active"
 	category := tasks.CategoryTransfer
 	sourceCluster := "test-source-cluster-" + s.T().Name()

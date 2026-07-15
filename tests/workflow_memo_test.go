@@ -37,7 +37,7 @@ type RunIDGetter interface {
 type startFunc func() (RunIDGetter, error)
 
 func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-start-with-memo-test"
 	wt := "functional-start-with-memo-test-type"
@@ -75,7 +75,7 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 }
 
 func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-signal-with-start-with-memo-test"
 	wt := "functional-signal-with-start-with-memo-test-type"

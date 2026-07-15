@@ -86,7 +86,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &Versioning3Suite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
-func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	opts = append([]testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
 
@@ -111,14 +111,14 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 	return testcore.NewEnv(s.T(), opts...)
 }
 
-func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*testcore.TestEnv, *Versioning3Suite), opts ...testcore.TestOption) {
+func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*testcore.TestEnv, *testvars.TestVars, *Versioning3Suite), opts ...testcore.TestOption) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func(s *Versioning3Suite) {
 			envOpts := append([]testcore.TestOption{}, opts...)
 			envOpts = append(envOpts, behavior.Options()...)
-			env := s.setupEnv(envOpts...)
+			env, tv := s.setupEnv(envOpts...)
 			behavior.InjectHooks(env)
-			testFn(env, s)
+			testFn(env, tv, s)
 		})
 	}
 }
@@ -128,8 +128,7 @@ func (s *Versioning3Suite) updateUtils() updateutils.UpdateUtils {
 }
 
 func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv := env.Tv()
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
 
 		tv2 := tv.WithBuildIDNumber(2)
 		go s.idlePollWorkflow(env, s.Context(), tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
@@ -153,8 +152,7 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 }
 
 func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv := env.Tv()
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
 		go s.idlePollWorkflow(env, s.Context(), tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
 
 		s.startWorkflow(env, tv, nil)
@@ -165,8 +163,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 }
 
 func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv := env.Tv()
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
 		tvOldDeployment := tv.WithBuildIDNumber(1)
 		tvNewDeployment := tv.WithBuildIDNumber(2)
 
@@ -203,8 +200,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 }
 
 func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegisteredInVersion() {
-	env := s.setupEnv()
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 
 	const (
 		wfName  = "session-wf"
@@ -285,19 +281,18 @@ func (s *Versioning3Suite) TestSessionActivityResourceSpecificTaskQueueNotRegist
 }
 
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testWorkflowWithPinnedOverride(env, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testWorkflowWithPinnedOverride(env, tv, true)
 	})
 }
 
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testWorkflowWithPinnedOverride(env, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testWorkflowWithPinnedOverride(env, tv, false)
 	})
 }
 
-func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *testcore.TestEnv, sticky bool) {
-	tv := env.Tv()
+func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *testcore.TestEnv, tv *testvars.TestVars, sticky bool) {
 
 	if sticky {
 		s.warmUpSticky(env, tv)
@@ -342,20 +337,20 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *testcore.TestEnv,
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_NoSticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testQueryWithPinnedOverride(env, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testQueryWithPinnedOverride(env, tv, false)
 	})
 }
 
 func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testQueryWithPinnedOverride(env, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testQueryWithPinnedOverride(env, tv, true)
 	})
 }
 
 func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testPinnedQueryDrainedVersion(env, false, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testPinnedQueryDrainedVersion(env, tv, false, false)
 	},
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second),
@@ -364,8 +359,8 @@ func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersAbsent() {
 }
 
 func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testPinnedQueryDrainedVersion(env, true, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testPinnedQueryDrainedVersion(env, tv, true, false)
 	},
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second),
@@ -373,16 +368,15 @@ func (s *Versioning3Suite) TestPinnedQuery_DrainedVersion_PollersPresent() {
 }
 
 func (s *Versioning3Suite) TestPinnedQuery_RollbackDrainedVersion() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testPinnedQueryDrainedVersion(env, true, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testPinnedQueryDrainedVersion(env, tv, true, true)
 	},
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 1*time.Second),
 	)
 }
 
-func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, pollersPresent bool, rollback bool) {
-	tv := env.Tv()
+func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, tv *testvars.TestVars, pollersPresent bool, rollback bool) {
 
 	// create version v1 and make it current
 	idlePollerDone := make(chan struct{})
@@ -463,8 +457,7 @@ func (s *Versioning3Suite) testPinnedQueryDrainedVersion(env *testcore.TestEnv, 
 	}
 }
 
-func (s *Versioning3Suite) testQueryWithPinnedOverride(env *testcore.TestEnv, sticky bool) {
-	tv := env.Tv()
+func (s *Versioning3Suite) testQueryWithPinnedOverride(env *testcore.TestEnv, tv *testvars.TestVars, sticky bool) {
 
 	if sticky {
 		s.warmUpSticky(env, tv)
@@ -501,19 +494,18 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(env *testcore.TestEnv, st
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedQuery(env, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedQuery(env, tv, false)
 	})
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedQuery(env, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedQuery(env, tv, true)
 	})
 }
 
-func (s *Versioning3Suite) testUnpinnedQuery(env *testcore.TestEnv, sticky bool) {
-	tv := env.Tv()
+func (s *Versioning3Suite) testUnpinnedQuery(env *testcore.TestEnv, tv *testvars.TestVars, sticky bool) {
 	tv2 := tv.WithBuildIDNumber(2)
 	if sticky {
 		s.warmUpSticky(env, tv)
@@ -572,20 +564,18 @@ func (s *Versioning3Suite) pollAndQueryWorkflow(
 }
 
 func (s *Versioning3Suite) TestPinnedWorkflowWithLateActivityPoller() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testPinnedWorkflowWithLateActivityPoller(env)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testPinnedWorkflowWithLateActivityPoller(env, tv)
 	})
 }
 
-func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *testcore.TestEnv) {
+func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *testcore.TestEnv, tv *testvars.TestVars) {
 	// Here, we test that designating activities as independent is revisited if the missing activity
 	// pollers arrive to server while the so-far-independent activity is backlogged.
 	// Summary: a wf starts with a pinned override. The first wft schedules an activity before
 	// any activity poller on the pinned deployment is seen by the server. The activity is sent
 	// to the default queue. Then, the activity poller on the pinned deployment arrives, the task
 	// should be now sent to that poller although no current deployment is set on the TQs.
-
-	tv := env.Tv()
 
 	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(env, tv, false, wftCompleted,
@@ -622,19 +612,18 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *testcor
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflow_Sticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedWorkflow(env, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedWorkflow(env, tv, true)
 	})
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedWorkflow(env, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedWorkflow(env, tv, false)
 	})
 }
 
-func (s *Versioning3Suite) testUnpinnedWorkflow(env *testcore.TestEnv, sticky bool) {
-	tv := env.Tv()
+func (s *Versioning3Suite) testUnpinnedWorkflow(env *testcore.TestEnv, tv *testvars.TestVars, sticky bool) {
 
 	if sticky {
 		s.warmUpSticky(env, tv)
@@ -678,9 +667,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(env *testcore.TestEnv, sticky bo
 }
 
 func (s *Versioning3Suite) TestSearchByUsedVersion() {
-	env := s.setupEnv()
-
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 
 	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(env, tv, false, wftCompleted,
@@ -768,8 +755,8 @@ func (s *Versioning3Suite) drainWorkflowTaskAfterSetCurrent(
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNewDeployment() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
 
@@ -855,8 +842,8 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionToNewDeployment() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
 
@@ -933,14 +920,14 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToVersioned() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedWorkflowWithRamp(env, false)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedWorkflowWithRamp(env, tv, false)
 	})
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.testUnpinnedWorkflowWithRamp(env, true)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.testUnpinnedWorkflowWithRamp(env, tv, true)
 	})
 }
 
@@ -961,9 +948,9 @@ func (s *Versioning3Suite) TestWorkflowRetry_Unpinned_ExpectAutoUpgradeToCurrent
 }
 
 func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavior, expectInherit, retryOfChild, retryOfCaN bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	childWorkflowID := tv1.WorkflowID() + "-child"
@@ -1141,11 +1128,11 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	}, 5*time.Second, 500*time.Millisecond)
 }
 
-func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(env *testcore.TestEnv, toUnversioned bool) {
+func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(env *testcore.TestEnv, tv *testvars.TestVars, toUnversioned bool) {
 	// This test sets a 50% ramp and runs 50 wfs and ensures both versions got some wf and
 	// activity tasks.
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	wf := func(ctx workflow.Context, version string) (string, error) {
@@ -1255,12 +1242,12 @@ func (s *Versioning3Suite) TestTransitionFromWft_NoSticky_ToUnversioned() {
 }
 
 func (s *Versioning3Suite) testTransitionFromWft(sticky bool, toUnversioned bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// Wf runs one WFT and one AT on d1, then the second WFT is redirected to d2 and
 	// transitions the wf with it.
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	if sticky {
 		s.warmUpSticky(env, tv1)
@@ -1351,7 +1338,7 @@ func (s *Versioning3Suite) TestDoubleTransitionFromUnversioned_WithSignal() {
 }
 
 func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// Scenario: make sure a transition on top of another transition works properly. Steps:
 	// 1. Start a workflow, process first task with sourceV (which is v1 or unversioned depending on passed `unversionedSrc`).
@@ -1367,7 +1354,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 	// 8. Not that the transition is complete, the activity should be able to go to sourceV poller.
 	// 9. Set v2 as current again and ensure the wf can complete on it.
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	sourceV := tv1.Deployment()
 	sourceVB := vbUnpinned
@@ -1488,13 +1475,13 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 }
 
 func (s *Versioning3Suite) TestNexusTask_StaysOnCurrentDeployment() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		s.nexusTaskStaysOnCurrentDeployment(env)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		s.nexusTaskStaysOnCurrentDeployment(env, tv)
 	})
 }
 
-func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment(env *testcore.TestEnv) {
-	tv1 := env.Tv().WithBuildIDNumber(1)
+func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment(env *testcore.TestEnv, tv *testvars.TestVars) {
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	nexusRequest := &matchingservice.DispatchNexusTaskRequest{
@@ -1558,13 +1545,11 @@ func (s *Versioning3Suite) pollAndDispatchNexusTask(
 }
 
 func (s *Versioning3Suite) TestEagerActivity() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 	)
 	// The first WFT asks for an activity to starts and get it eagerly in the WFT completion
 	// response. The activity is processed without issues and wf completes.
-
-	tv := env.Tv()
 
 	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tv, &deploymentpb.RoutingConfig{
 		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
@@ -1618,7 +1603,7 @@ func (s *Versioning3Suite) TestTransitionFromActivity_NoSticky() {
 }
 
 func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// The workflow runs one WFT on d1 which schedules four activities, then:
 	// 1. The first and second activities starts on d1
@@ -1633,7 +1618,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 8. WFT completes and the transition completes.
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	if sticky {
 		s.warmUpSticky(env, tv1)
@@ -1809,7 +1794,7 @@ func (s *Versioning3Suite) TestIndependentUnversionedActivity_Unpinned() {
 }
 
 func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior, unversionedActivity bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// This test starts a wf on wf-series. The workflow runs an activity that is sent to act-tq with
 	// workers on a different deployment series, act-series. We make sure that the activity is
@@ -1817,8 +1802,8 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	// is not required for independent activities to use a different TQ name but in here we test the
 	// more common case where the TQ name is different.
 
-	tvWf := env.Tv().WithDeploymentSeriesNumber(1)
-	tvAct := env.Tv().WithDeploymentSeriesNumber(2).WithTaskQueueNumber(2)
+	tvWf := tv.WithDeploymentSeriesNumber(1)
+	tvAct := tv.WithDeploymentSeriesNumber(2).WithTaskQueueNumber(2)
 
 	// Set current deployment for each TQ
 	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tvWf, &deploymentpb.RoutingConfig{
@@ -1891,11 +1876,11 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_Inherit() {
 }
 
 func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq bool, withOverride bool, parentRegistrationBehavior enumspb.VersioningBehavior) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// Child wf of a pinned parent starts on the parents pinned version.
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tv1Child := tv1.WithWorkflowIDNumber(2)
 	if crossTq {
@@ -2034,9 +2019,9 @@ func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 	crossTaskQueue bool,
 	parentBehavior enumspb.VersioningBehavior,
 ) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tvParentV1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvParentV1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChildV1 := tvParentV1.WithWorkflowIDNumber(2)
 	if crossTaskQueue {
 		tvChildV1 = tvChildV1.WithTaskQueueNumber(2)
@@ -2178,9 +2163,9 @@ func (s *Versioning3Suite) testChildWorkflowExplicitPinnedOverrideTakesPrecedenc
 // 3. Parent starts a child with an explicit AutoUpgrade override.
 // 4. Assert the child follows current-version routing instead of inheriting v1.
 func (s *Versioning3Suite) TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrecedence() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tvChildV2 := tv2.WithWorkflowIDNumber(2)
 	childOverride := &workflowpb.VersioningOverride{
@@ -2265,9 +2250,9 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitAutoUpgradeOverrideTakesPrec
 // 3. Assert the child's first WFT routes to v2 while the override is pending.
 // 4. Complete that WFT on v2 and assert the one-time override is cleared.
 func (s *Versioning3Suite) TestChildWorkflowExplicitOneTimeOverrideRoutesToTargetAndClears() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChildV1 := tv1.WithWorkflowIDNumber(2)
 	tvChildV2 := tvChildV1.WithBuildIDNumber(2)
 	childOverride := s.makeOneTimeOverride(tvChildV2)
@@ -2334,9 +2319,9 @@ func (s *Versioning3Suite) TestChildWorkflowExplicitOneTimeOverrideRoutesToTarge
 //  3. Assert the parent receives StartChildWorkflowExecutionFailed with
 //     InvalidVersioningOverride.
 func (s *Versioning3Suite) TestChildWorkflowInvalidPinnedOverrideRecordsFailedEvent() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tvParent := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvParent := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChild := tvParent.WithWorkflowIDNumber(2)
 	tvMissing := tvParent.WithBuildIDNumber(2)
 	missingOverride := s.makePinnedOverride(tvMissing)
@@ -2410,9 +2395,9 @@ func (s *Versioning3Suite) TestChildWorkflowInvalidPinnedOverrideRecordsFailedEv
 //  2. Assert RespondWorkflowTaskCompleted fails with InvalidArgument.
 //  3. Assert no child-workflow initiated event is written.
 func (s *Versioning3Suite) TestChildWorkflowMalformedPinnedOverrideFailsWorkflowTask() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tvParent := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvParent := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChild := tvParent.WithWorkflowIDNumber(2)
 
 	s.updateTaskQueueDeploymentDataWithRoutingConfig(env, tvParent, &deploymentpb.RoutingConfig{
@@ -2482,13 +2467,13 @@ func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ_NoInherit() {
 }
 
 func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq bool, parentBehavior enumspb.VersioningBehavior) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// Child wf of an unpinned parent is always started on the Current Version of its TQ.
 	// For the time being, cross-TQ children do not inherit parents pinned version until that part
 	// is implemented.
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv1Child := tv1.WithWorkflowIDNumber(2)
 	if crossTq {
 		tv1Child = tv1Child.WithTaskQueue("child-tq")
@@ -2845,8 +2830,8 @@ func (s *Versioning3Suite) pollUntilChildWorkflowTask(
 // 2, the server should clear the override and keep the workflow on the base
 // behavior/version reported by that completion.
 func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskClearsOverride() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -2873,8 +2858,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskClearsOverride(
 // worker starts that task. The first WFT should be dispatched to version 2, and
 // completion from version 2 should consume and clear the override.
 func (s *Versioning3Suite) TestOneTimeOverride_PendingWorkflowTaskRoutesToTargetAndClears() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	s.pollUntilRegistered(env, tv1)
@@ -2905,8 +2890,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_PendingWorkflowTaskRoutesToTarget
 // AutoUpgrade on version 2. When version 3 later becomes current, the workflow
 // should route to version 3 through normal AutoUpgrade routing.
 func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskReportsAutoUpgrade() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tv3 := tv1.WithBuildIDNumber(3)
 
@@ -2946,8 +2931,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskReportsAutoUpgr
 // one-time override because it did not complete on the target version. The next
 // WFT should still route to the one-time target and clear the override there.
 func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskOnPreviousVersionDoesNotClear() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -2983,8 +2968,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskOnPreviousVers
 // from the pending one-time override. The follow-up WFT should then run on
 // version 2 and consume the override on the original run.
 func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskContinueAsNewRejected() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -3039,8 +3024,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_StartedWorkflowTaskContinueAsNewR
 // version, the override should clear before the new run's versioning state is
 // computed. The continued run should not inherit a stale one-time override.
 func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskContinueAsNewDoesNotInheritOverride() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -3092,8 +3077,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_TargetWorkflowTaskContinueAsNewDo
 // upgrade-on-CAN should not be blocked by the old override; the new run should
 // start on version 3 through normal AutoUpgrade initial-versioning behavior.
 func (s *Versioning3Suite) TestOneTimeOverride_ClearedMoveAllowsUpgradeOnContinueAsNewToNewCurrent() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tv3 := tv1.WithBuildIDNumber(3)
 
@@ -3162,8 +3147,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_ClearedMoveAllowsUpgradeOnContinu
 // reapply the WorkflowExecutionOptionsUpdated event that set the one-time
 // override, so the reset run gets one pending WFT routed to version 2.
 func (s *Versioning3Suite) TestOneTimeOverride_ResetReappliesPendingMove() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -3227,8 +3212,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_ResetReappliesPendingMove() {
 // 1, but the child should inherit the pending override, route its first WFT to
 // version 2, and clear the override after that first child WFT completes.
 func (s *Versioning3Suite) TestOneTimeOverride_SameNamespaceChildInheritsPendingOverride() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	childTV1 := tv1.WithWorkflowIDNumber(2)
 	childTV2 := childTV1.WithBuildIDNumber(2)
@@ -3283,8 +3268,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_CrossTaskQueueChildInheritsOnlyWh
 		},
 	} {
 		s.Run(tc.name, func(s *Versioning3Suite) {
-			env := s.setupEnv()
-			tv1 := env.Tv().WithBuildIDNumber(1)
+			env, tv := s.setupEnv()
+			tv1 := tv.WithBuildIDNumber(1)
 			tv2 := tv1.WithBuildIDNumber(2)
 			childTV1 := tv1.WithWorkflowIDNumber(2).WithTaskQueueNumber(2)
 			childTV2 := childTV1.WithBuildIDNumber(2)
@@ -3343,8 +3328,8 @@ func (s *Versioning3Suite) TestOneTimeOverride_CrossTaskQueueChildInheritsOnlyWh
 // workflow's task queue. The update should fail before persistence, leaving the
 // workflow without a pending override.
 func (s *Versioning3Suite) TestOneTimeOverride_InvalidTargetVersionRejected() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 	missingTV := tv1.WithBuildIDNumber(2)
 
 	execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
@@ -3379,8 +3364,8 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableSendTargetVersionChanged, false))
 	}
 
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 		// Set v1 pinned override if testing that
 		var override *workflowpb.VersioningOverride
@@ -3426,7 +3411,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 				// Mode-specific validations
 				historyEvents := task.History.GetEvents()
 				if speculativeTask {
-					s.verifySpeculativeTask(env, execution)
+					s.verifySpeculativeTask(env, tv, execution)
 				} else if transientTask {
 					s.verifyTransientTask(task)
 					// Get events from server-side history, this includes transient events.
@@ -3571,8 +3556,8 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_NoRampingVersion
 //     - noRampingVersion=true: no ramping version exists, falls back to current (v1)
 //     - pinnedOverride=true: override wins, new run stays on v1
 func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, noRampingVersion bool) {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 
 		// Set up v1 as current, start workflow
@@ -3672,8 +3657,8 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 //     Target Version (current), not the ramping version — UseRampingVersion only applies once.
 //  2. A CaN issued by that run does not inherit UseRampingVersion; its new run uses normal routing.
 func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoesToTargetAndCaNDoesNotInherit() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 
 		// Standard UseRampingVersion CaN setup: pinned v1 workflow CaNs to v2 (ramping at 0%)
@@ -3769,8 +3754,8 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 // UseRampingVersion run also lands on the ramping version for its first WFT.
 // This verifies that ContinueAsNewInitialVersioningBehavior is propagated through retries per spec.
 func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsInitialBehavior() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 
 		// Standard UseRampingVersion CaN setup, with a retry policy so the run can retry on failure.
@@ -3845,8 +3830,8 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 // as its parent based on InheritedAutoUpgradeInfo, and therefore starts on v2 also, but we confirm that
 // it does not inherit UseRampingVersion.
 func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInheritUseRampingVersion() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 		childID := tv1.WorkflowID() + "-child"
 
@@ -3970,7 +3955,7 @@ func (s *Versioning3Suite) triggerTransientWFT(env *testcore.TestEnv, tv *testva
 }
 
 // Verify this is a speculative task - events not yet in persisted history
-func (s *Versioning3Suite) verifySpeculativeTask(env *testcore.TestEnv, execution *commonpb.WorkflowExecution) {
+func (s *Versioning3Suite) verifySpeculativeTask(env *testcore.TestEnv, tv *testvars.TestVars, execution *commonpb.WorkflowExecution) {
 	events := env.GetHistory(env.Namespace().String(), execution)
 	s.EqualHistoryEvents(`
 						1 WorkflowExecutionStarted
@@ -4011,8 +3996,8 @@ func (s *Versioning3Suite) verifyTransientTask(task *workflowservice.PollWorkflo
 //   - Issue ContinueAsNew with InitialVersioningBehavior AUTO_UPGRADE
 //     -> first task should be AUTO_UPGRADE (same as it would be without InitialVersioningBehavior)
 func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		tv2 := tv1.WithBuildIDNumber(2)
 		execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
 
@@ -4121,10 +4106,10 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 }
 
 func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBehavior, upgradeOnCaN bool, expectPinnedInherit bool, pinnedOverride bool) {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
 	// CaN inherits version if pinned and if new task queue is in pinned version, goes to current version if unpinned.
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	sdkBehavior := workflow.VersioningBehaviorAutoUpgrade
 	if behavior == vbPinned {
@@ -4279,8 +4264,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 }
 
 func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
-	env := s.setupEnv()
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 	t1 := time.Now()
 	t2 := t1.Add(time.Second)
 
@@ -4369,8 +4353,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 }
 
 func (s *Versioning3Suite) TestSyncDeploymentUserDataWithRoutingConfig_Update() {
-	env := s.setupEnv()
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 
 	data := s.getTaskQueueDeploymentData(env, tv, tqTypeAct)
 	s.Nil(data)
@@ -5631,12 +5614,12 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 }
 
 func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tv0 := env.Tv().WithBuildIDNumber(0)
+	tv0 := tv.WithBuildIDNumber(0)
 	tv1 := tv0.WithBuildIDNumber(1)
 
 	wf := func(ctx workflow.Context) (string, error) {
@@ -5685,7 +5668,7 @@ func (s *Versioning3Suite) TestAutoUpgradeWorkflows_NoBouncingBetweenVersions() 
 }
 
 func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true),
@@ -5705,7 +5688,7 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 			- Let an activity poller complete the activity task on v1.
 			- We should see a workflow transition happen to v1 even though the workflow TQ is lagging behind the activity TQ.
 	*/
-	tv0 := env.Tv().WithBuildIDNumber(0)
+	tv0 := tv.WithBuildIDNumber(0)
 	tv1 := tv0.WithBuildIDNumber(1)
 
 	// Update the userData by setting the current version to v0
@@ -5775,7 +5758,7 @@ func (s *Versioning3Suite) TestWorkflowTQLags_DependentActivityStartsTransition(
 }
 
 func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNewVersion() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.UseRevisionNumberForWorkerVersioning, true),
@@ -5795,7 +5778,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 			- Let a controlled poller complete the workflow task on v1 and schedule an activity task.
 			- We should see the activity task be dispatched to a v1 poller even though it's lagging behind the workflow TQ.
 	*/
-	tv0 := env.Tv().WithBuildIDNumber(0)
+	tv0 := tv.WithBuildIDNumber(0)
 	tv1 := tv0.WithBuildIDNumber(1)
 
 	// Update the userData for the workflow TQ by setting the current version to v0
@@ -5873,12 +5856,12 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 // the test is present to show that revision number mechanics work as expected even when the task-queue
 // partitions have a more updated view of the current version than the mutable state of a workflow.
 func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tvParent := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvParent := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChild := tvParent.WithWorkflowIDNumber(2)
 
 	// Parent workflow waits for a signal before starting the child.
@@ -5954,9 +5937,7 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQAhead() {
 }
 
 func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
-	env := s.setupEnv()
-
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 
 	// Simulate an old SDK polling a sticky task queue without providing normalName
 	stickyTaskQueueWithoutNormalName := &taskqueuepb.TaskQueue{
@@ -5993,12 +5974,12 @@ func (s *Versioning3Suite) TestVersionedPoller_FailsWithEmptyNormalName() {
 }
 
 func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tvParent := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tvParent := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tvChild := tvParent.WithWorkflowIDNumber(2)
 
 	// Parent workflow waits for a signal before starting the child.
@@ -6080,13 +6061,13 @@ func (s *Versioning3Suite) TestChildStartsWithParentRevision_SameTQ_TQLags() {
 // TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ demonstrates that a child workflow of an AutoUpgrade parent, not sharing
 // the same task queue, starts with no inherited auto upgrade info.
 func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
 	// Use different task queues that are in different deployments for both parent and child
-	tvParent := env.Tv().WithDeploymentSeriesNumber(1).WithBuildIDNumber(1).WithWorkflowIDNumber(1).WithTaskQueue("parent-tq")
+	tvParent := tv.WithDeploymentSeriesNumber(1).WithBuildIDNumber(1).WithWorkflowIDNumber(1).WithTaskQueue("parent-tq")
 	tvChild := tvParent.WithDeploymentSeriesNumber(2).WithBuildIDNumber(2).WithWorkflowIDNumber(2).WithTaskQueue("child-tq")
 
 	// Parent workflow waits for a signal before starting the child.
@@ -6157,12 +6138,12 @@ func (s *Versioning3Suite) TestChildStartsWithNoInheritedAutoUpgradeInfo_CrossTQ
 
 // Tests testing continue-as-new of an AutoUpgrade workflow using revision number mechanics.
 func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumberMechanics() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tv1 := env.Tv().WithBuildIDNumber(1).WithWorkflowIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 
 	// Workflow that waits for a signal before continuing-as-new
 	canWorkflow := func(ctx workflow.Context, attempt int) (string, error) {
@@ -6236,8 +6217,8 @@ func (s *Versioning3Suite) TestContinueAsNewOfAutoUpgradeWorkflow_RevisionNumber
 // even if the task-queue partition's user data is rolled back to an older version.
 // If testContinueAsNew is true, tests a ContinueAsNew followed by retry; otherwise tests a direct retry of a workflow.
 // If testChildWorkflow is true, tests that a child workflow's retry doesn't bounce back (child spawned by parent with retry policy).
-func (s *Versioning3Suite) testRetryNoBounceBack(env *testcore.TestEnv, testContinueAsNew bool, testChildWorkflow bool) {
-	tv1 := env.Tv().WithBuildIDNumber(1)
+func (s *Versioning3Suite) testRetryNoBounceBack(env *testcore.TestEnv, tv *testvars.TestVars, testContinueAsNew bool, testChildWorkflow bool) {
+	tv1 := tv.WithBuildIDNumber(1)
 	tv0 := tv1.WithBuildIDNumber(0)
 
 	childWorkflowID := tv1.WorkflowID() + "-child"
@@ -6448,33 +6429,33 @@ func (s *Versioning3Suite) testRetryNoBounceBack(env *testcore.TestEnv, testCont
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_NoBounceBack() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	s.testRetryNoBounceBack(env, false, false)
+	s.testRetryNoBounceBack(env, tv, false, false)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_AfterCAN_NoBounceBack() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	s.testRetryNoBounceBack(env, true, false)
+	s.testRetryNoBounceBack(env, tv, true, false)
 }
 
 func (s *Versioning3Suite) TestWorkflowRetry_AutoUpgrade_ChildNoBounceBack() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	s.testRetryNoBounceBack(env, false, true)
+	s.testRetryNoBounceBack(env, tv, false, true)
 }
 
 // The following tests test out the CheckTaskQueueVersionMembership RPC.
 func (s *Versioning3Suite) TestCheckTaskQueueVersionMembership() {
-	env := s.setupEnv()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	env, tv := s.setupEnv()
+	tv1 := tv.WithBuildIDNumber(1)
 
 	// No version exists in the task queue's userData as of now
 	s.Await(func(s *Versioning3Suite) {
@@ -6531,14 +6512,13 @@ func (s *Versioning3Suite) validatePinnedVersionExistsInTaskQueue(env *testcore.
 // versions returns a RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS error
 func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 	maxVersions := 5
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxVersionsInTaskQueue, maxVersions),
 	)
 	// This test is not dependent on a particular deployment workflow version, but we don't want it repetitively
 	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
 
 	// Set a low limit for the test to make it faster
-	tv := env.Tv()
 
 	// Pre-populate the task queue with maxVersions different deployment versions
 	// Each version will be in a separate deployment to ensure they count toward the limit
@@ -6589,7 +6569,7 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 }
 
 func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -6598,7 +6578,7 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 	// executes, if the workflow's versioning behavior is AutoUpgrade.
 
 	numPollers := 4
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Track activity attempts and which version executed them
@@ -6724,14 +6704,12 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 }
 
 func (s *Versioning3Suite) TestVersionedQueueUnload() {
-	env := s.setupEnv(
+	env, tv1 := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueueIdleTime, 5*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 	// Set MatchingMaxTaskQueueIdleTime to 5 seconds to shorten test duration
-
-	tv1 := env.Tv()
 
 	s.pollUntilRegistered(env, tv1)
 	s.setCurrentDeployment(env, tv1)
@@ -6789,27 +6767,27 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 }
 
 func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithoutSignal() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	s.testTransitionDuringTransientTask(env, false)
+	s.testTransitionDuringTransientTask(env, tv, false)
 }
 
 func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithSignal() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	s.testTransitionDuringTransientTask(env, true)
+	s.testTransitionDuringTransientTask(env, tv, true)
 }
 
 // TestTransitionDuringTransientTask verifies that a deployment version transition to v1
 // is properly set when a workflow task fails and is retried, and that the transition completes
 // successfully after a signal is sent during the retry backoff period.
-func (s *Versioning3Suite) testTransitionDuringTransientTask(env *testcore.TestEnv, withSignal bool) {
+func (s *Versioning3Suite) testTransitionDuringTransientTask(env *testcore.TestEnv, tv *testvars.TestVars, withSignal bool) {
 	// Create test vars for v1
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 
 	s.pollUntilRegistered(env, tv1, tqTypeWf, tqTypeAct)
 	s.waitForDeploymentDataPropagation(env, tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
@@ -6944,9 +6922,9 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(env *testcore.TestE
 // TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop tests that a pinned workflow that CAN's
 // without AUTO_UPGRADE as the InitialVersioningBehavior does not get stuck in an infinite CAN loop.
 func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
@@ -7033,7 +7011,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 //  3. Verify the notification is still outstanding in mutable state, with no durable started-event flag in history.
 //  4. Roll matching back to v1 and assert the next WFT re-fires the outstanding target-version notification.
 func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespiteStaleMatching() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -7041,7 +7019,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
 	defer cancel()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	setCurrentInMatching := func(tv *testvars.TestVars, revisionNumber int64, previous ...*testvars.TestVars) {
@@ -7171,9 +7149,8 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 // made current again, then reset-by-build-ID resets the workflow before v2 usage
 // so the reset run resumes on v1.
 func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
-	env := s.setupEnv(testcore.WithWorkerService("batch operations"))
+	env, tv := s.setupEnv(testcore.WithWorkerService("batch operations"))
 
-	tv := env.Tv()
 	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
@@ -7312,9 +7289,9 @@ func (s *Versioning3Suite) TestPinnedCaN_ResetByBuildIDAfterRollback() {
 // suppresses the target_worker_deployment_version_changed signal. When an operator
 // explicitly pins a workflow via override, routing changes should be irrelevant.
 func (s *Versioning3Suite) TestOverride_SuppressesTargetVersionChangedSignal() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
@@ -7370,9 +7347,9 @@ func (s *Versioning3Suite) TestOverride_SuppressesTargetVersionChangedSignal() {
 // routing target changes. AutoUpgrade workflows will naturally transition to the
 // new version on the next WFT, so signaling CaN is unnecessary.
 func (s *Versioning3Suite) TestAutoUpgrade_SuppressesTargetVersionChangedSignal() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Start async poller for v1 that will handle the first WFT and declare AutoUpgrade behavior
@@ -7420,9 +7397,9 @@ func (s *Versioning3Suite) TestAutoUpgrade_SuppressesTargetVersionChangedSignal(
 // This ensures condition 4 only suppresses the signal when the target is unchanged,
 // not when a genuinely new target appears.
 func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tv3 := tv1.WithBuildIDNumber(3)
 
@@ -7522,9 +7499,9 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 // 4. Remove override — target is still v2
 // 5. Signal → assert true (declined should have been cleared by override)
 func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
@@ -7671,12 +7648,12 @@ func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
 // 7. Set v4 as current (fresh version with higher revision)
 // 8. Trigger WFT → assert targetDeploymentVersionChanged=true (new revision > declined revision)
 func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	tv3 := tv1.WithBuildIDNumber(3)
 
@@ -7815,9 +7792,9 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 //     that we actually exercised the inline path)
 //     - targetWorkerDeploymentVersionChanged == false (the bug being fixed)
 func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 	ctx := s.Context()
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 
 	// Async poller for first WFT, declares pinned behavior
 	wftCompleted := make(chan struct{})
@@ -7914,12 +7891,12 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 // 5. Retry run: OnStart=v2 (preserved from CaN decision), target=v2
 // 6. Assert targetDeploymentVersionChanged=false (v2 == v2, decline is preserved)
 func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
-	env := s.setupEnv(
+	env, tv := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	numPollers := 4
 
@@ -8046,9 +8023,9 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 //
 // 5. Set v2 as current again → signal → target=v2, no declined → signal fires (assert true)
 func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
@@ -8191,9 +8168,9 @@ func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
 // 3. Unset current deployment → target becomes nil
 // 4. New run's WFT: targetDeploymentVersionChanged=true (nil target != v1)
 func (s *Versioning3Suite) TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnversioned() {
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 
-	tv1 := env.Tv().WithBuildIDNumber(1)
+	tv1 := tv.WithBuildIDNumber(1)
 
 	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
 	wftCompleted := make(chan struct{})
@@ -8280,8 +8257,8 @@ func (s *Versioning3Suite) TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnvers
 // 3. Signal → WFT has targetDeploymentVersionChanged=true (v1 != nil)
 // 4. CaN with AUTO_UPGRADE → new run picked up by unversioned poller → completes
 func (s *Versioning3Suite) TestPinnedCaN_UpgradeToUnversioned() {
-	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, s *Versioning3Suite) {
-		tv1 := env.Tv().WithBuildIDNumber(1)
+	s.runTestWithMatchingBehavior(func(env *testcore.TestEnv, tv *testvars.TestVars, s *Versioning3Suite) {
+		tv1 := tv.WithBuildIDNumber(1)
 		execution, _ := s.drainWorkflowTaskAfterSetCurrent(env, tv1)
 
 		// Trigger a normal WFT and declare pinned behavior to make the workflow pinned on v1.
@@ -8352,8 +8329,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeToUnversioned() {
 }
 
 func (s *Versioning3Suite) TestVersioning3_NoWorkerVersionOnStartedEvents() {
-	env := s.setupEnv()
-	tv := env.Tv()
+	env, tv := s.setupEnv()
 	tvUpd1 := tv.WithUpdateIDNumber(1).WithMessageIDNumber(1)
 	tvUpd2 := tv.WithUpdateIDNumber(2)
 	stamp := &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: tv.BuildID()}

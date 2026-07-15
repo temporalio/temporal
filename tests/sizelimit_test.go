@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -38,7 +37,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
-	env := testcore.NewEnv(
+	env, tv := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitWarn, 10),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryCountLimitError, 20),
@@ -54,7 +53,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 	id := "functional-terminate-workflow-by-history-count-limit-test"
 	wt := "functional-terminate-workflow-by-history-count-limit-test-type"
 	tq := "functional-terminate-workflow-by-history-count-limit-test-taskqueue"
-	tv := testvars.New(s.T()).WithTaskQueue(tq)
+	tv = tv.WithTaskQueue(tq)
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -224,7 +223,7 @@ SignalLoop:
 }
 
 func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
-	env := testcore.NewEnv(
+	env, tv := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, 1),
 		testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
@@ -232,7 +231,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	id := "functional-workflow-failed-large-payload"
 	wt := "functional-workflow-failed-large-payload-type"
 	tl := "functional-workflow-failed-large-payload-taskqueue"
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv = tv.WithTaskQueue(tl)
 
 	largePayload := make([]byte, 1001)
 	pl, err := payloads.Encode(largePayload)
@@ -321,7 +320,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
-	env := testcore.NewEnv(
+	env, tv := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
 		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 1100),
@@ -329,7 +328,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	id := "functional-terminate-workflow-by-ms-size-limit-test"
 	wt := "functional-terminate-workflow-by-ms-size-limit-test-type"
 	tq := "functional-terminate-workflow-by-ms-size-limit-test-taskqueue"
-	tv := testvars.New(s.T()).WithTaskQueue(tq)
+	tv = tv.WithTaskQueue(tq)
 	activityName := "activity_type1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -455,7 +454,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 }
 
 func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
-	env := testcore.NewEnv(
+	env, _ := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitWarn, 5000),
 		testcore.WithDynamicConfig(dynamicconfig.HistorySizeLimitError, 9000),

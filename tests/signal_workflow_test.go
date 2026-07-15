@@ -50,7 +50,7 @@ func TestSignalWorkflowTestSuiteChasm(t *testing.T) {
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test"
 	wt := "functional-signal-workflow-test-type"
 	tl := "functional-signal-workflow-test-taskqueue"
@@ -243,7 +243,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow(opts []testcore.TestOption)
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test-duplicate"
 	wt := "functional-signal-workflow-test-duplicate-type"
 	tl := "functional-signal-workflow-test-duplicate-taskqueue"
@@ -391,7 +391,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand(opts []testc
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-external-workflow-test"
 	wt := "functional-signal-external-workflow-test-type"
 	tl := "functional-signal-external-workflow-test-taskqueue"
@@ -610,7 +610,7 @@ CheckHistoryLoopForSignalSent:
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-test-cron"
 	wt := "functional-signal-workflow-test-cron-type"
 	tl := "functional-signal-workflow-test-cron-taskqueue"
@@ -687,7 +687,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_Cron_NoWorkflowTaskCreated(
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-workflow-workflow-close-attempted-test"
 	wt := "functional-signal-workflow-workflow-close-attempted-test-type"
 	tl := "functional-signal-workflow-workflow-close-attempted-test-taskqueue"
@@ -778,7 +778,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_WithoutRunID
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-external-workflow-test-without-run-id"
 	wt := "functional-signal-external-workflow-test-without-run-id-type"
 	tl := "functional-signal-external-workflow-test-without-run-id-taskqueue"
@@ -998,7 +998,7 @@ func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_UnKnownTarge
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-unknown-workflow-command-test"
 	wt := "functional-signal-unknown-workflow-command-test-type"
 	tl := "functional-signal-unknown-workflow-command-test-taskqueue"
@@ -1121,7 +1121,7 @@ CheckHistoryLoopForCancelSent:
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalExternalWorkflowCommand_SignalSelf(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-self-workflow-command-test"
 	wt := "functional-signal-self-workflow-command-test-type"
 	tl := "functional-signal-self-workflow-command-test-taskqueue"
@@ -1244,7 +1244,7 @@ CheckHistoryLoopForCancelSent:
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-with-start-workflow-test"
 	wt := "functional-signal-with-start-workflow-test-type"
 	tl := "functional-signal-with-start-workflow-test-taskqueue"
@@ -1520,7 +1520,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow(opts []testcore.Te
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplication(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 
 	// setting this to 0 to be sure we are terminating the current workflow
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
@@ -1715,7 +1715,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_ResolveIDDeduplica
 }
 
 func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_StartDelay(opts []testcore.TestOption) {
-	env := testcore.NewEnv(s.T(), opts...)
+	env, _ := testcore.NewEnv(s.T(), opts...)
 	id := "functional-signal-with-start-workflow-start-delay-test"
 	wt := "functional-signal-with-start-workflow-start-delay-test-type"
 	tl := "functional-signal-with-start-workflow-start-delay-test-taskqueue"

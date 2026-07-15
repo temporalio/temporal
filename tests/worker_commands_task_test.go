@@ -32,8 +32,7 @@ func TestWorkerCommandsTaskSuite(t *testing.T) {
 // TestDispatchCancelToWorker tests that when an activity cancellation is requested,
 // the server dispatches an ActivityCommandTask to the worker's control queue via Nexus.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorker() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 	poller := env.TaskPoller()
 
 	// Get the control queue name from test vars
@@ -176,8 +175,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelToWorker() {
 // that have a worker control queue. The activity is given a long timeout to
 // ensure it is still in-flight when the workflow is terminated.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowTermination() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 	poller := env.TaskPoller()
 
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
@@ -276,8 +274,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowTermination() {
 // Note: reset internally calls TerminateWorkflow, so this exercises the same code path as
 // TestDispatchCancelOnWorkflowTermination — it verifies the plumbing rather than a distinct branch.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowReset() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 	poller := env.TaskPoller()
 
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
@@ -397,8 +394,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowReset() {
 // cancel commands are dispatched for in-flight activities with a worker control queue.
 // The activity is given a long timeout to ensure it is still in-flight when the workflow times out.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowTimeout() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 	poller := env.TaskPoller()
 
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
@@ -488,8 +484,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnWorkflowTimeout() {
 // cancel commands are dispatched for in-flight activities from the old run.
 // CaN creates a fresh mutable state — pending activities are abandoned, same as terminate.
 func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnContinueAsNew() {
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 	poller := env.TaskPoller()
 
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
@@ -609,7 +604,7 @@ func (s *WorkerCommandsTaskSuite) TestDispatchCancelOnContinueAsNew() {
 // RespondWorkflowTaskCompleted (bypassing matching/RecordActivityTaskStarted), so the
 // server must set StartedClock in the eager path for worker commands to be dispatched.
 func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
-	env := testcore.NewEnv(t,
+	env, tv := testcore.NewEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
 	)
@@ -617,7 +612,6 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	tv := env.Tv()
 	poller := env.TaskPoller()
 
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())

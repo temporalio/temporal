@@ -140,7 +140,7 @@ func setupPausedScheduledWorkflow(
 	policy enumspb.ScheduleOverlapPolicy,
 	register func(s *testcore.TestEnv, wt string),
 ) *scheduledPauseFixture {
-	s := newScheduleEnv(t, pauseInteractionOpts(t)...)
+	s, _ := newScheduleEnv(t, pauseInteractionOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-pause-" + policy.String())
 	wid := testcore.RandomizeStr("sched-pause-wf-" + policy.String())
@@ -330,7 +330,7 @@ func setupPausedTriggeredWorkflow(
 	register func(s *testcore.TestEnv, wt string),
 	afterStart func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution),
 ) *scheduledPauseFixture {
-	s := newScheduleEnv(t, opts...)
+	s, _ := newScheduleEnv(t, opts...)
 
 	sid := testcore.RandomizeStr(idPrefix)
 	wid := testcore.RandomizeStr(idPrefix + "-wf")

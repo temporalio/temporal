@@ -44,7 +44,7 @@ func TestClientMiscTestSuite(t *testing.T) {
 }
 
 func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// To ensure that there is one pending child workflow before we try to create the next one,
 	// we create a child workflow here that signals the parent when it has started and then blocks forever.
 	parentWorkflowID := "parent"
@@ -121,7 +121,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 // TestTooManyPendingActivities verifies that we don't allow users to schedule new activities when they've already
 // reached the limit for pending activities.
 func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	pendingActivities := make(chan activity.Info, testcore.ClientSuiteLimit)
 	pendingActivity := func(ctx context.Context) error {
@@ -153,7 +153,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	env.SdkWorker().RegisterWorkflow(myWorkflow)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                  env.Tv().WorkflowID(),
+		ID:                  tv.WorkflowID(),
 		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: time.Second, // Use shorter timeout so test completes faster.
 	}, myWorkflow)
@@ -190,7 +190,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 }
 
 func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	// create a large number of blocked workflows
 	numTargetWorkflows := testcore.ClientSuiteLimit + 1
@@ -277,7 +277,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 }
 
 func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	receiverID := "receiver"
 	signalName := "my-signal"
 	sender := func(ctx workflow.Context, n int) error {
@@ -357,12 +357,12 @@ func continueAsNewTightLoop(ctx workflow.Context, currCount, maxCount int) (int,
 }
 
 func (s *ClientMiscTestSuite) TestContinueAsNewTightLoop() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	// Simulate continue as new tight loop, and verify server throttle the rate.
 	env.SdkWorker().RegisterWorkflow(continueAsNewTightLoop)
 
 	options := sdkclient.StartWorkflowOptions{
-		ID:                 env.Tv().WorkflowID(),
+		ID:                 tv.WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Second * 10,
 	}
@@ -379,7 +379,7 @@ func (s *ClientMiscTestSuite) TestContinueAsNewTightLoop() {
 }
 
 func (s *ClientMiscTestSuite) TestStickyAutoReset() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	// This test starts a workflow, wait and verify that the workflow is on sticky task queue.
 	// Then it stops the worker for 10s, this will make matching aware that sticky worker is dead.
 	// Then test sends a signal to the workflow to trigger a new workflow task.
@@ -396,7 +396,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	env.SdkWorker().RegisterWorkflow(wfFn)
 
 	options := sdkclient.StartWorkflowOptions{
-		ID:                 env.Tv().WorkflowID(),
+		ID:                 tv.WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
@@ -478,7 +478,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 //  3. Once the server has received the update, the workflow tries to complete itself.
 //  4. The server fails update request with error and completes WF.
 func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	readyToSendUpdate := make(chan bool, 1)
 	updateHasBeenAdmitted := make(chan bool)
@@ -490,7 +490,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	}
 
 	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
+		err := workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
 			return "my-update-result", nil
 		})
 		if err != nil {
@@ -506,7 +506,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                  env.Tv().WorkflowID(),
+		ID:                  tv.WorkflowID(),
 		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
@@ -522,8 +522,8 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	updateErrCh := make(chan error)
 	go func() {
 		handle, err := env.SdkClient().UpdateWorkflow(s.Context(), sdkclient.UpdateWorkflowOptions{
-			UpdateID:     env.Tv().UpdateID(),
-			UpdateName:   env.Tv().HandlerName(),
+			UpdateID:     tv.UpdateID(),
+			UpdateName:   tv.HandlerName(),
 			WorkflowID:   workflowRun.GetID(),
 			RunID:        workflowRun.GetRunID(),
 			Args:         []any{"update-value"},
@@ -536,7 +536,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		_, err = env.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(s.Context(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace: env.Namespace().String(),
-			UpdateRef: env.Tv().WithRunID(workflowRun.GetRunID()).UpdateRef(),
+			UpdateRef: tv.WithRunID(workflowRun.GetRunID()).UpdateRef(),
 			Identity:  "my-identity",
 			WaitPolicy: &updatepb.WaitPolicy{
 				LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
@@ -578,7 +578,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 }
 
 func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		ctx, cancelFunc := workflow.WithCancel(ctx)
 
@@ -603,7 +603,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 env.Tv().WorkflowID(),
+		ID:                 tv.WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 5 * time.Second,
 	}
@@ -614,7 +614,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 }
 
 func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -647,7 +647,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 env.Tv().WorkflowID(),
+		ID:                 tv.WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 10 * time.Second,
 	}
@@ -680,7 +680,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 // but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
 // This is the same behavior as the SDK used to do, but now we would do on server.
 func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -727,7 +727,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        env.Tv().WorkflowID(),
+		ID:        tv.WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 		// With 3s TaskTimeout and 5s RunTimeout, we expect to see total of 3 attempts.
 		// First attempt follow by immediate retry follow by timeout and 3rd attempt after WorkflowTaskTimeout.
@@ -764,7 +764,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 }
 
 func (s *ClientMiscTestSuite) Test_BufferedQuery() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	localActivityFn := func(ctx context.Context) error {
 		//nolint:forbidigo
 		time.Sleep(5 * time.Second) // use local activity sleep to block workflow task to force query to be buffered
@@ -796,7 +796,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 env.Tv().WorkflowID(),
+		ID:                 tv.WorkflowID(),
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
@@ -862,7 +862,7 @@ func (s *ClientMiscTestSuite) assertHistory(env *testcore.TestEnv, wid, rid stri
 //	Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
 //	Server complete workflow as requested.
 func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
@@ -886,7 +886,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 		if err := workflow.ExecuteLocalActivity(ctx1, localActivityFn).Get(ctx1, nil); err != nil {
 			return err
 		}
-		sigCh := workflow.GetSignalChannel(ctx, env.Tv().HandlerName())
+		sigCh := workflow.GetSignalChannel(ctx, tv.HandlerName())
 		for {
 			var sigVal string
 			ok := sigCh.ReceiveAsync(&sigVal)
@@ -901,7 +901,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        env.Tv().WorkflowID(),
+		ID:        tv.WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
 		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
@@ -921,7 +921,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 		s.Context(),
 		workflowRun.GetID(),
 		workflowRun.GetRunID(),
-		env.Tv().HandlerName(),
+		tv.HandlerName(),
 		"signal-value",
 	)
 	s.NoError(err)
@@ -979,7 +979,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 	}
 	for _, tt := range testCases {
 		s.Run(tt.name, func(s *ClientMiscTestSuite) {
-			env := testcore.NewEnv(s.T())
+			env, _ := testcore.NewEnv(s.T())
 			workflowFn := func(ctx workflow.Context) (string, error) {
 				if err := workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 					return "query works", nil
@@ -1063,7 +1063,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchSignal() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env, tv := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
 
 	type myData struct {
 		Stuff  string
@@ -1078,7 +1078,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                       env.Tv().WorkflowID(),
+		ID:                       tv.WorkflowID(),
 		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
@@ -1118,7 +1118,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchReset() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env, tv := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
 	var count atomic.Int32
 
 	activityFn := func(ctx context.Context) (int32, error) {
@@ -1142,7 +1142,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	env.SdkWorker().RegisterActivity(activityFn)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
-		ID:                       env.Tv().WorkflowID(),
+		ID:                       tv.WorkflowID(),
 		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
@@ -1182,7 +1182,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env, _ := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
 	tq := testcore.RandomizeStr(s.T().Name())
 	buildPrefix := uuid.NewString()[:6] + "-"
 	buildIdv1 := buildPrefix + "v1"

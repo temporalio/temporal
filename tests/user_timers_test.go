@@ -29,7 +29,7 @@ func TestUserTimersTestSuite(t *testing.T) {
 }
 
 func (s *UserTimersTestSuite) TestUserTimersSequential() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"

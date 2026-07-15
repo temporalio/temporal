@@ -26,7 +26,7 @@ func TestNamespaceInterceptorTestSuite(t *testing.T) {
 }
 
 func (s *NamespaceInterceptorTestSuite) TestNamespaceInterceptorServerRejectsInvalidRequests() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	sut := &sutConnector{
 		env:             env,

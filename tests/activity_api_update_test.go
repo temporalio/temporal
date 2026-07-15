@@ -66,7 +66,7 @@ func TestActivityAPIUpdateClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInterval() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -145,7 +145,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 }
 
 func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleToClose() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -226,7 +226,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// initial values are chosen in such a way that activity will fail due to schedule to close timeout
 	// we change schedule to close to a longer value and retry policy to a shorter value
 	// after that activity should succeed
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -311,7 +311,7 @@ func (s *ActivityAPIUpdateClientTestSuite) TestActivityUpdateApi_ResetDefaultOpt
 	// 3. reset activity options to default, verify that retry policy is reset to default
 	// 4. update activity options again, this time change schedule to close timeout and retry policy initial interval
 	// 5. let activity finish, verify that it finished with updated options
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

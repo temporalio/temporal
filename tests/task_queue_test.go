@@ -47,7 +47,7 @@ func TestTaskQueueSuite(t *testing.T) {
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
 // Additional per-test options may be passed in opts.
-func (s *TaskQueueSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *TaskQueueSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
@@ -73,7 +73,7 @@ func (s *TaskQueueSuite) runTaskQueueRateLimitTest(nPartitions, nWorkers int, ti
 }
 
 func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
-	env := s.newTestEnv(
+	env, tv := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, useNewMatching),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions),
@@ -91,7 +91,6 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	)
 
 	const maxBacklog = 30
-	tv := testvars.New(s.T())
 
 	helloRateLimitTest := func(ctx workflow.Context, name string) (string, error) {
 		return "Hello " + name + " !", nil
@@ -192,6 +191,7 @@ func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, u
 //   - Returns the context, cancel function, and both workers so the caller can manage their lifecycle.
 func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 	activityTaskQueue string,
 	activityName string,
 	taskCount int,
@@ -202,7 +202,6 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 	apiRPS float64,
 	mu *sync.Mutex,
 ) (ctx context.Context, cancel context.CancelFunc, activityWorker worker.Worker, wfWorker worker.Worker) {
-	tv := testvars.New(s.T())
 	// Apply API rate limit on `activityTaskQueue`
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
 		Namespace:     env.Namespace().String(),
@@ -285,7 +284,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 		activityTaskQueue = "RateLimitTest"
 	)
 	expectedTotal := time.Duration(float64(taskCount-int(apiRPS))/apiRPS) * time.Second
-	env := s.newTestEnv(
+	env, tv := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		// Set a very low TTL for task queue info cache to ensure the rate limiter stats
@@ -308,6 +307,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitOverridesWorkerLimit() {
 
 	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
 		env,
+		tv,
 		activityTaskQueue,
 		activityName,
 		taskCount,
@@ -342,7 +342,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 		activityTaskQueue = "RateLimitTestZero"
 	)
 
-	env := s.newTestEnv(
+	env, tv := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
@@ -361,6 +361,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 
 	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
 		env,
+		tv,
 		activityTaskQueue,
 		activityName,
 		taskCount,
@@ -391,7 +392,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 		activityName      = "timedActivity"
 	)
 
-	env := s.newTestEnv(
+	env, tv := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
@@ -432,7 +433,6 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	defer activityWorker.Stop()
 
 	// Start workflow worker
-	tv := testvars.New(s.T())
 	wfWorker := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 	wfWorker.RegisterWorkflow(workflowFn)
 	s.NoError(wfWorker.Start())
@@ -525,9 +525,8 @@ func (s *TaskQueueSuite) TestWholeQueueLimit_TighterThanPerKeyDefault_IsEnforced
 		buffer        = 3 * time.Second // CI jitter
 	)
 	fairnessKeysWithWeight := map[string]float32{"A": 1.0, "B": 1.0, "C": 1.0}
-	tv := testvars.New(s.T())
 
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -573,9 +572,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_Default_IsEnforcedAcrossThreeKeys()
 	)
 	fairnessKeysWithWeight := map[string]float32{"A": 1.0, "B": 1.0, "C": 1.0}
 
-	tv := testvars.New(s.T())
-
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -630,8 +627,7 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 	fairnessKeysWithWeight := map[string]float32{"A": 6666.0, "B": 0.0, "C": 6666.0} // defaults are opposite of override
 	fairnessWeightOverrides := map[string]float32{"A": 1.0, "B": 2.0, "C": 1.0}
 
-	tv := testvars.New(s.T())
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// configure task queue
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
@@ -680,10 +676,9 @@ func (s *TaskQueueSuite) TestPerKeyRateLimit_WeightOverride_IsEnforcedAcrossThre
 // that the updated configuration is reflected correctly.
 func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 	// Enforce a smaller limit for max fairness key weight overrides for this test
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.MatchingMaxFairnessKeyWeightOverrides, 5))
+	env, tv := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.MatchingMaxFairnessKeyWeightOverrides, 5))
 
 	// Send update.
-	tv := testvars.New(s.T())
 	taskQueueName := tv.TaskQueue().Name
 	namespace := env.Namespace().String()
 	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
@@ -761,8 +756,7 @@ func (s *TaskQueueSuite) TestUpdateAndDescribeTaskQueueConfig() {
 }
 
 func (s *TaskQueueSuite) TestUpdateUnsetAndDescribeTaskQueueConfig() {
-	env := s.newTestEnv()
-	tv := testvars.New(s.T())
+	env, tv := s.newTestEnv()
 	taskQueueName := tv.TaskQueue().Name
 	namespace := env.Namespace().String()
 	taskQueueType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
@@ -972,8 +966,8 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 	s.testTaskDispatchLatencyMetric(testNexusTaskDispatchLatencyEmitted)
 }
 
-func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
+func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, tv *testvars.TestVars, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
+	runWithMatchingBehaviors(s.T(), nil, func(s *testcore.TestEnv, tv *testvars.TestVars, b testcore.MatchingBehavior) {
 
 		// When task forwarding is forced, inject a delay so we can verify
 		// the latency metric captures forwarding time.
@@ -999,12 +993,11 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore
 			expectedSource = "DbBacklog"
 		}
 
-		scenario(s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
+		scenario(s, tv, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)
 	})
 }
 
-func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, tv *testvars.TestVars, expectedForwarded, expectedSource, expectedPartitionID string, minLatency time.Duration) {
 
 	capture := s.StartNamespaceMetricCapture()
 
@@ -1151,8 +1144,7 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 	s.Equal(1, activityCount, "expected exactly 1 task_dispatch_latency recording for activity task")
 }
 
-func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, tv *testvars.TestVars, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 
 	// Create a nexus endpoint targeting our task queue.
 	_, err := s.GetTestCluster().OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
@@ -1271,8 +1263,7 @@ func testNexusTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 	s.Equal(1, nexusCount, "expected exactly 1 task_dispatch_latency recording for nexus task")
 }
 
-func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
-	tv := testvars.New(s.T())
+func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, tv *testvars.TestVars, expectedForwarded, _, expectedPartitionID string, minLatency time.Duration) {
 
 	wftDone := make(chan struct{})
 
@@ -1412,9 +1403,8 @@ func testQueryTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded,
 }
 
 func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
+	env, tv := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
 
-	tv := testvars.New(s.T())
 	workerInstanceKey := uuid.NewString()
 
 	// Use a long poll timeout (2 minutes) to ensure we're testing cancellation, not timeout.
@@ -1521,8 +1511,7 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 }
 
 func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {
-	env := s.newTestEnv()
-	tv := testvars.New(s.T())
+	env, tv := s.newTestEnv()
 
 	// Write per-type config for the workflow task queue to bump user data version above 0.
 	// Rate limits are not allowed on workflow task queues, so use fairness weight overrides.
@@ -1548,8 +1537,7 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {
 }
 
 func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
-	env := s.newTestEnv()
-	tv := testvars.New(s.T())
+	env, tv := s.newTestEnv()
 
 	// Write per-type config for the workflow task queue.
 	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{

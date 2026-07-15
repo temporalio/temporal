@@ -51,7 +51,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 		},
 	} {
 		s.Run(tc.name, func(s *AddTasksSuite) {
-			env := testcore.NewEnv(s.T())
+			env, _ := testcore.NewEnv(s.T())
 
 			// Inject a history task interceptor that skips transfer workflow tasks.
 			var shouldSkip atomic.Bool
@@ -126,7 +126,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 }
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	_, err := env.GetTestCluster().HistoryClient().AddTasks(s.Context(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
