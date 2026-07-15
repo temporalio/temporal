@@ -108,20 +108,21 @@ func (p *clusterPool) getOneOff(t *testing.T, createCluster func() *FunctionalTe
 }
 
 func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
-	if p.availableSlots != nil {
-		p.Lock()
-		for len(p.availableSlots) == 0 {
-			p.availableCond.Wait()
-		}
-		idx := len(p.availableSlots) - 1
-		slot := p.availableSlots[idx]
-		p.availableSlots = p.availableSlots[:idx]
-		p.Unlock()
-
-		t.Cleanup(func() { p.releaseSlot(slot) })
-		return slot
+	if p.availableSlots == nil {
+		return p.nextSlot()
 	}
-	return p.nextSlot()
+
+	p.Lock()
+	defer p.Unlock()
+	for len(p.availableSlots) == 0 {
+		p.availableCond.Wait()
+	}
+	idx := len(p.availableSlots) - 1
+	slot := p.availableSlots[idx]
+	p.availableSlots = p.availableSlots[:idx]
+
+	t.Cleanup(func() { p.releaseSlot(slot) })
+	return slot
 }
 
 func (p *clusterPool) releaseSlot(slot *clusterPoolSlot) {
@@ -210,9 +211,8 @@ func (p *clusterPool) tearDown(t *testing.T) {
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared    *clusterPool
-	dedicated *clusterPool
-
+	shared      *clusterPool
+	dedicated   *clusterPool
 	suiteScoped sync.Map
 
 	eventsFile *os.File
@@ -375,19 +375,17 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 	// and reset per-test dynamic config before releasing the slot.
 	req.kind = clusterKindDedicated
 	req.needWorkerService = true // always enable the worker service on dedicated clusters
-
-	if len(req.clusterOpts) > 0 {
-		// These options are cluster-startup state and cannot be reset on a pooled cluster.
-		cluster := p.dedicated.getOneOff(t, func() *FunctionalTestBase {
-			return p.createCluster(t, req)
-		})
-		p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
-		return cluster
+	createCluster := func() *FunctionalTestBase {
+		return p.createCluster(t, req)
 	}
 
-	cluster := p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, req)
-	})
+	var cluster *FunctionalTestBase
+	if len(req.clusterOpts) > 0 {
+		// These options are cluster-startup state and cannot be reset on a pooled cluster.
+		cluster = p.dedicated.getOneOff(t, createCluster)
+	} else {
+		cluster = p.dedicated.get(t, createCluster)
+	}
 	p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
 	return cluster
 }
@@ -404,11 +402,11 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 
 	// The worker service is off unless the request explicitly needs it.
 	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
-	if req.kind != clusterKindDedicated {
+	if shared := req.kind != clusterKindDedicated; shared {
 		opts = append(opts, WithSharedCluster())
-	}
-	if req.kind != clusterKindDedicated && len(req.globalDynamicConfig) > 0 {
-		opts = append(opts, WithDynamicConfigOverrides(req.globalDynamicConfig))
+		if len(req.globalDynamicConfig) > 0 {
+			opts = append(opts, WithDynamicConfigOverrides(req.globalDynamicConfig))
+		}
 	}
 	opts = append(opts, req.clusterOpts...)
 
