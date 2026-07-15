@@ -335,9 +335,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 }
 
 func globalDynamicConfigOverrides(settings []dynamicConfigOverride) map[dynamicconfig.Key]any {
-	if len(settings) == 0 {
-		return nil
-	}
 	var byKey map[dynamicconfig.Key]any
 	for _, override := range settings {
 		if canBeNamespaceScoped(override.setting.Precedence()) {
