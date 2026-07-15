@@ -271,14 +271,10 @@ type clusterRequest struct {
 	clusterOpts         []TestClusterOption
 }
 
-// needsDedicated reports whether the request must be served by a dedicated
+// requiresDedicatedCluster reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
-func (r clusterRequest) needsDedicated() bool {
-	return r.dedicated || r.hasCustomClusterConfig()
-}
-
-func (r clusterRequest) hasCustomClusterConfig() bool {
-	return r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
+func (r clusterRequest) requiresDedicatedCluster() bool {
+	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -293,7 +289,7 @@ func (r clusterRequest) reason() string {
 	switch {
 	case r.dedicatedReason != "":
 		return r.dedicatedReason
-	case r.hasCustomClusterConfig():
+	case r.requiresDedicatedCluster():
 		return "custom config"
 	default:
 		return "dedicated"
@@ -338,7 +334,7 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTes
 			tb.RegisterTest(t)
 		}
 	}()
-	if req.needsDedicated() {
+	if req.requiresDedicatedCluster() {
 		return p.getDedicated(t, req)
 	}
 	if cluster := p.getSuiteScoped(t); cluster != nil {
