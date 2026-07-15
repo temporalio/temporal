@@ -575,51 +575,54 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 		wallElapsed)
 }
 
-// TestTimeSkipping_CircuitBreakerTripsOnBusyLoop verifies the rate guard of the circuit breaker. An
-// activity that fails instantly on every attempt would, with time skipping, retry in a tight
-// real-time loop: each failure schedules a retry backoff that time skipping skips instantly, so the
-// retry is re-dispatched immediately, fails again, and so on — burning real CPU with no real delay.
-// The rate guard counts skips per real-time window; once too many fire within the window, it disables
-// time skipping for the run so the retry backoff is honored as real-time backpressure again.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_CircuitBreakerTripsOnBusyLoop() {
 	const maxSkips = 3
-	// Rate guard only (MaxSkipsPerSession left 0 = disabled): a long window so every fast iteration
-	// lands in the same counting window, and a small cap so it trips quickly and deterministically
-	// regardless of machine speed.
-	tsi := s.driveTimeSkippingBusyLoopUntilDisabled(
-		dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: time.Minute, MaxSkips: maxSkips},
+	env, poller, tv, runID, tsi := s.driveTimeSkippingBusyLoopUntilDisabled(
+		dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: time.Minute, MaxSkipsPerWindow: maxSkips},
 		maxSkips+3,
 	)
-	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_WINDOW, tsi.GetDisabledReason())
-}
-
-// TestTimeSkipping_CircuitBreakerTripsOnMaxSkipsPerSession verifies the per-session guard: a run that
-// keeps skipping is cut off once its total skip count for the session exceeds MaxSkipsPerSession, even
-// when it stays under the rate guard. The rate guard is set high enough that the fast test loop can
-// never trip it, so the per-session total cap is necessarily what disables time skipping.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_CircuitBreakerTripsOnMaxSkipsPerSession() {
-	const maxSkipsPerSession = 3
-	tsi := s.driveTimeSkippingBusyLoopUntilDisabled(
-		dynamicconfig.TimeSkippingCircuitBreakerSettings{
-			Window: time.Minute, MaxSkips: 1000, MaxSkipsPerSession: maxSkipsPerSession,
-		},
-		maxSkipsPerSession+3,
-	)
-	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER_SESSION,
+	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER,
 		tsi.GetDisabledReason())
+
+	// Recovery: the operator re-enables time skipping (having fixed the instant-failure cause).
+	// Re-enabling clears the breaker's window counter, so the still-pending activity retry
+	// backoff is skipped again — the retry now succeeds and the workflow runs to completion,
+	// all without waiting out the real 1h backoff.
+	recoveryConfig := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(1500 * time.Hour)}
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(testcore.NewContext(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: recoveryConfig},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled(),
+		"time skipping is enabled again after the update")
+
+	wallStart := time.Now()
+	_, err = poller.PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err, "the pending retry is dispatched promptly via a resumed skip")
+
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	})
+	s.NoError(err)
+	s.Less(time.Since(wallStart), 30*time.Second,
+		"recovery must not wait out the real 1h backoff; skipping resumed")
+
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.True(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED),
+		"workflow completes once the failure cause is fixed and time skipping is re-enabled")
 }
 
-// driveTimeSkippingBusyLoopUntilDisabled starts a workflow whose activity always fails and retries
-// indefinitely under time skipping — a busy loop that skips the retry backoff on every failure. It
-// fails the activity up to maxAttempts times, stopping as soon as the circuit breaker disables time
-// skipping. It asserts the disable is recorded as a direct mutable-state change: time skipping is off,
-// the fast-forward is NOT marked reached (the target was never hit, which keeps the fast-forward poll
-// semantics honest), and no fast-forward-disable transition event was emitted. It returns the final
-// TimeSkippingInfo so the caller can assert which guard tripped.
 func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 	cb dynamicconfig.TimeSkippingCircuitBreakerSettings,
 	maxAttempts int,
-) *persistencespb.TimeSkippingInfo {
+) (*testcore.TestEnv, *taskpoller.TaskPoller, *testvars.TestVars, string, *persistencespb.TimeSkippingInfo) {
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
@@ -628,8 +631,6 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
-	// Start with time skipping enabled and a far-out fast-forward, so we can assert the breaker
-	// disables time skipping WITHOUT the fast-forward being marked reached.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -644,9 +645,6 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 	runID := startResp.RunId
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 
-	// WT1: schedule an activity that always fails and retries indefinitely with a 1h backoff. The
-	// large backoff is the interesting case: even with an hour between virtual attempts, an instant
-	// failure keeps the loop tight in REAL time, which is exactly what the breaker measures.
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Commands: []*commandpb.Command{
@@ -662,7 +660,7 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 							RetryPolicy: &commonpb.RetryPolicy{
 								InitialInterval:    durationpb.New(time.Hour),
 								BackoffCoefficient: 1.0,
-								MaximumAttempts:    0, // unlimited
+								MaximumAttempts:    0,
 							},
 						},
 					},
@@ -672,9 +670,6 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 	})
 	s.NoError(err)
 
-	// Fail the activity repeatedly. Each failure's close transaction skips the backoff and
-	// re-dispatches the retry promptly — until the breaker trips, after which the retry is left on its
-	// real 1h backoff and is no longer dispatched promptly. Stop polling as soon as it trips.
 	var tsi *persistencespb.TimeSkippingInfo
 	disabled := false
 	for attempt := 0; attempt < maxAttempts && !disabled; attempt++ {
@@ -691,8 +686,6 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 	s.False(tsi.GetFastForwardInfo().GetHasReached(),
 		"a circuit-breaker disable must NOT mark the fast-forward as reached")
 
-	// The breaker disables via a direct mutable-state change: no transition event is emitted, and in
-	// particular no fast-forward-disable (DisabledAfterFastForward) transition.
 	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	for _, e := range history {
 		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
@@ -708,7 +701,7 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 			Reason:            "test cleanup",
 		})
 	})
-	return tsi
+	return env, poller, tv, runID, tsi
 }
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {

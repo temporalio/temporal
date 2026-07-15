@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
@@ -542,6 +543,84 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Nil(tsc3TSI.GetFastForwardInfo())
 		s.Equal(time.Hour, tsc3TSI.GetAccumulatedSkippedDuration().AsDuration())
 
+	})
+}
+
+func (s *mutableStateSuite) TestTryTrippingTimeSkippingCircuitBreaker() {
+	setBreaker := func(window time.Duration, maxSkipsPerWindow int) {
+		s.mockConfig.TimeSkippingCircuitBreaker = func(string) dynamicconfig.TimeSkippingCircuitBreakerSettings {
+			return dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: window, MaxSkipsPerWindow: maxSkipsPerWindow}
+		}
+	}
+	enabledTSI := func() *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}}
+	}
+
+	s.Run("NilTimeSkippingInfo_NoTripNoPanic", func() {
+		setBreaker(time.Minute, 1)
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.timeSkippingInfoUpdated = false
+		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("BreakerDisabled_NoTrip", func() {
+		setBreaker(time.Minute, 0) // MaxSkipsPerWindow <= 0 disables the breaker
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		for range 100 {
+			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		}
+		// the config guard returns before allocating the window counter
+		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo())
+	})
+
+	s.Run("UnderThreshold_NoTrip", func() {
+		setBreaker(time.Minute, 5)
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		for range 5 {
+			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		}
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.True(tsi.GetConfig().GetEnabled())
+		s.EqualValues(5, tsi.GetCircuitBreakerInfo().GetSkipWindowCount())
+	})
+
+	s.Run("OutOfWindow_ResetsWindow", func() {
+		setBreaker(time.Minute, 5)
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+
+		for range 3 {
+			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		}
+		cbi := s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo()
+		s.EqualValues(3, cbi.GetSkipWindowCount())
+		windowStart := cbi.GetSkipWindowStartRealTime().AsTime()
+
+		// a skip past the window boundary starts a fresh window with the counter reset to 1
+		timeSource.Advance(time.Minute)
+		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		cbi = s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo()
+		s.EqualValues(1, cbi.GetSkipWindowCount(), "counter resets when the skip lands outside the window")
+		s.True(cbi.GetSkipWindowStartRealTime().AsTime().After(windowStart), "window start advances to the new skip")
+	})
+
+	s.Run("OverThreshold_Trips", func() {
+		setBreaker(time.Minute, 2)
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		s.mutableState.timeSkippingInfoUpdated = false
+		s.True(s.mutableState.tryTrippingTimeSkippingCircuitBreaker(), "the skip past MaxSkipsPerWindow trips the breaker")
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.False(tsi.GetConfig().GetEnabled(), "time skipping is disabled on trip")
+		s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER, tsi.GetDisabledReason())
+		s.EqualValues(0, tsi.GetCircuitBreakerInfo().GetSkipWindowCount(), "counter is reset on trip")
+		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
 }
 
@@ -1223,15 +1302,17 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		)
 		s.Require().NoError(err)
 
-		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-		s.Require().Equal(time.Hour, accumulated.AsDuration())
-		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED, tsi.GetDisabledReason())
 		s.Require().True(s.mutableState.timeSkippingInfoUpdated)
 	})
 
 	s.Run("DisabledAfterBoundDisablesConfigAndAccumulatesDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{TargetTime: timestamppb.New(baseTime.Add(2 * time.Hour))},
 		}
 		targetTime := baseTime.Add(2 * time.Hour)
 
@@ -1241,9 +1322,11 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		)
 		s.Require().NoError(err)
 
-		s.Require().False(s.mutableState.GetExecutionInfo().TimeSkippingInfo.Config.Enabled)
-		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
-		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED, tsi.GetDisabledReason())
+		s.Require().True(tsi.GetFastForwardInfo().GetHasReached(), "fast-forward is marked reached when it disables time skipping")
+		s.Require().Equal(2*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
 	})
 }
 

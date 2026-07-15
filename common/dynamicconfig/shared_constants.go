@@ -229,21 +229,11 @@ type SimplePartitionScalerThreshold struct {
 	TargetRate int           // target tasks/second per partition
 }
 
-// TimeSkippingCircuitBreakerSettings configures the busy-loop circuit breaker for time skipping.
-// It has two independent guards: a real-time rate window (Window / MaxSkips) that catches fast
-// busy loops, and a per-session total cap (MaxSkipsPerSession) that catches a run which skips
-// slowly-but-endlessly. Either guard, when exceeded, disables time skipping for the run.
+// TimeSkippingCircuitBreakerSettings is enforced per run: its counters are not propagated across a
+// chain of runs (continue-as-new, retry, cron), so every run starts from a clean slate.
 type TimeSkippingCircuitBreakerSettings struct {
-	// Window is the real (wall-clock) window over which a run's skip transitions are counted.
-	Window time.Duration
-	// MaxSkips is how many skip transitions a run may perform within Window before the breaker
-	// trips. Set to 0 (or a non-positive Window) to disable the rate guard.
-	MaxSkips int
-	// MaxSkipsPerSession is the total number of skip transitions allowed in one time-skipping
-	// session (a continuous period of time skipping being enabled; the count is cleared whenever the
-	// config is enabled or updated) before the breaker trips. A run that never needs this many skips
-	// is assumed to be stuck. Set to 0 to disable this guard.
-	MaxSkipsPerSession int
+	Window            time.Duration
+	MaxSkipsPerWindow int
 }
 
 type LatencyHealthCheckSettings struct {

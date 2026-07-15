@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -172,6 +173,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	ff := tsi.GetFastForwardInfo()
 	s.NotNil(ff)
 	s.True(ff.GetHasReached())
+	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED,
+		tsi.GetDisabledReason())
 }
 
 // TestFastForward_PauseLifecycle exercises the full paused-workflow

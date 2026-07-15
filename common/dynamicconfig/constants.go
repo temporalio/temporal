@@ -3542,18 +3542,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	)
 	TimeSkippingCircuitBreaker = NewNamespaceTypedSettingWithConverter(
 		"history.timeSkippingCircuitBreaker",
-		ConvertStructure(TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkips: 25, MaxSkipsPerSession: 500}),
-		TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkips: 25, MaxSkipsPerSession: 500},
-		`TimeSkippingCircuitBreaker bounds how much a single run may skip time before the circuit
-breaker disables time skipping for that run, via two independent guards. The rate guard counts the
-run's skip transitions over Window (real wall-clock) and trips when the count exceeds MaxSkips; this
-bounds the real-time CPU a fast runaway (e.g. an activity/cron that fails instantly and reschedules)
-can spend skipping, while still leaving room for a genuinely busy workflow to skip at a normal rate
-(a real worker round-trip is on the order of 100ms, so a legitimate run skips only a handful of
-times per second). The per-session guard trips when the run's total skip count for the current
-time-skipping session exceeds MaxSkipsPerSession, catching a run that skips slowly-but-endlessly and
-stays under the rate guard; the session count is cleared whenever time skipping is enabled or its
-config is updated. Set MaxSkips to 0 to disable the rate guard, or MaxSkipsPerSession to 0 to
-disable the per-session guard.`,
+		ConvertStructure(TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkipsPerWindow: 25}),
+		TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkipsPerWindow: 25},
+		`TimeSkippingCircuitBreaker bounds how fast a single run may skip time before the circuit
+breaker disables time skipping for that run. It counts the run's skip transitions over Window (real
+wall-clock) and trips when the count exceeds MaxSkipsPerWindow. This bounds the real-time CPU a fast
+runaway (e.g. an activity/cron that fails instantly and reschedules) can spend skipping, while still
+leaving room for a genuinely busy workflow to skip at a normal rate (a real worker round-trip is on
+the order of 100ms, so a legitimate run skips only a handful of times per second). Set
+MaxSkipsPerWindow to 0 to disable the circuit breaker.`,
 	)
 )
