@@ -25,6 +25,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	adminservice "go.temporal.io/server/api/adminservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -122,8 +123,40 @@ func deleteAllSchedules(t *testing.T, env *testcore.TestEnv) {
 		if err != nil && !errors.As(err, &notFoundErr) {
 			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete schedule %q: %w", scheduleID, err))
 		}
+		cleanupErr = errors.Join(cleanupErr, forceDeleteScheduleExecutions(ctx, env, scheduleID))
 	}
 	reportScheduleCleanupError(t, cleanupErr)
+}
+
+func registerScheduleExecutionCleanup(t *testing.T, env *testcore.TestEnv, scheduleID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(chasmContextFactory(testcore.NewContext()), 30*time.Second)
+		defer cancel()
+		reportScheduleCleanupError(t, forceDeleteScheduleExecutions(ctx, env, scheduleID))
+	})
+}
+
+func forceDeleteScheduleExecutions(ctx context.Context, env *testcore.TestEnv, scheduleID string) error {
+	var cleanupErr error
+	for _, execution := range []struct {
+		workflowID string
+		archetype  chasm.Archetype
+	}{
+		{workflowID: scheduler.WorkflowIDPrefix + scheduleID},
+		{workflowID: scheduleID, archetype: chasm.SchedulerArchetype},
+	} {
+		_, err := env.AdminClient().DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: execution.workflowID},
+			Archetype: execution.archetype,
+		})
+		var notFoundErr *serviceerror.NotFound
+		if err != nil && !errors.As(err, &notFoundErr) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("force delete schedule execution %q: %w", execution.workflowID, err))
+		}
+	}
+	return cleanupErr
 }
 
 func reportScheduleCleanupError(t *testing.T, err error) {

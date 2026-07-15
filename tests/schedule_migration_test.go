@@ -1642,6 +1642,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 			},
 		)
 		require.NoError(t, err)
+		registerScheduleExecutionCleanup(t, env, sid)
 	}
 
 	createCHASMSentinel := func(t *testing.T, sid string) {
@@ -1926,6 +1927,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 			},
 		)
 		s.NoError(err)
+		registerScheduleExecutionCleanup(s.T(), env, sid)
 
 		_, err = env.FrontendClient().PatchSchedule(
 			testcore.NewContext(),
