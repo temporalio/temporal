@@ -21,7 +21,7 @@ type VersioningTestEnv struct {
 
 func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
 	return &VersioningTestEnv{
-		TestEnv: testcore.NewEnv(t, opts...),
+		TestEnv: newWorkerDeploymentCleanupEnv(t, opts...),
 	}
 }
 

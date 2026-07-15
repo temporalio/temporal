@@ -91,7 +91,7 @@ func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testco
 			return tv.WithDeploymentSeries("wd").WithBuildID("b")
 		}),
 	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	return newWorkerDeploymentCleanupEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows

@@ -44,7 +44,7 @@ func (s *PrioritySuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEn
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksBatchSize, 20),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksReloadAt, 5),
 	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	return newWorkflowCleanupEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 func (s *PrioritySuite) TestActivity_Basic() {
@@ -450,7 +450,7 @@ func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOptio
 			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
 		)
 	}
-	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	return newWorkflowCleanupEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {

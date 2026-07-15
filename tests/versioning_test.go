@@ -98,7 +98,7 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0*time.Second),
 	}, opts...)
 
-	return testcore.NewEnv(s.T(), opts...)
+	return newWorkflowCleanupEnv(s.T(), opts...)
 }
 
 func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcore.TestEnv, *VersioningIntegSuite)) {

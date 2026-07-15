@@ -108,7 +108,7 @@ func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestE
 		}),
 	}, opts...)
 
-	return testcore.NewEnv(s.T(), opts...)
+	return newWorkerDeploymentCleanupEnv(s.T(), opts...)
 }
 
 func (s *Versioning3Suite) runTestWithMatchingBehavior(testFn func(*testcore.TestEnv, *Versioning3Suite), opts ...testcore.TestOption) {
