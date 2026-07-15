@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -60,6 +61,71 @@ var (
 		return ctx
 	}
 )
+
+const (
+	// pollInterval is the poll cadence shared by all await checks.
+	pollInterval = 200 * time.Millisecond
+	// awaitTimeout bounds how long an await waits for a condition to become true.
+	awaitTimeout = 30 * time.Second
+)
+
+// intervalSpec is the single-interval schedule spec used by most tests.
+func intervalSpec(every time.Duration) *schedulepb.ScheduleSpec {
+	return &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(every)}},
+	}
+}
+
+// createSchedule creates sched under sid and fails the test on error.
+func createSchedule(ctx context.Context, t *testing.T, env *testcore.TestEnv, sid string, sched *schedulepb.Schedule) {
+	t.Helper()
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  env.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   sched,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+}
+
+// startWorkflowAction builds the StartWorkflow action shared by these tests.
+func startWorkflowAction(env *testcore.TestEnv, wid, wt string) *schedulepb.ScheduleAction {
+	return &schedulepb.ScheduleAction{
+		Action: &schedulepb.ScheduleAction_StartWorkflow{
+			StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+				WorkflowId:            wid,
+				WorkflowType:          &commonpb.WorkflowType{Name: wt},
+				TaskQueue:             &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			},
+		},
+	}
+}
+
+// calendarSpec builds a single-instant calendar spec at the given time.
+func calendarSpec(at time.Time) *schedulepb.CalendarSpec {
+	return &schedulepb.CalendarSpec{
+		Year:       fmt.Sprintf("%d", at.Year()),
+		Month:      at.Month().String(),
+		DayOfMonth: fmt.Sprintf("%d", at.Day()),
+		Hour:       fmt.Sprintf("%d", at.Hour()),
+		Minute:     fmt.Sprintf("%d", at.Minute()),
+		Second:     fmt.Sprintf("%d", at.Second()),
+	}
+}
+
+// registerCountingWorkflow registers a workflow that records each execution in
+// runs (via SideEffect, so replays don't double-count) and returns immediately.
+//
+// Each registered counting workflow should be associated with a distinct `runs`
+// atomic.
+func registerCountingWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32) {
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { runs.Add(1); return 0 })
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+}
 
 func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 	opts := []testcore.TestOption{
