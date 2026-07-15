@@ -2,7 +2,6 @@ package postgresql
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -42,8 +41,6 @@ const (
 	createDatabaseQuery = `CREATE DATABASE "%v"`
 
 	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
-
-	terminateDatabaseConnectionsQuery = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`
 
 	listTablesQuery = "select table_name from information_schema.tables where table_schema='public'"
 
@@ -131,16 +128,5 @@ func (pdb *db) CreateDatabase(name string) error {
 
 // DropDatabase drops a database
 func (pdb *db) DropDatabase(name string) error {
-	var err error
-	for range 5 {
-		if err := pdb.Exec(terminateDatabaseConnectionsQuery, name); err != nil {
-			return err
-		}
-		err = pdb.Exec(fmt.Sprintf(dropDatabaseQuery, name))
-		if err == nil || !strings.Contains(err.Error(), "is being accessed by other users") {
-			return err
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return err
+	return pdb.Exec(fmt.Sprintf(dropDatabaseQuery, name))
 }
