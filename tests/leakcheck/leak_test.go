@@ -110,16 +110,16 @@ func TestClusterShutdownLeak(t *testing.T) {
 	// Warm up with a few clusters so process-lifetime singletons (gRPC resolver
 	// init, proto registries, ...) are created before we snapshot the baseline.
 	for range warmupIters {
-		buildRunReleaseEnv(t, &leakCheck)
+		buildRunTeardownCluster(t, &leakCheck)
 	}
 
 	// Wait for warmup goroutines to drain before snapshotting the baseline.
 	_ = goleak.Find(goleakOpts...)
 	baseline := goleak.IgnoreCurrent()
 
-	// Run the leak test: build, run, and release one environment per iteration.
+	// Run the leak test: build, run, and tear down a cluster per iteration.
 	for i := range iters {
-		buildRunReleaseEnv(t, &leakCheck)
+		buildRunTeardownCluster(t, &leakCheck)
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
@@ -151,9 +151,9 @@ func TestClusterShutdownLeak(t *testing.T) {
 	}
 }
 
-// buildRunReleaseEnv creates a dedicated environment and runs a trivial
-// workflow on it to exercise the full server path, then releases the environment.
-func buildRunReleaseEnv(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
+// buildRunTeardownCluster creates a dedicated cluster, runs a trivial
+// workflow on it to exercise the full server path, then tears it down.
+func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
 	// The subtest ensures all env cleanups complete before this returns.
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
