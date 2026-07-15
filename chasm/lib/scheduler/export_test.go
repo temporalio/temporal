@@ -20,7 +20,7 @@ var (
 )
 
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder())
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {
