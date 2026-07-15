@@ -53,7 +53,6 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
-	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
@@ -435,18 +434,6 @@ func (e *TestEnv) T() *testing.T {
 
 func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
-}
-
-// Context returns the test-level timeout context with RPC version headers already included.
-// This context will be canceled when the test timeout occurs. Use this directly for all RPC
-// operations - no need to wrap with NewContext or add headers manually.
-//
-// For custom timeouts, use:
-//
-//	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
-//	defer cancel()
-func (e *TestEnv) Context() context.Context {
-	return e.ctx
 }
 
 // WaitForChannel waits for ch to receive using the TestEnv context.

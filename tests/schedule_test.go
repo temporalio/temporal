@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -484,7 +485,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 	})
 
 	// Wait for the first workflow to be reported as RUNNING in ListSchedules.
-	running := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	running := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -498,7 +499,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 	require.Equal(t, 1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
 
 	// While paused, the listed RecentActions entry transitions to COMPLETED.
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, a := range ent.Info.RecentActions {
 			if a.GetStartWorkflowResult().GetRunId() == runningRunID &&
 				a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
@@ -535,7 +536,7 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 	})
 
 	// Wait for visibility to surface an initial FutureActionTimes projection.
-	initial := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	initial := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.FutureActionTimes) > 0
 	})
 	initialFirst := initial.Info.FutureActionTimes[0].AsTime()
@@ -543,7 +544,7 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 	// While still paused, the earliest projected time must advance past the
 	// initial value: the Generator keeps ticking and republishing the
 	// projection, even though no workflows fire.
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.FutureActionTimes) > 0 &&
 			ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
 	})
@@ -785,7 +786,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	// wait for visibility to stabilize on completed before calling describe,
 	// otherwise their recent actions may flake and differ
 
-	visibilityResponse := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	visibilityResponse := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		recentActions := ent.GetInfo().GetRecentActions()
 		return len(recentActions) >= 2 && recentActions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	})
@@ -1503,7 +1504,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	s.NoError(err)
 
 	// validate RecentActions made it to visibility
-	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp := getScheduleEntryFromVisibility(t, s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 1
 	})
 	s.Len(listResp.Info.RecentActions, 1)
@@ -1524,7 +1525,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	s.NoError(err)
 
 	// now wait for second recent action to land in visbility
-	listResp = getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp = getScheduleEntryFromVisibility(t, s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 2
 	})
 
@@ -1723,7 +1724,7 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// Verify the memo field length limit was enforced.
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	require.NotNil(t, entry)
 	spec := entry.GetInfo().GetSpec()
 	require.Len(t, spec.GetInterval(), expectedLimit)
@@ -1925,7 +1926,7 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	s.NoError(err)
 
 	// Wait for the schedule to appear with correct paused state.
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
 		return e.Info.Paused
 	})
 
@@ -2006,8 +2007,8 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 	}
 
 	// Wait for both schedules to appear in visibility.
-	getScheduleEntryFromVisibility(s, sid1, newContext, nil)
-	getScheduleEntryFromVisibility(s, sid2, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid1, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid2, newContext, nil)
 
 	listScheduleIDs := func(query string) []string {
 		t.Helper()
@@ -2232,7 +2233,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 	s.NoError(err)
 
 	// Wait for scheduler to start the workflow and show it as RUNNING.
-	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	listEntry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -2335,7 +2336,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 	})
 	s.NoError(err)
 
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
 			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
 				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -2407,7 +2408,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	})
 	s.NoError(err)
 
-	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	listEntry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -2508,7 +2509,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	})
 	s.NoError(err)
 
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
 			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
 				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -2576,7 +2577,7 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 
 	// Verify visibility shows exactly one schedule (not the dummy workflow).
-	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
@@ -2704,7 +2705,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
 
 	// Verify visibility shows exactly one schedule (not the sentinel).
-	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
@@ -3152,7 +3153,7 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// Sanity test, list with V1 handler.
-	v1Entry := getScheduleEntryFromVisibility(s, sid, newContext, func(sle *schedulepb.ScheduleListEntry) bool {
+	v1Entry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(sle *schedulepb.ScheduleListEntry) bool {
 		return sle.GetInfo().Paused
 	})
 	s.NotNil(v1Entry.GetInfo())
@@ -3165,7 +3166,7 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 	s.GreaterOrEqual(v1CountResp.Count, int64(1), "Expected at least 1 schedule with V1 handler")
 
 	// Flip on CHASM experiment and make sure we can still list.
-	chasmEntry := getScheduleEntryFromVisibility(s, sid, chasmContextFactory, nil)
+	chasmEntry := getScheduleEntryFromVisibility(t, s, sid, chasmContextFactory, nil)
 	s.NotNil(chasmEntry.GetInfo())
 	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
 
@@ -3326,7 +3327,7 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
 
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	s.NotNil(entry.Info)
 	s.ProtoEqual(schedule.Spec, entry.Info.Spec)
 	s.Equal(wt, entry.Info.WorkflowType.Name)
@@ -3472,11 +3473,11 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 
 // getScheduleEntryFromVisibility polls visibility using ListSchedules until it finds a schedule
 // with the given id and for which the optional predicate function returns true.
-func getScheduleEntryFromVisibility(env testcore.Env, sid string, newContext contextFactory, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
-	env.T().Helper()
+func getScheduleEntryFromVisibility(t *testing.T, env testcore.Env, sid string, newContext contextFactory, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
+	t.Helper()
 	var slEntry *schedulepb.ScheduleListEntry
-	require.Eventually(env.T(), func() bool { // wait for visibility
-		listResp, err := env.FrontendClient().ListSchedules(newContext(env.Context()), &workflowservice.ListSchedulesRequest{
+	require.Eventually(t, func() bool { // wait for visibility
+		listResp, err := env.FrontendClient().ListSchedules(newContext(testcontext.For(t)), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 5,
 		})
