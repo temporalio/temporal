@@ -14,6 +14,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -279,6 +280,92 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
+	s.False(resetReleaseCalled)
+}
+
+func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
+	// No current execution exists (e.g. the current run was deleted while older runs survive).
+	// persistToDB must persist the base run (bypassing the missing current record) so its
+	// ResetRunID link reaches the DB, then create the reset run as the new current via
+	// CreateWorkflowModeBrandNew. The nil current must not be touched.
+	baseWorkflow := NewMockWorkflow(s.controller)
+	baseMutableState := historyi.NewMockMutableState(s.controller)
+	baseWorkflow.EXPECT().GetMutableState().Return(baseMutableState).AnyTimes()
+	baseMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	baseMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
+
+	resetWorkflow := NewMockWorkflow(s.controller)
+	resetReleaseCalled := false
+	resetContext := historyi.NewMockWorkflowContext(s.controller)
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	var resetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
+	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
+	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn().Return(resetReleaseFn).AnyTimes()
+
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	resetMutableState.EXPECT().IsWorkflow().Return(true).AnyTimes()
+
+	resetSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+	}
+	resetEventsSeq := []*persistence.WorkflowEvents{{
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  s.workflowID,
+		RunID:       s.resetRunID,
+		BranchToken: []byte("some random reset branch token"),
+		Events: []*historypb.HistoryEvent{{
+			EventId: 123,
+		}},
+	}}
+	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
+		context.Background(),
+		historyi.TransactionPolicyActive,
+	).Return(resetSnapshot, resetEventsSeq, nil)
+
+	// The base run is closed as a mutation carrying the ResetRunID set by UpdateResetRunID.
+	baseMutation := &persistence.WorkflowMutation{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{ResetRunId: s.resetRunID},
+	}
+	baseEventsSeq := []*persistence.WorkflowEvents{}
+	baseMutableState.EXPECT().CloseTransactionAsMutation(
+		context.Background(),
+		historyi.TransactionPolicyActive,
+	).Return(baseMutation, baseEventsSeq, nil)
+
+	// Base-first: the base run is persisted with BypassCurrent (tolerating the missing current
+	// record) before the reset run is created as the new current.
+	baseUpdateEventsSize := int64(1234)
+	baseUpdateCurrent := s.mockTransaction.EXPECT().UpdateWorkflowExecution(
+		gomock.Any(),
+		persistence.UpdateWorkflowModeBypassCurrent,
+		chasm.WorkflowArchetypeID,
+		int64(0),
+		baseMutation,
+		baseEventsSeq,
+		(*int64)(nil),
+		(*persistence.WorkflowSnapshot)(nil),
+		([]*persistence.WorkflowEvents)(nil),
+		true, // isWorkflow
+	).Return(baseUpdateEventsSize, int64(0), nil)
+
+	resetNewEventsSize := int64(4321)
+	// The key assertion: reset run is created as the new current with BrandNew mode,
+	// not an Update/ConflictResolve mode (both of which assume an existing current row).
+	s.mockTransaction.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		persistence.CreateWorkflowModeBrandNew,
+		chasm.WorkflowArchetypeID,
+		int64(0),
+		resetSnapshot,
+		resetEventsSeq,
+		true, // isWorkflow
+	).Return(resetNewEventsSize, nil).After(baseUpdateCurrent)
+
+	// nil current workflow, and nil current mutation/events.
+	err := s.workflowResetter.persistToDB(context.Background(), baseWorkflow, nil, nil, nil, resetWorkflow)
+	s.NoError(err)
+	// persistToDB function is not charged of releasing locks
 	s.False(resetReleaseCalled)
 }
 
@@ -762,6 +849,154 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	)
 	s.NoError(err)
 	s.Equal(newRunID, lastVisitedRunID)
+}
+
+// cacheWorkflowContext registers a mock context for runID so getNextEventIDBranchToken loads it from the cache.
+func (s *workflowResetterSuite) cacheWorkflowContext(runID string, ctx historyi.WorkflowContext) {
+	key := wcache.Key{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, runID),
+		ArchetypeID: chasm.WorkflowArchetypeID,
+		ShardUUID:   s.mockShard.GetOwner(),
+	}
+	s.NoError(wcache.PutContextIfNotExist(s.workflowResetter.workflowCache, key, ctx))
+}
+
+// TestReapplyContinueAsNewWorkflowEvents_MissingCurrent_ChainTruncatedOnDeletedRun asserts that with no current
+// run the chain is followed past base into surviving runs and stops cleanly at the first run that no longer loads.
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_MissingCurrent_ChainTruncatedOnDeletedRun() {
+	ctx := context.Background()
+	baseFirstEventID := int64(124)
+	baseNextEventID := int64(456)
+	baseBranchToken := []byte("base branch token")
+
+	runBID := uuid.NewString()
+	runBBranchToken := []byte("runB branch token")
+	runBNextEventID := int64(6)
+	runCID := uuid.NewString()
+
+	baseEvents := []*historypb.HistoryEvent{
+		{EventId: 124, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}}},
+		{EventId: 125, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{NewExecutionRunId: runBID}}},
+	}
+	runBEvents := []*historypb.HistoryEvent{
+		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}}},
+		{EventId: 5, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{NewExecutionRunId: runCID}}},
+	}
+
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   baseBranchToken,
+		MinEventID:    baseFirstEventID,
+		MaxEventID:    baseNextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{History: []*historypb.History{{Events: baseEvents}}}, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   runBBranchToken,
+		MinEventID:    common.FirstEventID,
+		MaxEventID:    runBNextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{History: []*historypb.History{{Events: runBEvents}}}, nil)
+
+	// runB survives and loads.
+	runBContext := historyi.NewMockWorkflowContext(s.controller)
+	runBContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runBContext.EXPECT().Unlock()
+	runBContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	runBMutableState := historyi.NewMockMutableState(s.controller)
+	runBContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(runBMutableState, nil)
+	runBMutableState.EXPECT().GetNextEventID().Return(runBNextEventID).AnyTimes()
+	runBMutableState.EXPECT().GetCurrentBranchToken().Return(runBBranchToken, nil).AnyTimes()
+	s.cacheWorkflowContext(runBID, runBContext)
+
+	// runC was deleted; loading it truncates the chain.
+	runCContext := historyi.NewMockWorkflowContext(s.controller)
+	runCContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runCContext.EXPECT().Unlock()
+	runCContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	runCContext.EXPECT().Clear().AnyTimes()
+	runCContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("workflow execution not found"))
+	s.cacheWorkflowContext(runCID, runCContext)
+
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	resetMutableState.EXPECT().HSM().Return(root).AnyTimes()
+
+	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+		ctx,
+		resetMutableState,
+		nil, // no current run
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseFirstEventID,
+		baseNextEventID,
+		nil,
+		false, // allowResetWithPendingChildren
+	)
+	s.NoError(err)
+	s.Equal(runBID, lastVisitedRunID)
+}
+
+// TestReapplyContinueAsNewWorkflowEvents_MissingCurrent_TransientLoadErrorFailsReset asserts that a non-NotFound
+// error while loading the next run fails the reset rather than silently truncating the chain.
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_MissingCurrent_TransientLoadErrorFailsReset() {
+	ctx := context.Background()
+	baseFirstEventID := int64(124)
+	baseNextEventID := int64(456)
+	baseBranchToken := []byte("base branch token")
+	runBID := uuid.NewString()
+
+	baseEvents := []*historypb.HistoryEvent{
+		{EventId: 124, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}}},
+		{EventId: 125, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{NewExecutionRunId: runBID}}},
+	}
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   baseBranchToken,
+		MinEventID:    baseFirstEventID,
+		MaxEventID:    baseNextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: nil,
+		ShardID:       s.mockShard.GetShardID(),
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{History: []*historypb.History{{Events: baseEvents}}}, nil)
+
+	runBContext := historyi.NewMockWorkflowContext(s.controller)
+	runBContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runBContext.EXPECT().Unlock()
+	runBContext.EXPECT().IsDirty().Return(false).AnyTimes()
+	runBContext.EXPECT().Clear().AnyTimes()
+	runBContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewUnavailable("db unavailable"))
+	s.cacheWorkflowContext(runBID, runBContext)
+
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	resetMutableState.EXPECT().HSM().Return(root).AnyTimes()
+
+	_, err = s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+		ctx,
+		resetMutableState,
+		nil, // no current run
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseFirstEventID,
+		baseNextEventID,
+		nil,
+		false, // allowResetWithPendingChildren
+	)
+	var unavailable *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailable)
 }
 
 func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
