@@ -609,7 +609,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 // component maps untouched. Before the fix this assertion fails because the maps are shared.
 func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
-	specBuilder := newLegacySpecBuilder(nil)
+	specBuilder := newLegacySpecBuilder(0, 0)
 
 	vis := sched.Visibility.Get(ctx)
 	vis.MergeCustomMemo(ctx, map[string]*commonpb.Payload{"memoKey": payload.EncodeString("v")})

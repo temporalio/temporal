@@ -25,8 +25,8 @@ type (
 		tz             *time.Location
 		calendar       []*compiledCalendar
 		excludes       []*compiledCalendar
-		warnIterations func() int
-		maxIterations  func() int
+		warnIterations dynamicconfig.IntPropertyFn
+		maxIterations  dynamicconfig.IntPropertyFn
 	}
 
 	GetNextTimeResult struct {
@@ -45,8 +45,8 @@ type (
 		// the time zone database is changed while the process is running. To handle that, we
 		// expire entries after a day. Note that we cache negative results also.
 		locationCache  cache.Cache
-		warnIterations func() int
-		maxIterations  func() int
+		warnIterations dynamicconfig.IntPropertyFn
+		maxIterations  dynamicconfig.IntPropertyFn
 	}
 
 	locationAndError struct {
@@ -60,10 +60,12 @@ type (
 var ErrComputeLimitExceeded = errors.New("schedule spec next-time search exceeded the compute iteration limit")
 var ErrScheduleSpecLimitHit = serviceerror.NewInvalidArgument("the schedule calendar specification has too many exclusions. Please modify the specification.")
 
-func NewSpecBuilder(dc *dynamicconfig.Collection) *SpecBuilder {
+// NewSpecBuilder takes the compute-limit getters directly (rather than a *dynamicconfig.Collection)
+// so the dynamic-config plumbing stays in the wiring layer, per the common codebase pattern.
+func NewSpecBuilder(warnIterations, maxIterations dynamicconfig.IntPropertyFn) *SpecBuilder {
 	return &SpecBuilder{
-		warnIterations: dynamicconfig.SchedulerSpecWarnIterations.Get(dc),
-		maxIterations:  dynamicconfig.SchedulerSpecMaxIterations.Get(dc),
+		warnIterations: warnIterations,
+		maxIterations:  maxIterations,
 		locationCache: cache.New(1000,
 			&cache.Options{
 				TTL: 24 * time.Hour,

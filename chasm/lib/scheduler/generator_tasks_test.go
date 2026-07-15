@@ -25,7 +25,7 @@ func newGeneratorHandler(env *testEnv) *scheduler.GeneratorTaskHandler {
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
-		SpecBuilder:    newLegacySpecBuilder(nil),
+		SpecBuilder:    newLegacySpecBuilder(0, 0),
 	})
 }
 

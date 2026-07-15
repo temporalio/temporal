@@ -10,7 +10,6 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -41,7 +40,7 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 			},
 			mockMetrics,
 			log.NewTestLogger(),
-			newLegacySpecBuilder(nil),
+			newLegacySpecBuilder(0, 0),
 		),
 	}
 }
@@ -265,9 +264,7 @@ func TestProcessTimeRange_ComputeLimitExceeded(t *testing.T) {
 	capture := rec.StartCapture()
 	defer rec.StopCapture(capture)
 
-	specBuilder := newLegacySpecBuilder(dynamicconfig.StaticClient{
-		dynamicconfig.SchedulerSpecMaxIterations.Key(): 10_000,
-	})
+	specBuilder := newLegacySpecBuilder(0, 100)
 	processor := scheduler.NewSpecProcessor(
 		&scheduler.Config{
 			Tweakables: func(_ string) scheduler.Tweakables { return scheduler.DefaultTweakables },
@@ -319,9 +316,7 @@ func TestProcessTimeRange_ComputeLimitWarning(t *testing.T) {
 	defer rec.StopCapture(capture)
 
 	// Warn threshold only; leave the hard limit at its default (disabled).
-	specBuilder := newLegacySpecBuilder(dynamicconfig.StaticClient{
-		dynamicconfig.SchedulerSpecWarnIterations.Key(): 5,
-	})
+	specBuilder := newLegacySpecBuilder(5, 0)
 	processor := scheduler.NewSpecProcessor(
 		&scheduler.Config{
 			Tweakables: func(_ string) scheduler.Tweakables { return scheduler.DefaultTweakables },

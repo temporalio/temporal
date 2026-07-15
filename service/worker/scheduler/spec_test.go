@@ -6,18 +6,15 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// newSpecBuilderForTest builds a SpecBuilder backed by a dynamic-config Collection with the given
-// overrides (pass nil for all defaults). It replaces the old SetMaxIterations/SetWarnIterations
-// injection now that the compute-limit bounds are read from dynamic config in NewSpecBuilder.
-func newSpecBuilderForTest(overrides dynamicconfig.StaticClient) *SpecBuilder {
-	return NewSpecBuilder(dynamicconfig.NewCollection(overrides, log.NewNoopLogger()))
+// newSpecBuilderForTest builds a SpecBuilder with the given warn/max compute-limit bounds. A value
+// of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
+func newSpecBuilderForTest(warn, max int) *SpecBuilder {
+	return NewSpecBuilder(func() int { return warn }, func() int { return max })
 }
 
 type specSuite struct {
@@ -33,7 +30,7 @@ func TestSpec(t *testing.T) {
 
 func (s *specSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
-	s.specBuilder = newSpecBuilderForTest(nil)
+	s.specBuilder = newSpecBuilderForTest(0, 0)
 }
 
 func (s *specSuite) checkSequenceRaw(spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
@@ -394,9 +391,7 @@ func (s *specSuite) TestExcludeAll() {
 func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
 	// Mirrored calendar/exclude: every candidate is excluded, so the search hits the bound.
 	const iterations = 10_000
-	builder := newSpecBuilderForTest(dynamicconfig.StaticClient{
-		dynamicconfig.SchedulerSpecMaxIterations.Key(): iterations,
-	})
+	builder := newSpecBuilderForTest(0, iterations)
 	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
 		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
 		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
@@ -415,9 +410,7 @@ func (s *specSuite) TestGetNextTimeComputeLimitWarning() {
 	// keeps searching until the spec's end time, then returns no match. A short end time keeps
 	// the scan bounded for the test.
 	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
-	builder := newSpecBuilderForTest(dynamicconfig.StaticClient{
-		dynamicconfig.SchedulerSpecWarnIterations.Key(): 5,
-	})
+	builder := newSpecBuilderForTest(5, 0)
 	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
 		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
 		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
@@ -437,9 +430,7 @@ func (s *specSuite) TestGetNextTimeComputeLimitWarningThenResolves() {
 	// This exercises the success return path carrying ComputeLimitWarning=true (as opposed to the
 	// no-match path in TestGetNextTimeComputeLimitWarning).
 	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
-	builder := newSpecBuilderForTest(dynamicconfig.StaticClient{
-		dynamicconfig.SchedulerSpecWarnIterations.Key(): 5,
-	})
+	builder := newSpecBuilderForTest(5, 0)
 	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
 		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
 		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "0-58", Minute: "*", Hour: "*"}},

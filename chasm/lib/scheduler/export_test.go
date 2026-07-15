@@ -7,7 +7,6 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 )
@@ -15,7 +14,7 @@ import (
 // Export unexported methods for testing.
 
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder(dynamicconfig.NewNoopCollection()))
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {

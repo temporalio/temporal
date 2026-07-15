@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/worker/scheduler"
 )
@@ -78,13 +77,13 @@ func TestReplaysWithDynamicConfigChange(t *testing.T) {
 		return history
 	}
 
-	// replayWith registers a scheduler workflow whose SpecBuilder reports the given hard bound
-	// (via a dynamic-config Collection), then replays a fresh copy of the history against it.
+	// replayWith registers a scheduler workflow whose SpecBuilder reports the given hard bound,
+	// then replays a fresh copy of the history against it.
 	replayWith := func(maxIterations int, filename string) error {
-		dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient{
-			dynamicconfig.SchedulerSpecMaxIterations.Key(): maxIterations,
-		}, log.NewNoopLogger())
-		b := scheduler.NewSpecBuilder(dc)
+		b := scheduler.NewSpecBuilder(
+			func() int { return scheduler.DefaultWarnIterations },
+			func() int { return maxIterations },
+		)
 		replayer := worker.NewWorkflowReplayer()
 		replayer.RegisterWorkflowWithOptions(
 			scheduler.SchedulerWorkflowWithSpecBuilder(b),

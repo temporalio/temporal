@@ -230,7 +230,12 @@ var (
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 	disabled := func() bool { return false }
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(dynamicconfig.NewNoopCollection()), disabled, disabled)
+	dc := dynamicconfig.NewNoopCollection()
+	specBuilder := NewSpecBuilder(
+		dynamicconfig.SchedulerSpecWarnIterations.Get(dc),
+		dynamicconfig.SchedulerSpecMaxIterations.Get(dc),
+	)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, specBuilder, disabled, disabled)
 }
 
 func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
