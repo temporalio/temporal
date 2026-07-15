@@ -137,6 +137,7 @@ type (
 		PollerScalingBacklogAgeScaleUp  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		PollerScalingEmitMetrics        dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -231,6 +232,7 @@ type (
 		PollerScalingBacklogAgeScaleUp  func() time.Duration
 		PollerScalingWaitTime           func() time.Duration
 		PollerScalingDecisionsPerSecond func() float64
+		PollerScalingEmitMetrics        func() bool
 
 		FairnessCounter               func() counter.CounterParams
 		FairnessPassDither            func() bool
@@ -383,6 +385,7 @@ func NewConfig(
 		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
+		PollerScalingEmitMetrics:        dynamicconfig.MatchingPollerScalingEmitMetrics.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
@@ -561,6 +564,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerScalingDecisionsPerSecond: func() float64 {
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingEmitMetrics: func() bool {
+			return config.PollerScalingEmitMetrics(ns.String(), taskQueueName, taskType)
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
