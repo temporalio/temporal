@@ -40,6 +40,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkip,
 	}
+	resetTimeSkippingCircuitBreaker(ms.executionInfo.TimeSkippingInfo)
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
@@ -55,9 +56,23 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 		return serviceerror.NewInternal("time skipping info not initialized when updating")
 	}
 	ms.executionInfo.TimeSkippingInfo.Config = config
+	resetTimeSkippingCircuitBreaker(tsi)
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
 	return nil
+}
+
+// resetTimeSkippingCircuitBreaker clears the busy-loop circuit-breaker state: any auto-disabled
+// reason (fast-forward-reached or circuit-breaker) and the real-time skip-window counter. It is
+// called whenever the time-skipping config is initialized or updated so that a fresh or reconfigured
+// config starts the detector from a clean slate.
+func resetTimeSkippingCircuitBreaker(tsi *persistencespb.TimeSkippingInfo) {
+	if tsi == nil {
+		return
+	}
+	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED
+	tsi.SkipWindowCount = 0
+	tsi.SkipWindowStartRealTime = nil
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
@@ -89,12 +104,8 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		TransitionCount:          ms.NextTransitionCount(),
 	}
 
-	// always install a fresh fast-forward bound; a re-arm clears any prior disabled reason
-	// (fast-forward-reached or circuit-breaker) and resets the busy-loop detector, since time
-	// skipping is being enabled again.
-	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED
-	tsi.SkipWindowCount = 0
-	tsi.SkipWindowStartRealTime = nil
+	// always install a fresh fast-forward bound (the circuit-breaker state is cleared separately by
+	// resetTimeSkippingCircuitBreaker when the config is initialized or updated).
 	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
 		TargetTime:                    timestamppb.New(targetTime),
 		HasReached:                    false,
