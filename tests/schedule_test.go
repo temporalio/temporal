@@ -77,6 +77,7 @@ func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 
 func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv {
 	t.Helper()
+	opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}))
 	env := testcore.NewEnv(t, opts...)
 	t.Cleanup(func() {
 		deleteAllSchedules(t, env)
@@ -86,7 +87,7 @@ func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv
 
 func deleteAllSchedules(t *testing.T, env *testcore.TestEnv) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(chasmContextFactory(env.Context()), 30*time.Second)
+	ctx, cancel := context.WithTimeout(chasmContextFactory(testcore.NewContext()), 30*time.Second)
 	defer cancel()
 
 	var scheduleIDs []string
