@@ -694,6 +694,37 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 	s.NoError(resp.ExecutionErr)
 }
 
+func TestApplyChasmSystemOverrides(t *testing.T) {
+	creationTime := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	semanticTime := creationTime.Add(90 * time.Minute)
+
+	t.Run("ExecutionTime override applied", func(t *testing.T) {
+		requestBase := &manager.VisibilityRequestBase{ExecutionTime: creationTime}
+		applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+			sadefs.ExecutionTime: chasm.VisibilityValueTime(semanticTime),
+		})
+		require.True(t, semanticTime.Equal(requestBase.ExecutionTime))
+	})
+
+	t.Run("zero ExecutionTime does not override", func(t *testing.T) {
+		requestBase := &manager.VisibilityRequestBase{ExecutionTime: creationTime}
+		applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+			sadefs.ExecutionTime: chasm.VisibilityValueTime(time.Time{}),
+		})
+		require.True(t, creationTime.Equal(requestBase.ExecutionTime))
+	})
+
+	t.Run("unsupported field is ignored", func(t *testing.T) {
+		requestBase := &manager.VisibilityRequestBase{ExecutionTime: creationTime}
+		require.NotPanics(t, func() {
+			applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+				sadefs.TaskQueue: chasm.VisibilityValueKeyword("some-task-queue"),
+			})
+		})
+		require.True(t, creationTime.Equal(requestBase.ExecutionTime))
+	})
+}
+
 func (s *visibilityQueueTaskExecutorSuite) buildChasmMutableState(
 	key definition.WorkflowKey,
 	visComponentTransitionCount int64,

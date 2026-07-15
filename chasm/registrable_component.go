@@ -116,11 +116,15 @@ func WithSearchAttributes(
 
 		if rc.searchAttributesMapper == nil {
 			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string, len(searchAttributes)),
-				fieldToAlias:       make(map[string]string, len(searchAttributes)),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
-				systemAliasToField: make(map[string]string),
+				aliasToField:           make(map[string]string, len(searchAttributes)),
+				fieldToAlias:           make(map[string]string, len(searchAttributes)),
+				saTypeMap:              make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
+				systemAliasToField:     make(map[string]string),
+				overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
 			}
+		}
+		if rc.searchAttributesMapper.overriddenSystemFields == nil {
+			rc.searchAttributesMapper.overriddenSystemFields = make(map[string]enumspb.IndexedValueType)
 		}
 
 		for _, sa := range searchAttributes {
@@ -128,7 +132,13 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
-			if sadefs.IsChasmSystem(alias) {
+			// An identity-mapped CHASM system search attribute (alias == field, e.g. ExecutionTime)
+			// is a deliberate override: the component provides its own value for a system search
+			// attribute, and the value is stored in the dedicated system column (the column name is
+			// preserved) instead of a reserved CHASM search attribute column.
+			isSystemOverride := field == alias && sadefs.IsChasmSystem(field)
+
+			if sadefs.IsChasmSystem(alias) && !isSystemOverride {
 				//nolint:forbidigo
 				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a CHASM system search attribute", alias))
 			}
@@ -153,6 +163,10 @@ func WithSearchAttributes(
 			rc.searchAttributesMapper.aliasToField[alias] = field
 			rc.searchAttributesMapper.fieldToAlias[field] = alias
 			rc.searchAttributesMapper.saTypeMap[field] = valueType
+
+			if isSystemOverride {
+				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
+			}
 		}
 	}
 }

@@ -53,6 +53,13 @@ type VisibilitySearchAttributesMapper struct {
 
 	// map from system search attribute aliases to field names.
 	systemAliasToField map[string]string
+
+	// overriddenSystemFields records CHASM system search attribute fields (e.g. ExecutionTime)
+	// that this archetype overrides with its own component-provided value. The value is stored
+	// in the dedicated system column (preserving the column name) rather than a reserved CHASM
+	// search attribute column, so both the visibility write and read paths must treat these
+	// fields specially. The map value is the field's indexed value type.
+	overriddenSystemFields map[string]enumspb.IndexedValueType
 }
 
 // Alias returns the alias for a given field.
@@ -115,6 +122,27 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 		return nil
 	}
 	return v.saTypeMap
+}
+
+// IsSystemOverride returns true if the given field is a CHASM system search attribute
+// that this archetype overrides with its own component-provided value. Such fields are
+// written to their dedicated system column (the column name is preserved) rather than a
+// reserved CHASM search attribute column.
+func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.overriddenSystemFields[field]
+	return ok
+}
+
+// OverriddenSystemFields returns the set of CHASM system search attribute fields that this
+// archetype overrides, keyed by field name with the field's indexed value type as the value.
+func (v *VisibilitySearchAttributesMapper) OverriddenSystemFields() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.overriddenSystemFields
 }
 
 // ValueType returns the type of a CHASM search attribute field.

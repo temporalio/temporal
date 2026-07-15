@@ -7,8 +7,10 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -336,6 +338,29 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 				)
 			},
 		)
+	})
+
+	s.Run("identity-mapped CHASM system search attribute is registered as override", func() {
+		var rc *chasm.RegistrableComponent
+		s.Require().NotPanics(func() {
+			rc = chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.SearchAttributeExecutionTime,
+				),
+			)
+		})
+		mapper := rc.SearchAttributesMapper()
+		s.Require().True(mapper.IsSystemOverride(sadefs.ExecutionTime))
+		s.Require().Contains(mapper.OverriddenSystemFields(), sadefs.ExecutionTime)
+
+		// The override resolves to its own system column name (identity mapping).
+		field, err := mapper.Field(sadefs.ExecutionTime)
+		s.Require().NoError(err)
+		s.Require().Equal(sadefs.ExecutionTime, field)
+		typ, err := mapper.ValueType(sadefs.ExecutionTime)
+		s.Require().NoError(err)
+		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, typ)
 	})
 
 	s.Run("component with Visibility field must have businessID alias", func() {

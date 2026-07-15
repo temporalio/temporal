@@ -212,6 +212,15 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		)
 	}
+	// Surface registered CHASM system search attribute overrides (e.g. ExecutionTime).
+	// These values are stored in dedicated system columns (surfaced as fields on
+	// InternalExecutionInfo) rather than reserved CHASM search attribute columns, so they
+	// must be injected explicitly, keyed by the system column name.
+	for field, valueType := range mapper.OverriddenSystemFields() {
+		if value, ok := chasmSystemOverrideValue(exec, field); ok {
+			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
+		}
+	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
 		p.searchAttributesMapperProvider,
@@ -240,6 +249,20 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		Memo:                   userMemo,
 		ChasmMemo:              chasmMemoPayload,
 	}, nil
+}
+
+// chasmSystemOverrideValue returns the value for a registered CHASM system search attribute
+// override (e.g. ExecutionTime), read from the dedicated column on InternalExecutionInfo.
+// The second return value is false when the field is unsupported or the value is unset.
+func chasmSystemOverrideValue(exec *store.InternalExecutionInfo, field string) (any, bool) {
+	switch field {
+	case sadefs.ExecutionTime:
+		if !exec.ExecutionTime.IsZero() {
+			return exec.ExecutionTime, true
+		}
+	default:
+	}
+	return nil, false
 }
 
 // splitSearchAttributes splits decoded search attributes into CHASM and custom attributes.
