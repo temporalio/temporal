@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 )
 
@@ -45,4 +46,21 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_ConcurrentRecord() {
 	}
 	wg.Wait()
 	s.NoError(guard.validate())
+}
+
+func (s *TestEnvSuite) TestRequiresClusterStartup() {
+	tests := []struct {
+		name    string
+		key     dynamicconfig.Key
+		startup bool
+	}{
+		{name: "frontend trailer metadata", key: dynamicconfig.FrontendContextMetadataSetTrailer.Key(), startup: true},
+		{name: "worker sticky cache", key: dynamicconfig.WorkerStickyCacheSize.Key(), startup: true},
+		{name: "runtime global config", key: dynamicconfig.EnableChasm.Key(), startup: false},
+	}
+	for _, test := range tests {
+		s.Run(test.name, func(s *TestEnvSuite) {
+			s.Equal(test.startup, requiresClusterStartup(test.key))
+		})
+	}
 }

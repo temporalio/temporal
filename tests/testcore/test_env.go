@@ -254,6 +254,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
 
+	var startupDynamicConfig map[dynamicconfig.Key]any
 	var globalDynamicConfig map[dynamicconfig.Key]any
 	var namespaceDynamicConfig []dynamicConfigOverride
 	for _, override := range options.dynamicConfigSettings {
@@ -261,22 +262,30 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			namespaceDynamicConfig = append(namespaceDynamicConfig, override)
 			continue
 		}
-		if globalDynamicConfig == nil {
-			globalDynamicConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+		if requiresClusterStartup(override.setting.Key()) {
+			if startupDynamicConfig == nil {
+				startupDynamicConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+			}
+			startupDynamicConfig[override.setting.Key()] = override.value
+		} else {
+			if globalDynamicConfig == nil {
+				globalDynamicConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+			}
+			globalDynamicConfig[override.setting.Key()] = override.value
 		}
-		globalDynamicConfig[override.setting.Key()] = override.value
 	}
-	if len(globalDynamicConfig) > 0 {
+	if len(startupDynamicConfig) > 0 || len(globalDynamicConfig) > 0 {
 		dedicatedGuard.record("global dynamic config used")
 	}
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:           options.dedicatedCluster,
-		needWorkerService:   options.needWorkerService,
-		dedicatedReason:     options.dedicatedReason,
-		globalDynamicConfig: globalDynamicConfig,
-		clusterOpts:         options.clusterOptions,
+		dedicated:            options.dedicatedCluster,
+		needWorkerService:    options.needWorkerService,
+		dedicatedReason:      options.dedicatedReason,
+		startupDynamicConfig: startupDynamicConfig,
+		globalDynamicConfig:  globalDynamicConfig,
+		clusterOpts:          options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
 
@@ -613,6 +622,16 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	case dynamicconfig.PrecedenceNamespace,
 		dynamicconfig.PrecedenceTaskQueue,
 		dynamicconfig.PrecedenceDestination:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiresClusterStartup(key dynamicconfig.Key) bool {
+	switch key {
+	case dynamicconfig.FrontendContextMetadataSetTrailer.Key(),
+		dynamicconfig.WorkerStickyCacheSize.Key():
 		return true
 	default:
 		return false

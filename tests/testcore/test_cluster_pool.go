@@ -263,18 +263,23 @@ const (
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind                string // set by the router: shared, dedicated, or suite-scoped
-	dedicated           bool
-	dedicatedReason     string
-	needWorkerService   bool
-	globalDynamicConfig map[dynamicconfig.Key]any
-	clusterOpts         []TestClusterOption
+	kind                 string // set by the router: shared, dedicated, one-off, or suite-scoped
+	dedicated            bool
+	dedicatedReason      string
+	needWorkerService    bool
+	startupDynamicConfig map[dynamicconfig.Key]any
+	globalDynamicConfig  map[dynamicconfig.Key]any
+	clusterOpts          []TestClusterOption
 }
 
 // requiresDedicatedCluster reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
 func (r clusterRequest) requiresDedicatedCluster() bool {
-	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return r.dedicated ||
+		r.needWorkerService ||
+		len(r.startupDynamicConfig) > 0 ||
+		len(r.globalDynamicConfig) > 0 ||
+		len(r.clusterOpts) > 0
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -370,7 +375,7 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 	req.kind = clusterKindDedicated
 
 	var cluster *FunctionalTestBase
-	if len(req.clusterOpts) > 0 {
+	if len(req.startupDynamicConfig) > 0 || len(req.clusterOpts) > 0 {
 		// These options are cluster-startup state and cannot be reset on a pooled cluster.
 		req.kind = clusterKindOneOff
 		cluster = p.oneOff.get(t, func() *FunctionalTestBase {
@@ -398,11 +403,11 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 
 	// The worker service is off unless the request explicitly needs it.
 	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
-	if shared := req.kind != clusterKindDedicated; shared {
+	if req.isSharedCluster() {
 		opts = append(opts, WithSharedCluster())
-		if len(req.globalDynamicConfig) > 0 {
-			opts = append(opts, WithDynamicConfigOverrides(req.globalDynamicConfig))
-		}
+	}
+	if len(req.startupDynamicConfig) > 0 {
+		opts = append(opts, WithDynamicConfigOverrides(req.startupDynamicConfig))
 	}
 	opts = append(opts, req.clusterOpts...)
 
@@ -410,6 +415,10 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	p.recordCreation(t, req)
 
 	return tbase
+}
+
+func (r clusterRequest) isSharedCluster() bool {
+	return r.kind == clusterKindShared || r.kind == clusterKindSuiteScoped
 }
 
 func suiteRootName(t *testing.T) string {

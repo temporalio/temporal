@@ -137,6 +137,24 @@ func TestClusterPool_RecordsOneOffClusterKind(t *testing.T) {
 	require.Equal(t, "custom history shard count used", event.Reason)
 }
 
+func TestClusterRequest_SharedClusterKinds(t *testing.T) {
+	tests := []struct {
+		name   string
+		kind   string
+		shared bool
+	}{
+		{name: "shared", kind: clusterKindShared, shared: true},
+		{name: "suite scoped", kind: clusterKindSuiteScoped, shared: true},
+		{name: "dedicated", kind: clusterKindDedicated, shared: false},
+		{name: "one off", kind: clusterKindOneOff, shared: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.shared, clusterRequest{kind: test.kind}.isSharedCluster())
+		})
+	}
+}
+
 func TestClusterPool_ReservedSlotBlocksNextExclusiveOwner(t *testing.T) {
 	p := newClusterPool(1, true, 0)
 	acquired := make(chan struct{})
