@@ -300,18 +300,12 @@ func (r clusterRequest) reason() string {
 // run can be queried for which suite created how many clusters of each kind, and
 // why. Events fall back to the test log when no events file is configured.
 func (p *clusterRouter) recordCreation(t *testing.T, req clusterRequest) {
-	line, err := json.Marshal(struct {
-		Suite  string `json:"suite"`
-		Test   string `json:"test"`
-		Kind   string `json:"kind"`
-		Reason string `json:"reason"`
-		Worker bool   `json:"worker"`
-	}{
-		Suite:  suiteRootName(t),
-		Test:   t.Name(),
-		Kind:   req.kind,
-		Reason: req.reason(),
-		Worker: req.needWorkerService,
+	line, err := json.Marshal(map[string]any{
+		"suite":  suiteRootName(t),
+		"test":   t.Name(),
+		"kind":   req.kind,
+		"reason": req.reason(),
+		"worker": req.needWorkerService,
 	})
 	if err != nil {
 		return
@@ -387,19 +381,15 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 			return p.createCluster(t, req.withWorkerService())
 		})
 	}
-	p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
+	for key, value := range req.globalDynamicConfig {
+		cluster.testCluster.host.overrideDynamicConfigForTest(t, key, value)
+	}
 	return cluster
 }
 
 func (r clusterRequest) withWorkerService() clusterRequest {
 	r.needWorkerService = true // always enable the worker service on dedicated clusters
 	return r
-}
-
-func (p *clusterRouter) applyDynamicConfig(t *testing.T, cluster *FunctionalTestBase, overrides map[dynamicconfig.Key]any) {
-	for key, value := range overrides {
-		cluster.testCluster.host.overrideDynamicConfigForTest(t, key, value)
-	}
 }
 
 func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
