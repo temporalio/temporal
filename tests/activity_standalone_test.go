@@ -4872,7 +4872,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	// ExecutionTimeTracksStartDelayUpdates verifies that visibility recomputes ExecutionTime when
-	// start delay changes and restores the original indexed value when the options are restored.
+	// start delay changes and restores the original indexed value after a reset restores the options.
 	t.Run("ExecutionTimeTracksStartDelayUpdates", func(t *testing.T) {
 		activityID := "execution-time-update-activity-id"
 		originalDelay := 10 * time.Minute
@@ -4928,11 +4928,11 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			require.Equal(c, originalExecutionTime.Add(updatedDelay-originalDelay), exec.GetExecutionTime().AsTime())
 		}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
-		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
-			Namespace:       env.Namespace().String(),
-			ActivityId:      activityID,
-			RunId:           startResp.GetRunId(),
-			RestoreOriginal: true,
+		_, err = env.FrontendClient().ResetActivityExecution(s.Context(), &workflowservice.ResetActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			RunId:                  startResp.GetRunId(),
+			RestoreOriginalOptions: true,
 		})
 		require.NoError(t, err)
 		await.Require(s.Context(), t, func(c *await.T) {
