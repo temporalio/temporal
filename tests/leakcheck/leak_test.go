@@ -123,8 +123,6 @@ func TestClusterShutdownLeak(t *testing.T) {
 		t.Logf("cluster %2d: goroutines=%d", i, runtime.NumGoroutine())
 	}
 
-	testcore.TearDownClusterPools(t)
-
 	// Verify that no goroutines leaked beyond the baseline.
 	goleakErr := goleak.Find(append(goleakOpts, baseline)...)
 	goleakReport := "no unexpected goroutines\n"
@@ -160,7 +158,10 @@ func buildRunReleaseEnv(t *testing.T, leakCheck *objectleak.ObjectLeakCheck) {
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
 			testcore.WithDedicatedCluster(),
-			testcore.WithWorkerService("leak regression test"))
+			testcore.WithWorkerService("leak regression test"),
+			// Keep the default shard count, but pass it as a startup-only option so
+			// this test exercises one-off cluster teardown instead of pooled reuse.
+			testcore.WithHistoryShardCount(4))
 
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(

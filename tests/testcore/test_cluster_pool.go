@@ -46,6 +46,7 @@ func init() {
 	testClusterRouter = &clusterRouter{
 		shared:     newClusterPool(sharedSize, false, 0),
 		dedicated:  newClusterPool(dedicatedSize, true, 0),
+		oneOff:     newOneOffClusterPool(dedicatedSize),
 		eventsFile: eventsFile,
 	}
 }
@@ -93,17 +94,6 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 	slot := p.reserveSlot(t)
 	cluster := slot.acquire(t, createCluster)
 	t.Cleanup(slot.release)
-	return cluster
-}
-
-func (p *clusterPool) getOneOff(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	p.reserveSlot(t)
-	cluster := createCluster()
-	t.Cleanup(func() {
-		if err := cluster.tearDownTestCluster(); err != nil {
-			t.Logf("Failed to tear down cluster: %v", err)
-		}
-	})
 	return cluster
 }
 
@@ -194,25 +184,37 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 	s.leaseCount = 0
 }
 
-func (s *clusterPoolSlot) tearDown(t *testing.T) {
-	s.Lock()
-	defer s.Unlock()
-	if s.activeLeases != 0 {
-		t.Fatalf("cannot tear down cluster pool slot %d with %d active leases", s.idx, s.activeLeases)
-	}
-	s.tearDownLocked(t)
+type oneOffClusterPool struct {
+	leases chan struct{}
 }
 
-func (p *clusterPool) tearDown(t *testing.T) {
-	for _, slot := range p.allSlots {
-		slot.tearDown(t)
+func newOneOffClusterPool(size int) *oneOffClusterPool {
+	return &oneOffClusterPool{
+		leases: make(chan struct{}, size),
 	}
+}
+
+func (p *oneOffClusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
+	p.leases <- struct{}{}
+	var cluster *FunctionalTestBase
+	t.Cleanup(func() {
+		defer func() { <-p.leases }()
+		if cluster == nil {
+			return
+		}
+		if err := cluster.tearDownTestCluster(); err != nil {
+			t.Logf("Failed to tear down cluster: %v", err)
+		}
+	})
+	cluster = createCluster()
+	return cluster
 }
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
 	shared      *clusterPool
 	dedicated   *clusterPool
+	oneOff      *oneOffClusterPool
 	suiteScoped sync.Map
 
 	eventsFile *os.File
@@ -224,13 +226,6 @@ type suiteScopedCluster struct {
 	cluster *FunctionalTestBase
 }
 
-// TearDownClusterPools tears down clusters retained by the process-wide pools.
-func TearDownClusterPools(t *testing.T) {
-	t.Helper()
-	testClusterRouter.shared.tearDown(t)
-	testClusterRouter.dedicated.tearDown(t)
-}
-
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
 // The cluster is created on first use and torn down when `t` completes.
 //
@@ -238,7 +233,7 @@ func TearDownClusterPools(t *testing.T) {
 // suite execution.
 func UseSuiteScopedCluster(t *testing.T) {
 	t.Helper()
-	rootName, _, _ := strings.Cut(t.Name(), "/")
+	rootName := suiteRootName(t)
 	if t.Name() != rootName {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
@@ -262,6 +257,7 @@ func UseSuiteScopedCluster(t *testing.T) {
 const (
 	clusterKindShared      = "shared"
 	clusterKindDedicated   = "dedicated"
+	clusterKindOneOff      = "one-off"
 	clusterKindSuiteScoped = "suite-scoped"
 )
 
@@ -278,7 +274,11 @@ type clusterRequest struct {
 // needsDedicated reports whether the request must be served by a dedicated
 // cluster rather than the shared pool.
 func (r clusterRequest) needsDedicated() bool {
-	return r.dedicated || r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return r.dedicated || r.hasCustomClusterConfig()
+}
+
+func (r clusterRequest) hasCustomClusterConfig() bool {
+	return r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // reason explains why the cluster was created, for analytics. It falls back to a
@@ -293,36 +293,43 @@ func (r clusterRequest) reason() string {
 	switch {
 	case r.dedicatedReason != "":
 		return r.dedicatedReason
-	case r.needWorkerService || len(r.globalDynamicConfig) > 0 || len(r.clusterOpts) > 0:
+	case r.hasCustomClusterConfig():
 		return "custom config"
 	default:
 		return "dedicated"
 	}
 }
 
+type clusterCreationEvent struct {
+	Suite  string `json:"suite"`
+	Test   string `json:"test"`
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
+	Worker bool   `json:"worker"`
+}
+
 // recordCreation appends one JSON Lines event per test-cluster creation so a CI
 // run can be queried for which suite created how many clusters of each kind, and
 // why. Events fall back to the test log when no events file is configured.
-func (r clusterRequest) recordCreation(t *testing.T) {
-	suite, _, _ := strings.Cut(t.Name(), "/")
-	line, err := json.Marshal(map[string]any{
-		"suite":  suite,
-		"test":   t.Name(),
-		"kind":   r.kind,
-		"reason": r.reason(),
-		"worker": r.needWorkerService,
+func (p *clusterRouter) recordCreation(t *testing.T, req clusterRequest) {
+	line, err := json.Marshal(clusterCreationEvent{
+		Suite:  suiteRootName(t),
+		Test:   t.Name(),
+		Kind:   req.kind,
+		Reason: req.reason(),
+		Worker: req.needWorkerService,
 	})
 	if err != nil {
 		return
 	}
 
-	if testClusterRouter.eventsFile == nil {
+	if p.eventsFile == nil {
 		log.Printf("CLUSTEREVENT %s", line)
 		return
 	}
 	// O_APPEND makes each write land atomically at EOF and os.File serializes
 	// concurrent writes, so lines from parallel tests don't interleave.
-	_, _ = testClusterRouter.eventsFile.Write(append(line, '\n'))
+	_, _ = p.eventsFile.Write(append(line, '\n'))
 }
 
 func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTestBase) {
@@ -347,13 +354,12 @@ func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 }
 
 func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
-	rootName, _, _ := strings.Cut(t.Name(), "/")
-	_, ok := p.suiteScoped.Load(rootName)
+	_, ok := p.suiteScoped.Load(suiteRootName(t))
 	return ok
 }
 
 func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
-	rootName, _, _ := strings.Cut(t.Name(), "/")
+	rootName := suiteRootName(t)
 	if _, ok := p.suiteScoped.Load(rootName); !ok {
 		return nil
 	}
@@ -374,20 +380,26 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 	// TestEnv dedicated requests take exclusive ownership of a dedicated pool slot,
 	// and reset per-test dynamic config before releasing the slot.
 	req.kind = clusterKindDedicated
-	req.needWorkerService = true // always enable the worker service on dedicated clusters
-	createCluster := func() *FunctionalTestBase {
-		return p.createCluster(t, req)
-	}
 
 	var cluster *FunctionalTestBase
 	if len(req.clusterOpts) > 0 {
 		// These options are cluster-startup state and cannot be reset on a pooled cluster.
-		cluster = p.dedicated.getOneOff(t, createCluster)
+		req.kind = clusterKindOneOff
+		cluster = p.oneOff.get(t, func() *FunctionalTestBase {
+			return p.createCluster(t, req.withWorkerService())
+		})
 	} else {
-		cluster = p.dedicated.get(t, createCluster)
+		cluster = p.dedicated.get(t, func() *FunctionalTestBase {
+			return p.createCluster(t, req.withWorkerService())
+		})
 	}
 	p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
 	return cluster
+}
+
+func (r clusterRequest) withWorkerService() clusterRequest {
+	r.needWorkerService = true // always enable the worker service on dedicated clusters
+	return r
 }
 
 func (p *clusterRouter) applyDynamicConfig(t *testing.T, cluster *FunctionalTestBase, overrides map[dynamicconfig.Key]any) {
@@ -411,7 +423,12 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	opts = append(opts, req.clusterOpts...)
 
 	tbase.setupCluster(opts...)
-	req.recordCreation(t)
+	p.recordCreation(t, req)
 
 	return tbase
+}
+
+func suiteRootName(t *testing.T) string {
+	rootName, _, _ := strings.Cut(t.Name(), "/")
+	return rootName
 }

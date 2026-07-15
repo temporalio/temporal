@@ -1,6 +1,8 @@
 package testcore
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -85,9 +87,10 @@ func TestClusterPool_ExclusiveClusterReusesAfterRelease(t *testing.T) {
 	require.Equal(t, 1, created)
 }
 
-func TestClusterPool_OneOffClusterDoesNotReplacePooledCluster(t *testing.T) {
-	p := newClusterPool(1, true, 0)
-	slot := p.allSlots[0]
+func TestClusterPool_OneOffClusterUsesSeparatePool(t *testing.T) {
+	dedicated := newClusterPool(1, true, 0)
+	oneOff := newOneOffClusterPool(1)
+	dedicatedSlot := dedicated.allSlots[0]
 	var created int
 	createCluster := func() *FunctionalTestBase {
 		created++
@@ -95,21 +98,40 @@ func TestClusterPool_OneOffClusterDoesNotReplacePooledCluster(t *testing.T) {
 	}
 
 	t.Run("uses pooled cluster", func(t *testing.T) {
-		cluster := p.get(t, createCluster)
-		require.Same(t, cluster, slot.cluster)
+		cluster := dedicated.get(t, createCluster)
+		require.Same(t, cluster, dedicatedSlot.cluster)
 	})
 
-	pooledCluster := slot.cluster
+	pooledCluster := dedicatedSlot.cluster
 	require.NotNil(t, pooledCluster)
 
 	t.Run("uses fresh cluster", func(t *testing.T) {
-		cluster := p.getOneOff(t, createCluster)
+		cluster := oneOff.get(t, createCluster)
 		require.NotSame(t, pooledCluster, cluster)
-		require.Same(t, pooledCluster, slot.cluster)
+		require.Same(t, pooledCluster, dedicatedSlot.cluster)
 	})
 
-	require.Same(t, pooledCluster, slot.cluster)
+	require.Same(t, pooledCluster, dedicatedSlot.cluster)
 	require.Equal(t, 2, created)
+}
+
+func TestClusterPool_RecordsOneOffClusterKind(t *testing.T) {
+	eventsFile, err := os.CreateTemp(t.TempDir(), "cluster-events-*.jsonl")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, eventsFile.Close()) })
+
+	router := &clusterRouter{eventsFile: eventsFile}
+	router.recordCreation(t, clusterRequest{
+		kind:            clusterKindOneOff,
+		dedicatedReason: "custom history shard count used",
+	})
+
+	_, err = eventsFile.Seek(0, 0)
+	require.NoError(t, err)
+	var event clusterCreationEvent
+	require.NoError(t, json.NewDecoder(eventsFile).Decode(&event))
+	require.Equal(t, clusterKindOneOff, event.Kind)
+	require.Equal(t, "custom history shard count used", event.Reason)
 }
 
 func TestClusterPool_ReservedSlotBlocksNextExclusiveOwner(t *testing.T) {
