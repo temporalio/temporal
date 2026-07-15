@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v13 "go.temporal.io/api/enums/v1"
 	v12 "go.temporal.io/server/api/clock/v1"
 	v1 "go.temporal.io/server/api/history/v1"
 	v11 "go.temporal.io/server/api/persistence/v1"
@@ -448,6 +449,7 @@ type NexusTask struct {
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskId        string                 `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	TaskQueueKind v13.TaskQueueKind      `protobuf:"varint,4,opt,name=task_queue_kind,json=taskQueueKind,proto3,enum=temporal.api.enums.v1.TaskQueueKind" json:"task_queue_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -501,6 +503,13 @@ func (x *NexusTask) GetTaskId() string {
 		return x.TaskId
 	}
 	return ""
+}
+
+func (x *NexusTask) GetTaskQueueKind() v13.TaskQueueKind {
+	if x != nil {
+		return x.TaskQueueKind
+	}
+	return v13.TaskQueueKind(0)
 }
 
 // A reference for loading a history event.
@@ -655,7 +664,7 @@ var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"*temporal/server/api/token/v1/message.proto\x12\x1ctemporal.server.api.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xd4\x03\n" +
+	"*temporal/server/api/token/v1/message.proto\x12\x1ctemporal.server.api.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xd4\x03\n" +
 	"\x13HistoryContinuation\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12$\n" +
 	"\x0efirst_event_id\x18\x02 \x01(\x03R\ffirstEventId\x12\"\n" +
@@ -702,12 +711,13 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12\x17\n" +
-	"\atask_id\x18\x03 \x01(\tR\x06taskId\"f\n" +
+	"\atask_id\x18\x03 \x01(\tR\x06taskId\"\xb4\x01\n" +
 	"\tNexusTask\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12\x17\n" +
-	"\atask_id\x18\x03 \x01(\tR\x06taskId\"R\n" +
+	"\atask_id\x18\x03 \x01(\tR\x06taskId\x12L\n" +
+	"\x0ftask_queue_kind\x18\x04 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueKindR\rtaskQueueKind\"R\n" +
 	"\x0fHistoryEventRef\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
 	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\x80\x02\n" +
@@ -747,7 +757,8 @@ var file_temporal_server_api_token_v1_message_proto_goTypes = []any{
 	(*v1.VersionHistories)(nil),      // 9: temporal.server.api.history.v1.VersionHistories
 	(*v12.VectorClock)(nil),          // 10: temporal.server.api.clock.v1.VectorClock
 	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
-	(*v11.StateMachineRef)(nil),      // 12: temporal.server.api.persistence.v1.StateMachineRef
+	(v13.TaskQueueKind)(0),           // 12: temporal.api.enums.v1.TaskQueueKind
+	(*v11.StateMachineRef)(nil),      // 13: temporal.server.api.persistence.v1.StateMachineRef
 }
 var file_temporal_server_api_token_v1_message_proto_depIdxs = []int32{
 	7,  // 0: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
@@ -755,12 +766,13 @@ var file_temporal_server_api_token_v1_message_proto_depIdxs = []int32{
 	9,  // 2: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
 	10, // 3: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	11, // 4: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
-	12, // 5: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	12, // 5: temporal.server.api.token.v1.NexusTask.task_queue_kind:type_name -> temporal.api.enums.v1.TaskQueueKind
+	13, // 6: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_token_v1_message_proto_init() }
