@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -32,6 +33,7 @@ var Module = fx.Module(
 	fx.Invoke(endpointRegistryLifetimeHooks),
 	fx.Provide(defaultNexusTransportProvider),
 	fx.Provide(clientProviderFactory),
+	fx.Provide(newHandler),
 	fx.Provide(newCancellationBackoffTaskHandler),
 	fx.Provide(newCancellationInvocationTaskHandler),
 	fx.Provide(newOperationBackoffTaskHandler),
@@ -41,6 +43,19 @@ var Module = fx.Module(
 	fx.Provide(newOperationStartToCloseTimeoutTaskHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
+)
+
+var FrontendModule = fx.Module(
+	"chasm.lib.nexusoperation.frontend",
+	fx.Provide(configProvider),
+	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
+	fx.Provide(NewFrontendHandler),
+	fx.Provide(newComponentOnlyLibrary),
+	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
+		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
+		// need task handlers.
+		return registry.Register(l)
+	}),
 )
 
 func register(
@@ -103,7 +118,6 @@ func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
-	config *Config,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {

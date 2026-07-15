@@ -1,37 +1,11 @@
 package cinotify
 
-import "time"
+import (
+	"sort"
+	"time"
 
-// Conclusion represents the conclusion status of a workflow run or job
-type Conclusion string
-
-const (
-	ConclusionSuccess Conclusion = "success"
-	ConclusionFailure Conclusion = "failure"
+	"go.temporal.io/server/tools/common/github"
 )
-
-// WorkflowRun represents the GitHub workflow run information
-type WorkflowRun struct {
-	Name         string     `json:"name"`
-	Conclusion   Conclusion `json:"conclusion"`
-	HeadBranch   string     `json:"headBranch"`
-	HeadSHA      string     `json:"headSha"`
-	URL          string     `json:"url"`
-	DisplayTitle string     `json:"displayTitle"`
-	Event        string     `json:"event"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	Jobs         []Job      `json:"jobs"`
-}
-
-// Job represents a single job in the workflow
-type Job struct {
-	Name        string     `json:"name"`
-	Conclusion  Conclusion `json:"conclusion"`
-	Status      string     `json:"status"`
-	StartedAt   string     `json:"startedAt"`
-	CompletedAt string     `json:"completedAt"`
-	URL         string     `json:"url"`
-}
 
 // CommitInfo represents commit metadata
 type CommitInfo struct {
@@ -43,24 +17,10 @@ type CommitInfo struct {
 
 // FailureReport aggregates all failure information
 type FailureReport struct {
-	Workflow   WorkflowRun
+	Workflow   github.Run
 	Commit     CommitInfo
-	FailedJobs []Job
+	FailedJobs []github.Job
 	TotalJobs  int
-}
-
-// WorkflowRunSummary represents a workflow run for success reporting
-type WorkflowRunSummary struct {
-	Name         string        `json:"name"`
-	Conclusion   Conclusion    `json:"conclusion"`
-	Event        string        `json:"event"`
-	CreatedAt    time.Time     `json:"createdAt"`
-	StartedAt    time.Time     `json:"startedAt"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
-	Duration     time.Duration `json:"-"`
-	HeadSHA      string        `json:"headSha"`
-	DisplayTitle string        `json:"displayTitle"`
-	URL          string        `json:"url"`
 }
 
 // DigestReport aggregates success metrics for a time period
@@ -78,5 +38,22 @@ type DigestReport struct {
 	Under20MinutesPercent float64
 	Under25MinutesPercent float64
 	Under30MinutesPercent float64
-	Runs                  []WorkflowRunSummary
+	Runs                  []github.Run
+}
+
+func (r *DigestReport) slowestRuns(limit int) []github.Run {
+	if limit <= 0 {
+		return nil
+	}
+
+	sorted := make([]github.Run, 0, len(r.Runs))
+	for _, run := range r.Runs {
+		if run.Duration > 0 {
+			sorted = append(sorted, run)
+		}
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Duration > sorted[j].Duration
+	})
+	return sorted[:min(limit, len(sorted))]
 }

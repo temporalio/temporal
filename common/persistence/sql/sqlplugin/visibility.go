@@ -39,7 +39,7 @@ type (
 		CloseTime            *time.Time
 		HistoryLength        *int64
 		HistorySizeBytes     *int64
-		ExecutionDuration    *time.Duration
+		ExecutionDuration    *int64
 		StateTransitionCount *int64
 		Memo                 []byte
 		Encoding             string
@@ -219,7 +219,7 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 }
 
 func getDbFields() []string {
-	t := reflect.TypeOf(VisibilityRow{})
+	t := reflect.TypeFor[VisibilityRow]()
 	dbFields := make([]string, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)

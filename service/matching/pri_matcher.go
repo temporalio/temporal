@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"strconv"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -98,11 +97,12 @@ func newPriTaskMatcher(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	rateLimitManager *rateLimitManager,
+	onRateLimited func(),
 	markAlive func(),
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:                    config,
-		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
+		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager, onRateLimited),
 		tqCtx:                     tqCtx,
 		logger:                    logger,
 		metricsHandler:            metricsHandler,
@@ -210,11 +210,11 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 		// to the head of the backlog, which is what taskValidator expects.
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
-			task.finish(nil, false)
 			var invalidTaskTag = getInvalidTaskTag(task)
 
 			// consider this task expired while processing.
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
+			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -269,9 +269,9 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
-			task.finish(nil, false)
 			var invalidStageTag = getInvalidTaskTag(task)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidStageTag)
+			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 
 			// Stay alive as long as we're invalidating tasks
 			tm.markAlive()
@@ -279,7 +279,7 @@ func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
-			task.finish(errReprocessTask, true)
+			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 			// retrier's max interval is backlogTaskForwardTimeout, so for just valid tasks,
 			// this loop will essentially be limited to that interval.
 			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
@@ -293,6 +293,10 @@ func (tm *priTaskMatcher) forwardPolls(
 	ft pollForwarderType,
 	target *tqid.NormalPartition,
 ) {
+	policy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithMaximumInterval(tm.config.ForwardPollRetryMaxInterval()).
+		WithExpirationInterval(backoff.NoInterval)
+	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	forwarderTask := newPollForwarderTask(effectivePriority, ft)
 	ctxs := []context.Context{ctx} // ctx should be equal to or child of tm.tqCtx
 	for ctx.Err() == nil {
@@ -332,6 +336,10 @@ func (tm *priTaskMatcher) forwardPolls(
 		_ = stop()
 		if err == nil {
 			tm.data.FinishMatchAfterPollForward(poller, task)
+			retrier.Reset()
+			if ft == priorityBacklogPollForwarder {
+				metrics.PriorityBacklogForwardedPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			}
 		} else if ft == priorityBacklogPollForwarder && errors.Is(err, errNoTasks) {
 			// There are no tasks of the priority we're looking for on the target. This goroutine
 			// will probably get canceled as soon as ephemeral data updates. In the meantime, wait.
@@ -340,6 +348,10 @@ func (tm *priTaskMatcher) forwardPolls(
 			// 4× to allow for a few rounds plus propagation.
 			interval := cmp.Or(tm.config.EphemeralDataUpdateInterval(), time.Minute)
 			_ = util.InterruptibleSleep(ctx, 4*interval)
+		} else if common.IsResourceExhausted(err) {
+			// Rate limited: re-enqueue with forwarding still enabled so it retries.
+			tm.data.ReenqueuePollerIfNotMatched(poller)
+			_ = util.InterruptibleSleep(ctx, retrier.NextBackOff(err))
 		} else {
 			// Re-enqueue to let it match again, if it hasn't gotten a context timeout already.
 			poller.forwardCtx = nil // disable forwarding next time
@@ -377,19 +389,20 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
-	finish := func() (bool, error) {
+
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+	finish := func() (syncMatchOutcome, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return false, nil
+			return syncMatchUnspecified, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return true, nil
+				return syncMatchSuccess, nil
 			}
-			return false, nil // forward error, give up here
+			return syncMatchNoPoller, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -397,32 +410,36 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		return true, res.startErr
+		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
+		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
+		return syncMatchSuccess, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
-	if canMatch, gotMatch := tm.data.MatchTaskImmediately(task); gotMatch {
+	outcome := tm.data.MatchTaskImmediately(task)
+	switch outcome {
+	case syncMatchSuccess:
 		return finish()
-	} else if !canMatch {
-		return false, nil
-	}
-
-	// We only block if we are the root and the task is forwarded from a backlog.
-	// Otherwise, stop here.
-	if tm.isForwardingAllowed() ||
-		task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
-		!task.isForwarded() {
-		return false, nil
+	case syncMatchBacklogPresent:
+		return outcome, nil
+	default:
+		// We only block if we are the root and the task is forwarded from a backlog.
+		// Otherwise, stop here.
+		if tm.isForwardingAllowed() ||
+			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
+			!task.isForwarded() {
+			return outcome, nil
+		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return false, res.ctxErr
+		return syncMatchNoPoller, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return false, nil
+		return syncMatchNoPoller, nil
 	}
 
 	return finish()
@@ -516,7 +533,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
+		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
 	)
 }
@@ -543,7 +560,7 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 	// ReprocessTasks will have woken sync tasks, but for backlog we also need to call finish.
 	for _, task := range tasks {
 		if !task.isSyncMatchTask() {
-			task.finish(errReprocessTask, true)
+			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 		}
 	}
 }
@@ -560,7 +577,7 @@ func (tm *priTaskMatcher) ReprocessRedirectedTasksAfterStop() {
 			for _, task := range tasks {
 				// these should all be from backlog (not sync-match) but check again to be sure
 				if !task.isSyncMatchTask() {
-					task.finish(errReprocessTask, true)
+					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 				}
 			}
 		}()
@@ -590,6 +607,7 @@ func (tm *priTaskMatcher) poll(
 	start := time.Now()
 	pollWasForwarded := false
 	var priority int32
+	pollResult := "failed"
 
 	defer func() {
 		// TODO(pri): can we consolidate all the metrics code below?
@@ -597,8 +615,9 @@ func (tm *priTaskMatcher) poll(
 			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 				time.Since(start),
-				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
+				metrics.ForwardedTag(pollWasForwarded),
 				metrics.MatchingTaskPriorityTag(priority),
+				metrics.PollResultTag(pollResult),
 			)
 		}
 	}()
@@ -619,11 +638,13 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	if res == nil {
+		pollResult = "timeout"
 		return nil, errNoTasks // only possible for MatchPollerImmediately
 	} else if res.ctxErr != nil {
 		if res.ctxErrIdx == 0 {
 			metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
+		pollResult = "timeout"
 		return nil, errNoTasks
 	}
 
@@ -634,6 +655,7 @@ func (tm *priTaskMatcher) poll(
 	task := res.task
 	pollWasForwarded = task.isStarted() // true if this poll was forwarded _from_ this matcher
 	priority = task.getPriority().GetPriorityKey()
+	pollResult = "dispatch"
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
@@ -650,6 +672,10 @@ func (tm *priTaskMatcher) poll(
 	}
 
 	return task, nil
+}
+
+func (tm *priTaskMatcher) HasWaitingPoller() bool {
+	return tm.data.HasWaitingPoller()
 }
 
 func (tm *priTaskMatcher) isForwardingAllowed() bool {
@@ -671,13 +697,6 @@ func (tm *priTaskMatcher) emitForwardedSourceStats(
 	default:
 		metrics.LocalToLocalMatchPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 	}
-}
-
-func getInvalidTaskTag(task *internalTask) metrics.Tag {
-	if IsTaskExpired(task.event.AllocatedTaskInfo) {
-		return metrics.TaskExpireStageMemoryTag
-	}
-	return metrics.TaskInvalidTag
 }
 
 func (p *waitingPoller) minPriority() priorityKey {

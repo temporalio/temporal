@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -112,6 +113,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	case *tasks.DeleteExecutionVisibilityTask:
 		err = t.processDeleteExecution(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.processChasmTask(ctx, task)
 	default:
 		err = errUnknownVisibilityTask
@@ -322,10 +324,13 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	defer cancel()
 
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespace.ID(task.NamespaceID),
-		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
-		TaskID:      task.TaskID,
+		NamespaceID:       namespace.ID(task.NamespaceID),
+		WorkflowID:        task.WorkflowID,
+		RunID:             task.RunID,
+		TaskID:            task.TaskID,
+		CloseTime:         nil, // populated below if task close time is valid
+		StartTime:         task.StartTime,
+		IsRetentionDelete: task.IsRetentionDelete,
 	}
 
 	if task.CloseTime.After(time.Unix(0, 0)) {
@@ -367,8 +372,8 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return errNoChasmMutableState
 	}
 
-	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || !valid {
+	isTaskInTree, isValidByComponent, err := validateChasmSideEffectTask(ctx, mutableState, task)
+	if err != nil || !isTaskInTree || !isValidByComponent {
 		return err
 	}
 
@@ -407,7 +412,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	searchattributes := make(map[string]*commonpb.Payload)
+	searchAttributes := make(map[string]*commonpb.Payload)
 
 	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
 	for alias, value := range aliasedCustomSearchAttributes {
@@ -418,7 +423,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
 			continue
 		}
-		searchattributes[fieldName] = value
+		searchAttributes[fieldName] = value
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
@@ -435,7 +440,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 				}
 				continue
 			}
-			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
+			searchAttributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
@@ -465,11 +470,14 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		namespaceEntry,
 		mutableState,
 		combinedMemo,
-		searchattributes,
+		searchAttributes,
 	)
 
 	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
-	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+	searchattribute.AddSearchAttributes(
+		&requestBase.SearchAttributes,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
+	)
 
 	// Override TaskQueue if provided by CHASM search attributes.
 	if chasmTaskQueue != "" {
@@ -575,10 +583,12 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
 		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
 		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
-		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
-		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
-		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		if externalPayloadCount > 0 {
+			externalPayloadCountPayload := sadefs.MustEncodeValue(externalPayloadCount, enumspb.INDEXED_VALUE_TYPE_INT)
+			externalPayloadSizeBytesPayload := sadefs.MustEncodeValue(externalPayloadSizeBytes, enumspb.INDEXED_VALUE_TYPE_INT)
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+			base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+		}
 	}
 
 	return &manager.RecordWorkflowExecutionClosedRequest{

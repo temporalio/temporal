@@ -3,6 +3,7 @@ package nexus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ type (
 		refreshPageSize        dynamicconfig.IntPropertyFn
 		refreshMinWait         dynamicconfig.DurationPropertyFn
 		refreshRetryPolicy     backoff.RetryPolicy
+		refreshOnRead          dynamicconfig.BoolPropertyFn
 		readThroughCacheSize   dynamicconfig.IntPropertyFn
 		readThroughCacheTTL    dynamicconfig.DurationPropertyFn
 	}
@@ -78,6 +80,7 @@ func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryCo
 		refreshMinWait:         dynamicconfig.RefreshNexusEndpointsMinWait.Get(dc),
 		readThroughCacheSize:   dynamicconfig.NexusReadThroughCacheSize.Get(dc),
 		readThroughCacheTTL:    dynamicconfig.NexusReadThroughCacheTTL.Get(dc),
+		refreshOnRead:          dynamicconfig.ForceNexusEndpointRefreshOnRead.Get(dc),
 	}
 	config.refreshRetryPolicy = backoff.NewExponentialRetryPolicy(config.refreshMinWait()).WithMaximumInterval(config.refreshLongPollTimeout())
 	return config
@@ -148,6 +151,15 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
+
+	if r.config.refreshOnRead() {
+		// This is useful for test and single-node deployments that need endpoint writes
+		// to be visible to GetByName immediately, without waiting for background long poll.
+		if err := r.loadEndpoints(ctx); err != nil {
+			return nil, fmt.Errorf("refreshing endpoints: %w", err)
+		}
+	}
+
 	r.dataLock.RLock()
 	endpoint, ok := r.endpointsByName[endpointName]
 	r.dataLock.RUnlock()
@@ -161,6 +173,14 @@ func (r *EndpointRegistryImpl) GetByName(ctx context.Context, _ namespace.ID, en
 func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persistencespb.NexusEndpointEntry, error) {
 	if err := r.waitUntilInitialized(ctx); err != nil {
 		return nil, err
+	}
+
+	if r.config.refreshOnRead() {
+		// This is useful for test and single-node deployments that need endpoint writes
+		// to be visible to GetByID immediately, without waiting for background long poll.
+		if err := r.loadEndpoints(ctx); err != nil {
+			return nil, fmt.Errorf("refreshing endpoints: %w", err)
+		}
 	}
 
 	r.dataLock.RLock()

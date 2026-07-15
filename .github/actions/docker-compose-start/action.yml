@@ -1,0 +1,131 @@
+name: Docker Compose Start
+description: Restore Docker image cache, pull Docker Compose services with retries, then start them.
+
+inputs:
+  compose_file:
+    description: Docker Compose file to use.
+    required: true
+  services:
+    description: Whitespace-delimited list of services to start.
+    default: ""
+  attempts:
+    description: Number of pull attempts.
+    default: "5"
+  delay_seconds:
+    description: Delay between failed attempts.
+    default: "5"
+  timeout_minutes:
+    description: Timeout for each pull attempt.
+    default: "1"
+  flags:
+    description: Additional options to pass to docker compose up.
+    default: ""
+  cache:
+    description: Set to "true" to cache Docker images.
+    default: "false"
+  cache_path:
+    description: Directory used to store the Docker image archive.
+    default: ${{ runner.temp }}/docker-image-cache
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare Docker image cache
+      id: cache
+      if: ${{ inputs.cache == 'true' }}
+      shell: bash
+      env:
+        COMPOSE_HASH: ${{ hashFiles(inputs.compose_file) }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        services_hash="$(printf '%s' "$SERVICES" | shasum -a 256 | cut -d ' ' -f 1)"
+
+        echo "key=docker-${RUNNER_OS}${RUNNER_ARCH}-${COMPOSE_HASH}-${services_hash}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Docker image cache
+      id: restore-cache
+      if: ${{ inputs.cache == 'true' }}
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ inputs.cache_path }}
+        key: ${{ steps.cache.outputs.key }}
+
+    - name: Load Docker images
+      if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit == 'true' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.cache_path }}
+      run: |
+        if [[ -f "$CACHE_PATH/images.tar" ]]; then
+          docker load --input "$CACHE_PATH/images.tar"
+        else
+          echo "Docker image cache hit did not include images.tar."
+        fi
+
+    - name: Pull services
+      if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      env:
+        COMPOSE_FILE: ${{ inputs.compose_file }}
+        SERVICES: ${{ inputs.services }}
+      with:
+        max_attempts: ${{ inputs.attempts }}
+        retry_wait_seconds: ${{ inputs.delay_seconds }}
+        timeout_minutes: ${{ inputs.timeout_minutes }}
+        shell: bash
+        command: |
+          if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+            echo "No services configured for docker compose pull."
+            exit 0
+          fi
+          docker compose -f "$COMPOSE_FILE" pull $SERVICES
+
+    - name: Start services
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs.compose_file }}
+        SERVICES: ${{ inputs.services }}
+        FLAGS: ${{ inputs.flags }}
+      run: |
+        if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+          echo "No services configured for docker compose up."
+          exit 0
+        fi
+        docker compose -f "$COMPOSE_FILE" up -d $FLAGS $SERVICES
+
+    - name: Save Docker images to archive
+      id: archive
+      if: ${{ inputs.cache == 'true' && steps.restore-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        CACHE_PATH: ${{ inputs.cache_path }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        mkdir -p "$CACHE_PATH"
+        images_file="$CACHE_PATH/images.txt"
+        : > "$images_file"
+
+        # Only cache images that were actually pulled for this job's services.
+        while IFS= read -r image; do
+          if docker image inspect "$image" >/dev/null 2>&1; then
+            printf '%s\n' "$image" >> "$images_file"
+          fi
+        done < <(docker compose -f "$COMPOSE_FILE" config --images $SERVICES | sort -u)
+
+        if [[ ! -s "$images_file" ]]; then
+          echo "No Docker images are available to cache."
+          echo "cacheable=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        mapfile -t images < "$images_file"
+        docker save --output "$CACHE_PATH/images.tar" "${images[@]}"
+        echo "cacheable=true" >> "$GITHUB_OUTPUT"
+
+    - name: Save Docker image cache
+      if: ${{ inputs.cache == 'true' && steps.archive.outputs.cacheable == 'true' }}
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ inputs.cache_path }}
+        key: ${{ steps.cache.outputs.key }}

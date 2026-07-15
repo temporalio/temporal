@@ -10,6 +10,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
@@ -103,7 +104,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 	s.Nil(cachedProgress)
 
 	err := s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	// get existing progress
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
@@ -120,7 +121,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions2, versionHistoryItems2)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected2 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2},
@@ -143,7 +144,7 @@ func (s *progressCacheSuite) TestProgressCache() {
 		versionhistory.NewVersionHistoryItem(firstEventID+1, versionedTransition.NamespaceFailoverVersion+1),
 	}
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions3, versionHistoryItems3)
-	s.Nil(err)
+	s.NoError(err)
 
 	expected3 := &ReplicationProgress{
 		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
@@ -156,8 +157,45 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	// noop update: versioned transition and version history are already included in the existing progress
 	err = s.progressCache.Update(s.runID, targetClusterID, versionedTransitions, versionHistoryItems)
-	s.Nil(err)
+	s.NoError(err)
 
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
 	s.DeepEqual(expected3, cachedProgress)
+}
+
+func TestProgressCacheUsesDistinctMetricsTag(t *testing.T) {
+	// Verify that the progress cache uses its own cache_type tag value
+	// ("replication_progress") rather than the mutable state cache's tag value
+	// ("mutablestate"), preventing Prometheus gauge collision. See #9600.
+	ctrl := gomock.NewController(t)
+	mockShard := shard.NewTestContext(
+		ctrl,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 1,
+		},
+		tests.NewDynamicConfig(),
+	)
+	defer ctrl.Finish()
+	defer mockShard.StopForTest()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+
+	NewProgressCache(mockShard.GetConfig(), mockShard.GetLogger(), metricsHandler)
+
+	snapshot := capture.Snapshot()
+	cacheSizeRecordings := snapshot[metrics.CacheSize.Name()]
+	require.NotEmpty(t, cacheSizeRecordings, "expected cache_size metric to be recorded")
+
+	// Verify the cache_type tag is "replication_progress", not "mutablestate"
+	found := false
+	for _, recording := range cacheSizeRecordings {
+		if tag, ok := recording.Tags[metrics.CacheTypeTagName]; ok {
+			require.Equal(t, metrics.ReplicationProgressCacheTypeTagValue, tag,
+				"progress cache should use ReplicationProgressCacheTypeTagValue, not MutableStateCacheTypeTagValue")
+			found = true
+		}
+	}
+	require.True(t, found, "expected cache_size metric with cache_type tag")
 }

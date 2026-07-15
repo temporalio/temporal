@@ -139,35 +139,12 @@ func (s *WorkflowTaskCompletedHandlerSuite) TearDownTest() {
 
 func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
-	createWrittenHistoryCh := func(expectedUpdateWorkflowExecutionCalls int) <-chan []*historypb.HistoryEvent {
-		writtenHistoryCh := make(chan []*historypb.HistoryEvent, expectedUpdateWorkflowExecutionCalls)
-		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
-			var wfEvents []*persistence.WorkflowEvents
-			if len(request.UpdateWorkflowEvents) > 0 {
-				wfEvents = request.UpdateWorkflowEvents
-			} else {
-				wfEvents = request.NewWorkflowEvents
-			}
-
-			var historyEvents []*historypb.HistoryEvent
-			for _, uwe := range wfEvents {
-				for _, event := range uwe.Events {
-					historyEvents = append(historyEvents, event)
-				}
-			}
-			writtenHistoryCh <- historyEvents
-			return tests.UpdateWorkflowExecutionResponse, nil
-		}).Times(expectedUpdateWorkflowExecutionCalls)
-
-		return writtenHistoryCh
-	}
-
 	s.Run("Accept Complete", func() {
 		tv := testvars.New(s.T())
 		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
-		writtenHistoryCh := createWrittenHistoryCh(1)
+		writtenHistoryCh := s.captureWrittenHistory(1)
 
 		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
@@ -363,7 +340,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		s.mockNamespaceCache.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
-		writtenHistoryCh := createWrittenHistoryCh(1)
+		writtenHistoryCh := s.captureWrittenHistory(1)
 
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
@@ -416,7 +393,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect only 2 calls to UpdateWorkflowExecution: for timer started and timer fired events but not Update or WFT events.
-		writtenHistoryCh := createWrittenHistoryCh(2)
+		writtenHistoryCh := s.captureWrittenHistory(2)
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 
@@ -485,7 +462,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect 2 calls to UpdateWorkflowExecution: for timer started and WFT events.
-		writtenHistoryCh := createWrittenHistoryCh(2)
+		writtenHistoryCh := s.captureWrittenHistory(2)
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 
@@ -661,6 +638,27 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 	})
 }
 
+func (s *WorkflowTaskCompletedHandlerSuite) captureWrittenHistory(n int) <-chan []*historypb.HistoryEvent {
+	writtenHistoryCh := make(chan []*historypb.HistoryEvent, n)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		var wfEvents []*persistence.WorkflowEvents
+		if len(request.UpdateWorkflowEvents) > 0 {
+			wfEvents = request.UpdateWorkflowEvents
+		} else {
+			wfEvents = request.NewWorkflowEvents
+		}
+
+		var historyEvents []*historypb.HistoryEvent
+		for _, uwe := range wfEvents {
+			historyEvents = append(historyEvents, uwe.Events...)
+		}
+		writtenHistoryCh <- historyEvents
+		return tests.UpdateWorkflowExecutionResponse, nil
+	}).Times(n)
+
+	return writtenHistoryCh
+}
+
 func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) historyi.WorkflowContext {
 	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
 		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
@@ -728,6 +726,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		nil,
 		false,
 		nil,
+		0,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -807,6 +806,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		false,
 		nil,
+		0,
 	)
 	_, _ = ms.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity: tv.Any().String(),
@@ -824,6 +824,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 		nil,
 		false,
 		nil,
+		0,
 	)
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
@@ -860,6 +861,457 @@ func (s *WorkflowTaskCompletedHandlerSuite) createPausedWorkflowWithWFT(tv *test
 	s.NoError(err)
 	s.NotNil(loadedMS)
 	release(nil)
+
+	return wfContext, serializedTaskToken
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestWorkflowTaskCompletionPagination() {
+	s.Run("Single page completion unchanged when pagination enabled", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext := s.createStartedWorkflow(tv)
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+		s.NotNil(upd)
+		writtenHistoryCh := s.captureWrittenHistory(1)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken: serializedTaskToken,
+				Commands:  s.UpdateAcceptCompleteCommands(tv),
+				Messages:  s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				Identity:  tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+
+		updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		s.NoError(err)
+		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
+
+		s.EqualHistoryEvents(`
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
+	})
+
+	s.Run("Two page completion merges commands", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext := s.createStartedWorkflow(tv)
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+		s.NotNil(upd)
+		writtenHistoryCh := s.captureWrittenHistory(1)
+
+		// Page 0: intermediate, carries the accept command only
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         s.UpdateAcceptCommands(tv),
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		// Final page: carries the complete command and the messages
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				Commands:   s.UpdateCompleteCommands(tv),
+				Messages:   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				PageNumber: 1,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+
+		updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		s.NoError(err)
+		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
+
+		s.EqualHistoryEvents(`
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
+	})
+
+	s.Run("Buffer lost on eviction between pages", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		wfContext.Clear()
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				PageNumber: 1,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.Error(err)
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+	})
+
+	s.Run("Buffer cleared when the workflow task times out", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		taskToken := &tokenspb.Task{}
+		s.NoError(taskToken.Unmarshal(serializedTaskToken))
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		// Time out the started workflow task
+		ctx := context.Background()
+		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
+		ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+		startedWFT := ms.GetStartedWorkflowTask()
+		s.NotNil(startedWFT)
+		_, err = ms.AddWorkflowTaskTimedOutEvent(startedWFT)
+		s.NoError(err)
+		s.NoError(wfContext.UpdateWorkflowExecutionAsActive(ctx, s.workflowTaskCompletedHandler.shardContext))
+
+		// A late final page referencing the timed-out workflow task must be reported as
+		// buffer-lost, not silently merged against a stale buffer.
+		_, err = wfContext.GetMergedTaskCompletionPages(
+			taskToken.GetScheduledEventId(),
+			taskToken.Attempt,
+			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
+		)
+		s.Error(err)
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+	})
+
+	s.Run("Buffer cleared when the workflow is closed", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		taskToken := &tokenspb.Task{}
+		s.NoError(taskToken.Unmarshal(serializedTaskToken))
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		// Close the workflow (run timeout)
+		ctx := context.Background()
+		s.mockExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).
+			Return(&persistence.SetWorkflowExecutionResponse{}, nil).AnyTimes()
+		ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+		s.NoError(workflow.TimeoutWorkflow(ms, enumspb.RETRY_STATE_TIMEOUT, ""))
+		s.NoError(wfContext.SubmitClosedWorkflowSnapshot(ctx, s.workflowTaskCompletedHandler.shardContext, historyi.TransactionPolicyActive))
+
+		// A late final page referencing the closed WFT must be reported as
+		// buffer lost, not silently merged against a stale buffer.
+		_, err = wfContext.GetMergedTaskCompletionPages(
+			taskToken.GetScheduledEventId(),
+			taskToken.Attempt,
+			&workflowservice.RespondWorkflowTaskCompletedRequest{PageNumber: 1},
+		)
+		s.Error(err)
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+	})
+
+	s.Run("Buffer lost when an intermediate page is missing", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				PageNumber: 2,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.Error(err)
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+	})
+
+	s.Run("Duplicate intermediate page is idempotent", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		wfContext := s.createStartedWorkflow(tv)
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+		s.NotNil(upd)
+		writtenHistoryCh := s.captureWrittenHistory(1)
+
+		for range 2 {
+			resp, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:        serializedTaskToken,
+					Commands:         s.UpdateAcceptCompleteCommands(tv),
+					IntermediatePage: true,
+					PageNumber:       0,
+					Identity:         tv.Any().String(),
+				},
+			})
+			s.NoError(err)
+			s.NotNil(resp)
+		}
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:  serializedTaskToken,
+				Messages:   s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				PageNumber: 1,
+				Identity:   tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+
+		s.EqualHistoryEvents(`
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
+	})
+
+	s.Run("Empty intermediate page is rejected", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.Error(err)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+
+	s.Run("Per workflow buffer overflow terminates the workflow", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return true }
+
+		// Set a small limit, any non-empty page exceeds it.
+		s.workflowTaskCompletedHandler.config.WorkflowTaskCompletionBufferSizeLimit = func(string) int { return 1 }
+
+		_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+		writtenHistoryCh := s.captureWrittenHistory(1)
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.Error(err)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+
+		s.EqualHistoryEvents(`
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTerminated`, <-writtenHistoryCh)
+	})
+
+	s.Run("Pagination request rejected when pagination is disabled", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		s.workflowTaskCompletedHandler.config.EnableWorkflowTaskCompletionPagination = func(string) bool { return false }
+
+		_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken:        serializedTaskToken,
+				Commands:         []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER}},
+				IntermediatePage: true,
+				PageNumber:       0,
+				Identity:         tv.Any().String(),
+			},
+		})
+		s.Error(err)
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.ErrorContains(err, "pagination is disabled")
+	})
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflowWithStartedWFT(tv *testvars.TestVars) (historyi.WorkflowContext, []byte) {
+	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
+		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
+
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               tv.WorkflowID(),
+		WorkflowType:             tv.WorkflowType(),
+		TaskQueue:                tv.TaskQueue(),
+		Input:                    tv.Any().Payloads(),
+		WorkflowExecutionTimeout: tv.Any().InfiniteTimeout(),
+		WorkflowRunTimeout:       tv.Any().InfiniteTimeout(),
+		WorkflowTaskTimeout:      tv.Any().InfiniteTimeout(),
+		Identity:                 tv.ClientIdentity(),
+	}
+
+	_, _ = ms.AddWorkflowExecutionStartedEvent(
+		tv.WorkflowExecution(),
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:      1,
+			NamespaceId:  tv.NamespaceID().String(),
+			StartRequest: startRequest,
+		},
+	)
+
+	wt, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	_, _, _ = ms.AddWorkflowTaskStartedEvent(
+		wt.ScheduledEventID,
+		tv.RunID(),
+		tv.TaskQueue(),
+		tv.Any().String(),
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			return &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ctx, ms)}, nil
+		}).AnyTimes()
+
+	wfContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
+		tv.NamespaceID(),
+		tv.WorkflowExecution(),
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	s.NotNil(wfContext)
+
+	loadedMS, err := wfContext.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	s.NotNil(loadedMS)
+	release(nil)
+
+	taskToken := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      tv.NamespaceID().String(),
+		WorkflowId:       tv.WorkflowID(),
+		RunId:            tv.RunID(),
+		ScheduledEventId: wt.ScheduledEventID,
+	}
+	serializedTaskToken, err := taskToken.Marshal()
+	s.NoError(err)
 
 	return wfContext, serializedTaskToken
 }

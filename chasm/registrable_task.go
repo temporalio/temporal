@@ -6,6 +6,17 @@ import (
 	"reflect"
 )
 
+// SingletonTaskMode controls how the framework handles a new task of a singleton type
+// when a task of the same type already exists on the component instance.
+type SingletonTaskMode int
+
+const (
+	// SingletonTaskModeReplace removes the existing task and schedules the new one in its place.
+	SingletonTaskModeReplace SingletonTaskMode = iota + 1
+	// SingletonTaskModeIgnore keeps the existing task and discards the new one.
+	SingletonTaskModeIgnore
+)
+
 type (
 	RegistrableTask struct {
 		taskType                string
@@ -16,6 +27,8 @@ type (
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
 		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
 		isPureTask              bool
+		outboundTaskGroup       string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
+		singletonMode           SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -24,7 +37,7 @@ type (
 
 	RegistrableTaskOption func(*RegistrableTask)
 
-	validateFn              func(Context, any, TaskAttributes, any, *Registry) (bool, error)
+	validateFn              func(Context, any, TaskInvocation, any, *Registry) (bool, error)
 	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
 	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
 	sideEffectTaskDiscardFn func(context.Context, ComponentRef, TaskAttributes, any) error
@@ -44,14 +57,14 @@ func NewRegistrableSideEffectTask[C any, T any](
 		func(
 			ctx Context,
 			component any,
-			taskAttrs TaskAttributes,
+			taskInvocation TaskInvocation,
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
 			return handler.Validate(
 				ctx,
 				component.(C),
-				taskAttrs,
+				taskInvocation,
 				taskData.(T),
 			)
 		},
@@ -84,14 +97,14 @@ func NewRegistrablePureTask[C any, T any](
 		func(
 			ctx Context,
 			component any,
-			taskAttrs TaskAttributes,
+			taskInvocation TaskInvocation,
 			taskData any,
 			registry *Registry,
 		) (bool, error) {
 			return handler.Validate(
 				ctx,
 				component.(C),
-				taskAttrs,
+				taskInvocation,
 				taskData.(T),
 			)
 		},
@@ -155,7 +168,17 @@ func (rt *RegistrableTask) registerToLibrary(
 
 	fqn := rt.fqType()
 	rt.taskTypeID = GenerateTypeID(fqn)
+	// If outboundTaskGroup wasn't set on creation default it here,
+	// since this is the first place we will have the fqn.
+	if rt.outboundTaskGroup == "" {
+		rt.outboundTaskGroup = fqn
+	}
 	return fqn, rt.taskTypeID, nil
+}
+
+// TaskGroup returns the side-effect task group for the task.
+func (rt *RegistrableTask) TaskGroup() string {
+	return rt.outboundTaskGroup
 }
 
 // GoType returns the reflect.Type of the task's Go struct.
@@ -172,4 +195,28 @@ func (rt *RegistrableTask) fqType() string {
 		panic("task is not registered to a library")
 	}
 	return FullyQualifiedName(rt.library.Name(), rt.taskType)
+}
+
+// WithTaskGroup sets the task group for the task. The task group is used when
+// the side effect's destination is specified for grouping semantics on the outbound queue,
+// affects multi-cursor and the circuit breaker.
+// If task group isn't provided, the task group will default to the fully qualified name at library registration.
+func WithTaskGroup(taskgroup string) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.outboundTaskGroup = taskgroup
+	}
+}
+
+// WithSingletonTask configures the task type as a singleton: at most one task of this type
+// may exist per component instance at any time. The mode controls what happens when a new
+// task is added while one already exists:
+//   - [SingletonTaskModeReplace]: the existing task is removed and the new one takes its place.
+//   - [SingletonTaskModeIgnore]: the existing task is kept and the new one is discarded.
+//
+// Singleton semantics are enforced after task validation, so an invalid new task is dropped
+// before any replacement or ignore logic applies.
+func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.singletonMode = mode
+	}
 }

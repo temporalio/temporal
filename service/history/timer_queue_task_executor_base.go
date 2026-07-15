@@ -107,6 +107,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
+	// todo if we need add archetype id for loadMutableState
 	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	switch err.(type) {
 	case nil:
@@ -159,6 +160,11 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	return nil
 }
 
+// isValidExpirationTime returns true when the workflow is still running and
+// expirationTime has been reached. Callers pass fields from an execution
+// (e.g. WorkflowRunExpirationTime), which are stored in the execution's virtual
+// frame (if time skipping happens); this converts via ms.ToRealTime before
+// comparing to t.Now() because the timer queue dispatches against wall-clock.
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState historyi.MutableState,
 	task tasks.Task,
@@ -167,10 +173,8 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false
 	}
-
-	now := t.Now()
 	taskShouldTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(task, now, taskShouldTriggerAt)
+	expired := queues.IsTimeExpired(task, t.Now(), mutableState.ToRealTime(taskShouldTriggerAt))
 	return expired
 }
 
@@ -276,6 +280,7 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 	// truncated to a common (millisecond) precision later on.
 	//
 	// See also queues.IsTimeExpired.
+	// TODO@time-skipping: hasn's supported time skipping for CHASM system yet
 	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
 
 	return tree.EachPureTask(referenceTime, callback)
@@ -304,7 +309,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(task, t.Now(), group.Deadline.AsTime()) {
+		if !queues.IsTimeExpired(task, t.Now(), ms.ToRealTime(group.Deadline.AsTime())) {
 			break
 		}
 

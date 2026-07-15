@@ -825,7 +825,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.LoadAndSortActivityTimers()
-	s.EqualValues([]TimerSequenceID{
+	s.Equal([]TimerSequenceID{
 		{
 			EventID:      activityInfo.ScheduledEventId,
 			Timestamp:    activityInfo.StartedTime.AsTime().Add(activityInfo.StartToCloseTimeout.AsDuration()),

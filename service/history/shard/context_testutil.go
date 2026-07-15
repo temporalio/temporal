@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -144,7 +145,6 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		engineFuture:       future.NewFuture[historyi.Engine](),
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
-		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
 
 		clusterMetadata:      clusterMetadata,
 		timeSource:           t.TimeSource,
@@ -176,6 +176,14 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		},
 	)
 	ctx.taskKeyManager.setRangeID(config.ShardInfo.RangeId)
+	ctx.handoverTracker = NewDefaultHandoverTrackerFactory()(HandoverTrackerParams{
+		ClusterMetadata:         clusterMetadata,
+		GetMaxReplicationTaskID: ctx.getMaxReplicationTaskID,
+		ErrorByStateFn:          ctx.errorByState,
+		NotifyReplicationFn:     ctx.notifyReplicationQueueProcessor,
+		NamespaceRegistry:       registry,
+		Logger:                  ctx.contextTaggedLogger,
+	})
 	return ctx
 }
 
@@ -213,6 +221,10 @@ func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
 
 func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 	s.chasmRegistry = reg
+}
+
+func (s *ContextTest) SetChasmWorkflowRegistry(reg *chasmworkflow.Registry) {
+	s.chasmWorkflowRegistry = reg
 }
 
 func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {

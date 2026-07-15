@@ -22,12 +22,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -64,6 +66,7 @@ type (
 		config                  *configs.Config
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
+		testHooks               testhooks.TestHooks
 		replicationTaskExecutor TaskExecutor
 		dlqWriter               DLQWriter
 
@@ -99,6 +102,7 @@ func NewTaskProcessor(
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
+	testHooks testhooks.TestHooks,
 	dlqWriter DLQWriter,
 ) TaskProcessor {
 	shardID := shardContext.GetShardID()
@@ -125,6 +129,7 @@ func NewTaskProcessor(
 		config:                  config,
 		metricsHandler:          metricsHandler,
 		logger:                  shardContext.GetLogger(),
+		testHooks:               testHooks,
 		replicationTaskExecutor: replicationTaskExecutor,
 		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -313,7 +318,15 @@ func (p *taskProcessorImpl) handleReplicationTask(
 	operationTagValue := p.getOperationTagValue(replicationTask)
 
 	operation := func() error {
-		err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		var err error
+		// Tests use this hook to pause replication tasks before they are applied.
+		if hook, ok := testhooks.Get(p.testHooks, testhooks.HistoryReplicationTaskInterceptor, testhooks.GlobalScope); ok {
+			err = hook(replicationTask, func() error {
+				return p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+			})
+		} else {
+			err = p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		}
 		p.emitTaskMetrics(operationTagValue, err)
 		return err
 	}
@@ -337,8 +350,19 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 ) error {
 	_ = p.rateLimiter.Wait(ctx)
 
+	// Route the DLQ entry to the shard that owns the workflow on this (target) cluster,
+	// not the processor's shard. In cross-shard replication (source shard count < target
+	// shard count), the processor shard does not always equal the owner shard. Using
+	// p.config.GetShardID matches what handler.GetDLQReplicationMessages uses to dispatch,
+	// so the operator-facing "DLQ for workflow W is at GetShardID(W)" model holds.
+	targetShardID := p.config.GetShardID(
+		namespace.ID(request.TaskInfo.GetNamespaceId()),
+		request.TaskInfo.GetWorkflowId(),
+	)
+
 	p.logger.Info("enqueue replication task to DLQ",
-		tag.ShardID(p.shard.GetShardID()),
+		tag.TargetShardID(targetShardID),
+		tag.SourceShardID(p.sourceShardID),
 		tag.WorkflowNamespaceID(request.TaskInfo.GetNamespaceId()),
 		tag.WorkflowID(request.TaskInfo.GetWorkflowId()),
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
@@ -348,10 +372,10 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		float64(request.TaskInfo.GetTaskId()),
 		metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 		metrics.TargetClusterTag(p.sourceCluster),
-		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())))
+		metrics.InstanceTag(convert.Int32ToString(targetShardID)))
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := writeTaskToDLQ(ctx, p.dlqWriter, p.sourceShardID, request.SourceClusterName, p.shard.GetShardID(), request.TaskInfo)
+		err := writeTaskToDLQ(ctx, p.dlqWriter, p.sourceShardID, request.SourceClusterName, targetShardID, request.TaskInfo)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			metrics.ReplicationDLQFailed.With(p.metricsHandler).Record(
@@ -369,9 +393,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	switch replicationTask.TaskType {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
-			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:      taskAttributes.GetNamespaceId(),
@@ -402,9 +424,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		// NOTE: last event vs next event, next event ID is exclusive
 		nextEventID := lastEvent.GetEventId() + 1
 
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
-			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:    taskAttributes.GetNamespaceId(),
@@ -434,9 +454,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			return nil, err
 		}
 
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
-			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:    executionInfo.GetNamespaceId(),
@@ -452,9 +470,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
 		taskAttributes := replicationTask.GetSyncHsmAttributes()
 
-		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
 		return &persistence.PutReplicationTaskToDLQRequest{
-			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:    taskAttributes.GetNamespaceId(),

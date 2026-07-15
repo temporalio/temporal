@@ -84,6 +84,8 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		EagerExecutionAccepted:       req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:     request.InheritedAutoUpgradeInfo,
 		DeclinedTargetVersionUpgrade: request.DeclinedTargetVersionUpgrade,
+		TimeSkippingConfig:           req.GetTimeSkippingConfig(),
+		TimeSkippingStatePropagation: request.GetTimeSkippingStatePropagation(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -404,6 +406,9 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingConfigUpdated bool,
+	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -414,6 +419,9 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
 			Priority:                    priority,
+			TimeSkippingConfig:          timeSkippingConfig,
+			TimeSkippingConfigUpdated:   timeSkippingConfigUpdated,
+			WorkflowUpdateOptions:       workflowUpdateOptions,
 		},
 	}
 	event.Links = links
@@ -815,6 +823,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	identity string,
 	header *commonpb.Header,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	requestID string,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
@@ -825,6 +834,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 			Identity:                  identity,
 			Header:                    header,
 			ExternalWorkflowExecution: externalWorkflowExecution,
+			RequestId:                 requestID,
 		},
 	}
 	event.Links = links
@@ -835,6 +845,8 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	targetNamespaceID namespace.ID,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
@@ -857,11 +869,14 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			// Filter nil values here rather than in the API layer because not all
 			// creation paths go through the frontend (continue-as-new, child workflows, replication).
 			// This CaN event is created on the parent workflow, so we need to filter nil values here.
-			Memo:              payload.FilterNilMemo(command.Memo),
-			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
-			ParentClosePolicy: command.GetParentClosePolicy(),
-			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
-			Priority:          command.Priority,
+			Memo:                         payload.FilterNilMemo(command.Memo),
+			SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy:            command.GetParentClosePolicy(),
+			InheritBuildId:               command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
+			VersioningOverride:           worker_versioning.ConvertOverrideToV32(command.GetVersioningOverride()),
+			Priority:                     command.Priority,
+			TimeSkippingConfig:           timeSkippingConfig,
+			TimeSkippingStatePropagation: timeSkippingStatePropagation,
 		},
 	}
 	return event
@@ -1078,4 +1093,26 @@ func (b *EventFactory) createHistoryEvent(
 	historyEvent.TaskId = common.EmptyEventTaskID
 
 	return historyEvent
+}
+
+// CreateWorkflowExecutionTimeSkippingTransitionedEvent creates a workflow execution time skipping transitioned event.
+// If no time needs to be skipped, the targetTime should be zero time.
+// If the time skipping shouldn't be disabled, triggeredDisable should be false.
+// This method shouldn't be generated when there is no time to skip and no need to disable time skipping.
+func (b *EventFactory) CreateWorkflowExecutionTimeSkippingTransitionedEvent(
+	targetTime time.Time,
+	triggeredDisable bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, b.timeSource.Now())
+	transitionedAttr := &historypb.WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WallClockTime:            timestamppb.New(b.timeSource.Now()),
+		DisabledAfterFastForward: triggeredDisable,
+	}
+	if !targetTime.IsZero() {
+		transitionedAttr.TargetTime = timestamppb.New(targetTime.UTC())
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimeSkippingTransitionedEventAttributes{
+		WorkflowExecutionTimeSkippingTransitionedEventAttributes: transitionedAttr,
+	}
+	return event
 }

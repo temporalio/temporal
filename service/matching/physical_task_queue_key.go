@@ -117,6 +117,8 @@ func (q *PhysicalTaskQueueKey) PersistenceName() string {
 	switch p := q.Partition().(type) {
 	case *tqid.StickyPartition:
 		return p.StickyName()
+	case *tqid.WorkerCommandsPartition:
+		return p.TaskQueue().Name()
 	case *tqid.NormalPartition:
 		baseName := q.TaskQueueFamily().Name()
 

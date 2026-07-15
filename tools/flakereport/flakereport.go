@@ -9,6 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/common/github"
 )
 
 const (
@@ -115,7 +116,7 @@ func NewCliApp() *cli.App {
 
 // fetchAndAnalyzeWorkflowRuns fetches workflow runs between since and until and counts successes.
 // until is zero for an open-ended (up to now) window.
-func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, int, error) {
+func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.Run, int, error) {
 	fmt.Println("\n=== Fetching workflow runs ===")
 	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, since, until)
 	if err != nil {
@@ -141,32 +142,32 @@ func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID in
 }
 
 // collectArtifactJobs collects all artifact jobs from workflow runs
-func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, tempDir string) ([]ArtifactJob, error) {
+func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, tempDir string) ([]ArtifactJob, error) {
 	fmt.Println("\n=== Collecting artifacts ===")
 	var jobs []ArtifactJob
 	totalArtifacts := 0
 
 	for i, run := range runs {
-		artifacts, err := fetchRunArtifacts(ctx, repo, run.ID)
+		artifacts, err := fetchRunArtifacts(ctx, repo, run.DatabaseID)
 		if err != nil {
-			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.ID, err)
+			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.DatabaseID, err)
 			continue
 		}
 
 		if len(artifacts) == 0 {
 			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n",
-				i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano))
+				i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano))
 			continue
 		}
 
 		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n",
-			i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
+			i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
 
 		for _, artifact := range artifacts {
 			totalArtifacts++
 			jobs = append(jobs, ArtifactJob{
 				Repo:         repo,
-				RunID:        run.ID,
+				RunID:        run.DatabaseID,
 				RunCreatedAt: run.CreatedAt,
 				Artifact:     artifact,
 				TempDir:      tempDir,
@@ -184,7 +185,7 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, t
 // buildReportSummary builds the complete report summary from processed data
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
-	allFailures []TestFailure, allTestRuns []TestRun, runs []WorkflowRun, successfulRuns int) *ReportSummary {
+	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
@@ -301,10 +302,11 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
 
 	// Convert to reports with failure rates and sort
-	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks)
-	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks)
-	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks)
-	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks)
+	reportWindow := newReportWindow(reportSince, now)
+	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks, reportWindow)
+	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks, reportWindow)
+	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks, reportWindow)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks, reportWindow)
 
 	// Compute suite-level breakdown
 	suiteReports := generateSuiteReports(allFailures, allTestRuns)

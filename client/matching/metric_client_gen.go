@@ -51,6 +51,20 @@ func (c *metricClient) CancelOutstandingWorkerPolls(
 	return c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
 }
 
+func (c *metricClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPollsPartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+}
+
 func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -77,6 +91,20 @@ func (c *metricClient) CheckTaskQueueVersionMembership(
 	}()
 
 	return c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+}
+
+func (c *metricClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CountWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCountWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountWorkers(ctx, request, opts...)
 }
 
 func (c *metricClient) CreateNexusEndpoint(
@@ -161,20 +189,6 @@ func (c *metricClient) DescribeWorker(
 	}()
 
 	return c.client.DescribeWorker(ctx, request, opts...)
-}
-
-func (c *metricClient) DispatchNexusTask(
-	ctx context.Context,
-	request *matchingservice.DispatchNexusTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientDispatchNexusTask")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.DispatchNexusTask(ctx, request, opts...)
 }
 
 func (c *metricClient) ForceLoadTaskQueuePartition(
@@ -315,20 +329,6 @@ func (c *metricClient) ListWorkers(
 	}()
 
 	return c.client.ListWorkers(ctx, request, opts...)
-}
-
-func (c *metricClient) PollNexusTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollNexusTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientPollNexusTaskQueue")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) RecordWorkerHeartbeat(

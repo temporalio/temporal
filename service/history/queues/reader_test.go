@@ -101,6 +101,7 @@ func (s *readerSuite) TestStartLoadStop() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -188,7 +189,7 @@ func (s *readerSuite) TestMergeSlices() {
 
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -217,7 +218,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes[2].Predicate = predicates.Empty[tasks.Task]()
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -292,6 +293,7 @@ func (s *readerSuite) TestPause() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -362,6 +364,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 				mockTask := tasks.NewMockTask(s.controller)
 				mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+				mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 				mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 				result = append(result, mockTask)
 			}
@@ -398,6 +401,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -431,6 +435,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -495,7 +500,7 @@ func (s *readerSuite) validateSlicesOrdered(
 	}
 
 	for idx := range scopes[:len(scopes)-1] {
-		s.True(scopes[idx].Range.ExclusiveMax.CompareTo(scopes[idx+1].Range.InclusiveMin) <= 0)
+		s.LessOrEqual(scopes[idx].Range.ExclusiveMax.CompareTo(scopes[idx+1].Range.InclusiveMin), 0)
 	}
 }
 
@@ -506,7 +511,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		slices = append(slices, slice)
 	}
 

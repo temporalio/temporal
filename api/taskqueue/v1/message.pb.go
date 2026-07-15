@@ -477,7 +477,8 @@ func (x *PhysicalTaskQueueInfo) GetTaskQueueStatsByPriorityKey() map[int32]*v13.
 	return nil
 }
 
-// Represents a normal or sticky partition of a task queue.
+// Internal representation of a task queue partition, used for server-to-server RPCs.
+// This is the internal equivalent of temporal.api.taskqueue.v1.TaskQueue.
 type TaskQueuePartition struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// This is the user-facing name for this task queue
@@ -489,6 +490,7 @@ type TaskQueuePartition struct {
 	//
 	//	*TaskQueuePartition_NormalPartitionId
 	//	*TaskQueuePartition_StickyName
+	//	*TaskQueuePartition_WorkerCommands
 	PartitionId   isTaskQueuePartition_PartitionId `protobuf_oneof:"partition_id"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -563,6 +565,15 @@ func (x *TaskQueuePartition) GetStickyName() string {
 	return ""
 }
 
+func (x *TaskQueuePartition) GetWorkerCommands() *WorkerCommandsPartitionId {
+	if x != nil {
+		if x, ok := x.PartitionId.(*TaskQueuePartition_WorkerCommands); ok {
+			return x.WorkerCommands
+		}
+	}
+	return nil
+}
+
 type isTaskQueuePartition_PartitionId interface {
 	isTaskQueuePartition_PartitionId()
 }
@@ -575,9 +586,51 @@ type TaskQueuePartition_StickyName struct {
 	StickyName string `protobuf:"bytes,4,opt,name=sticky_name,json=stickyName,proto3,oneof"`
 }
 
+type TaskQueuePartition_WorkerCommands struct {
+	WorkerCommands *WorkerCommandsPartitionId `protobuf:"bytes,5,opt,name=worker_commands,json=workerCommands,proto3,oneof"`
+}
+
 func (*TaskQueuePartition_NormalPartitionId) isTaskQueuePartition_PartitionId() {}
 
 func (*TaskQueuePartition_StickyName) isTaskQueuePartition_PartitionId() {}
+
+func (*TaskQueuePartition_WorkerCommands) isTaskQueuePartition_PartitionId() {}
+
+type WorkerCommandsPartitionId struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerCommandsPartitionId) Reset() {
+	*x = WorkerCommandsPartitionId{}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerCommandsPartitionId) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerCommandsPartitionId) ProtoMessage() {}
+
+func (x *WorkerCommandsPartitionId) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerCommandsPartitionId.ProtoReflect.Descriptor instead.
+func (*WorkerCommandsPartitionId) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{6}
+}
 
 // Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
 // Deprecated.
@@ -593,7 +646,7 @@ type BuildIdRedirectInfo struct {
 
 func (x *BuildIdRedirectInfo) Reset() {
 	*x = BuildIdRedirectInfo{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -605,7 +658,7 @@ func (x *BuildIdRedirectInfo) String() string {
 func (*BuildIdRedirectInfo) ProtoMessage() {}
 
 func (x *BuildIdRedirectInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[6]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -618,7 +671,7 @@ func (x *BuildIdRedirectInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildIdRedirectInfo.ProtoReflect.Descriptor instead.
 func (*BuildIdRedirectInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BuildIdRedirectInfo) GetAssignedBuildId() string {
@@ -660,7 +713,7 @@ type TaskForwardInfo struct {
 
 func (x *TaskForwardInfo) Reset() {
 	*x = TaskForwardInfo{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -672,7 +725,7 @@ func (x *TaskForwardInfo) String() string {
 func (*TaskForwardInfo) ProtoMessage() {}
 
 func (x *TaskForwardInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -685,7 +738,7 @@ func (x *TaskForwardInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskForwardInfo.ProtoReflect.Descriptor instead.
 func (*TaskForwardInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TaskForwardInfo) GetSourcePartition() string {
@@ -742,15 +795,17 @@ func (x *TaskForwardInfo) GetDispatchVersionSet() string {
 // task queue family (all queues with the same name, across types), ephemeral data applies only to
 // one type at a time.
 type EphemeralData struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Partition     []*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3" json:"partition,omitempty"`
+	state     protoimpl.MessageState       `protogen:"open.v1"`
+	Partition []*EphemeralData_ByPartition `protobuf:"bytes,1,rep,name=partition,proto3" json:"partition,omitempty"`
+	// Current state of dynamic partition scaling
+	Scale         *PartitionScaleInfo `protobuf:"bytes,2,opt,name=scale,proto3" json:"scale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EphemeralData) Reset() {
 	*x = EphemeralData{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +817,7 @@ func (x *EphemeralData) String() string {
 func (*EphemeralData) ProtoMessage() {}
 
 func (x *EphemeralData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,12 +830,19 @@ func (x *EphemeralData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemeralData.ProtoReflect.Descriptor instead.
 func (*EphemeralData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EphemeralData) GetPartition() []*EphemeralData_ByPartition {
 	if x != nil {
 		return x.Partition
+	}
+	return nil
+}
+
+func (x *EphemeralData) GetScale() *PartitionScaleInfo {
+	if x != nil {
+		return x.Scale
 	}
 	return nil
 }
@@ -795,7 +857,7 @@ type VersionedEphemeralData struct {
 
 func (x *VersionedEphemeralData) Reset() {
 	*x = VersionedEphemeralData{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -807,7 +869,7 @@ func (x *VersionedEphemeralData) String() string {
 func (*VersionedEphemeralData) ProtoMessage() {}
 
 func (x *VersionedEphemeralData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -820,7 +882,7 @@ func (x *VersionedEphemeralData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionedEphemeralData.ProtoReflect.Descriptor instead.
 func (*VersionedEphemeralData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{9}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *VersionedEphemeralData) GetData() *EphemeralData {
@@ -833,6 +895,126 @@ func (x *VersionedEphemeralData) GetData() *EphemeralData {
 func (x *VersionedEphemeralData) GetVersion() int64 {
 	if x != nil {
 		return x.Version
+	}
+	return 0
+}
+
+// PartitionScaleInfo is propagated among task queue partitions in ephemeral data.
+type PartitionScaleInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Read  int32                  `protobuf:"varint,1,opt,name=read,proto3" json:"read,omitempty"`
+	Write int32                  `protobuf:"varint,2,opt,name=write,proto3" json:"write,omitempty"`
+	// version identifies a specific version of the scale state, which changes when the target
+	// number of partitions (i.e. the write count) changes. It may not change for other changes
+	// to scale state/info. This is used by the scale manager to know that a partition is
+	// operating with the latest scale info, to avoid ABA problems, i.e. to differentiate from a
+	// previous version whose read and write counts happen to be the same numbers.
+	Version       int64 `protobuf:"fixed64,10,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PartitionScaleInfo) Reset() {
+	*x = PartitionScaleInfo{}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartitionScaleInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartitionScaleInfo) ProtoMessage() {}
+
+func (x *PartitionScaleInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartitionScaleInfo.ProtoReflect.Descriptor instead.
+func (*PartitionScaleInfo) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *PartitionScaleInfo) GetRead() int32 {
+	if x != nil {
+		return x.Read
+	}
+	return 0
+}
+
+func (x *PartitionScaleInfo) GetWrite() int32 {
+	if x != nil {
+		return x.Write
+	}
+	return 0
+}
+
+func (x *PartitionScaleInfo) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// ClientPartitionCounts is propagated from the matching service to clients in grpc headers/trailers.
+// It may be a subset of PartitionScaleInfo.
+type ClientPartitionCounts struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Read          int32                  `protobuf:"varint,1,opt,name=read,proto3" json:"read,omitempty"`
+	Write         int32                  `protobuf:"varint,2,opt,name=write,proto3" json:"write,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientPartitionCounts) Reset() {
+	*x = ClientPartitionCounts{}
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientPartitionCounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientPartitionCounts) ProtoMessage() {}
+
+func (x *ClientPartitionCounts) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientPartitionCounts.ProtoReflect.Descriptor instead.
+func (*ClientPartitionCounts) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ClientPartitionCounts) GetRead() int32 {
+	if x != nil {
+		return x.Read
+	}
+	return 0
+}
+
+func (x *ClientPartitionCounts) GetWrite() int32 {
+	if x != nil {
+		return x.Write
 	}
 	return 0
 }
@@ -851,7 +1033,7 @@ type EphemeralData_ByVersion struct {
 
 func (x *EphemeralData_ByVersion) Reset() {
 	*x = EphemeralData_ByVersion{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -863,7 +1045,7 @@ func (x *EphemeralData_ByVersion) String() string {
 func (*EphemeralData_ByVersion) ProtoMessage() {}
 
 func (x *EphemeralData_ByVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -876,7 +1058,7 @@ func (x *EphemeralData_ByVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemeralData_ByVersion.ProtoReflect.Descriptor instead.
 func (*EphemeralData_ByVersion) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8, 0}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{9, 0}
 }
 
 func (x *EphemeralData_ByVersion) GetVersion() *v12.WorkerDeploymentVersion {
@@ -903,7 +1085,7 @@ type EphemeralData_ByPartition struct {
 
 func (x *EphemeralData_ByPartition) Reset() {
 	*x = EphemeralData_ByPartition{}
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[12]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +1097,7 @@ func (x *EphemeralData_ByPartition) String() string {
 func (*EphemeralData_ByPartition) ProtoMessage() {}
 
 func (x *EphemeralData_ByPartition) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[12]
+	mi := &file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +1110,7 @@ func (x *EphemeralData_ByPartition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemeralData_ByPartition.ProtoReflect.Descriptor instead.
 func (*EphemeralData_ByPartition) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{8, 1}
+	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP(), []int{9, 1}
 }
 
 func (x *EphemeralData_ByPartition) GetPartition() int32 {
@@ -988,15 +1170,17 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	" task_queue_stats_by_priority_key\x18\x04 \x03(\v2X.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntryR\x1btaskQueueStatsByPriorityKey\x1ay\n" +
 	" TaskQueueStatsByPriorityKeyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12?\n" +
-	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\xe6\x01\n" +
+	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\xce\x02\n" +
 	"\x12TaskQueuePartition\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x01 \x01(\tR\ttaskQueue\x12L\n" +
 	"\x0ftask_queue_type\x18\x02 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x120\n" +
 	"\x13normal_partition_id\x18\x03 \x01(\x05H\x00R\x11normalPartitionId\x12!\n" +
 	"\vsticky_name\x18\x04 \x01(\tH\x00R\n" +
-	"stickyNameB\x0e\n" +
-	"\fpartition_id\"A\n" +
+	"stickyName\x12f\n" +
+	"\x0fworker_commands\x18\x05 \x01(\v2;.temporal.server.api.taskqueue.v1.WorkerCommandsPartitionIdH\x00R\x0eworkerCommandsB\x0e\n" +
+	"\fpartition_id\"\x1b\n" +
+	"\x19WorkerCommandsPartitionId\"A\n" +
 	"\x13BuildIdRedirectInfo\x12*\n" +
 	"\x11assigned_build_id\x18\x01 \x01(\tR\x0fassignedBuildId\"\xa9\x03\n" +
 	"\x0fTaskForwardInfo\x12)\n" +
@@ -1008,9 +1192,10 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"createTime\x12Z\n" +
 	"\rredirect_info\x18\x03 \x01(\v25.temporal.server.api.taskqueue.v1.BuildIdRedirectInfoR\fredirectInfo\x12*\n" +
 	"\x11dispatch_build_id\x18\x04 \x01(\tR\x0fdispatchBuildId\x120\n" +
-	"\x14dispatch_version_set\x18\x05 \x01(\tR\x12dispatchVersionSet\"\x89\x03\n" +
+	"\x14dispatch_version_set\x18\x05 \x01(\tR\x12dispatchVersionSet\"\xd5\x03\n" +
 	"\rEphemeralData\x12Y\n" +
-	"\tpartition\x18\x01 \x03(\v2;.temporal.server.api.taskqueue.v1.EphemeralData.ByPartitionR\tpartition\x1a\x99\x01\n" +
+	"\tpartition\x18\x01 \x03(\v2;.temporal.server.api.taskqueue.v1.EphemeralData.ByPartitionR\tpartition\x12J\n" +
+	"\x05scale\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.PartitionScaleInfoR\x05scale\x1a\x99\x01\n" +
 	"\tByVersion\x12T\n" +
 	"\aversion\x18\x01 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionR\aversion\x126\n" +
 	"\x17backlog_priority_levels\x18\x02 \x01(\x03R\x15backlogPriorityLevels\x1a\x80\x01\n" +
@@ -1019,7 +1204,15 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x03(\v29.temporal.server.api.taskqueue.v1.EphemeralData.ByVersionR\aversion\"w\n" +
 	"\x16VersionedEphemeralData\x12C\n" +
 	"\x04data\x18\x01 \x01(\v2/.temporal.server.api.taskqueue.v1.EphemeralDataR\x04data\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversionB2Z0go.temporal.io/server/api/taskqueue/v1;taskqueueb\x06proto3"
+	"\aversion\x18\x02 \x01(\x03R\aversion\"X\n" +
+	"\x12PartitionScaleInfo\x12\x12\n" +
+	"\x04read\x18\x01 \x01(\x05R\x04read\x12\x14\n" +
+	"\x05write\x18\x02 \x01(\x05R\x05write\x12\x18\n" +
+	"\aversion\x18\n" +
+	" \x01(\x10R\aversion\"A\n" +
+	"\x15ClientPartitionCounts\x12\x12\n" +
+	"\x04read\x18\x01 \x01(\x05R\x04read\x12\x14\n" +
+	"\x05write\x18\x02 \x01(\x05R\x05writeB2Z0go.temporal.io/server/api/taskqueue/v1;taskqueueb\x06proto3"
 
 var (
 	file_temporal_server_api_taskqueue_v1_message_proto_rawDescOnce sync.Once
@@ -1033,7 +1226,7 @@ func file_temporal_server_api_taskqueue_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_taskqueue_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_taskqueue_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_temporal_server_api_taskqueue_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(*TaskVersionDirective)(nil),         // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective
 	(*FairLevel)(nil),                    // 1: temporal.server.api.taskqueue.v1.FairLevel
@@ -1041,52 +1234,57 @@ var file_temporal_server_api_taskqueue_v1_message_proto_goTypes = []any{
 	(*TaskQueueVersionInfoInternal)(nil), // 3: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
 	(*PhysicalTaskQueueInfo)(nil),        // 4: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo
 	(*TaskQueuePartition)(nil),           // 5: temporal.server.api.taskqueue.v1.TaskQueuePartition
-	(*BuildIdRedirectInfo)(nil),          // 6: temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	(*TaskForwardInfo)(nil),              // 7: temporal.server.api.taskqueue.v1.TaskForwardInfo
-	(*EphemeralData)(nil),                // 8: temporal.server.api.taskqueue.v1.EphemeralData
-	(*VersionedEphemeralData)(nil),       // 9: temporal.server.api.taskqueue.v1.VersionedEphemeralData
-	nil,                                  // 10: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry
-	(*EphemeralData_ByVersion)(nil),      // 11: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
-	(*EphemeralData_ByPartition)(nil),    // 12: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition
-	(*emptypb.Empty)(nil),                // 13: google.protobuf.Empty
-	(v1.VersioningBehavior)(0),           // 14: temporal.api.enums.v1.VersioningBehavior
-	(*v11.Deployment)(nil),               // 15: temporal.api.deployment.v1.Deployment
-	(*v12.WorkerDeploymentVersion)(nil),  // 16: temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	(*v13.TaskIdBlock)(nil),              // 17: temporal.api.taskqueue.v1.TaskIdBlock
-	(*v13.PollerInfo)(nil),               // 18: temporal.api.taskqueue.v1.PollerInfo
-	(*v13.TaskQueueStats)(nil),           // 19: temporal.api.taskqueue.v1.TaskQueueStats
-	(v1.TaskQueueType)(0),                // 20: temporal.api.enums.v1.TaskQueueType
-	(v14.TaskSource)(0),                  // 21: temporal.server.api.enums.v1.TaskSource
-	(*timestamppb.Timestamp)(nil),        // 22: google.protobuf.Timestamp
+	(*WorkerCommandsPartitionId)(nil),    // 6: temporal.server.api.taskqueue.v1.WorkerCommandsPartitionId
+	(*BuildIdRedirectInfo)(nil),          // 7: temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	(*TaskForwardInfo)(nil),              // 8: temporal.server.api.taskqueue.v1.TaskForwardInfo
+	(*EphemeralData)(nil),                // 9: temporal.server.api.taskqueue.v1.EphemeralData
+	(*VersionedEphemeralData)(nil),       // 10: temporal.server.api.taskqueue.v1.VersionedEphemeralData
+	(*PartitionScaleInfo)(nil),           // 11: temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	(*ClientPartitionCounts)(nil),        // 12: temporal.server.api.taskqueue.v1.ClientPartitionCounts
+	nil,                                  // 13: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry
+	(*EphemeralData_ByVersion)(nil),      // 14: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
+	(*EphemeralData_ByPartition)(nil),    // 15: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition
+	(*emptypb.Empty)(nil),                // 16: google.protobuf.Empty
+	(v1.VersioningBehavior)(0),           // 17: temporal.api.enums.v1.VersioningBehavior
+	(*v11.Deployment)(nil),               // 18: temporal.api.deployment.v1.Deployment
+	(*v12.WorkerDeploymentVersion)(nil),  // 19: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*v13.TaskIdBlock)(nil),              // 20: temporal.api.taskqueue.v1.TaskIdBlock
+	(*v13.PollerInfo)(nil),               // 21: temporal.api.taskqueue.v1.PollerInfo
+	(*v13.TaskQueueStats)(nil),           // 22: temporal.api.taskqueue.v1.TaskQueueStats
+	(v1.TaskQueueType)(0),                // 23: temporal.api.enums.v1.TaskQueueType
+	(v14.TaskSource)(0),                  // 24: temporal.server.api.enums.v1.TaskSource
+	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
 }
 var file_temporal_server_api_taskqueue_v1_message_proto_depIdxs = []int32{
-	13, // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective.use_assignment_rules:type_name -> google.protobuf.Empty
-	14, // 1: temporal.server.api.taskqueue.v1.TaskVersionDirective.behavior:type_name -> temporal.api.enums.v1.VersioningBehavior
-	15, // 2: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment:type_name -> temporal.api.deployment.v1.Deployment
-	16, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	16, // 0: temporal.server.api.taskqueue.v1.TaskVersionDirective.use_assignment_rules:type_name -> google.protobuf.Empty
+	17, // 1: temporal.server.api.taskqueue.v1.TaskVersionDirective.behavior:type_name -> temporal.api.enums.v1.VersioningBehavior
+	18, // 2: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment:type_name -> temporal.api.deployment.v1.Deployment
+	19, // 3: temporal.server.api.taskqueue.v1.TaskVersionDirective.deployment_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
 	1,  // 4: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.fair_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
 	1,  // 5: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.fair_ack_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
-	17, // 6: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock
+	20, // 6: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.task_id_block:type_name -> temporal.api.taskqueue.v1.TaskIdBlock
 	1,  // 7: temporal.server.api.taskqueue.v1.InternalTaskQueueStatus.fair_max_read_level:type_name -> temporal.server.api.taskqueue.v1.FairLevel
 	4,  // 8: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal.physical_task_queue_info:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo
-	18, // 9: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
+	21, // 9: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.pollers:type_name -> temporal.api.taskqueue.v1.PollerInfo
 	2,  // 10: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.internal_task_queue_status:type_name -> temporal.server.api.taskqueue.v1.InternalTaskQueueStatus
-	19, // 11: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	10, // 12: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats_by_priority_key:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry
-	20, // 13: temporal.server.api.taskqueue.v1.TaskQueuePartition.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	21, // 14: temporal.server.api.taskqueue.v1.TaskForwardInfo.task_source:type_name -> temporal.server.api.enums.v1.TaskSource
-	22, // 15: temporal.server.api.taskqueue.v1.TaskForwardInfo.create_time:type_name -> google.protobuf.Timestamp
-	6,  // 16: temporal.server.api.taskqueue.v1.TaskForwardInfo.redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	12, // 17: temporal.server.api.taskqueue.v1.EphemeralData.partition:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByPartition
-	8,  // 18: temporal.server.api.taskqueue.v1.VersionedEphemeralData.data:type_name -> temporal.server.api.taskqueue.v1.EphemeralData
-	19, // 19: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	16, // 20: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	11, // 21: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition.version:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	22, // 11: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	13, // 12: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.task_queue_stats_by_priority_key:type_name -> temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry
+	23, // 13: temporal.server.api.taskqueue.v1.TaskQueuePartition.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	6,  // 14: temporal.server.api.taskqueue.v1.TaskQueuePartition.worker_commands:type_name -> temporal.server.api.taskqueue.v1.WorkerCommandsPartitionId
+	24, // 15: temporal.server.api.taskqueue.v1.TaskForwardInfo.task_source:type_name -> temporal.server.api.enums.v1.TaskSource
+	25, // 16: temporal.server.api.taskqueue.v1.TaskForwardInfo.create_time:type_name -> google.protobuf.Timestamp
+	7,  // 17: temporal.server.api.taskqueue.v1.TaskForwardInfo.redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	15, // 18: temporal.server.api.taskqueue.v1.EphemeralData.partition:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByPartition
+	11, // 19: temporal.server.api.taskqueue.v1.EphemeralData.scale:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	9,  // 20: temporal.server.api.taskqueue.v1.VersionedEphemeralData.data:type_name -> temporal.server.api.taskqueue.v1.EphemeralData
+	22, // 21: temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	19, // 22: temporal.server.api.taskqueue.v1.EphemeralData.ByVersion.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	14, // 23: temporal.server.api.taskqueue.v1.EphemeralData.ByPartition.version:type_name -> temporal.server.api.taskqueue.v1.EphemeralData.ByVersion
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_taskqueue_v1_message_proto_init() }
@@ -1101,6 +1299,7 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 	file_temporal_server_api_taskqueue_v1_message_proto_msgTypes[5].OneofWrappers = []any{
 		(*TaskQueuePartition_NormalPartitionId)(nil),
 		(*TaskQueuePartition_StickyName)(nil),
+		(*TaskQueuePartition_WorkerCommands)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1108,7 +1307,7 @@ func file_temporal_server_api_taskqueue_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc), len(file_temporal_server_api_taskqueue_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -1,7 +1,9 @@
 package shard
 
 import (
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -47,6 +49,7 @@ type (
 		HostInfoProvider            membership.HostInfoProvider
 		Logger                      log.Logger
 		MetricsHandler              metrics.Handler
+		EventLogger                 otellog.Logger
 		NamespaceRegistry           namespace.Registry
 		PayloadSerializer           serialization.Serializer
 		PersistenceExecutionManager persistence.ExecutionManager
@@ -58,9 +61,11 @@ type (
 		TaskCategoryRegistry        tasks.TaskCategoryRegistry
 		EventsCache                 events.Cache
 
-		StateMachineRegistry *hsm.Registry
-		ChasmRegistry        *chasm.Registry
-		EndpointRegistry     commonnexus.EndpointRegistry
+		StateMachineRegistry   *hsm.Registry
+		ChasmRegistry          *chasm.Registry
+		ChasmWorkflowRegistry  *chasmworkflow.Registry
+		EndpointRegistry       commonnexus.EndpointRegistry
+		HandoverTrackerFactory HandoverTrackerFactory
 	}
 
 	contextFactoryImpl struct {
@@ -91,6 +96,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ClientBean,
 		c.HistoryClient,
 		c.MetricsHandler,
+		c.EventLogger,
 		c.PayloadSerializer,
 		c.TimeSource,
 		c.NamespaceRegistry,
@@ -103,7 +109,9 @@ func (c *contextFactoryImpl) CreateContext(
 		c.EventsCache,
 		c.StateMachineRegistry,
 		c.ChasmRegistry,
+		c.ChasmWorkflowRegistry,
 		c.EndpointRegistry,
+		c.HandoverTrackerFactory,
 	)
 	if err != nil {
 		return nil, err

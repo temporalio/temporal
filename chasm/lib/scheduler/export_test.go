@@ -13,8 +13,14 @@ import (
 
 // Export unexported methods for testing.
 
+// ExecutionStatus search-attribute values, exported for tests.
+var (
+	ExecutionStatusRunning   = executionStatusRunning
+	ExecutionStatusCompleted = executionStatusCompleted
+)
+
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder())
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {
@@ -36,4 +42,17 @@ func (s *Scheduler) RecordCompletedAction(
 
 func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
+}
+
+// RecordExecuteResult exposes recordExecuteResult so tests can pin the
+// per-RequestId idempotency guard against concurrent ExecuteTasks.
+func (i *Invoker) RecordExecuteResult(
+	ctx chasm.MutableContext,
+	completed []*schedulespb.BufferedStart,
+	retryable []*schedulespb.BufferedStart,
+) (newlyStarted, droppedDuplicates int) {
+	return i.recordExecuteResult(ctx, &executeResult{
+		CompletedStarts: completed,
+		RetryableStarts: retryable,
+	})
 }

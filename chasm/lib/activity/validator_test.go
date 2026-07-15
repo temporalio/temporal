@@ -46,6 +46,12 @@ var (
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
 	}
+	defaultMaxLinksPerRequest = func(ns string) int {
+		return 10
+	}
+	defaultLinkMaxSize = func(ns string) int {
+		return 4000
+	}
 )
 
 func TestValidateSuccess(t *testing.T) {
@@ -313,7 +319,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 }
 
 func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
-	t.Run("Allow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Allow PerNSWorkerTaskQueue TaskQueue on the same TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -332,7 +338,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue from non-internal TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -685,6 +691,101 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
+	})
+}
+
+func TestValidateStartDelay(t *testing.T) {
+	t.Run("NilDuration", func(t *testing.T) {
+		err := validateStartDelay(nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("ZeroDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(0))
+		require.NoError(t, err)
+	})
+
+	t.Run("ValidDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(5 * time.Second))
+		require.NoError(t, err)
+	})
+
+	t.Run("NegativeDuration", func(t *testing.T) {
+		err := validateStartDelay(durationpb.New(-1 * time.Second))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "invalid StartDelay")
+	})
+}
+
+func TestValidateOnConflictOptions(t *testing.T) {
+	t.Run("NilOptions", func(t *testing.T) {
+		require.NoError(t, validateOnConflictOptions(&workflowservice.StartActivityExecutionRequest{}))
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithCallback", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{{}},
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachLinksOnly", func(t *testing.T) {
+		// Links do not require a request ID; this combination must remain valid.
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{AttachLinks: true},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachRequestIdWithLink", func(t *testing.T) {
+		// A request ID alongside a link is valid (request ID has something to attach to).
+		req := &workflowservice.StartActivityExecutionRequest{
+			Links: []*commonpb.Link{{}},
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId: true,
+				AttachLinks:     true,
+			},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachCallbacksWithoutRequestId", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{{}},
+			OnConflictOptions:   &commonpb.OnConflictOptions{AttachCompletionCallbacks: true},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_completion_callbacks requires attach_request_id")
+	})
+
+	t.Run("AttachRequestIdWithoutCallbackOrLink", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{AttachRequestId: true},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
 	})
 }
 

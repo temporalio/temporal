@@ -183,7 +183,6 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcr
 	env := s.env
 
 	for _, run := range runs {
-		run := run // capture fresh value
 		// set up start
 		matchStart := mock.MatchedBy(func(req *schedulespb.StartWorkflowRequest) bool {
 			return req.Request.WorkflowId == run.id
@@ -290,7 +289,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.True(s.env.IsWorkflowCompleted())
 			result := s.env.GetWorkflowError()
 			var canErr *workflow.ContinueAsNewError
-			s.Require().True(errors.As(result, &canErr), "result: %v", result)
+			s.Require().ErrorAs(result, &canErr, "result: %v", result)
 
 			s.env.AssertExpectations(s.T())
 
@@ -303,7 +302,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
+		s.Require().Lenf(state.started, len(runs), "started %#v", state.started)
 		for _, run := range runs {
 			actual := state.started[run.id]
 			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
@@ -1356,7 +1355,6 @@ func (s *workflowSuite) TestHugeBackfillAllowAll() {
 
 	delayedCallbacks := make([]delayedCallback, backfills)
 	for i := range delayedCallbacks {
-		i := i
 		delayedCallbacks[i] = delayedCallback{
 			// test environment seems to get confused if the callback falls on the same instant
 			// as a workflow timer, so use an odd interval to force it to be different.
@@ -1424,7 +1422,6 @@ func (s *workflowSuite) TestHugeBackfillBuffer() {
 
 	delayedCallbacks := make([]delayedCallback, backfills)
 	for i := range delayedCallbacks {
-		i := i
 		delayedCallbacks[i] = delayedCallback{
 			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
 			f: func() {
@@ -1888,26 +1885,26 @@ func (s *workflowSuite) TestLimitedActions() {
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
-		s.Equal(2, len(desc.Info.FutureActionTimes))
+		s.Len(desc.Info.FutureActionTimes, 2)
 	}, 1*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
-		s.Equal(1, len(desc.Info.FutureActionTimes))
+		s.Len(desc.Info.FutureActionTimes, 1)
 	}, 5*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
-		s.Equal(0, len(desc.Info.FutureActionTimes))
-		s.Equal(1, len(s.runningWorkflows()))
+		s.Empty(desc.Info.FutureActionTimes)
+		s.Len(s.runningWorkflows(), 1)
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		// hasn't updated yet since we slept past :09
-		s.Equal(1, len(s.runningWorkflows()))
+		s.Len(s.runningWorkflows(), 1)
 		s.env.SignalWorkflow(SignalNameRefresh, nil)
 	}, 10*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(0, len(s.runningWorkflows()))
+		s.Empty(s.runningWorkflows())
 	}, 10*time.Minute+1*time.Second)
 
 	s.run(&schedulepb.Schedule{
@@ -2045,7 +2042,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
+	s.Equal(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)), CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -2081,7 +2078,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
+	s.Equal(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)), CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
@@ -2103,7 +2100,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
+	s.Equal(s.env.Now().Sub(baseStartTime), CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestCANByIterations() {
@@ -2275,14 +2272,19 @@ func (s *workflowSuite) TestMigrateSuccess() {
 	// Mock MigrateSchedule activity to succeed.
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
-	// Send migrate signal after the first iteration.
+	// Enable migration and request it via signal after the first iteration.
+	enableMigration := false
 	s.env.RegisterDelayedCallback(func() {
+		enableMigration = true
 		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2314,8 +2316,10 @@ func (s *workflowSuite) TestMigrateFailure() {
 			return errors.New("migration failed")
 		})
 
-	// Send migrate signal after the first iteration.
+	// Enable migration and request it via signal after the first iteration.
+	enableMigration := false
 	s.env.RegisterDelayedCallback(func() {
+		enableMigration = true
 		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
@@ -2328,7 +2332,10 @@ func (s *workflowSuite) TestMigrateFailure() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2370,14 +2377,19 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 			return nil
 		})
 
-	// Send migrate signal after the first iteration.
+	// Enable migration and request it via signal after the first iteration.
+	enableMigration := false
 	s.env.RegisterDelayedCallback(func() {
+		enableMigration = true
 		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2410,8 +2422,10 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 			return errors.New("migration failed")
 		})
 
-	// Send migrate signal after the first iteration.
+	// Enable migration and request it via signal after the first iteration.
+	enableMigration := false
 	s.env.RegisterDelayedCallback(func() {
+		enableMigration = true
 		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 	// After migration failure, send a pause patch and verify it's processed,
@@ -2434,7 +2448,10 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2476,7 +2493,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2499,6 +2516,55 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 	s.NoError(s.env.GetWorkflowError())
 }
 
+// TestMigrateDynamicConfigFlipsMidRun verifies that the enableCHASMMigration
+// closure is re-evaluated every iteration: the first iteration sees migration
+// disabled and does nothing, then the DC flips on, and a later iteration picks
+// it up and migrates without needing continue-as-new.
+func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
+	enabled := false
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return nil
+		})
+
+	prevTweakables := CurrentTweakablePolicies
+	// Enough iterations to span the flip; allow short intervals so the loop
+	// advances quickly under test time.
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 10
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	// Flip the closure between iteration 1 and iteration 2 (1h interval).
+	s.env.RegisterDelayedCallback(func() {
+		enabled = true
+	}, 30*time.Minute)
+
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return enabled }, func() bool { return true })
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after the dynamic flip triggers migration")
+	s.Equal(1, migrateCalls, "migration should fire exactly once, after the DC flips")
+}
+
 func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe),
 	// but activity fails.
@@ -2515,7 +2581,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{

@@ -72,7 +72,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Component1", rc2.FqType())
 
-	rc2, ok = r.ComponentOf(reflect.TypeOf(cInstance1))
+	rc2, ok = r.ComponentOf(reflect.TypeFor[*chasm.MockComponent]())
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Component1", rc2.FqType())
 
@@ -120,6 +120,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 		chasm.NewRegistrableSideEffectTask(
 			"Task1",
 			chasm.NewMockSideEffectTaskHandler[*chasm.MockComponent, testTask1](ctrl),
+			chasm.WithTaskGroup("test-task-group"),
 		),
 		chasm.NewRegistrablePureTask(
 			"Task2",
@@ -133,6 +134,7 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt1, ok := r.Task("TestLibrary.Task1")
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task1", rt1.FqType())
+	s.Require().Equal("test-task-group", rt1.TaskGroup())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
 	require.False(s.T(), ok)
@@ -142,8 +144,9 @@ func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	rt2, ok := r.TaskFor(tInstance1)
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
+	s.Require().Equal(rt2.FqType(), rt2.TaskGroup())
 
-	rt2, ok = r.TaskOf(reflect.TypeOf(tInstance1))
+	rt2, ok = r.TaskOf(reflect.TypeFor[testTask2]())
 	require.True(s.T(), ok)
 	require.Equal(s.T(), "TestLibrary.Task2", rt2.FqType())
 

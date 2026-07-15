@@ -50,6 +50,10 @@ func buildServer(t *testing.T, srcDir, outputPath string) {
 		"./cmd/server",
 	)
 	cmd.Dir = srcDir
+	// Allow Go to auto-download a newer toolchain when the source we're
+	// building requires a newer version than the runner's setup-go installed.
+	// setup-go sets GOTOOLCHAIN=local in the env which would otherwise block this.
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "build server binary failed:\n%s", out)
 }
@@ -91,7 +95,7 @@ func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
 		require.NoError(collect, err, "git ls-remote failed:\n%s", out)
 
 		var tags []string
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			parts := strings.Fields(line)
 			if len(parts) == 2 {
 				tags = append(tags, strings.TrimPrefix(parts[1], "refs/tags/"))

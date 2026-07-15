@@ -90,7 +90,7 @@ message WorkflowExecutionInfo {
   temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
   bool workflow_task_suggest_continue_as_new = 69;
   repeated temporal.api.enums.v1.SuggestContinueAsNewReason workflow_task_suggest_continue_as_new_reasons = 110;
-  bool workflow_task_target_worker_deployment_version_changed = 112;
+  reserved 112;
   int64 workflow_task_history_size_bytes = 70;
   // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
   // - verify WFT completes by the same Build ID that started in the latest attempt
@@ -145,6 +145,7 @@ message WorkflowExecutionInfo {
   map<string, temporal.api.common.v1.Payload> search_attributes = 52;
   map<string, temporal.api.common.v1.Payload> memo = 53;
   temporal.server.api.history.v1.VersionHistories version_histories = 54;
+  // Deprecated. use `WorkflowExecutionState.first_execution_run_id`
   string first_execution_run_id = 55;
   ExecutionStats execution_stats = 56;
   google.protobuf.Timestamp workflow_run_expiration_time = 57;
@@ -315,6 +316,44 @@ message WorkflowExecutionInfo {
   //
   // Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 114;
+
+  // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
+  TimeSkippingInfo time_skipping_info = 115;
+}
+
+message TimeSkippingInfo {
+  reserved 3;
+  reserved "current_elapsed_duration_bound";
+
+  // Current time-skipping configuration applied to the workflow.
+  temporal.api.common.v1.TimeSkippingConfig config = 1;
+
+  // Total skipped duration for the current workflow execution run, including any
+  // inherited skipped duration carried over from a preceding execution that started this run.
+  google.protobuf.Duration accumulated_skipped_duration = 2;
+
+  // The current fast-forward info for time skipping.
+  FastForwardInfo fast_forward_info = 4;
+
+  // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
+  // skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
+  // that pending timer tasks must be re-stamped against the new accumulated skip, since a
+  // skip mutates this workflow-level field without bumping any per-timer
+  // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+  VersionedTransition last_update_versioned_transition = 5;
+}
+
+message FastForwardInfo {
+  reserved 3;
+  reserved "source_event_id";
+
+  // Target time for the fast-forward, expressed in virtual time.
+  google.protobuf.Timestamp target_time = 1;
+
+  // Indicates whether this fast-forward has already been reached, used for idempotency checks.
+  bool has_reached = 2;
+
+  VersionedTransition last_update_versioned_transition = 4;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -322,6 +361,10 @@ message WorkflowExecutionInfo {
 // Used only within server persistence; never flows to the public API.
 message LastNotifiedTargetVersion {
   temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 1;
+  // Revision number of the task queue routing config at the time the
+  // notification was sent. Carried forward to DeclinedTargetVersionUpgrade
+  // at continue-as-new time.
+  int64 revision_number = 2;
 }
 
 message ExecutionStats {
@@ -346,6 +389,11 @@ message WorkflowExecutionState {
   // the workflow execution or request IDs that were attached to an existing running workflow
   // execution via StartWorkflowExecutionRequest.OnConflictOptions.
   map<string, RequestIDInfo> request_ids = 7;
+  // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
+  // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
+  // inherits the original run's ID. Empty on records written before this field was added;
+  // consumers must not assume run_id in that case.
+  string first_execution_run_id = 8;
 }
 
 message RequestIDInfo {
@@ -436,6 +484,8 @@ message VisibilityTaskInfo {
   reserved 9;
   int64 close_visibility_task_id = 10;
   google.protobuf.Timestamp close_time = 11;
+  google.protobuf.Timestamp start_time = 13;
+  bool is_retention_delete = 14;
 
   oneof task_details {
     // If the task addresses a CHASM component, this field will be set.
@@ -478,6 +528,10 @@ message TimerTaskInfo {
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 17;
   }
+
+  // VersionedTransition provides a unified solution for both intra-cluster and inter-cluster
+  // task verification. Task types can opt in to use it.
+  VersionedTransition versioned_transition = 18;
 }
 
 message ArchivalTaskInfo {
@@ -668,6 +722,21 @@ message ActivityInfo {
   // A dedicated per-worker Nexus task queue on which the server sends control
   // tasks (e.g. activity cancellation) to this specific worker instance.
   string worker_control_task_queue = 51;
+
+  // The shard clock at the time this activity was started (RecordActivityTaskStarted).
+  // Matching uses this clock to build the task token sent to the worker. Stored here so
+  // that history can later reconstruct the same task token (e.g. for cancel worker commands).
+  //
+  // IMPORTANT: The clock approach requires history to reconstruct the token using
+  // the same fields and logic as matching — if NewActivityTaskToken changes, both
+  // call sites must stay in sync or the tokens will silently diverge. An alternative
+  // is to store the full serialized task token (~150-300 bytes), which avoids
+  // reconstruction entirely and is immune to token format changes. We chose the
+  // clock approach to keep the per-activity memory footprint minimal (~24 bytes).
+  //
+  // Replication: This field is part of ActivityInfo and is automatically replicated
+  // via state-based replication. No special handling is needed.
+  temporal.server.api.clock.v1.VectorClock started_clock = 52;
 }
 
 // timer_map column

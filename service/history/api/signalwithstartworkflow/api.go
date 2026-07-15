@@ -22,8 +22,7 @@ func Invoke(
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
-	versionMembershipCache worker_versioning.VersionMembershipCache,
-	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
@@ -59,6 +58,10 @@ func Invoke(
 	)
 	request := startRequest.StartRequest
 
+	api.MigrateWorkflowIDReusePolicyForRunningWorkflow(
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdReusePolicy,
+		&signalWithStartRequest.SignalWithStartRequest.WorkflowIdConflictPolicy)
+
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "SignalWithStartWorkflowExecution")
@@ -67,12 +70,12 @@ func Invoke(
 	}
 
 	// Validation for versioning override, if any.
-	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), matchingClient, versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	shouldSkipReactivation, revisionNumber, err := worker_versioning.ValidateVersioningOverrideAndGetReactivationEligibility(ctx, request.GetVersioningOverride(), matchingClient, versionCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
 	if err != nil {
 		return nil, err
 	}
 
-	runID, started, err := SignalWithStartWorkflow(
+	outcome, err := SignalWithStartWorkflow(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -85,12 +88,21 @@ func Invoke(
 	}
 
 	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
-	if started {
-		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals())
+	if outcome.started {
+		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
+	swr := signalWithStartRequest.SignalWithStartRequest
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   runID,
-		Started: started,
+		RunId:               outcome.runID,
+		FirstExecutionRunId: outcome.firstExecutionRunID,
+		Started:             outcome.started,
+		SignalLink: api.GenerateRequestIDRefLink(
+			swr.GetNamespace(),
+			swr.GetWorkflowId(),
+			outcome.runID,
+			swr.GetRequestId(),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		),
 	}, nil
 }

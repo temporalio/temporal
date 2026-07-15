@@ -36,7 +36,7 @@ type startArgs struct {
 	startToCloseTimeout    time.Duration
 	header                 map[string]string
 	payload                *commonpb.Payload
-	nexusLink              nexus.Link
+	nexusLinks             []nexus.Link
 	serializedRef          []byte
 }
 
@@ -200,7 +200,7 @@ func (i *invocationSystem) Start(
 	res, err := i.chasmRegistry.NexusEndpointProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
 		Namespace:               i.ns,
 		RequestID:               args.requestID,
-		Links:                   []nexus.Link{args.nexusLink},
+		Links:                   args.nexusLinks,
 		ReserializeInputPayload: true,
 	}, args.service, args.operation, args.payload)
 	if err != nil {
@@ -239,7 +239,7 @@ func (i *invocationSystem) Start(
 		if v.Failure.GetCanceledFailureInfo() != nil {
 			state = nexus.OperationStateCanceled
 		}
-		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailure(v.Failure)
+		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailureInPlace(v.Failure)
 		if convErr != nil {
 			i.logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
 			he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)

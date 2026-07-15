@@ -139,6 +139,9 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		}
 		content.Header["type"] = fmt.Sprintf("application/x-protobuf; message-type=%q", messageType)
 	case "json/plain":
+		if len(payload.Metadata) != 1 {
+			return xTemporalPayload(payload)
+		}
 		content.Header["type"] = "application/json"
 	case "binary/null":
 		if len(payload.Metadata) != 1 {

@@ -32,7 +32,7 @@ func newActivityDispatchTaskHandler(opts activityDispatchTaskHandlerOptions) *ac
 func (h *activityDispatchTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
 	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
@@ -90,7 +90,7 @@ func newScheduleToStartTimeoutTaskHandler() *scheduleToStartTimeoutTaskHandler {
 func (h *scheduleToStartTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *activitypb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
 	return (activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
@@ -126,7 +126,7 @@ func newScheduleToCloseTimeoutTaskHandler() *scheduleToCloseTimeoutTaskHandler {
 func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
 	return TransitionTimedOut.Possible(activity), nil
@@ -160,7 +160,7 @@ func newStartToCloseTimeoutTaskHandler() *startToCloseTimeoutTaskHandler {
 func (h *startToCloseTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
 	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
@@ -211,7 +211,7 @@ func newHeartbeatTimeoutTaskHandler() *heartbeatTimeoutTaskHandler {
 func (h *heartbeatTimeoutTaskHandler) Validate(
 	ctx chasm.Context,
 	activity *Activity,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *activitypb.HeartbeatTimeoutTask,
 ) (bool, error) {
 	// Let T = user-configured heartbeat timeout and let hb_i be the time of the ith user-submitted

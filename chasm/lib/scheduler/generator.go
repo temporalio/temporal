@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -18,22 +19,26 @@ type Generator struct {
 	*schedulerpb.GeneratorState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 // NewGenerator returns an initialized Generator component, which should
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext) *Generator {
-	return newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
+	generator := newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
 		LastProcessedTime: nil,
 	})
+	// Kick off initial generator run as an immediate task.
+	generator.Generate(ctx)
+	return generator
 }
 
 func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.GeneratorState) *Generator {
 	generator := &Generator{
 		GeneratorState: state,
+		EventLog:       chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
-	// Kick off initial generator run as an immediate task.
-	generator.Generate(ctx)
 	return generator
 }
 
@@ -45,6 +50,8 @@ func (g *Generator) Generate(ctx chasm.MutableContext) {
 
 // scheduleTask schedules a GeneratorTask at the given time.
 func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	g.getOrCreateEventLog(ctx).LogEvent(ctx,
+		fmt.Sprintf("scheduled generatorTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
 	}, &schedulerpb.GeneratorTask{})
@@ -77,10 +84,12 @@ func (g *Generator) UpdateFutureActionTimes(
 		t = updateTime
 	}
 	for len(futureTimes) < count {
-		t = spec.GetNextTime(sched.jitterSeed(), t).Next
-		if t.IsZero() {
+		res, err := spec.GetNextTime(sched.jitterSeed(), t)
+		if err != nil || res.Next.IsZero() {
+			// Over-excluded spec (limit) or end of schedule: return a partial list.
 			break
 		}
+		t = res.Next
 		futureTimes = append(futureTimes, timestamppb.New(t))
 	}
 

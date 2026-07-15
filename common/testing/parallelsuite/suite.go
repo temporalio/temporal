@@ -1,24 +1,31 @@
 package parallelsuite
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 // testingSuite is the constraint for suite types.
 type testingSuite interface {
 	testifysuite.TestingSuite
-	copySuite(t *testing.T) testingSuite
-	initSuite(t *testing.T)
+	//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
+	copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite
+	//nolint:revive // see copySuite above.
+	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -31,25 +38,41 @@ type Suite[T testingSuite] struct {
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
 
-	guardT guardT
+	guardT      guardT
+	runParallel bool
+	ctx         context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
+	ctxOnce     sync.Once
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
-func (s *Suite[T]) copySuite(t *testing.T) testingSuite {
+// assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
+// ctx overrides the suite's context; nil means use the default (lazy testcontext.For).
+//
+//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
+func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
-	cp.initSuite(t)
+	cp.initSuite(t, parallel, assertT, ctx)
 	return cp
 }
 
-func (s *Suite[T]) initSuite(t *testing.T) {
+//nolint:revive // see copySuite above.
+func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
-	g.asserted.Store(false)
 	g.hasSubtests.Store(false)
-	s.Assertions = require.New(g)
-	s.ProtoAssertions = protorequire.New(g)
-	s.HistoryRequire = historyrequire.New(g)
+	s.runParallel = parallel
+	s.ctx = ctx
+	s.ctxOnce = sync.Once{}
+	if s.runParallel {
+		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel tests
+	}
+	if assertT == nil {
+		assertT = g
+	}
+	s.Assertions = require.New(assertT)
+	s.ProtoAssertions = protorequire.New(assertT)
+	s.HistoryRequire = historyrequire.New(assertT)
 }
 
 // T returns the *testing.T, panicking if the guard has been sealed.
@@ -60,15 +83,50 @@ func (s *Suite[T]) T() *testing.T {
 	return s.guardT.T
 }
 
+// Context returns the test-scoped context (created from [testcontext]).
+// Inside an [Await] callback, it returns the await-scoped context.
+func (s *Suite[T]) Context() context.Context {
+	s.ctxOnce.Do(func() {
+		if s.ctx == nil {
+			s.ctx = testcontext.For(s.T())
+		}
+	})
+	return s.ctx
+}
+
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
-		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel subtests
-		fn(s.copySuite(t).(T))
+		fn(s.copySuite(t, s.runParallel, nil, nil).(T))
 	})
+}
+
+// Await calls fn repeatedly until all assertions pass or timeout is reached.
+func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
+	s.Awaitf(fn, timeout, interval, "")
+}
+
+// Awaitf is like [Await] but includes a format string appended to the failure message.
+func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
+	t := s.T()
+	await.Requiref(s.Context(), t, func(at *await.T) {
+		fn(s.copySuite(t, false, at, at.Context()).(T))
+	}, timeout, interval, msg, args...)
+}
+
+// AwaitTrue calls fn repeatedly until it returns true or timeout is reached.
+//
+// Use it for simple local predicates only. Do not use assertions or side effects; use [Await] instead.
+func (s *Suite[T]) AwaitTrue(fn func() bool, timeout, interval time.Duration) {
+	s.AwaitTruef(fn, timeout, interval, "")
+}
+
+// AwaitTruef is like [AwaitTrue] but includes a format string appended to the failure message.
+func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, msg string, args ...any) {
+	await.RequireTruef(s.T(), fn, timeout, interval, msg, args...)
 }
 
 // Run discovers and runs all exported Test* methods on the given suite in parallel.
@@ -79,10 +137,22 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, true, args...)
+}
+
+// RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
+//
+// Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
+// with legacy behavior to ease migration.
+func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, false, args...)
+}
+
+func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
-	if typ.Kind() != reflect.Ptr || typ.Elem().Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
 		panic(fmt.Sprintf("parallelsuite.Run: suite must be a pointer to a struct, got %v", typ))
 	}
 	structType := typ.Elem()
@@ -104,13 +174,11 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	t.Parallel()
+	s.initSuite(t, true, nil, nil)
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			t.Parallel()
-
-			cpS := s.copySuite(t)
+			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
@@ -123,8 +191,8 @@ func init() {
 	type ds struct{ Suite[*ds] }
 	ptrType := reflect.TypeFor[*ds]()
 	inheritedMethods = make(map[string]bool, ptrType.NumMethod())
-	for i := range ptrType.NumMethod() {
-		inheritedMethods[ptrType.Method(i).Name] = true
+	for method := range ptrType.Methods() {
+		inheritedMethods[method.Name] = true
 	}
 }
 
@@ -179,8 +247,8 @@ func applyTestifyMFilter(methods []reflect.Method) []reflect.Method {
 func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect.Method {
 	expectedNumIn := 1 + len(args)
 
-	for i := range ptrType.NumMethod() {
-		name := ptrType.Method(i).Name
+	for method := range ptrType.Methods() {
+		name := method.Name
 		if !strings.HasPrefix(name, "Test") && !inheritedMethods[name] {
 			panic(fmt.Sprintf(
 				"parallelsuite.Run: suite %s has exported method %s that does not start with Test; "+
@@ -191,8 +259,7 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 	}
 
 	var methods []reflect.Method
-	for i := range ptrType.NumMethod() {
-		method := ptrType.Method(i)
+	for method := range ptrType.Methods() {
 		if !strings.HasPrefix(method.Name, "Test") {
 			continue
 		}
