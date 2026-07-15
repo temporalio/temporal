@@ -11,6 +11,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// newSpecBuilderForTest builds a SpecBuilder with the given warn/max compute-limit bounds. A value
+// of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
+func newSpecBuilderForTest(warnIter, maxIter int) *SpecBuilder {
+	return NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
+}
+
 type specSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
@@ -24,7 +30,7 @@ func TestSpec(t *testing.T) {
 
 func (s *specSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
-	s.specBuilder = NewSpecBuilder()
+	s.specBuilder = newSpecBuilderForTest(0, 0)
 }
 
 func (s *specSuite) checkSequenceRaw(spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
@@ -43,7 +49,8 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedulepb.Schedu
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.GetNextTime(jitterSeed, start)
+		result, err := cs.GetNextTime(jitterSeed, start)
+		s.Require().NoError(err)
 		if exp.IsZero() {
 			s.Require().True(
 				result.Nominal.IsZero(),
@@ -376,7 +383,65 @@ func (s *specSuite) TestExcludeAll() {
 		},
 	})
 	s.NoError(err)
-	s.Zero(cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC)))
+	result, err := cs.GetNextTime("", time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC))
+	s.Require().NoError(err)
+	s.Zero(result)
+}
+
+func (s *specSuite) TestGetNextTimeComputeLimitExceeded() {
+	// Mirrored calendar/exclude: every candidate is excluded, so the search hits the bound.
+	const iterations = 10_000
+	builder := newSpecBuilderForTest(0, iterations)
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+	})
+	s.Require().NoError(err)
+
+	after := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	_, err = cs.GetNextTime("", after)
+
+	s.Require().ErrorIs(err, ErrComputeLimitExceeded)
+}
+
+func (s *specSuite) TestGetNextTimeComputeLimitWarning() {
+	// Mirrored calendar/exclude means every candidate is excluded. With the hard limit disabled
+	// (the default, math.MaxInt) the search does not error; it crosses the warn threshold and
+	// keeps searching until the spec's end time, then returns no match. A short end time keeps
+	// the scan bounded for the test.
+	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	builder := newSpecBuilderForTest(5, 0)
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		EndTime:         timestamppb.New(start.Add(30 * time.Second)),
+	})
+	s.Require().NoError(err)
+
+	result, err := cs.GetNextTime("", start)
+	s.Require().NoError(err, "crossing the warn threshold must not error; the hard limit is disabled")
+	s.True(result.ComputeLimitWarning, "search should flag that it crossed the warn threshold")
+	s.True(result.Next.IsZero(), "an over-excluded spec resolves to no next time")
+}
+
+func (s *specSuite) TestGetNextTimeComputeLimitWarningThenResolves() {
+	// Calendar matches every second; exclude matches every second EXCEPT :59. The search skips
+	// the excluded seconds (crossing the small warn threshold) and then resolves to a real time.
+	// This exercises the success return path carrying ComputeLimitWarning=true (as opposed to the
+	// no-match path in TestGetNextTimeComputeLimitWarning).
+	start := time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)
+	builder := newSpecBuilderForTest(5, 0)
+	cs, err := builder.NewCompiledSpec(&schedulepb.ScheduleSpec{
+		Calendar:        []*schedulepb.CalendarSpec{{Second: "*", Minute: "*", Hour: "*"}},
+		ExcludeCalendar: []*schedulepb.CalendarSpec{{Second: "0-58", Minute: "*", Hour: "*"}},
+	})
+	s.Require().NoError(err)
+
+	result, err := cs.GetNextTime("", start)
+	s.Require().NoError(err)
+	s.True(result.ComputeLimitWarning, "crossing the warn threshold should be flagged even when the search resolves")
+	s.Require().False(result.Next.IsZero(), "the search should resolve to a real next time")
+	s.Equal(59, result.Nominal.Second(), "the only non-excluded second is :59")
 }
 
 func (s *specSuite) TestSpecStartTime() {
