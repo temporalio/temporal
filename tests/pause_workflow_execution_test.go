@@ -62,18 +62,18 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	}
-	env := testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	testEnv := testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 
-	pauseEnv := &pauseWorkflowExecutionEnv{
-		TestEnv:             env,
+	env := &pauseWorkflowExecutionEnv{
+		TestEnv:             testEnv,
 		testEndSignal:       "test-end",
 		pauseIdentity:       "functional-test",
 		pauseReason:         "pausing workflow for acceptance test",
 		activityCompletedCh: make(chan struct{}, 1),
 	}
 
-	pauseEnv.workflowFn = func(ctx workflow.Context) (string, error) {
-		pauseEnv.Logger.Debug("workflow started")
+	env.workflowFn = func(ctx workflow.Context) (string, error) {
+		env.Logger.Debug("workflow started")
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout:    5 * time.Second,
 			ScheduleToCloseTimeout: 10 * time.Second,
@@ -81,49 +81,49 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 		ctx = workflow.WithActivityOptions(ctx, ao)
 
 		var activityResult string
-		pauseEnv.Logger.Debug("executing activity")
-		if err := workflow.ExecuteActivity(ctx, pauseEnv.activityFn).Get(ctx, &activityResult); err != nil {
+		env.Logger.Debug("executing activity")
+		if err := workflow.ExecuteActivity(ctx, env.activityFn).Get(ctx, &activityResult); err != nil {
 			return "", err
 		}
 
 		var childResult string
-		pauseEnv.Logger.Debug("executing child workflow")
-		if err := workflow.ExecuteChildWorkflow(ctx, pauseEnv.childWorkflowFn).Get(ctx, &childResult); err != nil {
+		env.Logger.Debug("executing child workflow")
+		if err := workflow.ExecuteChildWorkflow(ctx, env.childWorkflowFn).Get(ctx, &childResult); err != nil {
 			return "", err
 		}
 
-		pauseEnv.Logger.Debug("waiting to receive signal to complete the workflow")
-		signalCh := workflow.GetSignalChannel(ctx, pauseEnv.testEndSignal)
+		env.Logger.Debug("waiting to receive signal to complete the workflow")
+		signalCh := workflow.GetSignalChannel(ctx, env.testEndSignal)
 		var signalPayload string
 		signalCh.Receive(ctx, &signalPayload)
-		pauseEnv.Logger.Debug("signal received to complete the workflow")
+		env.Logger.Debug("signal received to complete the workflow")
 		return signalPayload + activityResult + childResult, nil
 	}
 
-	pauseEnv.childWorkflowFn = func(ctx workflow.Context) (string, error) {
+	env.childWorkflowFn = func(ctx workflow.Context) (string, error) {
 		return "child-workflow", nil
 	}
 
-	pauseEnv.activityFn = func(ctx context.Context) (string, error) {
-		pauseEnv.Logger.Debug("activity started")
-		pauseEnv.activityCompletedOnce.Do(func() {
+	env.activityFn = func(ctx context.Context) (string, error) {
+		env.Logger.Debug("activity started")
+		env.activityCompletedOnce.Do(func() {
 			// blocks until the test case unblocks the activity.
-			<-pauseEnv.activityCompletedCh
+			<-env.activityCompletedCh
 		})
-		pauseEnv.Logger.Debug("activity completed")
+		env.Logger.Debug("activity completed")
 		return "activity", nil
 	}
 
-	pauseEnv.SdkWorker().RegisterWorkflow(pauseEnv.workflowFn)
-	pauseEnv.SdkWorker().RegisterWorkflow(pauseEnv.childWorkflowFn)
-	pauseEnv.SdkWorker().RegisterActivity(pauseEnv.activityFn)
+	env.SdkWorker().RegisterWorkflow(env.workflowFn)
+	env.SdkWorker().RegisterWorkflow(env.childWorkflowFn)
+	env.SdkWorker().RegisterActivity(env.activityFn)
 
 	// Setup for TestPauseWorkflowAndActivity
-	pauseEnv.activityShouldSucceed.Store(false)
-	pauseEnv.SdkWorker().RegisterWorkflow(pauseEnv.workflowWithFailingActivity)
-	pauseEnv.SdkWorker().RegisterActivity(pauseEnv.failingActivity)
+	env.activityShouldSucceed.Store(false)
+	env.SdkWorker().RegisterWorkflow(env.workflowWithFailingActivity)
+	env.SdkWorker().RegisterActivity(env.failingActivity)
 
-	return pauseEnv
+	return env
 }
 
 // failingActivity is an activity that fails until activityShouldSucceed is set to true.
