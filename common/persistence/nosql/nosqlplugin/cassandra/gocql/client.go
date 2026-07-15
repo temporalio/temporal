@@ -154,7 +154,7 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 		MaxInterval:     10 * time.Second,
 	}
 
-	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
+	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy(), gocql.ShuffleReplicas())
 
 	if cfg.AddressTranslator != nil && cfg.AddressTranslator.Translator != "" {
 		addressTranslator, err := translator.LookupTranslator(cfg.AddressTranslator.Translator)
