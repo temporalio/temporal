@@ -228,3 +228,19 @@ type SimplePartitionScalerThreshold struct {
 	Window     time.Duration // window to measure add rate over
 	TargetRate int           // target tasks/second per partition
 }
+
+type LatencyHealthCheckSettings struct {
+	// Percentile is a number from 0.00 to 1.00 which represents how far into the distribution we should look, eg 0.99 is p99.
+	Percentile float64
+
+	// Threshold is the amount of time this percentiles reading must exceed to trigger an unhealthy response (if enforced).
+	Threshold time.Duration
+
+	// Enforced allows this health check to return unhealthy responses, when false this health check will always report healthy.
+	Enforced bool
+}
+
+type LatencyHealthChecksPerPercentile struct {
+	// PercentileSettings stores settings for the health check of each percentile.
+	PercentileSettings []LatencyHealthCheckSettings
+}
