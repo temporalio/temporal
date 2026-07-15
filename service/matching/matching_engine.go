@@ -3222,6 +3222,12 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 	}
 
+	componentRef := task.event.GetData().GetComponentRef()
+	activityAttemptStamp := int32(0)
+	if len(componentRef) > 0 {
+		activityAttemptStamp = task.event.Data.GetStamp() + 1
+	}
+
 	taskToken := tasktoken.NewActivityTaskToken(
 		task.event.Data.GetNamespaceId(),
 		task.event.Data.GetWorkflowId(),
@@ -3233,7 +3239,8 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
-		task.event.GetData().GetComponentRef(),
+		componentRef,
+		activityAttemptStamp,
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

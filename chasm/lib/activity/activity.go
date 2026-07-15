@@ -1804,6 +1804,9 @@ func (a *Activity) validateActivityTaskToken(
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
+	if token.GetActivityAttemptStamp() != 0 && token.GetActivityAttemptStamp() != a.LastAttempt.Get(ctx).GetStamp()+1 {
+		return serviceerror.NewNotFound("activity task not found")
+	}
 
 	ref, err := chasm.DeserializeComponentRef(token.GetComponentRef())
 	if err != nil {

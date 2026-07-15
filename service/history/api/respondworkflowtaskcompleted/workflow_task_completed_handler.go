@@ -628,6 +628,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -729,6 +730,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 					ai.Version,
 					ai.StartVersion,
 					nil,
+					0,
 				))
 				if err != nil {
 					return nil, err

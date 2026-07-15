@@ -1552,6 +1552,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		common.EmptyVersion,
 		common.EmptyVersion,
 		componentRef,
+		0,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1749,6 +1750,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		common.EmptyVersion,
 		common.EmptyVersion,
 		componentRef,
+		0,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1959,6 +1961,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		common.EmptyVersion,
 		common.EmptyVersion,
 		componentRef,
+		0,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -2161,6 +2164,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		common.EmptyVersion,
 		common.EmptyVersion,
 		componentRef,
+		0,
 	)
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {

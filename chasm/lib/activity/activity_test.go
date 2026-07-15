@@ -358,6 +358,153 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 	}
 }
 
+func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	const (
+		namespaceID = "test-namespace-id"
+		activityID  = "test-activity-id"
+		runID       = "test-run-id"
+		attempt     = int32(1)
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{
+					NamespaceID: namespaceID,
+					BusinessID:  activityID,
+					RunID:       runID,
+				}
+			},
+		},
+	}
+
+	act := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			HeartbeatTimeout: durationpb.New(0),
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count: attempt,
+			Stamp: 7,
+		}),
+	}
+	originalToken := &tokenspb.Task{
+		NamespaceId:          namespaceID,
+		Attempt:              attempt,
+		ComponentRef:         componentRef,
+		ActivityAttemptStamp: act.LastAttempt.Get(ctx).GetStamp() + 1,
+	}
+	req := &historyservice.RecordActivityTaskHeartbeatRequest{
+		NamespaceId:      namespaceID,
+		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{},
+	}
+
+	_, err = act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+		Token:   originalToken,
+		Request: req,
+	})
+	require.NoError(t, err)
+
+	resetAttempt := act.LastAttempt.Get(ctx)
+	resetAttempt.Count = attempt
+	resetAttempt.Stamp++
+
+	resetToken := &tokenspb.Task{
+		NamespaceId:          namespaceID,
+		Attempt:              attempt,
+		ComponentRef:         componentRef,
+		ActivityAttemptStamp: resetAttempt.GetStamp() + 1,
+	}
+	require.Equal(t, originalToken.GetAttempt(), resetToken.GetAttempt())
+	require.NotEqual(t, originalToken.GetActivityAttemptStamp(), resetToken.GetActivityAttemptStamp())
+
+	_, err = act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+		Token:   originalToken,
+		Request: req,
+	})
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+
+	_, err = act.HandleCompleted(ctx, RespondCompletedEvent{
+		Token: originalToken,
+		Request: &historyservice.RespondActivityTaskCompletedRequest{
+			NamespaceId: namespaceID,
+		},
+	})
+	require.ErrorAs(t, err, &notFoundErr)
+
+	_, err = act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+		Token:   resetToken,
+		Request: req,
+	})
+	require.NoError(t, err)
+}
+
+func TestActivityTaskTokenWithoutAttemptStampAcceptedForCurrentRetryAttempt(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	const (
+		namespaceID = "test-namespace-id"
+		activityID  = "test-activity-id"
+		runID       = "test-run-id"
+		attempt     = int32(2)
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{
+					NamespaceID: namespaceID,
+					BusinessID:  activityID,
+					RunID:       runID,
+				}
+			},
+		},
+	}
+
+	act := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			HeartbeatTimeout: durationpb.New(0),
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count: attempt,
+			Stamp: 11,
+		}),
+	}
+	token := &tokenspb.Task{
+		NamespaceId:  namespaceID,
+		Attempt:      attempt,
+		ComponentRef: componentRef,
+	}
+	req := &historyservice.RecordActivityTaskHeartbeatRequest{
+		NamespaceId:      namespaceID,
+		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{},
+	}
+
+	_, err = act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+		Token:   token,
+		Request: req,
+	})
+	require.NoError(t, err)
+}
+
 func TestContextMetadata(t *testing.T) {
 	t.Run("returns activity type and task queue", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}

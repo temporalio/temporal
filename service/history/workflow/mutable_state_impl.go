@@ -4677,6 +4677,7 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 			ai.Version,
 			ai.StartVersion,
 			nil,
+			0,
 		))
 		if err != nil {
 			return err
