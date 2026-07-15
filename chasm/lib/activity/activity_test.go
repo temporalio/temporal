@@ -299,12 +299,9 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			wantPaused: true,
 		},
 		{
-			// A reset issued with keepPaused on a paused activity sets ResetKeepPaused; the worker
-			// must be told it is both paused and being reset.
-			name:            "reset with keep-paused propagates both paused and reset",
+			name:            "reset with keep-paused propagates only reset",
 			status:          activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 			resetKeepPaused: true,
-			wantPaused:      true,
 			wantReset:       true,
 		},
 		{

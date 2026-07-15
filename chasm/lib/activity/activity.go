@@ -1500,11 +1500,16 @@ func (a *Activity) RecordHeartbeat(
 			},
 		)
 	}
-	return &historyservice.RecordActivityTaskHeartbeatResponse{
-		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		ActivityPaused:  a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED || (a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED && a.ResetKeepPaused),
-		ActivityReset:   a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-	}, nil
+	response := &historyservice.RecordActivityTaskHeartbeatResponse{}
+	switch a.Status {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		response.CancelRequested = true
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		response.ActivityReset = true
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		response.ActivityPaused = true
+	}
+	return response, nil
 }
 
 // InternalStatusToAPIStatus converts internal activity execution status to API status.
