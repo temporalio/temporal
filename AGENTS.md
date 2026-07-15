@@ -74,6 +74,7 @@ Before starting the implementation of any request, you MUST REVIEW the following
 ## Testing:
 - Write tests for new functionality
 - Run tests after altering code or tests
+- Tests added to `tests/versioning_3_test.go` must include a concise numbered `Flow:` comment that accurately describes the setup, action, and assertions
 - Start with unit tests for fastest feedback
 - Prefer `require` over `assert`, avoid testify suites in unit tests (functional tests require suites for test cluster setup), use `require.Eventually` instead of `time.Sleep` (forbidden by linter)
 - For float comparisons in tests, use `InDelta` or `InEpsilon` instead of `Equal` (enforced by `testifylint`)
