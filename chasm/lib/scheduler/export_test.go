@@ -13,6 +13,12 @@ import (
 
 // Export unexported methods for testing.
 
+// ExecutionStatus search-attribute values, exported for tests.
+var (
+	ExecutionStatusRunning   = executionStatusRunning
+	ExecutionStatusCompleted = executionStatusCompleted
+)
+
 func NewTestHandler(logger log.Logger) *handler {
 	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }

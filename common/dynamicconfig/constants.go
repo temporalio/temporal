@@ -260,6 +260,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5*time.Second,
 		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
 	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
 		"system.historyHealthSignalUsePercentiles",
@@ -3508,6 +3513,15 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
 		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
+	)
+
+	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
+		"frontend.enableMatchingFanOutForPollCancellation",
+		false,
+		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
+		When enabled, frontend sends root partition only; matching fans out to all partitions.
+		When disabled, frontend iterates partitions; matching handles each partition locally.
+		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
