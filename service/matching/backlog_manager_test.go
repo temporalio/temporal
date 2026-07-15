@@ -497,6 +497,51 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.Zero(totalApproximateBacklogCount(s.blm))
 }
 
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	blm := s.blm.(*priBacklogManagerImpl)
+	db := blm.db
+
+	// Initialize the db/subqueues without starting the background reader pump, so the test can
+	// drive the reader deterministically.
+	_, err := db.RenewLease(blm.tqCtx)
+	s.Require().NoError(err)
+
+	// Simulate a diverged backlog count with no real tasks in persistence, e.g. a stale count
+	// carried across a reload. Since nothing is spooled, there are no outstanding tasks and
+	// completeTask never runs, so the only thing that can reset the count is the gap-drain path
+	// (setReadLevelAfterGap), not the completeTask path.
+	db.updateBacklogStats(5, time.Time{})
+	s.Require().EqualValues(5, db.getTotalApproximateBacklogCount())
+
+	// Advance maxReadLevel past the ack level to simulate a range renewal that left a gap of
+	// task IDs that were never actually written.
+	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
+	db.setMaxReadLevelForTesting(subqueueZero, maxRL)
+
+	// Drive a reader through the empty range exactly as getTasksPump does, but synchronously.
+	// Each empty batch advances the ack level via setReadLevelAfterGap.
+	tr := newPriTaskReader(blm, subqueueZero, 0)
+	for {
+		batch, err := tr.getTaskBatch(blm.tqCtx)
+		s.Require().NoError(err)
+		s.Require().Empty(batch.tasks)
+		tr.setReadLevelAfterGap(batch.readLevel)
+		if batch.isReadBatchDone {
+			break
+		}
+	}
+
+	// Having read to maxReadLevel with everything acked, setReadLevelAfterGap must have pushed
+	// the advanced ack level into the db, which resets the diverged count to 0.
+	_, ackLevel := tr.getLevels()
+	s.Equal(maxRL, ackLevel)
+	s.Zero(db.getTotalApproximateBacklogCount())
+}
+
 func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	if !s.newMatcher {
 		s.T().Skip("SyncState is only used by the new backlog manager")
