@@ -292,10 +292,6 @@ type ActivityState struct {
 	// since been unpaused), hence the "last" prefix. No logic gates on this field — it is descriptive
 	// metadata only.
 	LastPauseState *ActivityPauseState `protobuf:"bytes,16,opt,name=last_pause_state,json=lastPauseState,proto3" json:"last_pause_state,omitempty"`
-	// Set when reset was requested while the activity was STARTED and the operator asked for
-	// heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
-	// activity transitions out of RESET_REQUESTED.
-	ResetHeartbeats bool `protobuf:"varint,17,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
 	// Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
 	// that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
 	// when the activity transitions out of RESET_REQUESTED.
@@ -456,13 +452,6 @@ func (x *ActivityState) GetLastPauseState() *ActivityPauseState {
 		return x.LastPauseState
 	}
 	return nil
-}
-
-func (x *ActivityState) GetResetHeartbeats() bool {
-	if x != nil {
-		return x.ResetHeartbeats
-	}
-	return false
 }
 
 func (x *ActivityState) GetResetKeepPaused() bool {
@@ -1199,7 +1188,7 @@ var File_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto protor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xf3\v\n" +
+	"@temporal/server/chasm/lib/activity/proto/v1/activity_state.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a&temporal/api/activity/v1/message.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a'temporal/api/taskqueue/v1/message.proto\"\xc8\v\n" +
 	"\rActivityState\x12I\n" +
 	"\ractivity_type\x18\x01 \x01(\v2$.temporal.api.common.v1.ActivityTypeR\factivityType\x12C\n" +
 	"\n" +
@@ -1219,8 +1208,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"startDelay\x12T\n" +
 	"\x10original_options\x18\x0e \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0foriginalOptions\x125\n" +
 	"\x17schedule_to_close_stamp\x18\x0f \x01(\x05R\x14scheduleToCloseStamp\x12i\n" +
-	"\x10last_pause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\x0elastPauseState\x12)\n" +
-	"\x10reset_heartbeats\x18\x11 \x01(\bR\x0fresetHeartbeats\x12*\n" +
+	"\x10last_pause_state\x18\x10 \x01(\v2?.temporal.server.chasm.lib.activity.proto.v1.ActivityPauseStateR\x0elastPauseState\x12*\n" +
 	"\x11reset_keep_paused\x18\x12 \x01(\bR\x0fresetKeepPaused\x12W\n" +
 	"\x1afirst_attempt_started_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\x17firstAttemptStartedTime\x122\n" +
 	"\x15reset_restore_options\x18\x14 \x01(\bR\x13resetRestoreOptions\"\xa7\x01\n" +

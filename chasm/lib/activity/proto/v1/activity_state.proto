@@ -128,11 +128,6 @@ message ActivityState {
   // metadata only.
   ActivityPauseState last_pause_state = 16;
 
-  // Set when reset was requested while the activity was STARTED and the operator asked for
-  // heartbeat details to be cleared on the next retry. Consumed when the worker yields and the
-  // activity transitions out of RESET_REQUESTED.
-  bool reset_heartbeats = 17;
-
   // Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
   // that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
   // when the activity transitions out of RESET_REQUESTED.

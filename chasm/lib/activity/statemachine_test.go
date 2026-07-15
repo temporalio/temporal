@@ -723,167 +723,102 @@ func TestTransitionCanceled(t *testing.T) {
 	protorequire.ProtoEqual(t, expectedFailure, outcome.GetFailed().GetFailure())
 }
 
-// TestTerminalTransitionsClearResetFlags verifies that ResetHeartbeats is cleared by every
-// terminal transition and that terminals are reachable from RESET_REQUESTED so a reset-in-flight
-// activity does not get stuck.
-func TestTerminalTransitionsClearResetFlags(t *testing.T) {
-	makeActivity := func(ctx *chasm.MockMutableContext, status activitypb.ActivityExecutionStatus) *Activity {
-		return &Activity{
-			ActivityState: &activitypb.ActivityState{
-				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-				RetryPolicy:            defaultRetryPolicy,
-				ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
-				ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
-				StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
-				Status:                 status,
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
-				ResetHeartbeats:        true,
-			},
-			LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 2}),
-			LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{}),
-			Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
-		}
+func TestTransitionResetClearsHeartbeat(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 2}
+	heartbeatState := &activitypb.ActivityHeartbeatState{
+		Details:      payloads.EncodeString("heartbeat-details"),
+		RecordedTime: timestamppb.New(defaultTime),
 	}
 
-	newCtx := func() *chasm.MockMutableContext {
-		ctx := &chasm.MockMutableContext{}
-		ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
-		return ctx
+	act := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			ScheduleTime:           timestamppb.New(defaultTime),
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		LastAttempt:   chasm.NewDataField(ctx, attemptState),
+		LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 	}
 
-	t.Run("TransitionCompleted", func(t *testing.T) {
-		ctx := newCtx()
-		act := makeActivity(ctx, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, handler: metrics.NoopMetricsHandler})
+	require.NoError(t, err)
+	require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+	require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+}
 
-		ctrl := gomock.NewController(t)
-		mh := metrics.NewMockHandler(ctrl)
-		s2c := metrics.NewMockTimerIface(ctrl)
-		s2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(s2c)
-		sch2c := metrics.NewMockTimerIface(ctrl)
-		sch2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(sch2c)
-		ctr := metrics.NewMockCounterIface(ctrl)
-		ctr.EXPECT().Record(int64(1))
-		mh.EXPECT().Counter(metrics.ActivitySuccess.Name()).Return(ctr)
+func TestDeferredResetClearsHeartbeat(t *testing.T) {
+	testCases := []struct {
+		name              string
+		transition        chasm.Transition[activitypb.ActivityExecutionStatus, *Activity, rescheduleEvent]
+		resetKeepPaused   bool
+		expectedStatus    activitypb.ActivityExecutionStatus
+		expectedTaskCount int
+	}{
+		{
+			name:              "scheduled",
+			transition:        TransitionResetAttemptFailedToScheduled,
+			resetKeepPaused:   false,
+			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			expectedTaskCount: 1,
+		},
+		{
+			name:              "paused",
+			transition:        TransitionResetAttemptFailedToPaused,
+			resetKeepPaused:   true,
+			expectedStatus:    activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+			expectedTaskCount: 0,
+		},
+	}
 
-		err := TransitionCompleted.Apply(act, ctx, completeEvent{
-			req: &historyservice.RespondActivityTaskCompletedRequest{
-				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{Identity: "worker"},
-			},
-			metricsHandler: mh,
-		})
-		require.NoError(t, err)
-		require.False(t, act.ResetHeartbeats, "ResetHeartbeats should be cleared by TransitionCompleted")
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			attemptState := &activitypb.ActivityAttemptState{
+				Count:       3,
+				StartedTime: timestamppb.New(defaultTime),
+			}
+			heartbeatState := &activitypb.ActivityHeartbeatState{
+				Details:      payloads.EncodeString("heartbeat-details"),
+				RecordedTime: timestamppb.New(defaultTime),
+			}
 
-	t.Run("TransitionFailed", func(t *testing.T) {
-		ctx := newCtx()
-		act := makeActivity(ctx, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
-
-		ctrl := gomock.NewController(t)
-		mh := metrics.NewMockHandler(ctrl)
-		s2c := metrics.NewMockTimerIface(ctrl)
-		s2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(s2c)
-		sch2c := metrics.NewMockTimerIface(ctrl)
-		sch2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(sch2c)
-		cFail := metrics.NewMockCounterIface(ctrl)
-		cFail.EXPECT().Record(int64(1))
-		mh.EXPECT().Counter(metrics.ActivityFail.Name()).Return(cFail)
-		cTaskFail := metrics.NewMockCounterIface(ctrl)
-		cTaskFail.EXPECT().Record(int64(1))
-		mh.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(cTaskFail)
-
-		err := TransitionFailed.Apply(act, ctx, failedEvent{
-			req: &historyservice.RespondActivityTaskFailedRequest{
-				FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-					Failure: &failurepb.Failure{
-						Message: "non-retryable",
-						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
-						},
-					},
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:            &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:             defaultRetryPolicy,
+					ScheduleToCloseTimeout:  durationpb.New(defaultScheduleToCloseTimeout),
+					ScheduleToStartTimeout:  durationpb.New(0),
+					StartToCloseTimeout:     durationpb.New(defaultStartToCloseTimeout),
+					Status:                  activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+					ScheduleTime:            timestamppb.New(defaultTime),
+					FirstAttemptStartedTime: timestamppb.New(defaultTime),
+					TaskQueue:               &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					ResetKeepPaused:         tc.resetKeepPaused,
 				},
-			},
-			metricsHandler: mh,
+				LastAttempt:   chasm.NewDataField(ctx, attemptState),
+				LastHeartbeat: chasm.NewDataField(ctx, heartbeatState),
+				Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			err := tc.transition.Apply(act, ctx, rescheduleEvent{})
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedStatus, act.Status)
+			require.Equal(t, int32(1), attemptState.Count)
+			require.Nil(t, attemptState.GetCurrentRetryInterval())
+			require.Nil(t, act.LastHeartbeat.Get(ctx).GetDetails())
+			require.Nil(t, act.LastHeartbeat.Get(ctx).GetRecordedTime())
+			require.Len(t, ctx.Tasks, tc.expectedTaskCount)
 		})
-		require.NoError(t, err)
-		require.False(t, act.ResetHeartbeats, "ResetHeartbeats should be cleared by TransitionFailed")
-	})
-
-	t.Run("TransitionTerminated", func(t *testing.T) {
-		ctx := newCtx()
-		act := makeActivity(ctx, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
-
-		ctrl := gomock.NewController(t)
-		mh := metrics.NewMockHandler(ctrl)
-		ctr := metrics.NewMockCounterIface(ctrl)
-		ctr.EXPECT().Record(int64(1))
-		mh.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(ctr)
-
-		err := TransitionTerminated.Apply(act, ctx, terminateEvent{
-			request:        chasm.TerminateComponentRequest{Reason: "test"},
-			metricsHandler: mh,
-			fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		})
-		require.NoError(t, err)
-		require.False(t, act.ResetHeartbeats, "ResetHeartbeats should be cleared by TransitionTerminated")
-	})
-
-	t.Run("TransitionCanceled", func(t *testing.T) {
-		ctx := newCtx()
-		act := makeActivity(ctx, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED)
-
-		ctrl := gomock.NewController(t)
-		mh := metrics.NewMockHandler(ctrl)
-		s2c := metrics.NewMockTimerIface(ctrl)
-		s2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(s2c)
-		sch2c := metrics.NewMockTimerIface(ctrl)
-		sch2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(sch2c)
-		ctr := metrics.NewMockCounterIface(ctrl)
-		ctr.EXPECT().Record(int64(1))
-		mh.EXPECT().Counter(metrics.ActivityCancel.Name()).Return(ctr)
-
-		err := TransitionCanceled.Apply(act, ctx, cancelEvent{
-			handler:    mh,
-			fromStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-		})
-		require.NoError(t, err)
-		require.False(t, act.ResetHeartbeats, "ResetHeartbeats should be cleared by TransitionCanceled")
-	})
-
-	t.Run("TransitionTimedOut", func(t *testing.T) {
-		ctx := newCtx()
-		act := makeActivity(ctx, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
-
-		ctrl := gomock.NewController(t)
-		mh := metrics.NewMockHandler(ctrl)
-		s2c := metrics.NewMockTimerIface(ctrl)
-		s2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(s2c)
-		sch2c := metrics.NewMockTimerIface(ctrl)
-		sch2c.EXPECT().Record(gomock.Any())
-		mh.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(sch2c)
-		timeoutTag := metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String())
-		cTimeout := metrics.NewMockCounterIface(ctrl)
-		cTimeout.EXPECT().Record(int64(1), timeoutTag)
-		mh.EXPECT().Counter(metrics.ActivityTimeout.Name()).Return(cTimeout)
-		cTaskTimeout := metrics.NewMockCounterIface(ctrl)
-		cTaskTimeout.EXPECT().Record(int64(1), timeoutTag)
-		mh.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(cTaskTimeout)
-
-		err := TransitionTimedOut.Apply(act, ctx, timeoutEvent{
-			timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-			metricsHandler: mh,
-			fromStatus:     activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-		})
-		require.NoError(t, err)
-		require.False(t, act.ResetHeartbeats, "ResetHeartbeats should be cleared by TransitionTimedOut")
-	})
+	}
 }
 
 // TestTransitionResetFromPaused verifies that TransitionReset applied to a PAUSED activity

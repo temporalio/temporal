@@ -12049,13 +12049,12 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	}
 
-	resetActivity := func(ctx context.Context, t *testing.T, activityID, runID string, resetHeartbeat bool) {
+	resetActivity := func(ctx context.Context, t *testing.T, activityID, runID string) {
 		t.Helper()
 		_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace:      env.Namespace().String(),
-			ActivityId:     activityID,
-			RunId:          runID,
-			ResetHeartbeat: resetHeartbeat,
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
 		})
 		require.NoError(t, err)
 	}
@@ -12161,7 +12160,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 5*time.Second, 200*time.Millisecond)
 
 		// Reset while SCHEDULED — should re-dispatch immediately at attempt 1
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		// Poll — should be attempt 1
 		pollResp3, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -12197,7 +12196,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.EqualValues(t, 1, pollResp1.Attempt)
 
 		// Reset while running
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		// Verify activity still appears as STARTED (reset is deferred)
 		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -12251,7 +12250,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.EqualValues(t, 2, pollResp2.Attempt)
 
 		// Reset while attempt 2 is STARTED (deferred), then fail attempt 2 to trigger the reset.
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 		failAttemptRetryably(ctx, t, pollResp2.TaskToken, 0)
 
 		// The reset attempt (attempt 1) must dispatch promptly.
@@ -12399,7 +12398,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}, 5*time.Second, 200*time.Millisecond)
 
 		// Reset — should bypass the 1-minute wait and dispatch immediately
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		// Poll — task should be available immediately after reset (no long backoff)
 		pollResp2, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -12420,8 +12419,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("HeartbeatReset", func(t *testing.T) {
-		// Activity records heartbeats. Reset with resetHeartbeat=true clears them.
+	t.Run("ResetClearsHeartbeatDetails", func(t *testing.T) {
+		// Activity records heartbeats. Reset clears them.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -12465,12 +12464,11 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			require.Equal(c, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, d.GetInfo().GetRunState())
 		}, 5*time.Second, 200*time.Millisecond)
 
-		// Reset with heartbeat reset
+		// Reset clears recorded heartbeat state.
 		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace:      env.Namespace().String(),
-			ActivityId:     activityID,
-			RunId:          startResp.GetRunId(),
-			ResetHeartbeat: true,
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
 		})
 		require.NoError(t, err)
 
@@ -12494,8 +12492,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("HeartbeatResetWhileRunning", func(t *testing.T) {
-		// Reset with resetHeartbeat=true while the activity is STARTED.
+	t.Run("ResetClearsHeartbeatState", func(t *testing.T) {
+		// Reset while the activity is STARTED.
 		// The heartbeat clear is deferred — it only takes effect on the next retry,
 		// matching the behavior of the workflow activity HeartbeatDetails reset test.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -12527,8 +12525,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetInfo().GetHeartbeatDetails())
 
-		// Reset with heartbeat reset while STARTED — deferred
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), true)
+		// Reset while STARTED — heartbeat clearing is deferred.
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		// Activity should still be STARTED with heartbeat still visible (reset is deferred)
 		desc, err = env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -13555,7 +13553,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		// First reset -> RESET_REQUESTED (deferred reset of the running attempt). The reset handler
 		// runs synchronously, so the activity is in RESET_REQUESTED once this returns. (RESET_REQUESTED
 		// surfaces externally as runState STARTED — the worker is still running its attempt.)
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		// Second reset while a reset is already pending must be rejected with a clear message — the
 		// worker is still running the attempt, so "activity execution is not running" would be wrong.
