@@ -507,6 +507,83 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
 }
 
+func TestExecuteTask_EventLog(t *testing.T) {
+	newStart := func(requestID, runID string) *schedulespb.BufferedStart {
+		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID}
+	}
+
+	cases := []struct {
+		name       string
+		buffered   []*schedulespb.BufferedStart
+		cancels    []*commonpb.WorkflowExecution
+		terminates []*commonpb.WorkflowExecution
+		completed  []*schedulespb.BufferedStart
+		retryable  []*schedulespb.BufferedStart
+		wantLog    string
+	}{
+		{
+			name:      "kicked off counts newly started",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			completed: []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			wantLog:   "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:      "retried counts retryable starts",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			retryable: []*schedulespb.BufferedStart{newStart("s1", "")},
+			wantLog:   "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 1 starts",
+		},
+		{
+			name:     "surviving buffered starts are not counted as removed",
+			buffered: []*schedulespb.BufferedStart{newStart("a", ""), newStart("b", ""), newStart("c", "")},
+			wantLog:  "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:    "surviving cancels are not counted as removed",
+			cancels: []*commonpb.WorkflowExecution{{RunId: "c1"}, {RunId: "c2"}},
+			wantLog: "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "surviving terminates are not counted as removed",
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			wantLog:    "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "survivors alongside real work count independently",
+			buffered:   []*schedulespb.BufferedStart{newStart("s1", ""), newStart("s2", "")},
+			cancels:    []*commonpb.WorkflowExecution{{RunId: "c1"}},
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			completed:  []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			retryable:  []*schedulespb.BufferedStart{newStart("s2", "")},
+			wantLog:    "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 1 starts",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := env.MutableContext()
+			invoker := env.Scheduler.Invoker.Get(ctx)
+
+			invoker.BufferedStarts = tc.buffered
+			invoker.CancelWorkflows = tc.cancels
+			invoker.TerminateWorkflows = tc.terminates
+			invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+			eventLog := invoker.EventLog.Get(ctx)
+			eventLog.Events = nil
+
+			invoker.RecordExecuteResult(ctx, tc.completed, tc.retryable)
+
+			var messages []string
+			for _, e := range eventLog.Events {
+				messages = append(messages, e.Message)
+			}
+			require.Contains(t, messages, tc.wantLog)
+		})
+	}
+}
+
 // A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
 // Regression for the strict-Before check, which excluded equal-time entries
 // and stranded retries that landed precisely at the HWM boundary.
