@@ -114,5 +114,5 @@ func (h *cancelCommandDispatchTaskHandler) Execute(
 		h.logger,
 	)
 
-	return dispatcher.Execute(ctx, task, 1, nsEntry.Name().String())
+	return dispatcher.Execute(ctx, task, nsEntry.Name().String())
 }

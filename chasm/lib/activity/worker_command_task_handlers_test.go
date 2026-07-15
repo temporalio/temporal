@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/workercommands"
 )
 
