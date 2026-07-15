@@ -249,10 +249,23 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		opt(&options)
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
+
 	if options.dedicatedReason != "" {
 		dedicatedGuard.record(options.dedicatedReason)
 	}
-	globalDynamicConfig := globalDynamicConfigOverrides(options.dynamicConfigSettings)
+
+	var globalDynamicConfig map[dynamicconfig.Key]any
+	var namespaceDynamicConfig []dynamicConfigOverride
+	for _, override := range options.dynamicConfigSettings {
+		if canBeNamespaceScoped(override.setting.Precedence()) {
+			namespaceDynamicConfig = append(namespaceDynamicConfig, override)
+			continue
+		}
+		if globalDynamicConfig == nil {
+			globalDynamicConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+		}
+		globalDynamicConfig[override.setting.Key()] = override.value
+	}
 	if len(globalDynamicConfig) > 0 {
 		dedicatedGuard.record("global dynamic config used")
 	}
@@ -320,10 +333,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Apply namespace-scoped dynamic config settings.
-	for _, override := range options.dynamicConfigSettings {
-		if !canBeNamespaceScoped(override.setting.Precedence()) {
-			continue
-		}
+	for _, override := range namespaceDynamicConfig {
 		env.OverrideDynamicConfig(override.setting, override.value)
 	}
 	if options.historyTaskRecorder {
@@ -332,20 +342,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	return env
-}
-
-func globalDynamicConfigOverrides(settings []dynamicConfigOverride) map[dynamicconfig.Key]any {
-	var byKey map[dynamicconfig.Key]any
-	for _, override := range settings {
-		if canBeNamespaceScoped(override.setting.Precedence()) {
-			continue
-		}
-		if byKey == nil {
-			byKey = make(map[dynamicconfig.Key]any, len(settings))
-		}
-		byKey[override.setting.Key()] = override.value
-	}
-	return byKey
 }
 
 // Use test env-specific namespace here for test isolation.
