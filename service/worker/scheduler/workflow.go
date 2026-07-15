@@ -1445,8 +1445,11 @@ func (s *scheduler) startWorkflow(
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedulepb.ScheduleActionResult, error) {
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
-	workflowID := newWorkflow.WorkflowId
-	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
+	workflowID := start.WorkflowId
+	if workflowID == "" {
+		workflowID = newWorkflow.WorkflowId
+	}
+	if start.WorkflowId == "" && (start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp) {
 		// must match AppendedTimestampForValidation
 		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
@@ -1482,6 +1485,10 @@ func (s *scheduler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	requestID := start.RequestId
+	if requestID == "" {
+		requestID = s.newUUIDString()
+	}
 	req := &schedulespb.StartWorkflowRequest{
 		Request: &workflowservice.StartWorkflowExecutionRequest{
 			WorkflowId:               workflowID,
@@ -1492,7 +1499,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowRunTimeout:       newWorkflow.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      newWorkflow.WorkflowTaskTimeout,
 			Identity:                 s.identity(),
-			RequestId:                s.newUUIDString(),
+			RequestId:                requestID,
 			WorkflowIdReusePolicy:    reusePolicy,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,

@@ -141,6 +141,9 @@ func (h *InvokerExecuteTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	// If another execute task already happened to kick everything off, we don't need
 	// this one.
 	eligibleStarts := invoker.getEligibleBufferedStarts()
@@ -412,6 +415,9 @@ func (h *InvokerProcessBufferTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err

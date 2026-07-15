@@ -785,6 +785,9 @@ func (s *Scheduler) Delete(
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	s.Closed = true
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
@@ -838,6 +841,9 @@ func (s *Scheduler) Update(
 	if s.Closed {
 		return nil, ErrClosed
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
@@ -856,12 +862,6 @@ func (s *Scheduler) Update(
 
 		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
-	}
-
-	// Reject updates outright when a migration is pending so that changes are
-	// not silently lost during the migration window.
-	if s.WorkflowMigration != nil {
-		return nil, ErrMigrationPending
 	}
 
 	// Update custom memo.
@@ -898,6 +898,9 @@ func (s *Scheduler) Patch(
 	if s.Closed {
 		return nil, ErrClosed
 	}
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
@@ -905,9 +908,6 @@ func (s *Scheduler) Patch(
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
-		if s.WorkflowMigration != nil {
-			return nil, ErrMigrationPending
-		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
