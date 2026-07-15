@@ -143,6 +143,7 @@ var TransitionStarted = chasm.NewTransition(
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
+		attempt.StartedStamp = request.GetStamp()
 		// Record the first-ever worker pickup time once and never update on retries or resets.
 		if a.FirstAttemptStartedTime == nil {
 			a.FirstAttemptStartedTime = attempt.GetStartedTime()

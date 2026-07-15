@@ -393,8 +393,9 @@ func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *test
 			HeartbeatTimeout: durationpb.New(0),
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count: attempt,
-			Stamp: 7,
+			Count:        attempt,
+			Stamp:        7,
+			StartedStamp: 7,
 		}),
 	}
 	originalToken := &tokenspb.Task{
@@ -417,6 +418,7 @@ func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *test
 	resetAttempt := act.LastAttempt.Get(ctx)
 	resetAttempt.Count = attempt
 	resetAttempt.Stamp++
+	resetAttempt.StartedStamp = resetAttempt.GetStamp()
 
 	resetToken := &tokenspb.Task{
 		NamespaceId:          namespaceID,
@@ -484,8 +486,9 @@ func TestActivityTaskTokenWithoutAttemptStampAcceptedForCurrentRetryAttempt(t *t
 			HeartbeatTimeout: durationpb.New(0),
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			Count: attempt,
-			Stamp: 11,
+			Count:        attempt,
+			Stamp:        11,
+			StartedStamp: 8,
 		}),
 	}
 	token := &tokenspb.Task{

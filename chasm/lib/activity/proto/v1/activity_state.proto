@@ -245,6 +245,9 @@ message ActivityAttemptState {
   // worker-provided NextRetryDelay override. Retry policy updates only recompute
   // current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
   ActivityRetryIntervalSource current_retry_interval_source = 13;
+  // The attempt stamp captured when the current worker started this attempt.
+  // Unlike stamp, this does not change on options updates while the worker owns the token.
+  int32 started_stamp = 14;
 }
 
 message ActivityHeartbeatState {
