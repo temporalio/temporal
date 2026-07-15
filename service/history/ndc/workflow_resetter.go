@@ -136,8 +136,29 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
-	currentMutableState := currentWorkflow.GetMutableState()
-	if currentMutableState.IsWorkflowExecutionRunning() {
+	// currentWorkflow is nil only for a reset by explicit runId whose workflow has no current
+	// execution (the current run was deleted while older runs survive). This is exclusive to the
+	// user-facing reset API path; all other callers pass a concrete current run.
+	currentExecutionMissing := currentWorkflow == nil
+	if currentExecutionMissing {
+		// No current run to terminate. Reapply along the continue-as-new chain as far as it survives.
+		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
+			_, err := r.reapplyContinueAsNewWorkflowEvents(
+				ctx,
+				resetMutableState,
+				nil,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
+				baseRebuildLastEventID+1,
+				baseNextEventID,
+				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
+			)
+			return err
+		}
+	} else if currentMutableState := currentWorkflow.GetMutableState(); currentMutableState.IsWorkflowExecutionRunning() {
 		currentMutableState.GetExecutionInfo().WorkflowWasReset = true
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -255,7 +276,9 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+	if !currentExecutionMissing {
+		currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+	}
 
 	return nil
 }
@@ -345,8 +368,6 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
-	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
@@ -354,6 +375,52 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
+
+	currentExecutionMissing := currentWorkflow == nil
+	if currentExecutionMissing {
+		// There is no current_executions row (the current run was deleted), so the base->reset link
+		// and the new current run cannot be committed atomically: re-establishing a missing current
+		// requires a brand-new insert, while the base run needs a bypass-current update, and no
+		// single Transaction method does both. Write base-first so retries are safe: if the create
+		// fails, a retry rewrites the base link and the brand-new insert still succeeds. Creating
+		// first would leave the reset run as current and permanently conflict with the create.
+		baseWorkflowMutation, baseWorkflowEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
+			ctx,
+			historyi.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
+		if _, _, err := r.transaction.UpdateWorkflowExecution(
+			ctx,
+			persistence.UpdateWorkflowModeBypassCurrent,
+			chasm.WorkflowArchetypeID,
+			baseWorkflow.GetMutableState().GetCurrentVersion(),
+			baseWorkflowMutation,
+			baseWorkflowEventsSeq,
+			nil,
+			nil,
+			nil,
+			baseWorkflow.GetMutableState().IsWorkflow(),
+		); err != nil {
+			return err
+		}
+		if _, err := r.transaction.CreateWorkflowExecution(
+			ctx,
+			persistence.CreateWorkflowModeBrandNew,
+			chasm.WorkflowArchetypeID,
+			resetWorkflow.GetMutableState().GetCurrentVersion(),
+			resetWorkflowSnapshot,
+			resetWorkflowEventsSeq,
+			resetWorkflow.GetMutableState().IsWorkflow(),
+		); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
+	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 
 	if currentRunID == baseRunID {
 		// There are just 2 runs to update - base & new run.
@@ -695,7 +762,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		var wfCtx historyi.WorkflowContext
 		var err error
 
-		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+		// currentWorkflow is nil when resetting a workflow with no current run; load every run from the cache.
+		if currentWorkflow != nil && runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
 			wfCtx = currentWorkflow.GetContext()
 		} else {
 			var release historyi.ReleaseWorkflowContextFunc
@@ -731,11 +799,17 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// Second, for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
-		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
 		if err != nil {
+			// A deleted run truncates the chain; other errors must fail the reset so a retry
+			// can reapply the full surviving chain, since reset is one-shot.
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				break
+			}
 			return "", err
 		}
+		lastVisitedRunID = nextRunID
 
 		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
