@@ -253,6 +253,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 
 		var buf bytes.Buffer
 		cmd := exec.CommandContext(t.Context(), binary, args...)
+		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto") // Omes workers may require a newer toolchain
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
