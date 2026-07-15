@@ -16,7 +16,7 @@ import (
 
 // setTrailerInOpts finds the grpc.TrailerCallOption in opts and populates it.
 func setTrailerInOpts(opts []grpc.CallOption, pc PartitionCounts) {
-	v, _ := pc.encode()
+	v, _ := pc.encode(true) // trailer path (server -> client) includes backlog info
 	md := metadata.Pairs(partitionCountsTrailerName, v)
 	for _, opt := range opts {
 		if t, ok := opt.(grpc.TrailerCallOption); ok {
