@@ -7898,17 +7898,19 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NotEmpty(t, pollResp.GetTaskToken(), "expected dispatch under the updated start_delay after unpause")
 	})
 
-	// Once the delay window elapses the first dispatch time is fixed in the past, so start_delay
-	// becomes immutable even while paused: an update pushing dispatch further out is rejected, and
-	// unpause dispatches immediately rather than honoring the rejected longer delay.
-	s.Run("UpdateWhilePaused_AfterWindow_Rejected", func(s *standaloneActivityTestSuite) {
+	// While paused before the first attempt, start_delay stays editable even after the original
+	// delay window has elapsed: pause pulls the activity out of dispatch, so extending start_delay
+	// defers the dispatch that unpause would otherwise perform immediately.
+	s.Run("UpdateWhilePaused_AfterWindow_ExtendsDispatch", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		// Short so the sleep below stays fast; only needs to be > 0.
-		startDelay := 1 * time.Second
+		originalDelay := 1 * time.Second
+		// Long enough that a dispatch after unpause lands well beyond the short poll below.
+		newDelay := 30 * time.Second
 
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
@@ -7918,7 +7920,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			StartDelay:          durationpb.New(startDelay),
+			StartDelay:          durationpb.New(originalDelay),
 		})
 		require.NoError(t, err)
 
@@ -7931,7 +7933,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// 2s > startDelay (1s) so firstDispatchTime is firmly in the past; pause still holds dispatch.
+		// 2s > originalDelay (1s) so the original delay window is firmly in the past.
 		time.Sleep(2 * time.Second) //nolint:forbidigo
 
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
@@ -7942,21 +7944,23 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
 
-		// The delay window has elapsed, so start_delay can no longer be extended even while paused.
+		// The first attempt never started, so start_delay is still editable despite the elapsed window.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace:       env.Namespace().String(),
 			ActivityId:      activityID,
 			RunId:           startResp.RunId,
-			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(60 * time.Second)},
+			ActivityOptions: &activitypb.ActivityOptions{StartDelay: durationpb.New(newDelay)},
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}},
 		})
-		require.Error(t, err)
-		var failedPrecond *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPrecond)
-		require.Contains(t, failedPrecond.Message, "start_delay")
+		require.NoError(t, err)
+		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, newDelay, descResp.GetInfo().GetStartDelay().AsDuration())
 
-		// Unpause dispatches immediately: the rejected update did not push dispatch out.
-		unpauseTime := time.Now()
 		_, err = env.FrontendClient().UnpauseActivityExecution(s.Context(), &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -7965,22 +7969,13 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		pollCtx, cancel := context.WithTimeout(s.Context(), 5*time.Second)
+		// Dispatch now honors the extended delay (~30s out), so a short poll must find no task; had the
+		// update not taken effect, the elapsed original delay would dispatch immediately on unpause.
+		pollCtx, cancel := context.WithTimeout(s.Context(), 3*time.Second)
 		defer cancel()
-		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
-		require.NoError(t, err)
-		require.NotEmpty(t, pollResp.GetTaskToken())
-
-		descResp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
-		})
-		require.NoError(t, err)
-		lastStart := descResp.GetInfo().GetLastStartedTime().AsTime()
-		require.False(t, lastStart.IsZero())
-		require.WithinDuration(t, unpauseTime, lastStart, timerSafetyMargin,
-			"rejected longer start_delay must not delay dispatch; the elapsed delay dispatches on unpause")
+		pollResp, _ := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		require.Empty(t, pollResp.GetTaskToken(),
+			"activity must not dispatch within the extended start_delay after unpause")
 	})
 }
 
