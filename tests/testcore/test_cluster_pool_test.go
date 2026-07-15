@@ -60,7 +60,32 @@ func TestClusterPool_MaxLeasesRecyclesOnNextAcquire(t *testing.T) {
 	})
 }
 
-func TestClusterPool_OneOffClusterReplacesIdlePooledCluster(t *testing.T) {
+func TestClusterPool_ExclusiveClusterReusesAfterRelease(t *testing.T) {
+	p := newClusterPool(3, true, 0)
+	var created int
+	createCluster := func() *FunctionalTestBase {
+		created++
+		return &FunctionalTestBase{}
+	}
+
+	t.Run("uses pooled cluster", func(t *testing.T) {
+		cluster := p.get(t, createCluster)
+		require.NotNil(t, cluster)
+	})
+
+	pooledCluster := p.allSlots[2].cluster
+	require.NotNil(t, pooledCluster)
+
+	t.Run("reuses pooled cluster", func(t *testing.T) {
+		cluster := p.get(t, createCluster)
+		require.Same(t, pooledCluster, cluster)
+	})
+
+	require.Same(t, pooledCluster, p.allSlots[2].cluster)
+	require.Equal(t, 1, created)
+}
+
+func TestClusterPool_OneOffClusterDoesNotReplacePooledCluster(t *testing.T) {
 	p := newClusterPool(1, true, 0)
 	slot := p.allSlots[0]
 	var created int
@@ -80,10 +105,10 @@ func TestClusterPool_OneOffClusterReplacesIdlePooledCluster(t *testing.T) {
 	t.Run("uses fresh cluster", func(t *testing.T) {
 		cluster := p.getOneOff(t, createCluster)
 		require.NotSame(t, pooledCluster, cluster)
-		require.Nil(t, slot.cluster)
+		require.Same(t, pooledCluster, slot.cluster)
 	})
 
-	require.Nil(t, slot.cluster)
+	require.Same(t, pooledCluster, slot.cluster)
 	require.Equal(t, 2, created)
 }
 

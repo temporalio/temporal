@@ -54,7 +54,8 @@ func init() {
 type clusterPool struct {
 	sync.Mutex
 	allSlots       []*clusterPoolSlot
-	availableSlots chan *clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
+	availableSlots []*clusterPoolSlot // for exclusive access (nil means shared/concurrent access)
+	availableCond  *sync.Cond
 	nextSlotIdx    int
 }
 
@@ -79,10 +80,8 @@ func newClusterPool(size int, exclusive bool, maxLeases int) *clusterPool {
 		}
 	}
 	if exclusive {
-		p.availableSlots = make(chan *clusterPoolSlot, size)
-		for _, slot := range p.allSlots {
-			p.availableSlots <- slot
-		}
+		p.availableCond = sync.NewCond(&p.Mutex)
+		p.availableSlots = append(p.availableSlots, p.allSlots...)
 	}
 	return p
 }
@@ -98,8 +97,7 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 }
 
 func (p *clusterPool) getOneOff(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
-	slot := p.reserveSlot(t)
-	slot.tearDown(t)
+	p.reserveSlot(t)
 	cluster := createCluster()
 	t.Cleanup(func() {
 		if err := cluster.tearDownTestCluster(); err != nil {
@@ -111,11 +109,26 @@ func (p *clusterPool) getOneOff(t *testing.T, createCluster func() *FunctionalTe
 
 func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
 	if p.availableSlots != nil {
-		slot := <-p.availableSlots
-		t.Cleanup(func() { p.availableSlots <- slot })
+		p.Lock()
+		for len(p.availableSlots) == 0 {
+			p.availableCond.Wait()
+		}
+		idx := len(p.availableSlots) - 1
+		slot := p.availableSlots[idx]
+		p.availableSlots = p.availableSlots[:idx]
+		p.Unlock()
+
+		t.Cleanup(func() { p.releaseSlot(slot) })
 		return slot
 	}
 	return p.nextSlot()
+}
+
+func (p *clusterPool) releaseSlot(slot *clusterPoolSlot) {
+	p.Lock()
+	defer p.Unlock()
+	p.availableSlots = append(p.availableSlots, slot)
+	p.availableCond.Signal()
 }
 
 func (p *clusterPool) nextSlot() *clusterPoolSlot {
@@ -183,7 +196,16 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 func (s *clusterPoolSlot) tearDown(t *testing.T) {
 	s.Lock()
 	defer s.Unlock()
+	if s.activeLeases != 0 {
+		t.Fatalf("cannot tear down cluster pool slot %d with %d active leases", s.idx, s.activeLeases)
+	}
 	s.tearDownLocked(t)
+}
+
+func (p *clusterPool) tearDown(t *testing.T) {
+	for _, slot := range p.allSlots {
+		slot.tearDown(t)
+	}
 }
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
@@ -200,6 +222,13 @@ type clusterRouter struct {
 type suiteScopedCluster struct {
 	once    sync.Once
 	cluster *FunctionalTestBase
+}
+
+// TearDownClusterPools tears down clusters retained by the process-wide pools.
+func TearDownClusterPools(t *testing.T) {
+	t.Helper()
+	testClusterRouter.shared.tearDown(t)
+	testClusterRouter.dedicated.tearDown(t)
 }
 
 // UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
@@ -343,13 +372,30 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	// TestEnv dedicated requests take exclusive ownership of a dedicated pool slot,
-	// but still use fresh clusters so state cannot leak between unrelated tests.
+	// and reset per-test dynamic config before releasing the slot.
 	req.kind = clusterKindDedicated
 	req.needWorkerService = true // always enable the worker service on dedicated clusters
 
-	return p.dedicated.getOneOff(t, func() *FunctionalTestBase {
+	if len(req.clusterOpts) > 0 {
+		// These options are cluster-startup state and cannot be reset on a pooled cluster.
+		cluster := p.dedicated.getOneOff(t, func() *FunctionalTestBase {
+			return p.createCluster(t, req)
+		})
+		p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
+		return cluster
+	}
+
+	cluster := p.dedicated.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, req)
 	})
+	p.applyDynamicConfig(t, cluster, req.globalDynamicConfig)
+	return cluster
+}
+
+func (p *clusterRouter) applyDynamicConfig(t *testing.T, cluster *FunctionalTestBase, overrides map[dynamicconfig.Key]any) {
+	for key, value := range overrides {
+		cluster.testCluster.host.overrideDynamicConfigForTest(t, key, value)
+	}
 }
 
 func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *FunctionalTestBase {
@@ -361,7 +407,7 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}
-	if len(req.globalDynamicConfig) > 0 {
+	if req.kind != clusterKindDedicated && len(req.globalDynamicConfig) > 0 {
 		opts = append(opts, WithDynamicConfigOverrides(req.globalDynamicConfig))
 	}
 	opts = append(opts, req.clusterOpts...)
