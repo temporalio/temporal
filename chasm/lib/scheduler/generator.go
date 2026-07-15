@@ -62,14 +62,28 @@ func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 // UpdateFutureActionTimes computes and stores the next scheduled action times.
+// On spec-compile error the previously stored times are left untouched.
 func (g *Generator) UpdateFutureActionTimes(
 	ctx chasm.Context,
 	specBuilder *scheduler.SpecBuilder,
 ) {
+	futureTimes, err := g.computeFutureActionTimes(ctx, specBuilder)
+	if err != nil {
+		return
+	}
+	g.FutureActionTimes = futureTimes
+}
+
+// computeFutureActionTimes returns the next scheduled action times without mutating
+// component state, so it's safe to call from a read-only context.
+func (g *Generator) computeFutureActionTimes(
+	ctx chasm.Context,
+	specBuilder *scheduler.SpecBuilder,
+) ([]*timestamppb.Timestamp, error) {
 	sched := g.Scheduler.Get(ctx)
 	spec, err := sched.getCompiledSpec(specBuilder)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	count := recentActionCount
@@ -93,5 +107,5 @@ func (g *Generator) UpdateFutureActionTimes(
 		futureTimes = append(futureTimes, timestamppb.New(t))
 	}
 
-	g.FutureActionTimes = futureTimes
+	return futureTimes, nil
 }
