@@ -276,7 +276,7 @@ func (r clusterRequest) reason() string {
 	case r.needWorkerService || len(r.globalDynamicConfig) > 0 || r.requiresOneOffCluster():
 		return "custom config"
 	default:
-		return "dedicated (pooled)"
+		return "dedicated"
 	}
 }
 
@@ -351,20 +351,12 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
-	// TestEnv dedicated requests normally reuse one exclusive worker-enabled cluster.
-	// Cluster-construction options and global dynamic config use a one-off cluster
-	// because they cannot be reset reliably after startup.
+	// TestEnv dedicated requests are serialized through one slot to reduce peak memory,
+	// but still use fresh clusters so state cannot leak between unrelated tests.
 	req.kind = clusterKindDedicated
 	req.needWorkerService = true // always enable the worker service on dedicated clusters
 
-	if req.requiresOneOffCluster() {
-		return p.exclusiveTestEnvCluster.getOneOff(t, func() *FunctionalTestBase {
-			return p.createCluster(t, req)
-		})
-	}
-
-	return p.exclusiveTestEnvCluster.get(t, func() *FunctionalTestBase {
-		req.globalDynamicConfig = nil
+	return p.exclusiveTestEnvCluster.getOneOff(t, func() *FunctionalTestBase {
 		return p.createCluster(t, req)
 	})
 }
