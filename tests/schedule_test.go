@@ -92,7 +92,11 @@ func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv
 				NextPageToken:   nextPageToken,
 			})
 			if err != nil {
-				reportScheduleCleanupError(t, fmt.Errorf("list schedules: %w", err))
+				if t.Failed() {
+					t.Logf("schedule cleanup failed: list schedules: %v", err)
+				} else {
+					t.Errorf("schedule cleanup failed: list schedules: %v", err)
+				}
 				return
 			}
 			for _, schedule := range response.GetSchedules() {
@@ -116,21 +120,15 @@ func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv
 				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete schedule %q: %w", scheduleID, err))
 			}
 		}
-		reportScheduleCleanupError(t, cleanupErr)
+		if cleanupErr != nil {
+			if t.Failed() {
+				t.Logf("schedule cleanup failed: %v", cleanupErr)
+			} else {
+				t.Errorf("schedule cleanup failed: %v", cleanupErr)
+			}
+		}
 	})
 	return env
-}
-
-func reportScheduleCleanupError(t *testing.T, err error) {
-	t.Helper()
-	if err == nil {
-		return
-	}
-	if t.Failed() {
-		t.Logf("schedule cleanup failed: %v", err)
-		return
-	}
-	t.Errorf("schedule cleanup failed: %v", err)
 }
 
 const (
