@@ -250,6 +250,27 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
 	)
+	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.historyHealthSignalLatencyWindowCount",
+		10,
+		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.historyHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
+	// TODO: This should be removed once percentiles are the default.
+	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
+		"system.historyHealthSignalUsePercentiles",
+		false,
+		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
+	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
@@ -1577,6 +1598,8 @@ default as namespace cardinality can be high and this requires a metrics collect
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
 			MaxRate:               0.33,
+			ShrinkRatio:           0.1,
+			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
@@ -1654,6 +1677,11 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
+		"history.emitReplicationLifecycleEvents",
+		false,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
 		true,
@@ -1720,6 +1748,18 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
+		"history.enableWorkflowTaskCompletionPagination",
+		false,
+		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
+		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
+	)
+	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
+		"history.workflowTaskCompletionBufferSizeLimit",
+		40*1024*1024,
+		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
+		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -3459,6 +3499,15 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
 		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
+	)
+
+	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
+		"frontend.enableMatchingFanOutForPollCancellation",
+		false,
+		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
+		When enabled, frontend sends root partition only; matching fans out to all partitions.
+		When disabled, frontend iterates partitions; matching handles each partition locally.
+		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are

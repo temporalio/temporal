@@ -172,7 +172,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 
 	s.Run("child workflow propagation can be turned off", func() {
 		src := newSource()
-		src.TimeSkippingInfo.Config.DisableChildPropagation = true
+		src.TimeSkippingInfo.Config.DisablePropagation = true
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
@@ -191,7 +191,7 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		s.Nil(propagatedState.GetFastForwardTargetTime())
 	})
 
-	s.Run("disableChildPropagation still propagates virtual time", func() {
+	s.Run("disablePropagation still propagates virtual time", func() {
 		src := newSource()
 		src.TimeSkippingInfo.Config.Enabled = false
 		tsc, propagatedState := propagateTimeSkippingToChild(src)
@@ -397,9 +397,9 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		eventID := int64(1)
 
 		cfg := &commonpb.TimeSkippingConfig{
-			Enabled:                 true,
-			FastForward:             durationpb.New(fastForward),
-			DisableChildPropagation: true,
+			Enabled:            true,
+			FastForward:        durationpb.New(fastForward),
+			DisablePropagation: true,
 		}
 		propagation := &commonpb.TimeSkippingStatePropagation{
 			InitialSkippedDuration: durationpb.New(hasSkipped),
@@ -470,9 +470,9 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
 		// new config
 		newConfig := &commonpb.TimeSkippingConfig{
-			Enabled:                 true,
-			FastForward:             durationpb.New(2 * time.Hour),
-			DisableChildPropagation: true,
+			Enabled:            true,
+			FastForward:        durationpb.New(2 * time.Hour),
+			DisablePropagation: true,
 		}
 		newEventID := int64(8)
 		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig, newEventID))

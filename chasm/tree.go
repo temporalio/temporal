@@ -2130,7 +2130,7 @@ func (n *Node) deserializeComponentTask(
 // This method assumes component value is already hydrated.
 func (n *Node) validateTask(
 	validateContext Context,
-	taskAttributes TaskAttributes,
+	taskInvocation TaskInvocation,
 	taskInstance any,
 ) (_ bool, retErr error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
@@ -2155,7 +2155,7 @@ func (n *Node) validateTask(
 	return registableTask.validateFn(
 		validateContext,
 		n.value,
-		taskAttributes,
+		taskInvocation,
 		taskInstance,
 		n.registry,
 	)
@@ -2176,9 +2176,11 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			TaskAttributes{
-				ScheduledTime: existingTask.ScheduledTime.AsTime(),
-				Destination:   existingTask.Destination,
+			TaskInvocation{
+				TaskAttributes: TaskAttributes{
+					ScheduledTime: existingTask.ScheduledTime.AsTime(),
+					Destination:   existingTask.Destination,
+				},
 			},
 			existingTaskInstance,
 		)
@@ -2258,7 +2260,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			newTask.attributes,
+			TaskInvocation{TaskAttributes: newTask.attributes},
 			newTask.task,
 		)
 		if err != nil {
@@ -2544,6 +2546,121 @@ func (n *Node) snapshotInternal(
 			nodes,
 		)
 	}
+}
+
+// PartitionedSnapshot returns the tree's state split into two parts:
+//   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
+//     upload to object storage or replicate to another cluster.
+//   - A ChasmLocalState capturing the extracted cluster-local fields, keyed by encoded
+//     node path. Only nodes that carry such metadata are present.
+//
+// The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
+// zeroes field values, it never adds or removes nodes. The live in-memory tree is left
+// untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
+// Snapshot returns the tree's live node references.
+//
+// The returned ChasmLocalState has an empty Nodes map when no node carries cluster-local
+// fields; MergeClusterLocalState treats an empty (or nil) state as a no-op.
+func (n *Node) PartitionedSnapshot(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (NodesSnapshot, *persistencespb.ChasmLocalState) {
+	snapshot := n.Snapshot(exclusiveMinVT)
+	localState := &persistencespb.ChasmLocalState{
+		Nodes: make(map[string]*persistencespb.ChasmNodeLocalState),
+	}
+	for path, node := range snapshot.Nodes {
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		if len(componentAttr.SideEffectTasks)+len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
+		// read-only in a snapshot, so share its pointer rather than copying component payloads.
+		clean := &persistencespb.ChasmNode{Metadata: proto.CloneOf(node.GetMetadata()), Data: node.GetData()}
+		cleanAttr := clean.GetMetadata().GetComponentAttributes()
+		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
+			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
+			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
+		}
+		snapshot.Nodes[path] = clean
+	}
+	return snapshot, localState
+}
+
+// extractAndZeroTaskStatuses records each task's physical task status in order and zeroes
+// it in place. The caller must pass tasks from a node copy, not the live tree.
+func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task) []int32 {
+	if len(taskList) == 0 {
+		return nil
+	}
+	statuses := make([]int32, len(taskList))
+	for i, t := range taskList {
+		statuses[i] = t.PhysicalTaskStatus
+		t.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return statuses
+}
+
+// ClusterLocalStateMergeResult reports, per direction, how many nodes had a task/status count
+// mismatch during MergeClusterLocalState. The two directions differ in significance, so they are
+// tracked separately rather than as a single count.
+type ClusterLocalStateMergeResult struct {
+	// NodesWithUncoveredTasks counts nodes that had more tasks than stored statuses. The extra
+	// tasks keep their zeroed status (physicalTaskStatusNone) and get a physical task created on
+	// the next transaction. Benign and self-healing — typically the writer's captured state was
+	// slightly behind the authoritative snapshot.
+	NodesWithUncoveredTasks int
+	// NodesWithExtraStatuses counts nodes that had more stored statuses than tasks. The surplus
+	// statuses have no task to apply to and are dropped. Suspicious: the stored state referenced
+	// tasks absent from the authoritative snapshot, which can indicate cluster divergence (e.g.
+	// split-brain). Detecting and resolving true divergence belongs to the replication conflict
+	// path; this count is a diagnostic signal, not the resolution.
+	NodesWithExtraStatuses int
+}
+
+// MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
+// extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
+// state are updated; nodes in the state but not the snapshot are silently skipped (the node
+// may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
+// only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
+// match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
+// stale-data) merge and escalate the suspicious direction.
+//
+// The merge performs no version/ordering checks; callers must apply it only against a final local
+// tree (e.g. defer until the execution is completed and its close version has caught up to the
+// source), so a length mismatch signals real divergence rather than normal replication lag.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
+	var result ClusterLocalStateMergeResult
+	for path, nodeState := range state.GetNodes() {
+		node, ok := s.Nodes[path]
+		if !ok {
+			continue
+		}
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		seDiff := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureDiff := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seDiff > 0 || pureDiff > 0 {
+			result.NodesWithUncoveredTasks++
+		}
+		if seDiff < 0 || pureDiff < 0 {
+			result.NodesWithExtraStatuses++
+		}
+	}
+	return result
+}
+
+// mergeTaskStatuses applies statuses to tasks by position and returns len(taskList) - len(statuses)
+// (>0: extra tasks left zeroed; <0: surplus statuses dropped).
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) int {
+	for i := 0; i < len(taskList) && i < len(statuses); i++ {
+		taskList[i].PhysicalTaskStatus = statuses[i]
+	}
+	return len(taskList) - len(statuses)
 }
 
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
@@ -3398,7 +3515,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(validationContext, taskAttributes, taskInstance)
+	valid, err := n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
 	if err != nil {
 		return false, err
 	}
@@ -3557,9 +3674,12 @@ func (n *Node) ValidateSideEffectTask(
 
 	isValidByComponent, retErr = node.validateTask(
 		validateCtx,
-		TaskAttributes{
-			ScheduledTime: chasmTask.GetVisibilityTime(),
-			Destination:   chasmTask.Destination,
+		TaskInvocation{
+			TaskAttributes: TaskAttributes{
+				ScheduledTime: chasmTask.GetVisibilityTime(),
+				Destination:   chasmTask.Destination,
+			},
+			Attempt: chasmTask.Attempt,
 		},
 		chasmTask.DeserializedTask.Interface(),
 	)
@@ -3672,7 +3792,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's handler.
-		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
+		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
 	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
@@ -3713,6 +3833,7 @@ func (n *Node) ComponentByPath(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
+	attempt int,
 	taskAttributes TaskAttributes,
 	taskValue reflect.Value,
 ) func(NodeBackend, Context, Component, *Registry) error {
@@ -3730,7 +3851,7 @@ func makeValidationFn(
 		valid, err := registrableTask.validateFn(
 			ctx,
 			component,
-			taskAttributes,
+			TaskInvocation{TaskAttributes: taskAttributes, Attempt: attempt},
 			taskValue.Interface(),
 			registry,
 		)

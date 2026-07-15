@@ -355,7 +355,7 @@ var defaultVisibilityTaskHandler = &visibilityTaskHandler{}
 func (v *visibilityTaskHandler) Validate(
 	_ Context,
 	component *Visibility,
-	_ TaskAttributes,
+	_ TaskInvocation,
 	task *persistencespb.ChasmVisibilityTaskData,
 ) (bool, error) {
 	return task.TransitionCount == component.Data.TransitionCount, nil

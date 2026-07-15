@@ -439,6 +439,7 @@ jobs:
           TEST_ARGS: "${{ matrix.test_args }}"
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: info
+          TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
@@ -494,7 +495,7 @@ jobs:
 
       - name: Print memory snapshot
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
+        run: cat .testoutput/memory/memory-snapshot.txt || true
 
       - name: Print current server logs
         if: always()
@@ -506,7 +507,7 @@ jobs:
 
       - name: Print Omes logs
         if: always()
-        run: cat .testoutput/mixedbrain_omes.log || true
+        run: cat .testoutput/mixedbrain_omes_*.log || true
 
       - name: Stop containerized dependencies
         if: always()

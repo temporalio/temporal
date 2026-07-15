@@ -3,11 +3,12 @@ package history
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -30,6 +31,9 @@ type (
 		rpcFactory             RPCFactory
 		clientCtor             func(grpc.ClientConnInterface) C
 		logger                 log.Logger
+		connectionCloseDelay   dynamicconfig.DurationPropertyFn
+		watcher                *goro.Handle
+		closed                 atomic.Bool
 	}
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
@@ -41,6 +45,7 @@ type (
 		getOrCreateClientConn(addr rpcAddress) clientConnection[C]
 		getAllClientConns() []clientConnection[C]
 		resetConnectBackoff(clientConnection[C])
+		Close()
 	}
 )
 
@@ -59,29 +64,39 @@ func NewConnectionPool[C any](
 		rpcFactory:             rpcFactory,
 		clientCtor:             clientCtor,
 		logger:                 logger,
+		connectionCloseDelay:   connectionCloseDelay,
 	}
 
 	// Close cached conns whose host leaves the membership ring.
-	ctx, cancel := context.WithCancel(context.Background())
-	go watchMembershipForClose[C](ctx, historyServiceResolver, logger, conns, connectionCloseDelay)
-	runtime.AddCleanup(c, func(cancel context.CancelFunc) { cancel() }, cancel)
+	c.watcher = goro.NewHandle(context.Background()).Go(c.watchMembership)
 	return c
 }
 
-func watchMembershipForClose[C any](
-	ctx context.Context,
-	resolver membership.ServiceResolver,
-	logger log.Logger,
-	conns *sync.Map,
-	connectionCloseDelay dynamicconfig.DurationPropertyFn,
-) {
-	listenerName := fmt.Sprintf("%p", conns)
-	ch := make(chan *membership.ChangedEvent, 1)
-	if err := resolver.AddListener(listenerName, ch); err != nil {
-		logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+// Close stops the watcher and closes all pooled connections.
+func (c *connectionPoolImpl[C]) Close() {
+	if !c.closed.CompareAndSwap(false, true) {
 		return
 	}
-	defer func() { _ = resolver.RemoveListener(listenerName) }()
+	c.watcher.Cancel()
+	<-c.watcher.Done()
+	// Set closed before reaping so a concurrent create can't re-cache a conn.
+	c.conns.Range(func(key, value any) bool {
+		c.conns.Delete(key)
+		if err := value.(clientConnection[C]).grpcConn.Close(); err != nil {
+			c.logger.Warn("Error closing gRPC connection on shutdown", tag.Error(err))
+		}
+		return true
+	})
+}
+
+func (c *connectionPoolImpl[C]) watchMembership(ctx context.Context) error {
+	listenerName := fmt.Sprintf("%p", c.conns)
+	ch := make(chan *membership.ChangedEvent, 1)
+	if err := c.historyServiceResolver.AddListener(listenerName, ch); err != nil {
+		c.logger.Error("Failed to subscribe history connection pool to membership", tag.Error(err))
+		return err
+	}
+	defer func() { _ = c.historyServiceResolver.RemoveListener(listenerName) }()
 
 	// Reap departed hosts via a per-address deadline checked by a single ticker;
 	// a re-add resets it to the latest removal.
@@ -91,31 +106,26 @@ func watchMembershipForClose[C any](
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case event := <-ch:
 			for _, h := range event.HostsRemoved {
-				evictAt[rpcAddress(h.GetAddress())] = time.Now().Add(connectionCloseDelay())
+				evictAt[rpcAddress(h.GetAddress())] = time.Now().Add(c.connectionCloseDelay())
 			}
 			for _, h := range event.HostsAdded {
 				delete(evictAt, rpcAddress(h.GetAddress()))
 			}
 		case <-ticker.C:
-			reapClosableConns[C](resolver, logger, conns, evictAt)
+			c.reapClosableConns(evictAt)
 		}
 	}
 }
 
-func reapClosableConns[C any](
-	resolver membership.ServiceResolver,
-	logger log.Logger,
-	conns *sync.Map,
-	evictAt map[rpcAddress]time.Time,
-) {
+func (c *connectionPoolImpl[C]) reapClosableConns(evictAt map[rpcAddress]time.Time) {
 	if len(evictAt) == 0 {
 		return
 	}
 	members := make(map[rpcAddress]struct{})
-	for _, m := range resolver.Members() {
+	for _, m := range c.historyServiceResolver.Members() {
 		members[rpcAddress(m.GetAddress())] = struct{}{}
 	}
 	now := time.Now()
@@ -127,9 +137,9 @@ func reapClosableConns[C any](
 		if now.Before(deadline) {
 			continue
 		}
-		if v, ok := conns.LoadAndDelete(addr); ok {
+		if v, ok := c.conns.LoadAndDelete(addr); ok {
 			if err := v.(clientConnection[C]).grpcConn.Close(); err != nil {
-				logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
+				c.logger.Warn("Error closing evicted gRPC connection", tag.Error(err))
 			}
 		}
 		delete(evictAt, addr)
@@ -150,6 +160,12 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
 		_ = grpcConn.Close()
 		return actual.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+	}
+	// Lost the race with Close; drop the conn we just cached.
+	if c.closed.Load() {
+		if v, ok := c.conns.LoadAndDelete(addr); ok {
+			_ = v.(clientConnection[C]).grpcConn.Close()
+		}
 	}
 	return cc
 }

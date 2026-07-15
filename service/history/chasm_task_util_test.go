@@ -29,7 +29,7 @@ type discardableTestTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*discardableTestTask]
 }
 
-func (e *discardableTestTaskHandler) Validate(_ chasm.Context, _ any, _ chasm.TaskAttributes, _ *discardableTestTask) (bool, error) {
+func (e *discardableTestTaskHandler) Validate(_ chasm.Context, _ any, _ chasm.TaskInvocation, _ *discardableTestTask) (bool, error) {
 	return true, nil
 }
 
@@ -64,7 +64,7 @@ type nonDiscardableTestTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*nonDiscardableTestTask]
 }
 
-func (e *nonDiscardableTestTaskHandler) Validate(_ chasm.Context, _ any, _ chasm.TaskAttributes, _ *nonDiscardableTestTask) (bool, error) {
+func (e *nonDiscardableTestTaskHandler) Validate(_ chasm.Context, _ any, _ chasm.TaskInvocation, _ *nonDiscardableTestTask) (bool, error) {
 	return true, nil
 }
 
