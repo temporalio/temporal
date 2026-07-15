@@ -578,7 +578,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	// Target workflow B. No worker polls B; the SignalExternal RPC will land a
 	// WorkflowExecutionSignaled event in B's history directly. Distinct task
