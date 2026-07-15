@@ -391,6 +391,50 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 		"backlog count should not be incremented")
 }
 
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_PersistenceLimit() {
+	// A write dropped by the persistence rate limiter definitely didn't reach the database,
+	// so it should not count towards the backlog.
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.addFault("CreateTasks", "PersistenceLimit", 1.0)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	for range 10 {
+		s.Require().Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
+		"backlog count should not be incremented for rate-limited writes")
+}
+
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_ConcurrentLimit() {
+	// A write rejected by the ConcurrentRequestLimiter interceptor definitely didn't reach the
+	// database, so it should not count towards the backlog.
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.addFault("CreateTasks", "ConcurrentLimit", 1.0)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	for range 10 {
+		s.Require().Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
+		"backlog count should not be incremented for concurrency-limited writes")
+}
+
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	if !s.newMatcher || s.fairness {
 		s.T().Skip("only for priority backlog manager")
