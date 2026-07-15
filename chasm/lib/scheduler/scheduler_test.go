@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
@@ -564,6 +565,57 @@ func TestSearchAttributes_BufferedStartsCount(t *testing.T) {
 		sas := sentinel.SearchAttributes(ctx)
 		_, ok := findSearchAttribute(t, sas, scheduler.ScheduleBufferedStartsCountName)
 		require.False(t, ok)
+	})
+}
+
+// TestTerminate verifies that terminating a schedule flips its published
+// ExecutionStatus search attribute closed, so it leaves the CHASM ListSchedules
+// query (service/worker/scheduler.VisibilityListQueryChasm).
+func TestTerminate(t *testing.T) {
+	t.Run("closes the schedule and flips ExecutionStatus to Completed", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		require.False(t, sched.Closed)
+		require.Equal(t, chasm.LifecycleStateRunning, sched.LifecycleState(ctx))
+		status, ok := findSearchAttribute(t, sched.SearchAttributes(ctx), sadefs.ExecutionStatus)
+		require.True(t, ok)
+		require.Equal(t, scheduler.ExecutionStatusRunning, status)
+
+		_, err := sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		// Closed at both altitudes: lifecycle state (MS-level status) and the SA.
+		require.True(t, sched.Closed)
+		require.Equal(t, chasm.LifecycleStateCompleted, sched.LifecycleState(ctx))
+		status, ok = findSearchAttribute(t, sched.SearchAttributes(ctx), sadefs.ExecutionStatus)
+		require.True(t, ok)
+		require.Equal(t, scheduler.ExecutionStatusCompleted, status)
+	})
+
+	t.Run("returns ErrClosed when already closed", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		_, err := sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		_, err = sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.ErrorIs(t, err, scheduler.ErrClosed)
+	})
+
+	t.Run("closing after terminate enqueues a visibility task", func(t *testing.T) {
+		env := newTestEnv(t)
+		sched := env.Scheduler
+
+		_, err := sched.Terminate(env.MutableContext(), chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		// Discard setup tasks; assert only on what closing the terminated schedule emits.
+		env.NodeBackend.TasksByCategory = nil
+		require.NoError(t, env.Node.SetRootComponent(sched))
+		require.NoError(t, env.CloseTransaction())
+
+		require.NotEmpty(t, env.NodeBackend.TasksByCategory[tasks.CategoryVisibility],
+			"terminate must enqueue a visibility task so the closed status reaches ListSchedules")
 	})
 }
 
