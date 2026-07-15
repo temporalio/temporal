@@ -340,7 +340,6 @@ const (
 	PollerScaleDecisionScaleUpBacklog  = "scale_up_backlog"
 	PollerScaleDecisionScaleUpTaskRate = "scale_up_task_rate"
 	PollerScaleDecisionHoldRateLimited = "hold_rate_limited"
-	PollerScaleDecisionHoldNoSignal    = "hold_no_signal"
 )
 
 // PollerScaleDecisionTag records why a physical task queue manager decided to scale pollers

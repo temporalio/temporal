@@ -605,7 +605,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldRat
 	s.assertPollerScaleDecisionReason(capture, metrics.PollerScaleDecisionHoldRateLimited)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldNoSignal() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNoSignalNotEmitted() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -613,14 +613,16 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldNoS
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
-	// No backlog and add rate does not exceed dispatch rate: delta stays 0.
+	// No backlog and add rate does not exceed dispatch rate: delta stays 0, so no decision is
+	// issued and nothing should be emitted even with the metric enabled.
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 0,
 		TasksAddRate:            10,
 		TasksDispatchRate:       100,
 	}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.assertPollerScaleDecisionReason(capture, metrics.PollerScaleDecisionHoldNoSignal)
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricDisabledByDefault() {

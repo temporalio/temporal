@@ -901,7 +901,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	}
 
 	delta := int32(0)
-	reason := metrics.PollerScaleDecisionHoldNoSignal
+	var reason string
 	stats := statsFn()
 	if stats.GetApproximateBacklogCount() > 0 &&
 		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
@@ -923,10 +923,10 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		}
 	}
 
-	c.recordPollerScaleDecision(reason)
 	if delta == 0 {
 		return nil
 	}
+	c.recordPollerScaleDecision(reason)
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
