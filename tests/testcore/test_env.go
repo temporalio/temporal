@@ -319,7 +319,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Cleanup(func() { tl.FailOnError(prev) })
 	}
 
-	// Apply namespace-scoped dynamic config settings as test-scoped overrides.
+	// Apply namespace-scoped dynamic config settings.
 	for _, override := range options.dynamicConfigSettings {
 		if !canBeNamespaceScoped(override.setting.Precedence()) {
 			continue
