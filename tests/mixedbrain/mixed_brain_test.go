@@ -178,6 +178,7 @@ func TestMixedBrain(t *testing.T) {
 		createNexusEndpoint(st, conn, nexusEndpoint, throughput.namespace, "omes-"+runID+"-"+throughput.name)
 
 		proxy = startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
+		st.Cleanup(proxy.stop)
 
 		for _, scenario := range scenarios {
 			st.Run(scenario.name, func(sst *testing.T) {
@@ -190,16 +191,15 @@ func TestMixedBrain(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	t.Cleanup(proxy.stop)
 
 	t.Run("verify", func(st *testing.T) {
 		requireServerAlive(st, "current", currentSrv.FrontendHostPort())
 		requireServerAlive(st, "release", releaseSrv.FrontendHostPort())
 
 		for i, backend := range []string{"current", "release"} {
-			count := proxy.connCount[i].Load()
-			st.Logf("Proxy connections to %s: %d", backend, count)
-			require.Positive(st, count, "expected proxy to route traffic to %s server", backend)
+			count := proxy.callCount[i].Load()
+			st.Logf("Proxy RPCs to %s: %d", backend, count)
+			require.Positive(st, count, "expected proxy to route RPCs to %s server", backend)
 		}
 	})
 
