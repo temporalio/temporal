@@ -666,9 +666,11 @@ func (a *Activity) UpdateActivityExecutionOptions(
 				return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
 			}
 		}
-		if !a.firstDispatchTime().After(ctx.Now(a)) {
+		inDelayWindow := a.firstDispatchTime().After(ctx.Now(a))
+		pausedBeforeFirstAttempt := a.GetFirstAttemptStartedTime() == nil && a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+		if !(inDelayWindow || pausedBeforeFirstAttempt) {
 			return nil, serviceerror.NewFailedPrecondition(
-				"cannot update start_delay: activity is no longer in its delay window")
+				"cannot update start_delay: the first activity attempt has already been dispatched")
 		}
 	}
 
