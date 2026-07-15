@@ -25,7 +25,9 @@ func init() {
 		sharedSize = n
 	}
 
-	dedicatedSize := runtime.GOMAXPROCS(0)
+	// Dedicated and one-off clusters run system workers and are much heavier than shared
+	// clusters, especially under race/coverage. Keep the default small; CI can override it.
+	dedicatedSize := min(2, runtime.GOMAXPROCS(0))
 	if v := os.Getenv("TEMPORAL_TEST_DEDICATED_CLUSTERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
