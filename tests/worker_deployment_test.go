@@ -36,14 +36,14 @@ type (
 )
 
 func TestWorkerDeploymentSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                              //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &WorkerDeploymentSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &WorkerDeploymentSuite{}) //nolint:staticcheck // SA1019: suite runs sequentially to limit worker-service cluster churn.
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
 // Additional per-test options may be passed in opts.
 func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *VersioningTestEnv {
 	baseOpts := []testcore.TestOption{
+		testcore.WithWorkerService("worker deployment"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
 
 		// Make sure we don't hit the rate limiter in tests

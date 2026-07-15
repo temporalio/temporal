@@ -207,60 +207,25 @@ func (p *oneOffClusterPool) get(t *testing.T, createCluster func() *FunctionalTe
 	return cluster
 }
 
-// clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
+// clusterRouter routes tests to shared/dedicated [clusterPool]s.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	oneOff      *oneOffClusterPool
-	suiteScoped sync.Map
+	shared    *clusterPool
+	dedicated *clusterPool
+	oneOff    *oneOffClusterPool
 
 	eventsFile *os.File
 }
 
-// suiteScopedCluster owns one lazily created legacy suite cluster.
-type suiteScopedCluster struct {
-	once    sync.Once
-	cluster *FunctionalTestBase
-}
-
-// UseSuiteScopedCluster makes NewEnv use one cluster for all tests under `t`.
-// The cluster is created on first use and torn down when `t` completes.
-//
-// Deprecated: this only exists for backwards-compatibility with legacy sequential
-// suite execution.
-func UseSuiteScopedCluster(t *testing.T) {
-	t.Helper()
-	rootName := suiteRootName(t)
-	if t.Name() != rootName {
-		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
-	}
-	testClusterRouter.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-
-	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterRouter.suiteScoped.Load(rootName)
-		if ok {
-			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-			if suiteCluster.cluster != nil {
-				if err := suiteCluster.cluster.tearDownTestCluster(); err != nil {
-					t.Logf("Failed to tear down suite-scoped cluster: %v", err)
-				}
-			}
-		}
-		testClusterRouter.suiteScoped.Delete(rootName)
-	})
-}
-
 // Cluster kinds recorded in creation events.
 const (
-	clusterKindShared      = "shared"
-	clusterKindDedicated   = "dedicated"
-	clusterKindOneOff      = "one-off"
-	clusterKindSuiteScoped = "suite-scoped"
+	clusterKindShared    = "shared"
+	clusterKindDedicated = "dedicated"
+	clusterKindOneOff    = "one-off"
 )
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind                 string // set by the router: shared, dedicated, one-off, or suite-scoped
+	kind                 string // set by the router: shared, dedicated, or one-off
 	dedicated            bool
 	dedicatedReason      string
 	needWorkerService    bool
@@ -285,8 +250,6 @@ func (r clusterRequest) reason() string {
 	switch r.kind {
 	case clusterKindShared:
 		return "shared pool"
-	case clusterKindSuiteScoped:
-		return "suite-scoped"
 	}
 	switch {
 	case r.dedicatedReason != "":
@@ -331,9 +294,6 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTes
 	if req.requiresDedicatedCluster() {
 		return p.getDedicated(t, req)
 	}
-	if cluster := p.getSuiteScoped(t); cluster != nil {
-		return cluster
-	}
 	return p.getShared(t)
 }
 
@@ -341,29 +301,6 @@ func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
 	})
-}
-
-func (p *clusterRouter) hasSuiteScoped(t *testing.T) bool {
-	_, ok := p.suiteScoped.Load(suiteRootName(t))
-	return ok
-}
-
-func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
-	rootName := suiteRootName(t)
-	if _, ok := p.suiteScoped.Load(rootName); !ok {
-		return nil
-	}
-
-	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
-	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
-	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
-	})
-	suiteCluster.cluster.SetT(t)
-	return suiteCluster.cluster
 }
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
@@ -415,7 +352,7 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 }
 
 func (r clusterRequest) isSharedCluster() bool {
-	return r.kind == clusterKindShared || r.kind == clusterKindSuiteScoped
+	return r.kind == clusterKindShared
 }
 
 func suiteRootName(t *testing.T) string {

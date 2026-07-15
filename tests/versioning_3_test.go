@@ -82,12 +82,12 @@ type Versioning3Suite struct {
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                         //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 	parallelsuite.RunLegacySequential(t, &Versioning3Suite{}) //nolint:staticcheck // SA1019: suite still requires legacy sequential execution
 }
 
 func (s *Versioning3Suite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	opts = append([]testcore.TestOption{
+		testcore.WithWorkerService("versioning v3"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(versioning3DeploymentWorkflowVersion)),
 
 		// Make sure we don't hit the rate limiter in tests

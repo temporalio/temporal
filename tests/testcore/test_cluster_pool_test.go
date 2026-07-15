@@ -144,7 +144,6 @@ func TestClusterRequest_SharedClusterKinds(t *testing.T) {
 		shared bool
 	}{
 		{name: "shared", kind: clusterKindShared, shared: true},
-		{name: "suite scoped", kind: clusterKindSuiteScoped, shared: true},
 		{name: "dedicated", kind: clusterKindDedicated, shared: false},
 		{name: "one off", kind: clusterKindOneOff, shared: false},
 	}

@@ -64,14 +64,14 @@ var (
 )
 
 func TestDeploymentVersionSuite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                               //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &DeploymentVersionSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &DeploymentVersionSuite{}) //nolint:staticcheck // SA1019: suite runs sequentially to limit worker-service cluster churn.
 }
 
 // newTestEnv creates a TestEnv with the dynamic config and test variables this suite needs.
 // Additional per-test options may be passed in opts.
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
+		testcore.WithWorkerService("worker-deployment version"),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
 
 		// Make sure we don't hit the rate limiter in tests
@@ -1874,8 +1874,6 @@ func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(env *test
 // The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
@@ -2853,8 +2851,6 @@ func (s *DeploymentVersionSuite) makeAutoUpgradeOverride() *workflowpb.Versionin
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
@@ -2905,8 +2901,6 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithUnpinnedOverride
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
