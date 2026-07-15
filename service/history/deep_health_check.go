@@ -53,22 +53,32 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		Message: fmt.Sprintf("historyservice gRPC health check: %s", status.Status.String()),
 	})
 
-	// TODO: Remove AverageLatency check once Latency is used by default. It is fine to combine both for now since only one returns a non-zero value.
+	// TODO: Remove AverageLatency check once Latency is used by default.
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCLatency,
-		h.historyHealthSignal.AverageLatency()+h.historyHealthSignal.LatencyQuantile(0.99), h.config.HealthRPCLatencyFailure(),
-		"historyservice latency"))
+		h.historyHealthSignal.AverageLatency(), h.config.HealthRPCLatencyFailure(),
+		"historyservice latency", true))
+
+	for _, settings := range h.config.HealthRPCLatencyPercentiles().PercentileSettings {
+		checks = append(checks, errorIfOverThreshold(
+			healthcheck.CheckTypeRPCLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
+			h.historyHealthSignal.LatencyQuantile(settings.Percentile),
+			float64(settings.Threshold.Milliseconds()),
+			fmt.Sprintf("historyservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
+			settings.Enforced,
+		))
+	}
 
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCErrorRatio,
 		h.historyHealthSignal.ErrorRatio(), h.config.HealthRPCErrorRatio(),
-		"historyservice error ratio"))
+		"historyservice error ratio", true))
 
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
 		h.persistenceHealthSignal.AverageLatency(), h.config.HealthPersistenceLatencyFailure(),
-		"persistenceservice latency"))
+		"persistenceservice latency", true))
 
 	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceErrRatio,
 		h.persistenceHealthSignal.ErrorRatio(), h.config.HealthPersistenceErrorRatio(),
-		"persistenceservice error ratio"))
+		"persistenceservice error ratio", true))
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
 
@@ -96,9 +106,9 @@ func suppressStartupErrors(status grpchealthspb.HealthCheckResponse_ServingStatu
 	return toLocalHealthProto(status)
 }
 
-func errorIfOverThreshold(checkType string, value float64, threshold float64, message string) *healthspb.HealthCheck {
+func errorIfOverThreshold(checkType string, value float64, threshold float64, message string, enforced bool) *healthspb.HealthCheck {
 	state := enumsspb.HEALTH_STATE_SERVING
-	if value > threshold {
+	if value > threshold && enforced {
 		state = enumsspb.HEALTH_STATE_NOT_SERVING
 	}
 	return &healthspb.HealthCheck{

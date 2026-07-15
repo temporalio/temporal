@@ -17,45 +17,15 @@ import (
 
 const (
 	retryTimeout = 30 * time.Second
+	omesModule   = "github.com/temporalio/omes"
+	omesBranch   = "main"
+	omesRepo     = "https://" + omesModule + ".git"
 	temporalRepo = "https://github.com/temporalio/temporal.git"
-	omesRepo     = "https://github.com/temporalio/omes"
-	omesCommit   = "8e4c1f54f3b0fb5e39d131f859c56fb2236395b1"
 )
 
 func sourceRoot() string {
 	_, filename, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(filename), "..", "..")
-}
-
-func cloneRepo(t *testing.T, url, destDir, ref string) {
-	t.Helper()
-	t.Logf("Cloning %s at %s...", url, ref)
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		_ = os.RemoveAll(destDir)
-		out, err := exec.CommandContext(t.Context(), "git", "clone", "--filter=blob:none", url, destDir).CombinedOutput()
-		require.NoError(collect, err, "git clone failed:\n%s", out)
-	}, retryTimeout, 2*time.Second, "git clone "+filepath.Base(url))
-
-	out, err := exec.CommandContext(t.Context(), "git", "-C", destDir, "checkout", ref).CombinedOutput()
-	require.NoError(t, err, "git checkout %s failed:\n%s", ref, out)
-}
-
-func buildServer(t *testing.T, srcDir, outputPath string) {
-	t.Helper()
-	t.Logf("Building server binary from %s...", srcDir)
-	cmd := exec.CommandContext(t.Context(), "go",
-		"build",
-		"-tags", "disable_grpc_modules",
-		"-o", outputPath,
-		"./cmd/server",
-	)
-	cmd.Dir = srcDir
-	// Allow Go to auto-download a newer toolchain when the source we're
-	// building requires a newer version than the runner's setup-go installed.
-	// setup-go sets GOTOOLCHAIN=local in the env which would otherwise block this.
-	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "build server binary failed:\n%s", out)
 }
 
 // resolveReleaseVersion returns the highest version for the previous minor.
@@ -80,14 +50,10 @@ func resolveReleaseVersion(serverVersion string, tags []string) semver.Version {
 	return best
 }
 
-// downloadAndBuildReleaseServer finds the highest patch of the previous minor
-// version, clones the repo at that tag, and builds the server binary. For
-// example, if ServerVersion is 1.31.x, it will look for the highest 1.30.x
-// tag. Falls back to pre-release tags (cloud versions) if no stable release
-// exists yet.
-func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
+// fetchPreviousMinorTag asks the temporal git remote for tags and resolves
+// the latest patch of the previous minor relative to headers.ServerVersion.
+func fetchPreviousMinorTag(t *testing.T) string {
 	t.Helper()
-
 	t.Log("Resolving release tags...")
 	var version semver.Version
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
@@ -105,30 +71,33 @@ func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
 		version = resolveReleaseVersion(headers.ServerVersion, tags)
 		require.NotEqual(collect, semver.Version{}, version, "no tags found for previous minor")
 	}, retryTimeout, 2*time.Second, "fetch release tags")
-
-	tag := "v" + version.String()
-	repoDir := filepath.Join(filepath.Dir(outputPath), "temporal-release")
-	cloneRepo(t, temporalRepo, repoDir, tag)
-
-	t.Log("Building release server binary...")
-	buildServer(t, repoDir, outputPath)
-	return tag
+	return "v" + version.String()
 }
 
-func downloadAndBuildOmes(t *testing.T, workDir string) {
+// downloadAndBuildOmes clones omes main into workDir/omes and builds its
+// CLI into outputPath. We clone instead of going through the module cache so
+// the build resolves omes's transitive deps independently of this module's
+// go.sum (omes uses replace directives that block `go install`).
+func downloadAndBuildOmes(t *testing.T, workDir, outputPath string) {
 	t.Helper()
 
 	repoDir := filepath.Join(workDir, "omes")
-	cloneRepo(t, omesRepo, repoDir, omesCommit)
+	t.Logf("Cloning %s branch %s...", omesRepo, omesBranch)
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		_ = os.RemoveAll(repoDir)
+		out, err := exec.CommandContext(t.Context(),
+			"git", "clone",
+			"--filter=blob:none",
+			"--branch", omesBranch,
+			"--single-branch", omesRepo,
+			repoDir,
+		).CombinedOutput()
+		require.NoError(collect, err, "git clone failed:\n%s", out)
+	}, retryTimeout, 2*time.Second, "git clone omes")
 
-	t.Log("Building Omes...")
-	omesBinary := filepath.Join(workDir, "omes-bin")
-	buildCmd := exec.CommandContext(t.Context(), "go",
-		"build",
-		"-o", omesBinary,
-		"./cmd",
-	)
-	buildCmd.Dir = repoDir
-	out, err := buildCmd.CombinedOutput()
-	require.NoError(t, err, "build Omes failed:\n%s", out)
+	t.Logf("Building omes into %s...", outputPath)
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", outputPath, "./cmd/omes")
+	cmd.Dir = repoDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build omes failed:\n%s", out)
 }
