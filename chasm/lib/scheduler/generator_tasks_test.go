@@ -36,7 +36,7 @@ func newGeneratorHandler(env *testEnv, opts ...generatorHandlerOption) *schedule
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
-		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
+		SpecBuilder:    newLegacySpecBuilder(0, 0),
 	}
 	for _, opt := range opts {
 		opt(&o)
