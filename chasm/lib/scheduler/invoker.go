@@ -375,17 +375,6 @@ func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 	})
 }
 
-// isWorkflowStarted returns true if a workflow with the given ID has already
-// been started (has a RunId set).
-func (i *Invoker) isWorkflowStarted(workflowID string) bool {
-	for _, start := range i.GetBufferedStarts() {
-		if start.GetWorkflowId() == workflowID && start.GetRunId() != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // runningWorkflowExecutions returns the list of workflow executions that
 // have been started but not yet completed.
 func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
