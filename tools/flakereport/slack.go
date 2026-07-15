@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // SlackMessage represents Slack Block Kit message
@@ -117,7 +119,7 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 
 	// Add link to report
 	if runID != "" {
-		linkURL := fmt.Sprintf("https://github.com/%s/actions/runs/%s", repo, runID)
+		linkURL := github.RunURL(repo, runID)
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
@@ -169,7 +171,7 @@ func (msg *SlackMessage) addBisectSection(reports []TestBisectReport, repo strin
 			if len(shortSHA) > 7 {
 				shortSHA = shortSHA[:7]
 			}
-			commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, sha)
+			commitURL := github.CommitURL(repo, sha)
 			title := cc.title
 			if title == sha || title == "" {
 				title = shortSHA
@@ -245,7 +247,7 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 
 	// Add link to workflow run
 	if runID != "" {
-		linkURL := fmt.Sprintf("https://github.com/%s/actions/runs/%s", repo, runID)
+		linkURL := github.RunURL(repo, runID)
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{

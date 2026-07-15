@@ -170,8 +170,16 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
-	// MaxRate limits scale change frequency.
+	// MaxRate limits target change frequency.
 	MaxRate float32
+	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
+	// at any time. E.g. if ShrinkRatio is 0.1 and read partitions is 40, then write partitions
+	// may not be lower than 36, until read partitions falls lower.
+	ShrinkRatio float32
+	// ShrinkDelta is how much smaller write partitions is allowed to be than read partitions,
+	// by absolute count. E.g. if ShrinkDelta is 2 and read partitions is 24, then write
+	// partitions may not be lower than 22.
+	ShrinkDelta int32
 	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
 	// reload.)
 	BatchSize int32
@@ -219,4 +227,20 @@ type SimplePartitionScalerSettings struct {
 type SimplePartitionScalerThreshold struct {
 	Window     time.Duration // window to measure add rate over
 	TargetRate int           // target tasks/second per partition
+}
+
+type LatencyHealthCheckSettings struct {
+	// Percentile is a number from 0.00 to 1.00 which represents how far into the distribution we should look, eg 0.99 is p99.
+	Percentile float64
+
+	// Threshold is the amount of time this percentiles reading must exceed to trigger an unhealthy response (if enforced).
+	Threshold time.Duration
+
+	// Enforced allows this health check to return unhealthy responses, when false this health check will always report healthy.
+	Enforced bool
+}
+
+type LatencyHealthChecksPerPercentile struct {
+	// PercentileSettings stores settings for the health check of each percentile.
+	PercentileSettings []LatencyHealthCheckSettings
 }

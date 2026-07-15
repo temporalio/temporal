@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/workercommands"
@@ -103,9 +104,20 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
-		return respond(e.workerCommandsDispatcher.Execute(ctx, task, executable.Attempt(), namespaceTag.Value))
+		if executable.Attempt() > workercommands.MaxTaskAttempts {
+			e.logger.Info("Worker commands task exceeded max attempts, dropping",
+				tag.WorkflowID(task.WorkflowID),
+				tag.WorkflowRunID(task.RunID),
+				tag.NewStringTag("control_queue", task.Destination),
+				tag.Attempt(int32(executable.Attempt())),
+			)
+			workercommands.RecordCommandMetrics(task.Commands, e.metricsHandler, namespaceTag.Value, "max_attempts_exceeded")
+			return respond(nil)
+		}
+		return respond(e.workerCommandsDispatcher.Execute(ctx, task, namespaceTag.Value))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

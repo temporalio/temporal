@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +29,7 @@ type ActivityServiceLayeredClient struct {
 
 // NewActivityServiceLayeredClient initializes a new ActivityServiceLayeredClient.
 func NewActivityServiceLayeredClient(
+	lc fx.Lifecycle,
 	dc *dynamicconfig.Collection,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
@@ -51,12 +53,17 @@ func NewActivityServiceLayeredClient(
 	} else {
 		redirector = history.NewBasicRedirector(connections, resolver)
 	}
-	return &ActivityServiceLayeredClient{
+	client := &ActivityServiceLayeredClient{
 		metricsHandler: metricsHandler,
 		redirector:     redirector,
 		numShards:      config.NumHistoryShards,
 		retryPolicy:    common.CreateHistoryClientRetryPolicy(dynamicconfig.RetryUnboundedOnSystemResourceExhausted.Get(dc)),
-	}, nil
+	}
+	lc.Append(fx.StopHook(client.Stop))
+	return client, nil
+}
+func (c *ActivityServiceLayeredClient) Stop() {
+	c.redirector.Close()
 }
 func (c *ActivityServiceLayeredClient) callStartActivityExecutionNoRetry(
 	ctx context.Context,

@@ -280,8 +280,11 @@ func HealthSignalAggregatorProvider(
 	return interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 	)
 }
 

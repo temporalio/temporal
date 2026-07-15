@@ -507,6 +507,83 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
 }
 
+func TestExecuteTask_EventLog(t *testing.T) {
+	newStart := func(requestID, runID string) *schedulespb.BufferedStart {
+		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID}
+	}
+
+	cases := []struct {
+		name       string
+		buffered   []*schedulespb.BufferedStart
+		cancels    []*commonpb.WorkflowExecution
+		terminates []*commonpb.WorkflowExecution
+		completed  []*schedulespb.BufferedStart
+		retryable  []*schedulespb.BufferedStart
+		wantLog    string
+	}{
+		{
+			name:      "kicked off counts newly started",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			completed: []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			wantLog:   "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:      "retried counts retryable starts",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			retryable: []*schedulespb.BufferedStart{newStart("s1", "")},
+			wantLog:   "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 1 starts",
+		},
+		{
+			name:     "surviving buffered starts are not counted as removed",
+			buffered: []*schedulespb.BufferedStart{newStart("a", ""), newStart("b", ""), newStart("c", "")},
+			wantLog:  "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:    "surviving cancels are not counted as removed",
+			cancels: []*commonpb.WorkflowExecution{{RunId: "c1"}, {RunId: "c2"}},
+			wantLog: "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "surviving terminates are not counted as removed",
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			wantLog:    "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "survivors alongside real work count independently",
+			buffered:   []*schedulespb.BufferedStart{newStart("s1", ""), newStart("s2", "")},
+			cancels:    []*commonpb.WorkflowExecution{{RunId: "c1"}},
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			completed:  []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			retryable:  []*schedulespb.BufferedStart{newStart("s2", "")},
+			wantLog:    "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 1 starts",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := env.MutableContext()
+			invoker := env.Scheduler.Invoker.Get(ctx)
+
+			invoker.BufferedStarts = tc.buffered
+			invoker.CancelWorkflows = tc.cancels
+			invoker.TerminateWorkflows = tc.terminates
+			invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+			eventLog := invoker.EventLog.Get(ctx)
+			eventLog.Events = nil
+
+			invoker.RecordExecuteResult(ctx, tc.completed, tc.retryable)
+
+			var messages []string
+			for _, e := range eventLog.Events {
+				messages = append(messages, e.Message)
+			}
+			require.Contains(t, messages, tc.wantLog)
+		})
+	}
+}
+
 // A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
 // Regression for the strict-Before check, which excluded equal-time entries
 // and stranded retries that landed precisely at the HWM boundary.
@@ -523,9 +600,93 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 		BackoffTime: timestamppb.New(now),
 	}}
 
-	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
+}
+
+// Validate must skip Execute when no work is ready.
+func TestExecuteTask_Validate(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	now := env.TimeSource.Now()
+
+	cases := []struct {
+		name          string
+		setup         func()
+		expectedValid bool
+	}{
+		{
+			name:          "empty invoker is invalid",
+			setup:         func() {},
+			expectedValid: false,
+		},
+		{
+			name: "eligible start is valid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "ready",
+					Attempt:   1,
+				}}
+			},
+			expectedValid: true,
+		},
+		{
+			// When the RunID is set, the start's already been kicked off, so we don't need
+			// an execute task.
+			name: "running start (RunId set) is invalid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "running",
+					Attempt:   1,
+					RunId:     "run-1",
+				}}
+			},
+			expectedValid: false,
+		},
+		{
+			// A retry is pending, but we're still in exponential backoff time.
+			name: "backing-off start is invalid",
+			setup: func() {
+				invoker.LastProcessedTime = timestamppb.New(now)
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId:   "backoff",
+					Attempt:     2,
+					BackoffTime: timestamppb.New(now.Add(time.Minute)),
+				}}
+			},
+			expectedValid: false,
+		},
+		{
+			name: "pending cancel is valid",
+			setup: func() {
+				invoker.CancelWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf", RunId: "r"}}
+			},
+			expectedValid: true,
+		},
+		{
+			name: "pending terminate is valid",
+			setup: func() {
+				invoker.TerminateWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf", RunId: "r"}}
+			},
+			expectedValid: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			invoker.BufferedStarts = nil
+			invoker.CancelWorkflows = nil
+			invoker.TerminateWorkflows = nil
+			invoker.LastProcessedTime = nil
+			c.setup()
+			valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
+			require.NoError(t, err)
+			require.Equal(t, c.expectedValid, valid)
+		})
+	}
 }
 
 // BackoffTime must be derived from the framework clock (chasm.Context.Now),

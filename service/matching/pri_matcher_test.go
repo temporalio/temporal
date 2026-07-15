@@ -77,7 +77,8 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		s.logger,
 		metrics.NoopMetricsHandler,
 		rateLimitManager,
-		func() {},
+		func() {}, // onRateLimited
+		func() {}, // markAlive
 	)
 
 	// start the matcher
@@ -171,6 +172,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 			metrics.NoopMetricsHandler,
 			rateLimitManager,
 			func() {},
+			func() {},
 		)
 
 		tm.Start()
@@ -236,6 +238,7 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 				s.logger,
 				metrics.NoopMetricsHandler,
 				rateLimitManager,
+				func() {},
 				func() {},
 			)
 			tm.Start()

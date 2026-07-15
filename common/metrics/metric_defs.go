@@ -1201,6 +1201,16 @@ var (
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
 
+	// Pagination of RespondWorkflowTaskCompleted requests
+	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
+		"workflow_task_completion_paginated_bytes",
+		WithDescription("Total wire size of successfully completed paginated RespondWorkflowTaskCompleted requests. count givens the total number of successful paginated requests."),
+	)
+	WorkflowTaskCompletionBufferLost = NewCounterDef(
+		"workflow_task_completion_buffer_lost",
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted or a page was missing)."),
+	)
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1281,6 +1291,7 @@ var (
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
+	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -220,6 +221,10 @@ func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
 
 func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 	s.chasmRegistry = reg
+}
+
+func (s *ContextTest) SetChasmWorkflowRegistry(reg *chasmworkflow.Registry) {
+	s.chasmWorkflowRegistry = reg
 }
 
 func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
