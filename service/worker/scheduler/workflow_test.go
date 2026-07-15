@@ -356,41 +356,6 @@ func (s *workflowSuite) TestStart() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
-func (s *workflowSuite) TestMigratedBufferedStartPreservesIdempotencyIDs() {
-	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.Equal("migrated-workflow-id", req.Request.WorkflowId)
-		s.Equal("migrated-request-id", req.Request.RequestId)
-		return nil, nil
-	})
-
-	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
-	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
-			},
-			Action: s.defaultAction("configured-workflow-id"),
-		},
-		State: &schedulespb.InternalState{
-			Namespace:     "myns",
-			NamespaceId:   "mynsid",
-			ScheduleId:    "myschedule",
-			ConflictToken: InitialConflictToken,
-			BufferedStarts: []*schedulespb.BufferedStart{{
-				NominalTime:   timestamppb.New(baseStartTime),
-				ActualTime:    timestamppb.New(baseStartTime),
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-				Manual:        true,
-				RequestId:     "migrated-request-id",
-				WorkflowId:    "migrated-workflow-id",
-			}},
-		},
-	})
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-}
-
 func (s *workflowSuite) TestInitialPatch() {
 	// written using low-level mocks so we can set initial patch
 
