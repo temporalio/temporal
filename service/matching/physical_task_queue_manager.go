@@ -907,7 +907,8 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		delta = 1
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data.
+		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
+		// as they have only 1 partition.
 		return nil
 	} else {
 		if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
