@@ -12210,7 +12210,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 			require.EqualValues(c, 2, desc.GetInfo().GetAttempt())
 		}, 5*time.Second, 200*time.Millisecond)
 
-		resetActivity(ctx, t, activityID, startResp.GetRunId(), false)
+		resetActivity(ctx, t, activityID, startResp.GetRunId())
 
 		pollResp2 := pollActivity(ctx, t, taskQueue)
 		require.EqualValues(t, 1, pollResp2.Attempt)
