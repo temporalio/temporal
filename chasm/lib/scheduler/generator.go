@@ -84,10 +84,12 @@ func (g *Generator) UpdateFutureActionTimes(
 		t = updateTime
 	}
 	for len(futureTimes) < count {
-		t = spec.GetNextTime(sched.jitterSeed(), t).Next
-		if t.IsZero() {
+		res, err := spec.GetNextTime(sched.jitterSeed(), t)
+		if err != nil || res.Next.IsZero() {
+			// Over-excluded spec (limit) or end of schedule: return a partial list.
 			break
 		}
+		t = res.Next
 		futureTimes = append(futureTimes, timestamppb.New(t))
 	}
 
