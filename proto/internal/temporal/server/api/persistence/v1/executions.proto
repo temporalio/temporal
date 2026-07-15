@@ -321,6 +321,17 @@ message WorkflowExecutionInfo {
   TimeSkippingInfo time_skipping_info = 115;
 }
 
+// TimeSkippingDisabledReason records why time skipping was turned off for a workflow.
+// It is only meaningful once config.enabled is false.
+enum TimeSkippingDisabledReason {
+  TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED = 0;
+  // The fast-forward target was reached (its wall-clock or virtual budget was exhausted).
+  TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED = 1;
+  // The busy-loop circuit breaker tripped: skips fired faster than a real worker cycle
+  // for too many consecutive rounds, so time skipping was disabled to restore backpressure.
+  TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER = 2;
+}
+
 message TimeSkippingInfo {
   reserved 3;
   reserved "current_elapsed_duration_bound";
@@ -341,6 +352,18 @@ message TimeSkippingInfo {
   // skip mutates this workflow-level field without bumping any per-timer
   // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
   VersionedTransition last_update_versioned_transition = 5;
+
+  // Why time skipping was disabled. Set when config.enabled transitions to false; unset while
+  // time skipping is enabled. Re-arming a fast-forward clears this back to UNSPECIFIED.
+  TimeSkippingDisabledReason disabled_reason = 6;
+
+  // Busy-loop circuit breaker state (set on the active side). The breaker is a fixed-window rate
+  // limiter: skip_window_start_real_time is the real (wall-clock) start of the current counting
+  // window, and skip_window_count is the number of skip transitions in it. When the count exceeds
+  // the per-namespace max-skips-per-window, time skipping is disabled for the run. Persisted here so
+  // the window survives mutable-state eviction/reload mid-loop. Reset when a fast-forward is (re)armed.
+  google.protobuf.Timestamp skip_window_start_real_time = 7;
+  int32 skip_window_count = 8;
 }
 
 message FastForwardInfo {

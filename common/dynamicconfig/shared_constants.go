@@ -229,6 +229,17 @@ type SimplePartitionScalerThreshold struct {
 	TargetRate int           // target tasks/second per partition
 }
 
+// TimeSkippingCircuitBreakerSettings configures the busy-loop circuit breaker for time skipping.
+// A single run's skip transitions are counted over Window (real wall-clock); when the count
+// exceeds MaxSkips the breaker trips and disables time skipping for that run.
+type TimeSkippingCircuitBreakerSettings struct {
+	// Window is the real (wall-clock) window over which a run's skip transitions are counted.
+	Window time.Duration
+	// MaxSkips is how many skip transitions a run may perform within Window before the breaker
+	// trips. Set to 0 (or a non-positive Window) to disable the circuit breaker.
+	MaxSkips int
+}
+
 type LatencyHealthCheckSettings struct {
 	// Percentile is a number from 0.00 to 1.00 which represents how far into the distribution we should look, eg 0.99 is p99.
 	Percentile float64

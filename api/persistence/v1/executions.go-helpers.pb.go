@@ -2,6 +2,8 @@
 package persistence
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1113,4 +1115,23 @@ func (this *WorkflowPauseInfo) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	TimeSkippingDisabledReason_shorthandValue = map[string]int32{
+		"Unspecified":        0,
+		"FastForwardReached": 1,
+		"CircuitBreaker":     2,
+	}
+)
+
+// TimeSkippingDisabledReasonFromString parses a TimeSkippingDisabledReason value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to TimeSkippingDisabledReason
+func TimeSkippingDisabledReasonFromString(s string) (TimeSkippingDisabledReason, error) {
+	if v, ok := TimeSkippingDisabledReason_value[s]; ok {
+		return TimeSkippingDisabledReason(v), nil
+	} else if v, ok := TimeSkippingDisabledReason_shorthandValue[s]; ok {
+		return TimeSkippingDisabledReason(v), nil
+	}
+	return TimeSkippingDisabledReason(0), fmt.Errorf("%s is not a valid TimeSkippingDisabledReason", s)
 }

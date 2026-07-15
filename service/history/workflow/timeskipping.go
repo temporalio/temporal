@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -88,6 +89,12 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		TransitionCount:          ms.NextTransitionCount(),
 	}
 
+	// always install a fresh fast-forward bound; a re-arm clears any prior disabled reason
+	// (fast-forward-reached or circuit-breaker) and resets the busy-loop detector, since time
+	// skipping is being enabled again.
+	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED
+	tsi.SkipWindowCount = 0
+	tsi.SkipWindowStartRealTime = nil
 	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
 		TargetTime:                    timestamppb.New(targetTime),
 		HasReached:                    false,
@@ -429,6 +436,57 @@ func (ms *MutableStateImpl) findNextSkipTarget() *timeSkippingTransition {
 	return nil
 }
 
+// timeSkippingBusyLoopTripped counts the skip about to happen against a real-time window and reports
+// whether the circuit breaker should trip. It caps how many skips a single run may perform within
+// the window: once the count exceeds the per-namespace max, the run is skipping fast enough to be a
+// runaway (e.g. an activity/cron that fails instantly and reschedules) rather than a genuinely busy
+// workflow, so the breaker trips. A burst under the cap is allowed. The window start and count are
+// persisted in TimeSkippingInfo so the detector survives mutable-state eviction/reload mid-loop.
+func (ms *MutableStateImpl) timeSkippingBusyLoopTripped() bool {
+	nsName := ms.namespaceEntry.Name().String()
+	cb := ms.config.TimeSkippingCircuitBreaker(nsName)
+	if cb.MaxSkips <= 0 || cb.Window <= 0 {
+		return false // circuit breaker disabled by config
+	}
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil {
+		return false
+	}
+	realNow := ms.ToRealTime(ms.Now())
+	// Open a new window if none is active or the current one has elapsed. Guard on the pointer, not
+	// IsZero: a nil timestamp's AsTime() is the Unix epoch, not the zero time.
+	if start := tsi.GetSkipWindowStartRealTime(); start == nil || realNow.Sub(start.AsTime()) >= cb.Window {
+		tsi.SkipWindowStartRealTime = timestamppb.New(realNow)
+		tsi.SkipWindowCount = 0
+	}
+	tsi.SkipWindowCount++
+	ms.timeSkippingInfoUpdated = true
+	return int(tsi.SkipWindowCount) > cb.MaxSkips
+}
+
+// tripTimeSkippingCircuitBreaker disables time skipping for this run because the busy-loop detector
+// fired. It flips config.enabled off and records the reason directly in mutable state without
+// emitting a transition event — so, unlike a fast-forward disable, FastForwardInfo.HasReached is left
+// untouched (the target was never reached). The change is carried by state-based replication via
+// timeSkippingInfoUpdated. A stale fast-forward TimeSkippingTimerTask, if any, is dropped by
+// fastForwardTaskIsLive once config.enabled is false.
+func (ms *MutableStateImpl) tripTimeSkippingCircuitBreaker() {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil || tsi.GetConfig() == nil {
+		return
+	}
+	tsi.Config.Enabled = false
+	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER
+	tsi.SkipWindowCount = 0
+	tsi.SkipWindowStartRealTime = nil
+	ms.timeSkippingInfoUpdated = true
+	ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingCircuitBreakerTrippedCounter.Name()).Record(1)
+	ms.logger.Warn("time skipping disabled by busy-loop circuit breaker",
+		tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+		tag.WorkflowRunID(ms.GetExecutionState().RunId),
+	)
+}
+
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -447,14 +505,24 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. state change.
+		// 3. busy-loop circuit breaker: if skips have been firing faster than a real worker
+		// cycle for too many consecutive rounds (e.g. an activity/cron that fails instantly and
+		// immediately reschedules), disable time skipping instead of skipping again. This restores
+		// the retry/cron backoff as real-time backpressure and breaks the loop. It is recorded as a
+		// direct mutable-state change (no transition event) so the fast-forward is NOT marked
+		// reached — the target was never actually hit.
+		if ms.timeSkippingBusyLoopTripped() {
+			ms.tripTimeSkippingCircuitBreaker()
+			return false
+		}
+		// 4. state change.
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
 		if err != nil {
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 4. task regeneration
+		// 5. task regeneration
 		return true
 	case historyi.TransactionPolicyPassive:
 		return false
@@ -501,8 +569,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	}
 	// update enabled state
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
-	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.FastForwardInfo.HasReached = true
+	if attr.GetDisabledAfterFastForward() {
+		tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED
+		if tsi.GetFastForwardInfo() != nil {
+			tsi.FastForwardInfo.HasReached = true
+		}
 	}
 
 	ms.timeSkippingInfoUpdated = true

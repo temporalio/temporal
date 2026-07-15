@@ -3540,4 +3540,16 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
+	TimeSkippingCircuitBreaker = NewNamespaceTypedSettingWithConverter(
+		"history.timeSkippingCircuitBreaker",
+		ConvertStructure(TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkips: 25}),
+		TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkips: 25},
+		`TimeSkippingCircuitBreaker bounds how fast a single run may skip time before the busy-loop
+circuit breaker trips and disables time skipping for that run. It counts the run's skip transitions
+over Window (real wall-clock) and trips when the count exceeds MaxSkips. This bounds the real-time
+CPU a runaway run (e.g. an activity/cron that fails instantly and reschedules) can spend skipping,
+while still leaving room for a genuinely busy workflow to skip at a normal rate (a real worker
+round-trip is on the order of 100ms, so a legitimate run skips only a handful of times per second).
+Set MaxSkips to 0 to disable the circuit breaker.`,
+	)
 )

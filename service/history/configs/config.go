@@ -82,6 +82,8 @@ type Config struct {
 	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ExternalPayloadsEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	TimeSkippingCircuitBreaker dynamicconfig.TypedPropertyFnWithNamespaceFilter[dynamicconfig.TimeSkippingCircuitBreakerSettings]
+
 	// EventsCache settings
 	// Change of these configs require shard restart
 	EventsShardLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
@@ -497,6 +499,7 @@ func NewConfig(
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
+		TimeSkippingCircuitBreaker:            dynamicconfig.TimeSkippingCircuitBreaker.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),

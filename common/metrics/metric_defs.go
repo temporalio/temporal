@@ -1198,8 +1198,9 @@ var (
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
 
-	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
-	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+	ExecutionTimeSkippingTransitionedCounter          = NewCounterDef("execution_time_skipping_transitioned_count")
+	ExecutionTimeSkippingTransitionedErrorCounter     = NewCounterDef("execution_time_skipping_transitioned_error_count")
+	ExecutionTimeSkippingCircuitBreakerTrippedCounter = NewCounterDef("execution_time_skipping_circuit_breaker_tripped_count")
 
 	// Pagination of RespondWorkflowTaskCompleted requests
 	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(

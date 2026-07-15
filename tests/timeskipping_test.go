@@ -18,6 +18,7 @@ import (
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -572,6 +573,112 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 	s.Less(wallElapsed, 3*time.Second,
 		"test wall elapsed = %v; the activity retry should be dispatched promptly after skipping the 1h backoff",
 		wallElapsed)
+}
+
+// TestTimeSkipping_CircuitBreakerTripsOnBusyLoop verifies the busy-loop circuit breaker. An
+// activity that fails instantly on every attempt would, with time skipping, retry in a tight
+// real-time loop: each failure schedules a retry backoff that time skipping skips instantly, so
+// the retry is re-dispatched immediately, fails again, and so on — burning real CPU with no real
+// delay. The breaker measures the real wall-clock gap between consecutive skips; once too many
+// consecutive skips fire faster than a genuine worker cycle, it disables time skipping for the run
+// so the retry backoff is honored as real-time backpressure again.
+//
+// The disable is recorded as a direct mutable-state change (no transition event) and leaves
+// FastForwardInfo.HasReached false — a circuit-breaker trip does not mean the fast-forward target
+// was reached (this is what keeps the fast-forward poll semantics honest).
+func (s *TimeSkippingTestSuite) TestTimeSkipping_CircuitBreakerTripsOnBusyLoop() {
+	const maxSkips = 3
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+		// A long window so every (fast) test iteration lands in the same counting window, and a small
+		// cap so the breaker trips quickly and deterministically regardless of machine speed.
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingCircuitBreaker,
+			dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: time.Minute, MaxSkips: maxSkips}),
+	)
+	tv := testvars.New(s.T())
+	ctx := testcore.NewContext()
+
+	// Start with time skipping enabled and a far-out fast-forward, so we can assert the breaker
+	// disables time skipping WITHOUT the fast-forward being marked reached.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(2000 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(1500 * time.Hour)},
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+
+	// WT1: schedule an activity that always fails and retries indefinitely with a 1h backoff. The
+	// large backoff is the interesting case: even with an hour between virtual attempts, an instant
+	// failure keeps the loop tight in REAL time, which is exactly what the breaker measures.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+							ActivityId:             tv.ActivityID(),
+							ActivityType:           tv.ActivityType(),
+							TaskQueue:              tv.TaskQueue(),
+							ScheduleToCloseTimeout: durationpb.New(1000 * time.Hour),
+							StartToCloseTimeout:    durationpb.New(30 * time.Second),
+							RetryPolicy: &commonpb.RetryPolicy{
+								InitialInterval:    durationpb.New(time.Hour),
+								BackoffCoefficient: 1.0,
+								MaximumAttempts:    0, // unlimited
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Fail the activity repeatedly. Each failure's close transaction skips the backoff and
+	// re-dispatches the retry promptly — until the breaker trips, after which the retry is left on
+	// its real 1h backoff and is no longer dispatched promptly. Stop polling as soon as it trips.
+	var tsi *persistencespb.TimeSkippingInfo
+	tripped := false
+	for attempt := 0; attempt < maxSkips+3 && !tripped; attempt++ {
+		_, err = poller.PollAndHandleActivityTask(tv, func(_ *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			return nil, errors.New("always fails")
+		})
+		s.NoError(err)
+		ms := s.getMutableState(env, tv.WorkflowID(), runID)
+		tsi = ms.State.ExecutionInfo.GetTimeSkippingInfo()
+		tripped = tsi.GetDisabledReason() == persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER
+	}
+
+	s.True(tripped, "circuit breaker must trip after repeated fast skips")
+	s.False(tsi.GetConfig().GetEnabled(), "time skipping must be disabled after the breaker trips")
+	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER, tsi.GetDisabledReason())
+	s.False(tsi.GetFastForwardInfo().GetHasReached(),
+		"a circuit-breaker disable must NOT mark the fast-forward as reached")
+
+	// The breaker disables via a direct mutable-state change: no transition event is emitted, and in
+	// particular no fast-forward-disable (DisabledAfterFastForward) transition.
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	for _, e := range history {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED {
+			s.False(e.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetDisabledAfterFastForward(),
+				"a circuit-breaker disable must not be recorded as a fast-forward-disable transition")
+		}
+	}
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
 }
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {
