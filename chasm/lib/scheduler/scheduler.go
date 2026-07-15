@@ -758,7 +758,7 @@ func (s *Scheduler) ListMatchingTimes(
 		if err != nil {
 			// An over-excluded spec won't resolve until it's edited, so return a
 			// non-retryable code: retrying would just re-burn the compute bound each call.
-			return nil, serviceerror.NewInvalidArgument(err.Error())
+			return nil, scheduler.ErrScheduleSpecLimitHit
 		}
 		t1 = res.Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {

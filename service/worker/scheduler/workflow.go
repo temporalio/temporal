@@ -12,7 +12,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -166,8 +165,6 @@ type (
 
 		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
 		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
-		MaxIterations               int  // Hard bound on GetNextTime search iterations (math.MaxInt = disabled)
-		WarnIterations              int  // Warn (non-fatal) bound on GetNextTime search iterations
 
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
@@ -1176,7 +1173,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 		if err != nil {
 			// An over-excluded spec won't resolve until it's edited, so return a
 			// non-retryable code: retrying would just re-burn the compute bound each call.
-			return nil, serviceerror.NewInvalidArgument(err.Error())
+			return nil, ErrScheduleSpecLimitHit
 		}
 		t1 = res.Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {

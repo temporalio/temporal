@@ -50,6 +50,14 @@ func TestReplays(t *testing.T) {
 // replay returns the recorded values rather than recomputing them against the new limits.
 // Each history is replayed twice: once with the "original" (effectively disabled) bound, then
 // again with a much lower bound simulating an operator lowering SchedulerSpecMaxIterations.
+//
+// testdata/replay_compute_limit_exceeded.json.gz is the fixture that makes this meaningful (not
+// a no-op): it is a V1 schedule whose spec actually tripped the hard limit while it was set to
+// 1000 (an over-excluded/pathological spec: calendar matches every second, exclude blocks every
+// second except a window ~1800s out, so GetNextTime scans past 1000 excluded candidates). It was
+// captured from a real V1 workflow run; replaying it here at both a lower and a higher bound
+// confirms the limit-exceeded decision is fixed in a SideEffect marker and cannot diverge on a
+// config change.
 func TestReplaysWithDynamicConfigChange(t *testing.T) {
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)

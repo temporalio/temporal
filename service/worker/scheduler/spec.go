@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -57,6 +58,7 @@ type (
 // ErrComputeLimitExceeded is returned by GetNextTime when the search for the next matching time
 // hits the hard compute iteration bound before finding a non-excluded time.
 var ErrComputeLimitExceeded = errors.New("schedule spec next-time search exceeded the compute iteration limit")
+var ErrScheduleSpecLimitHit = serviceerror.NewInvalidArgument("the schedule calendar specification has too many exclusions. Please modify the specification.")
 
 func NewSpecBuilder(dc *dynamicconfig.Collection) *SpecBuilder {
 	return &SpecBuilder{
