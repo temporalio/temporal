@@ -100,6 +100,27 @@ func TestDeepHealthCheck(t *testing.T) {
 						Message:   "persistenceservice latency",
 					},
 					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+					},
+					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
 						State:     enumsspb.HEALTH_STATE_SERVING,
 						Value:     0,
@@ -172,6 +193,27 @@ func TestDeepHealthCheck(t *testing.T) {
 						Message:   "persistenceservice latency",
 					},
 					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+					},
+					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
 						State:     enumsspb.HEALTH_STATE_SERVING,
 						Value:     0,
@@ -190,8 +232,8 @@ func TestDeepHealthCheck(t *testing.T) {
 				{1500 * time.Millisecond, nil},
 			},
 			persistRecords: []record{
-				{100 * time.Millisecond, context.DeadlineExceeded},
-				{100 * time.Millisecond, context.DeadlineExceeded},
+				{800 * time.Millisecond, context.DeadlineExceeded},
+				{800 * time.Millisecond, context.DeadlineExceeded},
 			},
 			expected: &historyservice.DeepHealthCheckResponse{
 				State: enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -239,9 +281,30 @@ func TestDeepHealthCheck(t *testing.T) {
 					{
 						CheckType: health2.CheckTypePersistenceLatency,
 						State:     enumsspb.HEALTH_STATE_SERVING,
-						Value:     100,
+						Value:     800,
 						Threshold: 1000,
 						Message:   "persistenceservice latency",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     800,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     800,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     800,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
 					},
 					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
@@ -263,8 +326,8 @@ func TestDeepHealthCheck(t *testing.T) {
 				{1500 * time.Millisecond, nil},
 			},
 			persistRecords: []record{
-				{100 * time.Millisecond, context.DeadlineExceeded},
-				{100 * time.Millisecond, context.DeadlineExceeded},
+				{800 * time.Millisecond, context.DeadlineExceeded},
+				{800 * time.Millisecond, context.DeadlineExceeded},
 			},
 			expected: &historyservice.DeepHealthCheckResponse{
 				State: enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -312,9 +375,30 @@ func TestDeepHealthCheck(t *testing.T) {
 					{
 						CheckType: health2.CheckTypePersistenceLatency,
 						State:     enumsspb.HEALTH_STATE_SERVING,
-						Value:     100,
+						Value:     800,
 						Threshold: 1000,
 						Message:   "persistenceservice latency",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     800,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: true)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     800,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: true)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+						Value:     800,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: true)",
 					},
 					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
@@ -389,6 +473,27 @@ func TestDeepHealthCheck(t *testing.T) {
 						Message:   "persistenceservice latency",
 					},
 					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+					},
+					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
 						State:     enumsspb.HEALTH_STATE_SERVING,
 						Value:     0,
@@ -461,6 +566,27 @@ func TestDeepHealthCheck(t *testing.T) {
 						Message:   "persistenceservice latency",
 					},
 					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+					},
+					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
 						State:     enumsspb.HEALTH_STATE_SERVING,
 						Value:     0,
@@ -527,6 +653,27 @@ func TestDeepHealthCheck(t *testing.T) {
 						Message:   "persistenceservice latency",
 					},
 					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     0,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     0,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     0,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+					},
+					{
 						CheckType: health2.CheckTypePersistenceErrRatio,
 						State:     enumsspb.HEALTH_STATE_SERVING,
 						Value:     0,
@@ -572,9 +719,30 @@ func TestDeepHealthCheck(t *testing.T) {
 							},
 						}
 					},
+					HealthPersistenceLatencyPercentiles: func() dynamicconfig.LatencyHealthChecksPerPercentile {
+						return dynamicconfig.LatencyHealthChecksPerPercentile{
+							PercentileSettings: []dynamicconfig.LatencyHealthCheckSettings{
+								{
+									Percentile: 0.99,
+									Threshold:  2 * time.Second,
+									Enforced:   tc.percentilesEnforced,
+								},
+								{
+									Percentile: 0.90,
+									Threshold:  1 * time.Second,
+									Enforced:   tc.percentilesEnforced,
+								},
+								{
+									Percentile: 0.50,
+									Threshold:  500 * time.Millisecond,
+									Enforced:   tc.percentilesEnforced,
+								},
+							},
+						}
+					},
 				},
 				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, time.Second, 10, time.Second, 10),
-				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger),
+				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, func() bool { return true }, time.Second, 100, metrics.NoopMetricsHandler, testLogger, time.Second, 10),
 				startupTime:             startupTime,
 			}
 
