@@ -12419,7 +12419,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("ResetClearsHeartbeat", func(t *testing.T) {
+	t.Run("ResetClearsHeartbeatDetails", func(t *testing.T) {
 		// Activity records heartbeats. Reset clears them.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -12492,7 +12492,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 
-	t.Run("ResetWhileRunningClearsHeartbeat", func(t *testing.T) {
+	t.Run("ResetClearsHeartbeatState", func(t *testing.T) {
 		// Reset while the activity is STARTED.
 		// The heartbeat clear is deferred — it only takes effect on the next retry,
 		// matching the behavior of the workflow activity HeartbeatDetails reset test.

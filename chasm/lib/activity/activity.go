@@ -1032,7 +1032,7 @@ func (a *Activity) recordPauseState(
 	a.emitOnPausedMetrics(event.metricsHandler)
 }
 
-func (a *Activity) clearHeartbeat(ctx chasm.MutableContext) {
+func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 	if hb, ok := a.LastHeartbeat.TryGet(ctx); ok {
 		hb.Details = nil
 		hb.RecordedTime = nil
@@ -1045,7 +1045,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-	a.clearHeartbeat(ctx)
+	a.clearHeartbeatDetails(ctx)
 	dispatchTime := a.dispatchTimeRespectingStartDelay(event.resetTime)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
@@ -1167,7 +1167,7 @@ func (a *Activity) resetKeepPaused(
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	attempt.DispatchTime = nil
-	a.clearHeartbeat(ctx)
+	a.clearHeartbeatDetails(ctx)
 	a.emitOnResetMetrics(metricsHandler)
 	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
