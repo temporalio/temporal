@@ -337,7 +337,13 @@ func (s *Scheduler) Terminate(
 	_ chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// TODO: Implement terminate logic.
+	if s.Closed {
+		return chasm.TerminateComponentResponse{}, ErrClosed
+	}
+
+	// Needed so that the CHASM-level search attribute reads closed as well as the
+	// MS-level/legacy ExecutionStatus.
+	s.Closed = true
 	return chasm.TerminateComponentResponse{}, nil
 }
 
