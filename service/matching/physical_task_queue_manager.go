@@ -934,9 +934,9 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 // recordPollerScaleDecision emits the poller_scale_decision metric describing why the physical
 // task queue manager decided to scale pollers up, down, or hold. It is a no-op unless the opt-in
-// dynamic config matching.pollerScalingEmitMetrics is enabled for this namespace/task queue.
+// dynamic config matching.enablePollerScalingDecisionMetrics is enabled for this namespace/task queue.
 func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(reason string) {
-	if !c.partitionMgr.config.PollerScalingEmitMetrics() {
+	if !c.partitionMgr.config.EnablePollerScalingDecisionMetrics() {
 		return
 	}
 	c.metricsHandler.Counter(metrics.PollerScaleDecisionCounter.Name()).

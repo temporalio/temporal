@@ -134,10 +134,10 @@ type (
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
 		MinDispatchTaskTimeout            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
-		PollerScalingBacklogAgeScaleUp  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
-		PollerScalingEmitMetrics        dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		PollerScalingBacklogAgeScaleUp     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PollerScalingWaitTime              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PollerScalingDecisionsPerSecond    dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		EnablePollerScalingDecisionMetrics dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -229,10 +229,10 @@ type (
 		PollerHistoryTTL func() time.Duration
 
 		// Poller scaling decisions configuration
-		PollerScalingBacklogAgeScaleUp  func() time.Duration
-		PollerScalingWaitTime           func() time.Duration
-		PollerScalingDecisionsPerSecond func() float64
-		PollerScalingEmitMetrics        func() bool
+		PollerScalingBacklogAgeScaleUp     func() time.Duration
+		PollerScalingWaitTime              func() time.Duration
+		PollerScalingDecisionsPerSecond    func() float64
+		EnablePollerScalingDecisionMetrics func() bool
 
 		FairnessCounter               func() counter.CounterParams
 		FairnessPassDither            func() bool
@@ -382,10 +382,10 @@ func NewConfig(
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 		MinDispatchTaskTimeout:            nexusoperations.MinDispatchTaskTimeout.Get(dc),
 
-		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
-		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
-		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
-		PollerScalingEmitMetrics:        dynamicconfig.MatchingPollerScalingEmitMetrics.Get(dc),
+		PollerScalingBacklogAgeScaleUp:     dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
+		PollerScalingWaitTime:              dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
+		PollerScalingDecisionsPerSecond:    dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
+		EnablePollerScalingDecisionMetrics: dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
@@ -565,8 +565,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		PollerScalingDecisionsPerSecond: func() float64 {
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
 		},
-		PollerScalingEmitMetrics: func() bool {
-			return config.PollerScalingEmitMetrics(ns.String(), taskQueueName, taskType)
+		EnablePollerScalingDecisionMetrics: func() bool {
+			return config.EnablePollerScalingDecisionMetrics(ns.String(), taskQueueName, taskType)
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)

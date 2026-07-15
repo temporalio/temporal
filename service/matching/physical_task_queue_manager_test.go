@@ -534,7 +534,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 func (s *PhysicalTaskQueueManagerTestSuite) enablePollerScaleDecisionMetrics() *metricstest.CaptureHandler {
 	handler := metricstest.NewCaptureHandler()
 	s.tqMgr.metricsHandler = handler
-	s.tqMgr.partitionMgr.config.PollerScalingEmitMetrics = func() bool { return true }
+	s.tqMgr.partitionMgr.config.EnablePollerScalingDecisionMetrics = func() bool { return true }
 	return handler
 }
 
