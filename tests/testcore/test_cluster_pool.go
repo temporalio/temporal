@@ -100,12 +100,15 @@ func (p *clusterPool) get(t *testing.T, createCluster func() *FunctionalTestBase
 }
 
 func (p *clusterPool) reserveSlot(t *testing.T) *clusterPoolSlot {
-	if p.availableSlots == nil {
-		return p.nextSlot()
-	}
-
 	p.Lock()
 	defer p.Unlock()
+
+	if p.availableSlots == nil {
+		slot := p.allSlots[p.nextSlotIdx]
+		p.nextSlotIdx = (p.nextSlotIdx + 1) % len(p.allSlots)
+		return slot
+	}
+
 	for len(p.availableSlots) == 0 {
 		p.availableCond.Wait()
 	}
@@ -122,14 +125,6 @@ func (p *clusterPool) releaseSlot(slot *clusterPoolSlot) {
 	defer p.Unlock()
 	p.availableSlots = append(p.availableSlots, slot)
 	p.availableCond.Signal()
-}
-
-func (p *clusterPool) nextSlot() *clusterPoolSlot {
-	p.Lock()
-	defer p.Unlock()
-	slot := p.allSlots[p.nextSlotIdx]
-	p.nextSlotIdx = (p.nextSlotIdx + 1) % len(p.allSlots)
-	return slot
 }
 
 func (s *clusterPoolSlot) acquire(t *testing.T, createCluster func() *FunctionalTestBase) *FunctionalTestBase {
