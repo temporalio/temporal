@@ -113,6 +113,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 	case *tasks.DeleteExecutionVisibilityTask:
 		err = t.processDeleteExecution(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.processChasmTask(ctx, task)
 	default:
 		err = errUnknownVisibilityTask

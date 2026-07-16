@@ -219,6 +219,18 @@ type SimplePartitionScalerSettings struct {
 	Downs []SimplePartitionScalerThreshold
 	Ups   []SimplePartitionScalerThreshold
 
+	// Backlog-based scaling: If these are > 0, then we'll a new partition for each partition
+	// whose backlog count grows above BacklogBase and has not shrunk below BacklogReset (for
+	// hysteresis).
+	BacklogReset int32
+	BacklogBase  int32
+
+	// BacklogCap adjusts task distribution with the above two settings: If > 0, then tasks
+	// are distributed based on the gap between the current backlog and BacklogCap,
+	// effectively making it a soft cap on backlog count. If 0, uniform distribution is used.
+	// When in use, they should be set so that Reset < Base < Cap.
+	BacklogCap int32
+
 	// Overall bounds (0 means don't enforce).
 	Min int32
 	Max int32
@@ -227,4 +239,20 @@ type SimplePartitionScalerSettings struct {
 type SimplePartitionScalerThreshold struct {
 	Window     time.Duration // window to measure add rate over
 	TargetRate int           // target tasks/second per partition
+}
+
+type LatencyHealthCheckSettings struct {
+	// Percentile is a number from 0.00 to 1.00 which represents how far into the distribution we should look, eg 0.99 is p99.
+	Percentile float64
+
+	// Threshold is the amount of time this percentiles reading must exceed to trigger an unhealthy response (if enforced).
+	Threshold time.Duration
+
+	// Enforced allows this health check to return unhealthy responses, when false this health check will always report healthy.
+	Enforced bool
+}
+
+type LatencyHealthChecksPerPercentile struct {
+	// PercentileSettings stores settings for the health check of each percentile.
+	PercentileSettings []LatencyHealthCheckSettings
 }

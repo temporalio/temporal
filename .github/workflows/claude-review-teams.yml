@@ -1,34 +1,37 @@
-# Reviews PRs from opted-in team members with Claude.
+# Reviews PRs from opted-in team members or Claude review labels with Claude.
 #
 # Uses `pull_request_target` so the workflow has access to secrets even when
 # a PR is opened from a fork. This is safe ONLY because the
-# `check-review-eligibility` job gates the review job behind trusted eligibility
+# `check-review-eligibility` job gates the review job behind trusted user
 # checks.
-name: Claude review for opted-in team PRs
+name: Claude review for opted-in PRs
 
 on:
-  # Auto-trigger on PR open/reopen/ready is disabled while we validate the
-  # workflow end-to-end via workflow_dispatch. Re-enable once we've confirmed
-  # the membership check and review behave as expected on real PRs.
-  # pull_request_target:
-  #   types: [opened, reopened, ready_for_review]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: PR number to review (manual test trigger)
-        required: true
-        type: string
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, labeled]
 
 env:
   # Space- or newline-separated list of temporalio team slugs whose
-  # members' PRs should receive an automated Claude review.
-  REVIEW_TEAMS: |
-    nexus
-  REVIEW_OPT_OUT_LABEL: opt-out
+  # members' PRs should receive an automated Claude review. Empty means only
+  # PRs labeled with REVIEW_OPT_IN_LABEL by a temporalio org member are reviewed.
+  REVIEW_TEAMS: ""
+  REVIEW_OPT_IN_LABEL: request-claude-review
+  REVIEW_OPT_OUT_LABEL: skip-claude-review
 
 jobs:
   check-review-eligibility:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: >-
+      (
+        github.event.action != 'labeled' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
+        github.event.action == 'labeled' &&
+        (
+          github.event.label.name == 'request-claude-review' ||
+          github.event.label.name == 'skip-claude-review'
+        )
+      )
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
@@ -39,40 +42,28 @@ jobs:
     steps:
       - name: Generate app token
         id: generate_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ secrets.TEMPORAL_AI_REVIEW_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_AI_REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           # Least-privilege: members:read for team-membership lookups,
-          # pull-requests:read for the workflow_dispatch PR lookup, and
+          # pull-requests:read for PR metadata, and
           # issues:read for PR label lookups.
           permission-members: read
           permission-pull-requests: read
           permission-issues: read
       - id: resolve
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            pr_json=$(gh api -H "Accept: application/vnd.github+json" \
-              "/repos/${REPO}/pulls/${INPUT_PR_NUMBER}")
-            author=$(echo "$pr_json" | jq -r '.user.login')
-            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
-            pr_number="$INPUT_PR_NUMBER"
-          else
-            author="$PR_AUTHOR"
-            head_sha="$PR_HEAD_SHA"
-            pr_number="$EVENT_PR_NUMBER"
-          fi
+          author="$PR_AUTHOR"
+          head_sha="$PR_HEAD_SHA"
+          pr_number="$EVENT_PR_NUMBER"
 
           echo "Resolved PR #${pr_number}: author=${author}, head_sha=${head_sha}"
           {
@@ -84,6 +75,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
+          EVENT_ACTOR: ${{ github.actor }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           REPO: ${{ github.repository }}
         run: |
@@ -93,7 +87,80 @@ jobs:
             echo "should_review=$1" >> "$GITHUB_OUTPUT"
           }
 
-          echo "Checking PR #${PR_NUMBER} for opt-out label '${REVIEW_OPT_OUT_LABEL}'"
+          skip_review() {
+            echo "Skipping Claude review for PR #${PR_NUMBER}: $1"
+            set_review_decision false
+            exit 0
+          }
+
+          enable_review() {
+            echo "Claude review enabled for PR #${PR_NUMBER}: $1"
+            set_review_decision true
+            exit 0
+          }
+
+          labels_match() {
+            [ "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')" ]
+          }
+
+          has_label() {
+            printf '%s\n' "$labels" | awk -v label="$1" 'tolower($0) == tolower(label) { found = 1 } END { exit !found }'
+          }
+
+          require_org_member() {
+            user="$1"
+            role="$2"
+
+            echo "Checking temporalio organization membership for ${role} ${user}"
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/memberships/${user}" 2>&1); then
+              if [ "$(echo "$response" | jq -r '.state')" != "active" ]; then
+                skip_review "${role} is not an active temporalio organization member"
+              fi
+            elif echo "$response" | grep -q "HTTP 404"; then
+              skip_review "${role} is not a temporalio organization member"
+            else
+              echo "Unexpected error checking temporalio organization membership for ${role} ${user}: ${response}" >&2
+              exit 1
+            fi
+            echo "${role} ${user} is an active temporalio organization member"
+          }
+
+          require_repo_write() {
+            user="$1"
+            role="$2"
+
+            echo "Checking repository write permission for ${role} ${user}"
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${REPO}/collaborators/${user}/permission" 2>&1); then
+              permission=$(echo "$response" | jq -r '.permission')
+              case "$permission" in
+                admin|write)
+                  echo "${role} ${user} has repository ${permission} permission"
+                  ;;
+                *)
+                  skip_review "${role} has repository ${permission} permission, not write/admin"
+                  ;;
+              esac
+            elif echo "$response" | grep -q "HTTP 404"; then
+              skip_review "${role} is not a repository collaborator"
+            else
+              echo "Unexpected error checking repository permission for ${role} ${user}: ${response}" >&2
+              exit 1
+            fi
+          }
+
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            require_org_member "$EVENT_ACTOR" "labeler"
+            require_repo_write "$EVENT_ACTOR" "labeler"
+          else
+            require_org_member "$AUTHOR" "author"
+            require_repo_write "$AUTHOR" "author"
+          fi
+
+          echo "Fetching labels for PR #${PR_NUMBER}"
           labels=$(gh api -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/issues/${PR_NUMBER}" --jq '.labels[].name')
           if [ -z "$labels" ]; then
@@ -103,16 +170,28 @@ jobs:
             printf '%s\n' "$labels" | sed 's/^/- /'
           fi
 
-          opt_out_label=$(printf '%s\n' "$labels" | awk -v label="$REVIEW_OPT_OUT_LABEL" 'tolower($0) == tolower(label) { print; exit }')
-          if [ -n "$opt_out_label" ]; then
-            echo "Skipping Claude review for PR #${PR_NUMBER}: opt-out label '${REVIEW_OPT_OUT_LABEL}' is present"
-            set_review_decision false
-            exit 0
+          if has_label "$REVIEW_OPT_OUT_LABEL"; then
+            skip_review "skip label '${REVIEW_OPT_OUT_LABEL}' is present"
+          fi
+          echo "No skip label '${REVIEW_OPT_OUT_LABEL}' found on PR #${PR_NUMBER}"
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            if ! labels_match "$EVENT_LABEL_NAME" "$REVIEW_OPT_IN_LABEL"; then
+              skip_review "label '${EVENT_LABEL_NAME}' does not request Claude review"
+            fi
           fi
 
-          echo "No opt-out label '${REVIEW_OPT_OUT_LABEL}' found on PR #${PR_NUMBER}"
-          echo "Checking team membership for ${AUTHOR}"
+          echo "Checking PR #${PR_NUMBER} for request label '${REVIEW_OPT_IN_LABEL}'"
+          if has_label "$REVIEW_OPT_IN_LABEL"; then
+            enable_review "request label '${REVIEW_OPT_IN_LABEL}' is present"
+          fi
+          echo "No request label '${REVIEW_OPT_IN_LABEL}' found on PR #${PR_NUMBER}"
+          if [ -z "$REVIEW_TEAMS" ]; then
+            skip_review "no REVIEW_TEAMS configured; PR requires request label '${REVIEW_OPT_IN_LABEL}'"
+          fi
+
+          echo "Checking configured review teams for ${AUTHOR}"
           is_member=false
+          matched_team=""
           for team in $REVIEW_TEAMS; do
             if response=$(gh api \
                 -H "Accept: application/vnd.github+json" \
@@ -120,6 +199,7 @@ jobs:
               if [ "$(echo "$response" | jq -r '.state')" = "active" ]; then
                 echo "${AUTHOR} is an active member of temporalio/${team}"
                 is_member=true
+                matched_team="$team"
                 break
               fi
             elif echo "$response" | grep -q "HTTP 404"; then
@@ -131,13 +211,10 @@ jobs:
           done
 
           if [ "$is_member" = "false" ]; then
-            echo "Skipping Claude review for PR #${PR_NUMBER}: author is not in an opted-in team"
-            set_review_decision false
-            exit 0
+            skip_review "author is not in a configured review team"
           fi
 
-          echo "Claude review enabled for PR #${PR_NUMBER}: author is in an opted-in team and no opt-out label is present"
-          set_review_decision true
+          enable_review "author is in configured review team 'temporalio/${matched_team}'"
 
   review:
     needs: check-review-eligibility
@@ -148,26 +225,29 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          # pull_request_target defaults to the base ref; explicitly check out
-          # the PR head so the review sees the proposed changes. Safe here
-          # because the team-membership gate above limits this to trusted authors.
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
-      - uses: anthropics/claude-code-action@v1
+          path: pr-head
+      - name: Claude PR review
+        uses: anthropics/claude-code-action@v1
         with:
+          github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
+          track_progress: ${{ github.event.action != 'labeled' }}
           prompt: |
             Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
-            Please review this pull request.
-            The PR branch is already checked out in the current working directory.
+            Please review PR #${{ needs.check-review-eligibility.outputs.pr_number }}.
+            The trusted base branch is checked out in the current working directory.
+            The PR head is checked out in `pr-head/`.
+            Review the changes in `pr-head/`.
             Prefer inline comments for all actionable findings.
             Use `mcp__github_inline_comment__create_inline_comment` with `confirmed: true` to highlight specific code issues.
+            When posting inline comments, use repository-relative PR file paths from the diff, without the `pr-head/` prefix.
             Only use `gh pr comment` for a brief summary if there are no inline findings or if a finding cannot be attached to a specific changed line.
             Do not duplicate inline findings in a top-level comment.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

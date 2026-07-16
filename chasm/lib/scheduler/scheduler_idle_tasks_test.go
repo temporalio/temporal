@@ -52,7 +52,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(c.taskIdleTimeTotal)}
 	taskAttrs := chasm.TaskAttributes{ScheduledTime: c.scheduledTime}
 
-	isValid, err := handler.Validate(ctx, sched, taskAttrs, task)
+	isValid, err := handler.Validate(ctx, sched, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.Equal(t, c.expectedValid, isValid)
 }
@@ -193,7 +193,7 @@ func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 			taskAttrs := chasm.TaskAttributes{ScheduledTime: now}
 			c.setup(env.Scheduler, now, &taskAttrs)
 
-			isValid, err := handler.Validate(env.MutableContext(), env.Scheduler, taskAttrs,
+			isValid, err := handler.Validate(env.MutableContext(), env.Scheduler, chasm.TaskInvocation{TaskAttributes: taskAttrs},
 				&schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(10 * time.Minute)})
 			require.NoError(t, err)
 			require.False(t, isValid)
@@ -297,7 +297,7 @@ func TestIdleTask_Validate_SentinelNotHeldOpen(t *testing.T) {
 		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
 	}
 
-	isValid, err := handler.Validate(ctx, sentinel, taskAttrs, task)
+	isValid, err := handler.Validate(ctx, sentinel, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.True(t, isValid, "sentinel must remain eligible to close regardless of paused/backfill/empty-spec state")
 }

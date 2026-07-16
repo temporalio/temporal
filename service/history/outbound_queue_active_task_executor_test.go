@@ -8,12 +8,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	workerpb "go.temporal.io/api/worker/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -194,6 +197,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_ChasmTask() {
 
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+			s.mockExecutable.EXPECT().Attempt().Return(1).AnyTimes()
 			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
@@ -252,6 +256,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_PreValidationFails() 
 			task := tc.setupTask()
 			tc.setupMocks(task)
 			s.mockExecutable.EXPECT().GetTask().Return(task)
+			s.mockExecutable.EXPECT().Attempt().Return(1).AnyTimes()
 			s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 			result := s.executor.Execute(ctx, s.mockExecutable)
@@ -262,6 +267,39 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_PreValidationFails() 
 			s.NotEmpty(result.ExecutionMetricTags)
 		})
 	}
+}
+
+func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_WorkerCommandsTask_ExceedsMaxAttempts() {
+	ctx := context.Background()
+
+	mockClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	mockClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).Times(0)
+	s.executor.workerCommandsDispatcher = workercommands.NewDispatcher(
+		mockClient,
+		s.mockShard.GetConfig(),
+		s.metricsHandler,
+		s.logger,
+	)
+
+	task := &tasks.WorkerCommandsTask{
+		WorkflowKey: tests.WorkflowKey,
+		TaskID:      s.mustGenerateTaskID(),
+		Destination: "test-control-queue",
+		Commands: []*workerpb.WorkerCommand{
+			{Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token")},
+			}},
+		},
+	}
+
+	s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+	s.mockExecutable.EXPECT().Attempt().Return(workercommands.MaxTaskAttempts + 1).AnyTimes()
+	s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
+
+	result := s.executor.Execute(ctx, s.mockExecutable)
+
+	s.NoError(result.ExecutionErr)
+	s.True(result.ExecutedAsActive)
 }
 
 func (s *outboundQueueActiveTaskExecutorSuite) mustGenerateTaskID() int64 {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -48,6 +50,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -87,6 +90,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
+		eventLogger         otellog.Logger
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -147,8 +151,9 @@ type (
 
 		stateMachineRegistry *hsm.Registry
 
-		chasmRegistry    *chasm.Registry
-		endpointRegistry chasm.EndpointRegistry
+		chasmRegistry         *chasm.Registry
+		chasmWorkflowRegistry *chasmworkflow.Registry
+		endpointRegistry      chasm.EndpointRegistry
 
 		businessIDRateLimiters cache.Cache
 	}
@@ -2050,6 +2055,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
+	eventLogger otellog.Logger,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2062,6 +2068,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	endpointRegistry chasm.EndpointRegistry,
 	handoverTrackerFactory HandoverTrackerFactory,
 ) (*ContextImpl, error) {
@@ -2087,6 +2094,7 @@ func newContext(
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
+		eventLogger:             eventLogger,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2112,6 +2120,7 @@ func newContext(
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
+		chasmWorkflowRegistry:   chasmWorkflowRegistry,
 		endpointRegistry:        endpointRegistry,
 		businessIDRateLimiters: cache.New(
 			historyConfig.BusinessIDReuseLimiterCacheSize(),
@@ -2195,6 +2204,13 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
 }
 
+func (s *ContextImpl) GetEventLogger() otellog.Logger {
+	if s.eventLogger == nil {
+		return wideevents.NoopLogger()
+	}
+	return s.eventLogger
+}
+
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
 }
@@ -2229,6 +2245,10 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 
 func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
+}
+
+func (s *ContextImpl) ChasmWorkflowRegistry() *chasmworkflow.Registry {
+	return s.chasmWorkflowRegistry
 }
 
 func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {

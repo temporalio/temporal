@@ -62,21 +62,16 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, true),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueuesPerBuildIdLimit, 3),
-		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure, true),
 
 		testcore.WithDynamicConfig(dynamicconfig.AssignmentRuleLimitPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.RedirectRuleLimitPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.RedirectRuleMaxUpstreamBuildIDsPerQueue, 10),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeletedRuleRetentionTime, 24*time.Hour),
 		testcore.WithDynamicConfig(dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod, 3*time.Minute),
-		testcore.WithDynamicConfig(dynamicconfig.ReachabilityQueryBuildIdLimit, 4),
-		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheOpenWFsTTL, testReachabilityCacheOpenWFsTTL),
-		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheClosedWFsTTL, testReachabilityCacheClosedWFsTTL),
 
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 1),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 1000),
 
 		// The dispatch tests below rely on being able to see the effects of changing
 		// versioning data relatively quickly. In general, we only promise to act on new
@@ -99,6 +94,13 @@ func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.T
 	}, opts...)
 
 	return testcore.NewEnv(s.T(), opts...)
+}
+
+func (s *VersioningIntegSuite) reachabilityCacheTTLOptions() []testcore.TestOption {
+	return []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheOpenWFsTTL, testReachabilityCacheOpenWFsTTL),
+		testcore.WithDynamicConfig(dynamicconfig.ReachabilityCacheClosedWFsTTL, testReachabilityCacheClosedWFsTTL),
+	}
 }
 
 func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcore.TestEnv, *VersioningIntegSuite)) {
@@ -3954,7 +3956,7 @@ func (s *VersioningIntegSuite) validateBuildIDAfterReset(
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_ReachabilityCache() {
-	env := s.setupEnv()
+	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	// 1. Add assignment rule A and start workflow with build id A
@@ -4012,7 +4014,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
-	env := s.setupEnv()
+	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	s.getBuildIDReachability(env, tq, nil, map[string]enumspb.BuildIdTaskReachability{
@@ -4223,7 +4225,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	env := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 
-	buildIDs := []string{"A", "B", "C", "D"}
+	buildIDs := []string{"A", "B", "C", "D", "E"}
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace:              env.Namespace().String(),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -4236,7 +4238,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	buildIDs = []string{"A", "B", "C", "D", "E"}
+	buildIDs = []string{"A", "B", "C", "D", "E", "F"}
 	resp, err = env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace:              env.Namespace().String(),
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
