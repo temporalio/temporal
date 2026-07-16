@@ -1512,6 +1512,13 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
+		"matching.enablePollerScalingDecisionMetrics",
+		false,
+		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
+metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
+scoped by namespace and/or task queue.`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),

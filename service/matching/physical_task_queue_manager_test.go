@@ -529,6 +529,115 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 	s.Nil(decision)
 }
 
+// enablePollerScaleDecisionMetrics swaps in a capturing metrics handler and turns on the opt-in
+// poller_scale_decision metric for the manager under test, returning the handler for assertions.
+func (s *PhysicalTaskQueueManagerTestSuite) enablePollerScaleDecisionMetrics() *metricstest.CaptureHandler {
+	handler := metricstest.NewCaptureHandler()
+	s.tqMgr.metricsHandler = handler
+	s.tqMgr.partitionMgr.config.EnablePollerScalingDecisionMetrics = func() bool { return true }
+	return handler
+}
+
+// assertPollerScaleDecision asserts that exactly one poller_scale_decision metric was captured
+// with the expected decision (direction) and reason tags.
+func (s *PhysicalTaskQueueManagerTestSuite) assertPollerScaleDecision(capture *metricstest.Capture, wantDecision string, wantReason metrics.ReasonString) {
+	recordings := capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(wantDecision, recordings[0].Tags[metrics.PollerScaleDecisionTag(wantDecision).Key])
+	s.Equal(string(wantReason), recordings[0].Tags[metrics.ReasonTag(wantReason).Key])
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleDownIdle() {
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpBacklog() {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpTaskRate() {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		TasksAddRate:      100,
+		TasksDispatchRate: 10,
+	}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldRateLimited() {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNoSignalNotEmitted() {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	// No backlog and add rate does not exceed dispatch rate: delta stays 0, so no decision is
+	// issued and nothing should be emitted even with the metric enabled.
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		TasksAddRate:            10,
+		TasksDispatchRate:       100,
+	}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricDisabledByDefault() {
+	// The opt-in config defaults to false, so no metric should be emitted.
+	handler := metricstest.NewCaptureHandler()
+	s.tqMgr.metricsHandler = handler
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
+}
+
 // TestDrainCompletionNoReloadDraining tests that after drain completes:
 // 1. OtherHasTasks is set to false in persisted metadata
 // 2. On reload, no draining is set up and no persistence calls are made to the migration table
