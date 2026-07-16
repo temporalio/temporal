@@ -116,6 +116,10 @@ message StartWorkflowExecutionResponse {
   bool started = 4;
   temporal.api.enums.v1.WorkflowExecutionStatus status = 5;
   temporal.api.common.v1.Link link = 6;
+  // Run ID of the first execution in the chain. Equals run_id only for a first run; any
+  // continuation (continue-as-new, retry, cron, or reset) inherits the original run's ID. May be
+  // empty when the server could not determine it.
+  string first_execution_run_id = 7;
 }
 
 message GetMutableStateRequest {
@@ -510,6 +514,10 @@ message SignalWithStartWorkflowExecutionResponse {
   string run_id = 1;
   bool started = 2;
   temporal.api.common.v1.Link signal_link = 3;
+  // Run ID of the first execution in the chain. Equals run_id only for a first run; any
+  // continuation (continue-as-new, retry, cron, or reset) inherits the original run's ID. May be
+  // empty when the server could not determine it.
+  string first_execution_run_id = 4;
 }
 
 message RemoveSignalMutableStateRequest {

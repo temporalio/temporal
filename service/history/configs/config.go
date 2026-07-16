@@ -2,6 +2,7 @@ package configs
 
 import (
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -13,6 +14,7 @@ type Config struct {
 	NumberOfShards int32
 
 	EnableReplicationStream                       dynamicconfig.BoolPropertyFn
+	EmitReplicationLifecycleEvents                dynamicconfig.BoolPropertyFn
 	EnableCloseInboundReplicationStreamOnShutdown dynamicconfig.BoolPropertyFn
 	EnableSeparateReplicationEnableFlag           dynamicconfig.BoolPropertyFn
 	HistoryReplicationDLQV2                       dynamicconfig.BoolPropertyFn
@@ -42,13 +44,15 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog            dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS            dynamicconfig.IntPropertyFn
-	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange      dynamicconfig.DurationPropertyFn
-	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                        dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                  dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                        dynamicconfig.IntPropertyFn
+	EnableStickyQuery                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                  dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay             dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -69,6 +73,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -412,6 +417,7 @@ type Config struct {
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
+	HealthRPCLatencyPercentiles     dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
 	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
 	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -442,6 +448,7 @@ func NewConfig(
 		NumberOfShards: numberOfShards,
 
 		EnableReplicationStream:                       dynamicconfig.EnableReplicationStream.Get(dc),
+		EmitReplicationLifecycleEvents:                dynamicconfig.EmitReplicationLifecycleEvents.Get(dc),
 		EnableCloseInboundReplicationStreamOnShutdown: dynamicconfig.EnableCloseInboundReplicationStreamOnShutdown.Get(dc),
 		EnableSeparateReplicationEnableFlag:           dynamicconfig.EnableSeparateReplicationEnableFlag.Get(dc),
 		HistoryReplicationDLQV2:                       dynamicconfig.EnableHistoryReplicationDLQV2.Get(dc),
@@ -494,6 +501,7 @@ func NewConfig(
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
+		EnableChasmNexusWorkflowOperations:    nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
@@ -799,6 +807,7 @@ func NewConfig(
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCLatencyPercentiles:     dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
 		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
 		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
@@ -817,6 +826,10 @@ func NewConfig(
 		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+
+		// Workflow task completion pagination
+		EnableWorkflowTaskCompletionPagination: dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:  dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 	}
 
 	return cfg

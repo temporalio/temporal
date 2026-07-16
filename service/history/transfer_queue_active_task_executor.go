@@ -171,6 +171,7 @@ func (t *transferQueueActiveTaskExecutor) execute(
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
@@ -945,64 +946,77 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		)
 	}
 
+	versioningOverride := attributes.GetVersioningOverride()
+	if err := worker_versioning.ValidateVersioningOverrideStructure(versioningOverride); err != nil {
+		return t.recordStartChildExecutionFailed(
+			ctx,
+			task,
+			weContext,
+			attributes,
+			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_INVALID_VERSIONING_OVERRIDE,
+		)
+	}
+
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
-	var inheritedBuildId string
-	if attributes.InheritBuildId && mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		// Do not set inheritedBuildId for v3 wfs.
-		// setting inheritedBuildId of the child wf to the assignedBuildId of the parent
-		inheritedBuildId = mutableState.GetAssignedBuildId()
-		if inheritedBuildId == "" {
-			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
-			// [cleanup-old-wv]
-			// Copy version stamp to new workflow only if:
-			// - command says to use compatible version
-			// - using versioning
-			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
-		}
-	}
-
-	// If there is a pinned override, then the effective version will be the same as the pinned override version.
-	// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
-	// the first matching task-queue-in-version check.
-	newTQInPinnedVersion := false
-
-	// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
+	var inheritedBuildID string
 	var inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion
-	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
-		newTQ := attributes.GetTaskQueue().GetName()
-		if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
-			inheritedPinnedVersion = nil
-		} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
-			newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
-			if err != nil {
-				return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
-			}
-			if !newTQInPinnedVersion {
-				inheritedPinnedVersion = nil
-			}
-		}
-	}
-
-	// Pinned and one-time overrides are inherited if Task Queue of new run is compatible with the override version.
 	var inheritedVersioningOverride *workflowpb.VersioningOverride
-	if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.GetOverrideTargetDeploymentVersion(o) != nil {
-		inheritedVersioningOverride = o
-		newTQ := attributes.GetTaskQueue().GetName()
-		if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
-			attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit override if child is in a different namespace
-			inheritedVersioningOverride = nil
-		}
-	}
-
-	// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment version as the parent TQ.
 	var inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo
-	sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
-	sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
+	// If a VersioningOverride is present at child workflow start, it takes precedence over inherited information.
+	if versioningOverride == nil {
+		if attributes.InheritBuildId && mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { //nolint:staticcheck // SA1019: worker versioning v0.2
+			// Do not set inheritedBuildId for v3 wfs.
+			// setting inheritedBuildId of the child wf to the assignedBuildId of the parent
+			inheritedBuildID = mutableState.GetAssignedBuildId()
+			if inheritedBuildID == "" {
+				// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
+				// [cleanup-old-wv]
+				// Copy version stamp to new workflow only if:
+				// - command says to use compatible version
+				// - using versioning
+				sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
+			}
+		}
 
-	// Only set inherited auto upgrade info if source deployment version and revision number are not nil
-	if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 {
-		if effectiveVersioningBehavior := mutableState.GetEffectiveVersioningBehavior(); effectiveVersioningBehavior == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+		// If there is a pinned override, then the effective version will be the same as the pinned override version.
+		// If this is a cross-TQ child, we don't want to ask matching the same question twice, so we re-use the result from
+		// the first matching task-queue-in-version check.
+		newTQInPinnedVersion := false
+
+		// Child of pinned parent will inherit the parent's version if the Child's Task Queue belongs to that version.
+		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			inheritedPinnedVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+			newTQ := attributes.GetTaskQueue().GetName()
+			if attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit pinned version if child is in a different namespace
+				inheritedPinnedVersion = nil
+			} else if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() {
+				newTQInPinnedVersion, err = worker_versioning.GetIsWFTaskQueueInVersionDetector(t.matchingRawClient, t.versionCache)(ctx, attributes.GetNamespaceId(), newTQ, inheritedPinnedVersion)
+				if err != nil {
+					return fmt.Errorf("error determining child task queue presence in inherited version: %w", err)
+				}
+				if !newTQInPinnedVersion {
+					inheritedPinnedVersion = nil
+				}
+			}
+		}
+
+		// Pinned and one-time overrides are inherited if Task Queue of new run is compatible with the override version.
+		if o := mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); worker_versioning.GetOverrideTargetDeploymentVersion(o) != nil {
+			inheritedVersioningOverride = o
+			newTQ := attributes.GetTaskQueue().GetName()
+			if newTQ != mutableState.GetExecutionInfo().GetTaskQueue() && !newTQInPinnedVersion ||
+				attributes.GetNamespaceId() != mutableState.GetExecutionInfo().GetNamespaceId() { // don't inherit override if child is in a different namespace
+				inheritedVersioningOverride = nil
+			}
+		}
+
+		// If the parent has AutoUpgrade behavior, we populate the inherited auto upgrade info based on whether the child TQ is in the same deployment version as the parent TQ.
+		sourceDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment())
+		sourceDeploymentRevisionNumber := mutableState.GetVersioningRevisionNumber()
+
+		// Only set inherited auto upgrade info if source deployment version and revision number are not nil
+		if sourceDeploymentVersion != nil && sourceDeploymentRevisionNumber != 0 &&
+			mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
 			inheritedAutoUpgradeInfo = &deploymentpb.InheritedAutoUpgradeInfo{
 				SourceDeploymentVersion:                sourceDeploymentVersion,
 				SourceDeploymentRevisionNumber:         sourceDeploymentRevisionNumber,
@@ -1088,7 +1102,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		attributes,
 		sourceVersionStamp,
 		rootExecutionInfo,
-		inheritedBuildId,
+		inheritedBuildID,
 		initiatedEvent.GetUserMetadata(),
 		shouldTerminateAndStartChild,
 		inheritedVersioningOverride,
@@ -1098,19 +1112,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
-		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
-			// for retryable error just return
-			return err
-		}
 		var failedCause enumspb.StartChildWorkflowExecutionFailedCause
-		switch err.(type) {
-		case *serviceerror.WorkflowExecutionAlreadyStarted:
-			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
-		case *serviceerror.NamespaceNotFound:
-			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
-		default:
-			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ServiceErrorType(err), tag.Error(err))
-			return err
+		if versioningOverride != nil && worker_versioning.IsPinnedVersionNotInTaskQueueError(err) {
+			// TODO(Shivam): Revisit this string-based classification and consider a typed error if more callers need it.
+			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_INVALID_VERSIONING_OVERRIDE
+		} else {
+			if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
+				// for retryable error just return
+				return err
+			}
+			switch err.(type) {
+			case *serviceerror.WorkflowExecutionAlreadyStarted:
+				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
+			case *serviceerror.NamespaceNotFound:
+				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
+			default:
+				t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ServiceErrorType(err), tag.Error(err))
+				return err
+			}
 		}
 
 		return t.recordStartChildExecutionFailed(
@@ -1670,6 +1689,11 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	priority *commonpb.Priority,
 	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
 ) (string, *clockspb.VectorClock, error) {
+	versioningOverride := inheritedVersioningOverride
+	if attributes.GetVersioningOverride() != nil {
+		versioningOverride = attributes.GetVersioningOverride()
+	}
+
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
 		WorkflowId:               attributes.WorkflowId,
@@ -1690,7 +1714,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		Memo:                     attributes.Memo,
 		SearchAttributes:         attributes.SearchAttributes,
 		UserMetadata:             userMetadata,
-		VersioningOverride:       inheritedVersioningOverride,
+		VersioningOverride:       versioningOverride,
 		Priority:                 priority,
 		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}

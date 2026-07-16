@@ -53,6 +53,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	// Deprecated: use the suite's Context() method instead.
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
@@ -88,6 +89,7 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster         bool
+	needWorkerService        bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
@@ -143,7 +145,7 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.needWorkerService = true
 		o.dedicatedReason = "worker service required: " + reason
 	}
 }
@@ -265,7 +267,13 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	base := testClusterRouter.get(t, clusterRequest{
+		dedicated:         options.dedicatedCluster,
+		needWorkerService: options.needWorkerService,
+		dedicatedReason:   options.dedicatedReason,
+		dynamicConfig:     startupConfig,
+		clusterOpts:       options.clusterOptions,
+	})
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -438,6 +446,8 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
+//
+// Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
 	return e.ctx
 }

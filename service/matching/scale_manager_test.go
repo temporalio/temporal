@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -18,6 +19,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -40,6 +43,16 @@ type ScaleManagerSuite struct {
 
 	sm       *scaleManager
 	settings dynamicconfig.PartitionScaleManagerSettings
+
+	// metricsHandler is wired into the manager. It defaults to Noop (gauge
+	// emission is enabled whenever the handler isn't the Noop handler, so gauges
+	// are off by default). A test that asserts on emitted gauges sets
+	// s.metricsHandler = s.capture before startManager.
+	metricsHandler metrics.Handler
+	capture        *metricstest.CaptureHandler
+
+	// newTarget counts "new target" logs, which are also used for test synchronization
+	newTarget *testlogger.Expectation
 }
 
 func TestScaleManagerSuite(t *testing.T) {
@@ -54,13 +67,17 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.userData = NewMockuserDataManager(s.controller)
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
+	s.capture = metricstest.NewCaptureHandler()
+	s.metricsHandler = metrics.NoopMetricsHandler
 
 	// scaler.Stop is called from sm.Stop in TearDownTest, but only if the test
 	// actually started the manager.
 	s.scaler.EXPECT().Stop().AnyTimes()
 
 	s.settings = dynamicconfig.PartitionScaleManagerSettings{
-		MaxRate:            10, // 100ms cooldown
+		MaxRate:            10,  // 100ms cooldown
+		ShrinkRatio:        1.0, // no shrink limit by default
+		ShrinkDelta:        100, // no shrink limit by default
 		BatchSize:          1,
 		BackgroundInterval: time.Hour, // disabled by default
 		DrainBufferTime:    time.Hour, // disabled by default
@@ -80,7 +97,7 @@ func (s *ScaleManagerSuite) TearDownTest() {
 // startManager builds and starts the scaleManager. Call this after configuring
 // EXPECTs and tweaking s.settings. Pass initial=nil to start with no prior state.
 func (s *ScaleManagerSuite) startManager(writePartitions int, initial *persistencespb.PartitionScaleState) {
-	s.startManagerWithLogger(log.NewTestLogger(), writePartitions, initial)
+	s.startManagerWithLogger(testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly), writePartitions, initial)
 }
 
 func (s *ScaleManagerSuite) startManagerWithLogger(
@@ -88,18 +105,21 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 	writePartitions int,
 	initial *persistencespb.PartitionScaleState,
 ) {
+	if tl, ok := logger.(*testlogger.TestLogger); ok {
+		s.newTarget = tl.Expect(testlogger.Info, "new target")
+	}
 	s.sm = newScaleManager(
 		context.Background(),
 		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		logger,
-		metrics.NoopMetricsHandler,
+		s.metricsHandler,
 		s.userData,
 		s.matching,
 		s.scaler,
 		s.timeSource,
 		dynamicconfig.GetTypedPropertyFn(s.settings),
 		dynamicconfig.GetIntPropertyFn(writePartitions),
-		dynamicconfig.GetBoolPropertyFn(false),
+		func() bool { return s.metricsHandler != metrics.NoopMetricsHandler },
 	)
 	s.sm.Start(initial, s.scaleDB)
 }
@@ -112,6 +132,14 @@ func (s *ScaleManagerSuite) fireBackgroundTimer() {
 		"worker never registered a periodic timer")
 	// BackgroundInterval has up to 5% jitter; advance comfortably past it.
 	s.timeSource.Advance(s.settings.BackgroundInterval*2 + time.Millisecond)
+}
+
+// awaitDecisionApplied blocks until the worker has fully applied n decisions.
+// This uses the "new target" log that's emitted at the end of callScaler, so we know that
+// an update has been fully applied.
+func (s *ScaleManagerSuite) awaitDecisionApplied(n int64) {
+	s.T().Helper()
+	waitLogMatches(s, s.newTarget, n, "decision not fully applied before clock advance")
 }
 
 // waitRecv blocks until ch yields a value, failing the test on timeout.
@@ -233,6 +261,53 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	s.Equal(int32(2), info.Write)
 }
 
+// TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
+// decision records the read, write, and target gauges with the expected values.
+func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
+	s.metricsHandler = s.capture
+	capture := s.capture.StartCapture()
+	defer s.capture.StopCapture(capture)
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NewTarget: 2})
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil)
+
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	s.startManager(4, nil) // 4 write partitions in dynamic config
+
+	s.sm.AddedTasks(1)
+	waitRecv(s, dbWrites, "no db write")
+
+	// setState records the gauges after the ephemeral push, so poll the snapshot
+	// until the decision's values land: Read=4 (dynamic config), Write=Target=2.
+	lastValue := func(name string) (float64, bool) {
+		recs := capture.Snapshot()[name]
+		if len(recs) == 0 {
+			return 0, false
+		}
+		v, ok := recs[len(recs)-1].Value.(float64)
+		return v, ok
+	}
+	await.RequireTruef(s.T(), func() bool {
+		v, ok := lastValue(metrics.PartitionScaleTarget.Name())
+		return ok && v == 2
+	}, time.Second, time.Millisecond, "target gauge never reached 2")
+
+	read, _ := lastValue(metrics.PartitionScaleRead.Name())
+	write, _ := lastValue(metrics.PartitionScaleWrite.Name())
+	target, _ := lastValue(metrics.PartitionScaleTarget.Name())
+	s.InDelta(float64(4), read, 0.001, "read gauge")
+	s.InDelta(float64(2), write, 0.001, "write gauge")
+	s.InDelta(float64(2), target, 0.001, "target gauge")
+}
+
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
 // <= 0 uses the normal apply path.
 func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
@@ -334,6 +409,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 	s.Equal(0, in1.CurrentTarget)
 	s.Nil(in1.PrivateState)
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
@@ -349,7 +425,6 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -359,7 +434,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "NoChange decision should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "NoChange decision should not log")
 }
 
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
@@ -368,7 +443,6 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 4)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -389,7 +463,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "first shadow log missing")
+	waitLogMatches(s, s.newTarget, 1, "first shadow log missing")
 
 	s.sm.AddedTasks(1)
 	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
@@ -397,23 +471,22 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "shadow log repeated before cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "shadow log repeated before cadence")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "fourth shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "second shadow log missing")
+	waitLogMatches(s, s.newTarget, 2, "second shadow log missing")
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 1)
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Do(func(in PartitionScalerInput) { inputs <- in }).
@@ -426,7 +499,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "shadow scaler call missing")
-	assertNoNewLogs(s, shadowLog, 30*time.Millisecond, "disabled scaler should not log")
+	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "disabled scaler should not log")
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
@@ -534,7 +607,6 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	shadowLog := logger.Expect(testlogger.Info, "new target")
 	inputs := make(chan PartitionScalerInput, 3)
 	gomock.InOrder(
 		s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -556,17 +628,17 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "first shadow call missing")
-	waitLogMatches(s, shadowLog, 1, "shadow target 3 not logged")
+	waitLogMatches(s, s.newTarget, 1, "shadow target 3 not logged")
 
 	s.timeSource.Advance(time.Minute) // past cooldown and cadence
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "second shadow call missing")
-	waitLogMatches(s, shadowLog, 2, "shadow target 2 not logged")
+	waitLogMatches(s, s.newTarget, 2, "shadow target 2 not logged")
 
 	s.timeSource.Advance(time.Minute)
 	s.sm.AddedTasks(1)
 	waitRecv(s, inputs, "third shadow call missing")
-	waitLogMatches(s, shadowLog, 3, "shadow target 3 after oscillation not logged")
+	waitLogMatches(s, s.newTarget, 3, "shadow target 3 after oscillation not logged")
 }
 
 // TestNoChangeDecisionSkipsWrite covers two skip paths: explicit NoChange, and
@@ -648,6 +720,7 @@ func (s *ScaleManagerSuite) TestCooldown() {
 
 	// Advance fake time past cooldown. Trigger another wakeup; the scaler
 	// should now be called with the accumulated 8 tasks.
+	s.awaitDecisionApplied(1) // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond)
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second decision never delivered")
@@ -688,6 +761,7 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 	s.Nil(in1.PrivateState, "first call should have no private state")
 	waitRecv(s, dbWrites, "first db write missing")
 
+	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past 100ms cooldown
 	s.sm.AddedTasks(1)
 	in2 := waitRecv(s, inputs, "second call missing")
@@ -698,6 +772,8 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 
 // TestDrainClearsBacklogBits verifies that partitions which report as fully
 // drained have their BacklogState bits cleared on the next periodic drain check.
+// It also covers that the drain write is synchronous and that freshly sampled
+// backlog counts ride along on the same write.
 func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 	s.settings.BackgroundInterval = 50 * time.Millisecond
 	s.settings.DrainBufferTime = 0
@@ -708,48 +784,164 @@ func (s *ScaleManagerSuite) TestDrainClearsBacklogBits() {
 		TargetVersion: 0, // fake clock starts at Unix zero
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	// scaleStateToInfo for the initial state has Read=4, Write=2.
-	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: true},
-					},
-				},
-			},
-		},
-	}
+	// scaleStateToInfo for the initial state has Read=4, Write=2, which
+	// backlogDescribeResponse echoes so partitionIsFullyDrained's equality check
+	// passes. Partitions 0,1 (id < target) stay occupied; 2,3 report fully drained.
 	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(drainedResp, nil).AnyTimes()
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			if req.GetTaskQueuePartition().GetNormalPartitionId() >= 2 {
+				return backlogDescribeResponse(0, true), nil
+			}
+			return backlogDescribeResponse(500, false), nil
+		}).AnyTimes()
 
 	// Timer-driven path also calls the scaler (with NumTasks=0). It returns
 	// NoChange so no decision-driven DB write happens — only the drain write.
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
-	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	writes := make(chan dbWrite, 1)
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
-			dbWrites <- common.CloneProto(state)
+		Do(func(state *persistencespb.PartitionScaleState, sync bool) {
+			writes <- dbWrite{common.CloneProto(state), sync}
 		}).
 		Return(nil)
 
 	// One ephemeral push from Start (0 → Read=4/Write=2), one from the drain (Read drops to 2).
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).Times(2)
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
-	state := waitRecv(s, dbWrites, "drain never wrote")
-	s.Equal(int32(2), state.Target, "target should not change during drain")
+	w := waitRecv(s, writes, "drain never wrote")
+	s.True(w.sync, "a drain-bit change must force a synchronous DB write")
+	s.Equal(int32(2), w.state.Target, "target should not change during drain")
 	// Drained ids 2 and 3 should be cleared; ids 0 and 1 stay set (id < target).
-	s.Equal(int32(2), bitSet(state.BacklogState).len())
-	s.True(bitSet(state.BacklogState).get(0))
-	s.True(bitSet(state.BacklogState).get(1))
-	s.False(bitSet(state.BacklogState).get(2))
-	s.False(bitSet(state.BacklogState).get(3))
+	s.Equal(int32(2), bitSet(w.state.BacklogState).len())
+	s.True(bitSet(w.state.BacklogState).get(0))
+	s.True(bitSet(w.state.BacklogState).get(1))
+	s.False(bitSet(w.state.BacklogState).get(2))
+	s.False(bitSet(w.state.BacklogState).get(3))
+	// Freshly sampled counts ride along: occupied 0,1 hold 500; drained 2,3 are 0.
+	c500 := number.EncodeCompact8(500)
+	s.Equal([]byte{c500, c500, 0, 0}, w.state.BacklogCounts)
+
+	// Drain dropped Read to 2; Write stays at target 2.
+	i1 := waitRecv(s, scaleInfos, "no drain push")
+	s.Equal(int32(2), i1.Read, "drain read")
+	s.Equal(int32(2), i1.Write, "drain write")
+}
+
+// TestDrainShrinkLimitedReadWrite is an end-to-end drain runthrough that checks
+// the Read/Write counts pushed to ephemeral data as partitions drain, exercising
+// the write-shrink limit across multiple rounds. With ShrinkDelta=2 and target=1:
+// 10 partitions backlogged -> Read=10/Write=8; drain 7,8,9 -> Read=7/Write=5;
+// drain the rest -> Read=1/Write=1 (partition 0 stays because id < target).
+func (s *ScaleManagerSuite) TestDrainShrinkLimitedReadWrite() {
+	s.settings.BackgroundInterval = 50 * time.Millisecond
+	s.settings.DrainBufferTime = 0
+	s.settings.ShrinkDelta = 2 // ShrinkRatio stays 1.0, so delta dominates
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:        1,
+		MaxTarget:     10,
+		TargetVersion: 0, // fake clock starts at Unix zero; target never changes here
+		BacklogState: bitSet(nil).
+			set(0).set(1).set(2).set(3).set(4).set(5).set(6).set(7).set(8).set(9),
+	}
+
+	// drained holds the partition ids that currently report BacklogDrained. The
+	// test advances it between drain rounds.
+	var drained atomic.Pointer[map[int32]bool]
+	setDrained := func(ids ...int32) {
+		m := make(map[int32]bool, len(ids))
+		for _, id := range ids {
+			m[id] = true
+		}
+		drained.Store(&m)
+	}
+	setDrained() // nothing drained yet
+
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			id := req.GetTaskQueuePartition().GetNormalPartitionId()
+			// Echo the manager's current scale info so partitionIsFullyDrained's
+			// version/read/write equality check passes at every round. This runs on
+			// the background goroutine that owns scaleState, so the read is safe.
+			info := scaleStateToInfo(s.sm.scaleState, s.settings)
+			return &matchingservice.DescribeTaskQueuePartitionResponse{
+				ScaleInfo: info,
+				VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+					"v1": {
+						PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
+							InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
+								{BacklogDrained: (*drained.Load())[id]},
+							},
+						},
+					},
+				},
+			}, nil
+		}).AnyTimes()
+
+	// The timer also calls the scaler; keep target stable with NoChange.
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).AnyTimes()
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 3)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
+
+	s.startManager(10, initial)
+
+	// Start pushes the initial counts: Read=10, Write=max(1, 10-2)=8.
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(10), i0.Read, "initial read")
+	s.Equal(int32(8), i0.Write, "initial write")
+
+	// Round 1: partitions 7,8,9 fully drain.
+	setDrained(7, 8, 9)
+	s.fireBackgroundTimer()
+	st1 := waitRecv(s, dbWrites, "round 1 drain never wrote")
+	s.Equal(int32(7), bitSet(st1.BacklogState).len(), "round 1 backlog count")
+	s.False(bitSet(st1.BacklogState).get(7))
+	s.False(bitSet(st1.BacklogState).get(8))
+	s.False(bitSet(st1.BacklogState).get(9))
+	i1 := waitRecv(s, scaleInfos, "no round 1 push")
+	s.Equal(int32(7), i1.Read, "round 1 read")   // backlog len 7
+	s.Equal(int32(5), i1.Write, "round 1 write") // max(1, 7-2)
+
+	// Round 2: everything else drains. Partition 0 (id < target) keeps its bit.
+	setDrained(1, 2, 3, 4, 5, 6)
+	s.fireBackgroundTimer()
+	st2 := waitRecv(s, dbWrites, "round 2 drain never wrote")
+	s.Equal(int32(1), bitSet(st2.BacklogState).len(), "round 2 backlog count")
+	s.True(bitSet(st2.BacklogState).get(0), "partition below target stays set")
+	i2 := waitRecv(s, scaleInfos, "no round 2 push")
+	s.Equal(int32(1), i2.Read, "round 2 read")   // max(target 1, backlog len 1)
+	s.Equal(int32(1), i2.Write, "round 2 write") // max(1, 1-1)
 }
 
 // TestNoDrainWithBacklog verifies that partitions still reporting backlog
@@ -764,26 +956,17 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 		TargetVersion: 0,
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	notDrainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: false},
-					},
-				},
-			},
-		},
-	}
+	// Partitions report not-drained with no backlog count, so nothing changes.
 	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Return(notDrainedResp, nil).AnyTimes()
+		Return(backlogDescribeResponse(0, false), nil).AnyTimes()
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
 	// Only the push on Start (0 → Read=4/Write=2) is expected.
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
@@ -793,10 +976,18 @@ func (s *ScaleManagerSuite) TestNoDrainWithBacklog() {
 		}).AnyTimes()
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote despite backlog")
+	// No backlog cleared, so no further ephemeral push beyond the one at Start.
+	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push without drain")
 }
 
 // TestDrainSkippedDuringBufferTime verifies that drain is not evaluated until
@@ -817,7 +1008,9 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
 		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
 
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).AnyTimes()
 
 	var dbWrites atomic.Int32
 	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
@@ -827,10 +1020,122 @@ func (s *ScaleManagerSuite) TestDrainSkippedDuringBufferTime() {
 		}).AnyTimes()
 
 	s.startManager(4, initial)
+
+	// Start: Read=4 (backlog 0..3), Write=2 (target; shrink limit off by default).
+	i0 := waitRecv(s, scaleInfos, "no start push")
+	s.Equal(int32(4), i0.Read, "start read")
+	s.Equal(int32(2), i0.Write, "start write")
+
 	s.fireBackgroundTimer()
 
 	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
 		30*time.Millisecond, time.Millisecond, "drain wrote inside DrainBufferTime")
+	// Drain skipped during buffer time, so no push beyond the one at Start.
+	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "unexpected ephemeral push during buffer time")
+}
+
+// TestScaleStateToInfoShrinkLimit exercises the write-shrink limiting in
+// scaleStateToInfo. Read is max(target, backlog len); write is held up near
+// read so it can't shrink faster than allowedShrink = max(1, min(read*ShrinkRatio,
+// ShrinkDelta)) below read, with target as the floor. This matters during drain,
+// when read exceeds target.
+func (s *ScaleManagerSuite) TestScaleStateToInfoShrinkLimit() {
+	// backlog builds a BacklogState with bits 0..n-1 set, giving a read count of n.
+	backlog := func(n int32) bitSet {
+		b := bitSet(nil)
+		for i := range n {
+			b = b.set(i)
+		}
+		return b
+	}
+
+	cases := []struct {
+		name        string
+		target      int32
+		backlogLen  int32
+		shrinkRatio float32
+		shrinkDelta int32
+		wantRead    int32
+		wantWrite   int32
+	}{
+		{
+			name:        "no drain: read==target, write==target regardless of shrink",
+			target:      10,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   10,
+		},
+		{
+			name:        "ratio dominates: read=10 ratio=0.1 -> shrink 1",
+			target:      2,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   9, // 10 - max(1, min(1, 8))
+		},
+		{
+			name:        "delta dominates: read=200 ratio=0.1 (=20) capped at delta 8",
+			target:      2,
+			backlogLen:  200,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    200,
+			wantWrite:   192, // 200 - 8
+		},
+		{
+			name:        "no shrink limit (suite defaults): write falls to target",
+			target:      2,
+			backlogLen:  10,
+			shrinkRatio: 1.0,
+			shrinkDelta: 100,
+			wantRead:    10,
+			wantWrite:   2, // 10 - min(10, 100) = 0, floored to target
+		},
+		{
+			name:        "shrink floored to 1 when ratio rounds to 0",
+			target:      2,
+			backlogLen:  5,
+			shrinkRatio: 0.0,
+			shrinkDelta: 8,
+			wantRead:    5,
+			wantWrite:   4, // 5 - max(1, min(0, 8))
+		},
+		{
+			name:        "target floor wins over read-allowedShrink",
+			target:      9,
+			backlogLen:  10,
+			shrinkRatio: 0.1,
+			shrinkDelta: 8,
+			wantRead:    10,
+			wantWrite:   9, // max(9, 10-1)
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			settings := s.settings
+			settings.ShrinkRatio = tc.shrinkRatio
+			settings.ShrinkDelta = tc.shrinkDelta
+
+			state := &persistencespb.PartitionScaleState{
+				Target:        tc.target,
+				TargetVersion: 12345,
+				BacklogState:  backlog(tc.backlogLen),
+			}
+			info := scaleStateToInfo(state, settings)
+			s.Equal(tc.wantRead, info.Read, "read")
+			s.Equal(tc.wantWrite, info.Write, "write")
+			s.Equal(int64(12345), info.Version, "version")
+		})
+	}
+
+	// nil state: read and write are both 0.
+	info := scaleStateToInfo(nil, s.settings)
+	s.Equal(int32(0), info.Read)
+	s.Equal(int32(0), info.Write)
 }
 
 // TestDBWriteFailureKeepsState verifies that when persistence fails the
@@ -880,4 +1185,170 @@ func (s *ScaleManagerSuite) TestDBWriteFailureKeepsState() {
 	state := waitRecv(s, dbWrites, "second db write missing")
 	s.Equal(int32(3), state.Target, "second decision's target landed (first was dropped)")
 	waitRecv(s, scaleInfos, "no ephemeral data push after recovery")
+}
+
+// dbWrite bundles the state and sync flag from an UpdateScaleState call so tests
+// can assert on the sync argument (in-memory vs. persisted).
+type dbWrite struct {
+	state *persistencespb.PartitionScaleState
+	sync  bool
+}
+
+// backlogDescribeResponse builds a describe response reporting the given
+// approximate backlog count on a single unversioned physical queue.
+func backlogDescribeResponse(count int64, drained bool) *matchingservice.DescribeTaskQueuePartitionResponse {
+	return &matchingservice.DescribeTaskQueuePartitionResponse{
+		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
+		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+			"": {
+				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
+					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
+						{ApproximateBacklogCount: count, BacklogDrained: drained},
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestBacklogCountUpdateInMemoryOnly verifies that when the periodic check finds
+// only changed backlog counts (no drain), the new counts are recorded with a
+// non-synchronous DB write (persisted lazily), the target is untouched, and read
+// partitions are preserved.
+func (s *ScaleManagerSuite) TestBacklogCountUpdateInMemoryOnly() {
+	s.settings.BackgroundInterval = 50 * time.Millisecond
+	s.settings.DrainBufferTime = time.Hour // disable drain
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		Return(backlogDescribeResponse(500, false), nil).AnyTimes()
+
+	writes := make(chan dbWrite, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, sync bool) {
+			writes <- dbWrite{common.CloneProto(state), sync}
+		}).
+		Return(nil)
+	var latestScaleInfo atomic.Pointer[taskqueuespb.PartitionScaleInfo]
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { latestScaleInfo.Store(common.CloneProto(info)) }).AnyTimes()
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:       2,
+		MaxTarget:    2,
+		BacklogState: bitSet(nil).set(0).set(1),
+	}
+	s.startManager(4, initial)
+	s.fireBackgroundTimer()
+
+	w := waitRecv(s, writes, "backlog update never wrote")
+	s.False(w.sync, "backlog-count-only update must not force a synchronous DB write")
+	s.Equal(int32(2), w.state.Target, "target must not change on a backlog-count update")
+	c500 := number.EncodeCompact8(500)
+	s.Equal([]byte{c500, c500}, w.state.BacklogCounts)
+	s.Equal(int32(2), bitSet(w.state.BacklogState).len(), "read partitions preserved (no drain)")
+
+	// verify pushed to ephemeral data also
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		info := latestScaleInfo.Load()
+		require.Equal(t, []byte{c500, c500}, info.BacklogCounts)
+		require.Equal(t, int32(2), info.Write, "target unchanged in pushed info")
+	}, 2*time.Second, time.Millisecond, "no ephemeral push carrying the new backlog counts")
+}
+
+// TestNoWriteWhenBacklogUnchanged verifies that when the sampled backlog counts
+// match what's already stored and nothing drains, no DB write happens at all.
+func (s *ScaleManagerSuite) TestNoWriteWhenBacklogUnchanged() {
+	s.settings.BackgroundInterval = 50 * time.Millisecond
+	s.settings.DrainBufferTime = time.Hour // disable drain
+
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NoChange: true}).AnyTimes()
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		Return(backlogDescribeResponse(500, false), nil).AnyTimes()
+
+	var dbWrites atomic.Int32
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(*persistencespb.PartitionScaleState, bool) {
+			dbWrites.Add(1)
+		}).Return(nil).AnyTimes()
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	c500 := number.EncodeCompact8(500)
+	initial := &persistencespb.PartitionScaleState{
+		Target:        2,
+		MaxTarget:     2,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{c500, c500}, // already equal to what describe reports
+	}
+	s.startManager(4, initial)
+	s.fireBackgroundTimer()
+
+	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+		30*time.Millisecond, time.Millisecond, "no write expected when backlog is unchanged and nothing drains")
+}
+
+// TestBacklogCapChangePersists verifies that a decision that keeps the same
+// target but changes the backlog cap is still applied (not short-circuited as
+// "no change"), and that the cap is stored/pushed as its Compact8 encoding.
+func (s *ScaleManagerSuite) TestBacklogCapChangePersists() {
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NewTarget: 3, BacklogCap: 1000})
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil)
+
+	var latestScaleInfo atomic.Pointer[taskqueuespb.PartitionScaleInfo]
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { latestScaleInfo.Store(common.CloneProto(info)) }).AnyTimes()
+
+	// Current target is already 3, so only the backlog cap differs from the decision.
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 3, MaxTarget: 3})
+
+	s.sm.AddedTasks(1)
+	state := waitRecv(s, dbWrites, "cap-only change never persisted")
+	s.Equal(int32(3), state.Target, "target unchanged; the cap change alone must trigger the write")
+	s.Equal(int32(number.EncodeCompact8(1000)), state.BacklogCap)
+
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		require.Equal(t, int32(number.EncodeCompact8(1000)), latestScaleInfo.Load().GetBacklogCap())
+	}, 2*time.Second, time.Millisecond, "cap must propagate to ephemeral data")
+}
+
+// TestSameTargetAndCapSkipsWrite verifies that a decision matching both the
+// current target and the current backlog cap is short-circuited (no write), and
+// that the stored backlog counts are fed into the scaler input.
+func (s *ScaleManagerSuite) TestSameTargetAndCapSkipsWrite() {
+	inputs := make(chan PartitionScalerInput, 1)
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Do(func(in PartitionScalerInput) { inputs <- in }).
+		Return(PartitionScalerDecision{NewTarget: 3, BacklogCap: 1000})
+
+	var dbWrites atomic.Int32
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Do(func(*persistencespb.PartitionScaleState, bool) {
+			dbWrites.Add(1)
+		}).Return(nil).AnyTimes()
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	c500 := number.EncodeCompact8(500)
+	initial := &persistencespb.PartitionScaleState{
+		Target:        3,
+		MaxTarget:     3,
+		BacklogCap:    int32(number.EncodeCompact8(1000)),
+		BacklogCounts: []byte{c500, c500, c500},
+	}
+	s.startManager(4, initial)
+
+	s.sm.AddedTasks(1)
+	in := waitRecv(s, inputs, "scaler never called")
+	s.Equal([]byte{c500, c500, c500}, in.BacklogCounts, "stored backlog counts must be fed to the scaler")
+
+	s.Require().Never(func() bool { return dbWrites.Load() > 0 },
+		30*time.Millisecond, time.Millisecond, "no write when both target and cap are unchanged")
 }

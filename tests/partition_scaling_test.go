@@ -247,6 +247,43 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 	}, 15*time.Second, time.Second)
 }
 
+// TestPartitionScaling_Backlog exercises backlog-count-based scaling (as opposed
+// to add-rate-based scaling). Unlike the add-rate tests, this is not timing
+// sensitive: partitions open once their accumulated backlog crosses BacklogBase,
+// regardless of how fast tasks arrive. We build a backlog by sending tasks
+// without polling, watch the scaler open partitions up to Max, then drain and
+// confirm everything empties out.
+func TestPartitionScaling_Backlog(t *testing.T) {
+	// default dynamic config to 1 to ensure we turn on managed scaling immediately
+	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+
+	t.Log("enable backlog-based scaling (no fixed target, no add-rate windows)")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled:      true,
+		BacklogReset: 2,  // clear once backlog drops below 2
+		BacklogBase:  5,  // open a partition once backlog grows above 5
+		BacklogCap:   20, // soft cap used to spread new tasks
+		Max:          4,  // bound growth so the test stays fast and deterministic
+	})
+
+	t.Log("start sending 10 tasks/s without polling to build a backlog")
+	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	defer stopTasks()
+
+	t.Log("wait until backlog-based scaling has opened all 4 partitions (each has backlog)")
+	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 1, 0, 1, 2, 3), 30*time.Second, time.Second)
+
+	t.Log("stop sending tasks")
+	stopTasks()
+
+	t.Log("start background polls to drain")
+	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	defer stopPolls()
+
+	t.Log("wait until all partitions drain (backlog releases, scaler shrinks target)")
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 30*time.Second, time.Second)
+}
+
 // TODO: test disabling scaler
 
 func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {

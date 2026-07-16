@@ -138,7 +138,7 @@ func (h *InvokerExecuteTaskHandler) recordDuplicateExecuteDrops(scheduler *Sched
 func (h *InvokerExecuteTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
 	// If another execute task already happened to kick everything off, we don't need
@@ -358,13 +358,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Check if this start is already started. If so, we crashed after
-		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
-			continue
-		}
-
 		// Clone start before concurrent access. The clone will have RunId/StartTime
 		// set by startWorkflow, then copied back to the original in recordExecuteResult.
 		start = common.CloneProto(start)
@@ -409,7 +402,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 func (h *InvokerProcessBufferTaskHandler) Validate(
 	ctx chasm.Context,
 	invoker *Invoker,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
@@ -785,6 +778,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,

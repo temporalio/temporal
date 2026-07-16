@@ -126,8 +126,12 @@ MIXED_BRAIN_TEST_ROOT         := ./tests/mixedbrain
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
+TESTCORE_UNITTESTS := ./tests/testcore
 ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(MIXED_BRAIN_TEST_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+
+# Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
+UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
@@ -506,7 +510,7 @@ functional-with-fault-injection-test: clean-test-output
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
-	@CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v $(MIXED_BRAIN_TEST_ROOT) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
 	@$(MAKE) verify-test-log
 
 LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck

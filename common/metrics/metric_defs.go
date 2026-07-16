@@ -1201,6 +1201,16 @@ var (
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
 
+	// Pagination of RespondWorkflowTaskCompleted requests
+	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
+		"workflow_task_completion_paginated_bytes",
+		WithDescription("Total wire size of successfully completed paginated RespondWorkflowTaskCompleted requests. count givens the total number of successful paginated requests."),
+	)
+	WorkflowTaskCompletionBufferLost = NewCounterDef(
+		"workflow_task_completion_buffer_lost",
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted or a page was missing)."),
+	)
+
 	// Matching
 	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
 	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
@@ -1281,6 +1291,7 @@ var (
 	PartitionScaleEvents = NewCounterDef("partition_scale_events")
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
+	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
 
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to track the health of worker registry.
@@ -1336,6 +1347,13 @@ var (
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
+	)
+	PollerScaleDecisionCounter = NewCounterDef(
+		"poller_scale_decision",
+		WithDescription(
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
@@ -1440,6 +1458,7 @@ var (
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
 	CatchUpReadyShardCountGauge                       = NewGaugeDef("catchup_ready_shard_count")
+	CatchUpNotReadyShardCountGauge                    = NewGaugeDef("catchup_not_ready_shard_count")
 	HandoverReadyShardCountGauge                      = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                = NewCounterDef("replicator_messages")
 	ReplicatorFailures                                = NewCounterDef("replicator_errors")
@@ -1503,6 +1522,14 @@ var (
 	SchedulerGeneratorLoopCompleted = NewCounterDef(
 		"scheduler_generator_loop_completed",
 		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleComputeLimitExceeded = NewCounterDef(
+		"schedule_compute_limit_exceeded",
+		WithDescription("The number of times a schedule's next-time search hit the hard compute iteration bound and stopped the schedule"),
+	)
+	ScheduleComputeLimitWarning = NewCounterDef(
+		"schedule_compute_limit_warning",
+		WithDescription("The number of times a schedule's next-time search crossed the warn compute iteration threshold; the search continued and the schedule was not stopped"),
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",

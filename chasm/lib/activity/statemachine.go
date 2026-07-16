@@ -371,9 +371,11 @@ var TransitionTimedOut = chasm.NewTransition(
 				err = a.recordScheduleToStartOrCloseTimeoutFailure(ctx, timeoutType)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
+				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
 				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
+				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
 				err = a.recordFailedAttempt(ctx, 0, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)

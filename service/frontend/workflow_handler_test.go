@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/workflow"
@@ -225,7 +226,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
-		scheduler.NewSpecBuilder(),
+		scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
 		true,
 		nil, // Not testing activity handler here
 		nexusoperation.NewFrontendHandler(
@@ -245,6 +246,116 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			saValidator,
 		),
 	)
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+			})
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskFailed(context.Background(), &workflowservice.RespondNexusTaskFailedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+				Failure: &failurepb.Failure{
+					Message: "test failure",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{},
+					},
+				},
+			})
+			s.NoError(err)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
@@ -4391,6 +4502,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4399,10 +4511,18 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Expect cancellation for 2 partitions x 2 task types = 4 calls (in any order due to parallelization)
+	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally.
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(4)
+		DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsRequest, _ ...any) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			partition, err := tqid.PartitionFromProto(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
+			s.NoError(err)
+			s.True(partition.IsRoot(), "should send root partition only")
+			s.Equal(workerInstanceKey, req.GetWorkerInstanceKey())
+			s.Equal("worker", req.GetWorkerIdentity())
+			return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil
+		}).
+		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -4433,6 +4553,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
 	// When multiple partitions route to the same matching host, only one RPC should be sent per host.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(4) // 4 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4481,11 +4602,52 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
 	s.NoError(err)
 }
 
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellationFrontendFanOut() {
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Frontend fans out: 2 partitions x 2 task types = 4 calls
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(4)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// Verifies graceful degradation: ShutdownWorker succeeds even when poll cancellation fails.
 	// This ensures backward compatibility during rolling upgrades.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(1)
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4497,7 +4659,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// CancelOutstandingWorkerPolls returns an error (simulates old matching node)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnimplemented("method not implemented")).
-		Times(2) // 1 partition x 2 task types
+		Times(2) // 2 task types (workflow, activity)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -4527,6 +4689,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	// Verifies ShutdownWorker succeeds when some cancellation calls succeed and others fail.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4535,13 +4698,13 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Mixed results: some succeed, some fail (2 partitions x 2 task types = 4 calls)
+	// Mixed results: some succeed, some fail (2 task types = 2 calls)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(2)
+		Times(1)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnavailable("temporary error")).
-		Times(2)
+		Times(1)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 

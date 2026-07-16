@@ -1018,6 +1018,11 @@ func NexusTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("nexus-task-queue-name", taskQueueName)
 }
 
+// NexusEndpointTargetNamespaceID returns a tag for the namespace ID targeted by a Nexus endpoint's worker target.
+func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
+	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)
+}
+
 // WorkflowRuleID returns tag for WorkflowRuleID
 func WorkflowRuleID(ruleID string) ZapTag {
 	return NewStringTag("wf-rule-id", ruleID)
