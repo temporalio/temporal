@@ -2116,51 +2116,66 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
 }
 
-func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_StandaloneAttemptStamp() {
-	namespaceID := uuid.NewString()
-	workflowID := "workflow1"
-	runID := uuid.NewString()
-	activityID := "activity1"
-	activityType := "activityType"
-	scheduledEventID := int64(10)
-	attempt := int32(1)
-	taskStamp := int32(17)
-	componentRef := []byte("standalone-activity-component-ref")
-
-	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
-		NamespaceId:      namespaceID,
-		WorkflowId:       workflowID,
-		RunId:            runID,
-		ScheduledEventId: scheduledEventID,
-		Stamp:            taskStamp,
-		ComponentRef:     componentRef,
-		CreateTime:       timestamppb.Now(),
-	}, nil, 0, nil)
-
-	resp := s.matchingEngine.createPollActivityTaskQueueResponse(task, &historyservice.RecordActivityTaskStartedResponse{
-		Attempt: attempt,
-		ScheduledEvent: &historypb.HistoryEvent{
-			EventId: scheduledEventID,
-			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-					ActivityId:   activityID,
-					ActivityType: &commonpb.ActivityType{Name: activityType},
-				},
-			},
+func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAttemptStamp() {
+	testCases := []struct {
+		name         string
+		componentRef []byte
+	}{
+		{
+			name: "WorkflowActivity",
 		},
-	}, metrics.NoopMetricsHandler)
+		{
+			name:         "StandaloneActivity",
+			componentRef: []byte("standalone-activity-component-ref"),
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			namespaceID := uuid.NewString()
+			workflowID := "workflow1"
+			runID := uuid.NewString()
+			activityID := "activity1"
+			activityType := "activityType"
+			scheduledEventID := int64(10)
+			attempt := int32(1)
+			taskStamp := int32(17)
 
-	token, err := s.matchingEngine.tokenSerializer.Deserialize(resp.GetTaskToken())
-	s.NoError(err)
-	s.Equal(namespaceID, token.GetNamespaceId())
-	s.Equal(workflowID, token.GetWorkflowId())
-	s.Equal(runID, token.GetRunId())
-	s.Equal(scheduledEventID, token.GetScheduledEventId())
-	s.Equal(activityID, token.GetActivityId())
-	s.Equal(activityType, token.GetActivityType())
-	s.Equal(attempt, token.GetAttempt())
-	s.Equal(componentRef, token.GetComponentRef())
-	s.Equal(taskStamp+1, token.GetActivityAttemptStamp())
+			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+				NamespaceId:      namespaceID,
+				WorkflowId:       workflowID,
+				RunId:            runID,
+				ScheduledEventId: scheduledEventID,
+				Stamp:            taskStamp,
+				ComponentRef:     tc.componentRef,
+				CreateTime:       timestamppb.Now(),
+			}, nil, 0, nil)
+
+			resp := s.matchingEngine.createPollActivityTaskQueueResponse(task, &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: attempt,
+				ScheduledEvent: &historypb.HistoryEvent{
+					EventId: scheduledEventID,
+					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+							ActivityId:   activityID,
+							ActivityType: &commonpb.ActivityType{Name: activityType},
+						},
+					},
+				},
+			}, metrics.NoopMetricsHandler)
+
+			token, err := s.matchingEngine.tokenSerializer.Deserialize(resp.GetTaskToken())
+			s.NoError(err)
+			s.Equal(namespaceID, token.GetNamespaceId())
+			s.Equal(workflowID, token.GetWorkflowId())
+			s.Equal(runID, token.GetRunId())
+			s.Equal(scheduledEventID, token.GetScheduledEventId())
+			s.Equal(activityID, token.GetActivityId())
+			s.Equal(activityType, token.GetActivityType())
+			s.Equal(attempt, token.GetAttempt())
+			s.Equal(tc.componentRef, token.GetComponentRef())
+			s.Equal(taskStamp+1, token.GetActivityAttemptStamp())
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {

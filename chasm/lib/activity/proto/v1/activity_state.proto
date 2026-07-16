@@ -218,6 +218,9 @@ message ActivityAttemptState {
   // Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
   // it spans the full activity lifetime and must not be invalidated on retry.
   int32 stamp = 6;
+  // The attempt stamp captured when the current worker started this attempt. Unlike stamp, this does not change when
+  // the started attempt is updated, so a task token issued at start remains valid until that attempt completes.
+  int32 started_stamp = 14;
 
   string last_worker_identity = 7;
 
@@ -245,9 +248,6 @@ message ActivityAttemptState {
   // worker-provided NextRetryDelay override. Retry policy updates only recompute
   // current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
   ActivityRetryIntervalSource current_retry_interval_source = 13;
-  // The attempt stamp captured when the current worker started this attempt.
-  // Unlike stamp, this does not change on options updates while the worker owns the token.
-  int32 started_stamp = 14;
 }
 
 message ActivityHeartbeatState {

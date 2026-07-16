@@ -682,7 +682,10 @@ type ActivityAttemptState struct {
 	// previous attempt or pre-update state are discarded.
 	// Note: ScheduleToCloseTimeoutTask uses a separate ActivityState.schedule_to_close_stamp because
 	// it spans the full activity lifetime and must not be invalidated on retry.
-	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	Stamp int32 `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// The attempt stamp captured when the current worker started this attempt. Unlike stamp, this does not change when
+	// the started attempt is updated, so a task token issued at start remains valid until that attempt completes.
+	StartedStamp       int32  `protobuf:"varint,14,opt,name=started_stamp,json=startedStamp,proto3" json:"started_stamp,omitempty"`
 	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
@@ -703,11 +706,8 @@ type ActivityAttemptState struct {
 	// worker-provided NextRetryDelay override. Retry policy updates only recompute
 	// current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
 	CurrentRetryIntervalSource ActivityRetryIntervalSource `protobuf:"varint,13,opt,name=current_retry_interval_source,json=currentRetryIntervalSource,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource" json:"current_retry_interval_source,omitempty"`
-	// The attempt stamp captured when the current worker started this attempt.
-	// Unlike stamp, this does not change on options updates while the worker owns the token.
-	StartedStamp  int32 `protobuf:"varint,14,opt,name=started_stamp,json=startedStamp,proto3" json:"started_stamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -782,6 +782,13 @@ func (x *ActivityAttemptState) GetStamp() int32 {
 	return 0
 }
 
+func (x *ActivityAttemptState) GetStartedStamp() int32 {
+	if x != nil {
+		return x.StartedStamp
+	}
+	return 0
+}
+
 func (x *ActivityAttemptState) GetLastWorkerIdentity() string {
 	if x != nil {
 		return x.LastWorkerIdentity
@@ -829,13 +836,6 @@ func (x *ActivityAttemptState) GetCurrentRetryIntervalSource() ActivityRetryInte
 		return x.CurrentRetryIntervalSource
 	}
 	return ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
-}
-
-func (x *ActivityAttemptState) GetStartedStamp() int32 {
-	if x != nil {
-		return x.StartedStamp
-	}
-	return 0
 }
 
 type ActivityHeartbeatState struct {
@@ -1244,7 +1244,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\fstarted_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12?\n" +
 	"\rcomplete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fcompleteTime\x12\x86\x01\n" +
 	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x12\x14\n" +
-	"\x05stamp\x18\x06 \x01(\x05R\x05stamp\x120\n" +
+	"\x05stamp\x18\x06 \x01(\x05R\x05stamp\x12#\n" +
+	"\rstarted_stamp\x18\x0e \x01(\x05R\fstartedStamp\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
 	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12(\n" +
 	"\x10start_request_id\x18\t \x01(\tR\x0estartRequestId\x12\x19\n" +
@@ -1253,8 +1254,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\vsdk_version\x18\v \x01(\tR\n" +
 	"sdkVersion\x12?\n" +
 	"\rdispatch_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\fdispatchTime\x12\x8b\x01\n" +
-	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x12#\n" +
-	"\rstarted_stamp\x18\x0e \x01(\x05R\fstartedStamp\x1a\x80\x01\n" +
+	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +
