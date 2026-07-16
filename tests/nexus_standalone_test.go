@@ -140,7 +140,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 				s.NotEmpty(info.GetOperationToken())
 				s.NotNil(info.GetLastAttemptCompleteTime())
 				s.NotZero(info.GetStateSizeBytes())
-			}
+			})
 		}
 
 		s.Run("IncludeInput", func(s *NexusStandaloneTestSuite) {
