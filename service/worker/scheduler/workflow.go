@@ -21,7 +21,6 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -230,12 +229,7 @@ var (
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 	disabled := func() bool { return false }
-	dc := dynamicconfig.NewNoopCollection()
-	specBuilder := NewSpecBuilder(
-		dynamicconfig.SchedulerSpecWarnIterations.Get(dc),
-		dynamicconfig.SchedulerSpecMaxIterations.Get(dc),
-	)
-	return schedulerWorkflowWithSpecBuilder(ctx, args, specBuilder, disabled, disabled)
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), disabled, disabled)
 }
 
 func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration func() bool, migrateWithRunningWorkflows func() bool) error {
@@ -530,9 +524,7 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
-			// This (pre-cache-v2) path can't represent the compute limit distinctly, so a
-			// limit-exceeded result is treated as end-of-schedule (zero Next stops the loop).
-			next, _ := s.cspec.GetNextTime(s.jitterSeed(), t)
+			next := s.cspec.GetNextTime(s.jitterSeed(), t)
 			results[t] = next
 			t = next.Next
 		}
@@ -609,19 +601,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 			NominalTimes: make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
 		}
 		for t := start; len(cache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
-			next, err := s.cspec.GetNextTime(s.jitterSeed(), t)
-			if errors.Is(err, ErrComputeLimitExceeded) {
-				s.metrics.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Inc(1)
-				s.logger.Warn("schedule spec next-time search hit the compute limit; taking no further action until the spec is changed")
-				cache.Completed = true
-				break
-			}
-			if next.ComputeLimitWarning {
-				// Warn (non-fatal) case: the search went long but still resolved. Surface it for
-				// observability and keep scheduling. This is the default protection mode.
-				s.metrics.Counter(metrics.ScheduleComputeLimitWarning.Name()).Inc(1)
-				s.logger.Warn("schedule spec next-time search crossed the warn threshold; continuing (spec may be over-excluded)")
-			}
+			next := s.cspec.GetNextTime(s.jitterSeed(), t)
 			if next.Next.IsZero() {
 				cache.Completed = true
 				break
@@ -672,8 +652,7 @@ func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
 	// existing schedule workflows.
 	var next GetNextTimeResult
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
-		res, _ := s.cspec.GetNextTime(s.jitterSeed(), after)
-		return res
+		return s.cspec.GetNextTime(s.jitterSeed(), after)
 	}).Get(&next))
 	return next
 }
@@ -1113,8 +1092,7 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 
 	// Pure version not using workflow context
 	next := func(t time.Time) time.Time {
-		res, _ := s.cspec.GetNextTime(s.jitterSeed(), t)
-		return res.Next
+		return s.cspec.GetNextTime(s.jitterSeed(), t).Next
 	}
 
 	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
@@ -1174,13 +1152,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	t1 := timestamp.TimeValue(req.StartTime)
 	for range maxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
-		res, err := s.cspec.GetNextTime(s.jitterSeed(), t1)
-		if err != nil {
-			// An over-excluded spec won't resolve until it's edited, so return a
-			// non-retryable code: retrying would just re-burn the compute bound each call.
-			return nil, ErrScheduleSpecLimitHit
-		}
-		t1 = res.Next
+		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}

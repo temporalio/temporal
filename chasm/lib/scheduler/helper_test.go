@@ -34,12 +34,6 @@ const (
 	defaultCatchupWindow = 5 * time.Minute
 )
 
-// newLegacySpecBuilder builds a legacy SpecBuilder with the given warn/max compute-limit bounds.
-// A value of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
-func newLegacySpecBuilder(warnIter, maxIter int) *legacyscheduler.SpecBuilder {
-	return legacyscheduler.NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
-}
-
 // defaultSchedule returns a protobuf definition for a schedule matching this
 // package's other testing defaults.
 func defaultSchedule() *schedulepb.Schedule {
@@ -90,7 +84,7 @@ func defaultConfig() *scheduler.Config {
 
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
-	specBuilder := newLegacySpecBuilder(0, 0)
+	specBuilder := legacyscheduler.NewSpecBuilder()
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
@@ -181,7 +175,7 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 		defaultConfig(),
 		mockMetrics,
 		logger,
-		newLegacySpecBuilder(0, 0),
+		legacyscheduler.NewSpecBuilder(),
 	)
 }
 
