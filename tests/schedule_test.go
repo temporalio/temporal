@@ -542,7 +542,7 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 	// not a fresh action generated after completion. RecentActions lists the
 	// completed first tick and the still-running deferred start; with no jitter the
 	// deferred start's nominal time is exactly one interval after the first tick's.
-	s.Await(func(s *ScheduleSuite) {
+	s.Awaitf(func(s *ScheduleSuite) {
 		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
@@ -561,9 +561,9 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 		s.Equal(
 			fastInterval,
 			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()),
-			"deferred fire must be the start buffered one interval after the first tick, not a later fresh action",
 		)
-	}, awaitTimeout, pollInterval)
+	}, awaitTimeout, pollInterval,
+		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
 }
 
 func (s *ScheduleSuite) TestDeletedScheduleOperations(chasmEnabled bool) {
@@ -3850,9 +3850,10 @@ func (s *ScheduleCHASMSuite) TestPausedDropsCatchup() {
 		"FutureActionTimes should empty out once the only calendar date passes (proves HWM advanced past it while paused)")
 
 	patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "drops-catchup-test"})
-	s.Await(func(s *ScheduleCHASMSuite) {
-		s.True(scheduleClosed(s.Context(), env, sid), "schedule should close from idle after unpause (no future actions, no replay)")
-	}, awaitTimeout, pollInterval)
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid))
+	}, awaitTimeout, pollInterval,
+		"schedule should close from idle after unpause (no future actions, no replay)")
 }
 
 // testPausedScheduleNeverIdles verifies that a paused schedule is held open
@@ -4115,7 +4116,7 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 	})
 
 	var completedTime time.Time
-	s.Await(func(s *ScheduleSuite) {
+	s.Awaitf(func(s *ScheduleSuite) {
 		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
@@ -4129,8 +4130,8 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 				break
 			}
 		}
-		s.True(found, "the automatic action should complete")
-	}, awaitTimeout, pollInterval)
+		s.True(found)
+	}, awaitTimeout, pollInterval, "the automatic action should complete")
 	s.Equal(int32(1), runs.Load())
 
 	if paused {
@@ -4593,9 +4594,9 @@ func (s *ScheduleCHASMSuite) TestManualOnlyUnpausedClosesFromIdle() {
 	})
 
 	// With no spec and no manual trigger, the schedule closes once its idle window elapses.
-	s.Await(func(s *ScheduleCHASMSuite) {
-		s.True(scheduleClosed(s.Context(), env, sid), "manual-only schedule should close after idle window")
-	}, awaitTimeout, pollInterval)
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid))
+	}, awaitTimeout, pollInterval, "manual-only schedule should close after idle window")
 	s.Zero(runs.Load(), "a manual-only schedule must not fire any actions on its own")
 }
 
@@ -4632,9 +4633,9 @@ func (s *ScheduleCHASMSuite) TestPauseDuringIdleWindow() {
 
 	// Unpause: the Generator re-arms idle and the schedule finally closes.
 	patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "resume-after-idle"})
-	s.Await(func(s *ScheduleCHASMSuite) {
-		s.True(scheduleClosed(s.Context(), env, sid), "schedule must close after unpause via re-armed idle task")
-	}, awaitTimeout, pollInterval)
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid))
+	}, awaitTimeout, pollInterval, "schedule must close after unpause via re-armed idle task")
 	s.Equal(int32(1), runs.Load(), "no extra actions should fire across pause/unpause")
 }
 
@@ -4675,9 +4676,10 @@ func (s *ScheduleCHASMSuite) TestBackfillBlocksIdleClose() {
 		awaitTimeout, pollInterval,
 		"backfill should fire actions even though the scheduler was heading to idle")
 
-	s.Await(func(s *ScheduleCHASMSuite) {
-		s.True(scheduleClosed(s.Context(), env, sid), "scheduler should close from idle once the backfill drains and IdleTime elapses")
-	}, awaitTimeout, pollInterval)
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid))
+	}, awaitTimeout, pollInterval,
+		"scheduler should close from idle once the backfill drains and IdleTime elapses")
 }
 
 // testMultiRangeBackfillCountedExactlyOnce asserts that the `ActionCount` is
