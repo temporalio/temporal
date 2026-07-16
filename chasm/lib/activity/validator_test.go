@@ -1061,6 +1061,17 @@ func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
 	})
+
+	t.Run("NegativeJitter", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Jitter:     durationpb.New(-time.Second),
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid jitter: negative duration", invalidArgErr.Message)
+	})
 }
 
 func TestValidateResetActivityExecutionRequest(t *testing.T) {
@@ -1128,6 +1139,17 @@ func TestValidateResetActivityExecutionRequest(t *testing.T) {
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+	})
+
+	t.Run("NegativeJitter", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Jitter:     durationpb.New(-time.Second),
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid jitter: negative duration", invalidArgErr.Message)
 	})
 }
 

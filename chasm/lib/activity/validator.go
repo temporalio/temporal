@@ -759,7 +759,7 @@ func validateAndNormalizeResetActivityExecutionRequest(
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
 	}
-	return nil
+	return validateJitter(req.GetJitter())
 }
 
 func validateAndNormalizeUnpauseActivityExecutionRequest(
@@ -782,6 +782,13 @@ func validateAndNormalizeUnpauseActivityExecutionRequest(
 		if err != nil {
 			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
 		}
+	}
+	return validateJitter(req.GetJitter())
+}
+
+func validateJitter(jitter *durationpb.Duration) error {
+	if err := timestamp.ValidateAndCapProtoDuration(jitter); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid jitter: %v", err)
 	}
 	return nil
 }
