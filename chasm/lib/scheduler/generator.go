@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -64,11 +65,14 @@ func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 // UpdateFutureActionTimes computes and stores the next scheduled action times.
 // On spec-compile error the previously stored times are left untouched.
 func (g *Generator) UpdateFutureActionTimes(
-	ctx chasm.Context,
+	ctx chasm.MutableContext,
 	specBuilder *scheduler.SpecBuilder,
 ) {
 	futureTimes, err := g.computeFutureActionTimes(ctx, specBuilder)
 	if err != nil {
+		g.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("failed to update future action times: %v", err.Error()))
+		ctx.Logger().Warn("failed to update future action times", tag.Error(err))
 		return
 	}
 	g.FutureActionTimes = futureTimes
