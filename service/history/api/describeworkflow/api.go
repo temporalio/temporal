@@ -60,6 +60,32 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 	return target
 }
 
+// makeTimeSkippingInfo converts the persisted time-skipping state into the
+// public common.v1.TimeSkippingInfo. CurrentTime is the execution's virtual
+// clock; IsRunning tracks the config's enabled flag, which the server clears
+// once a fast-forward completes.
+func makeTimeSkippingInfo(mutableState historyi.MutableState) *commonpb.TimeSkippingInfo {
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	info := &commonpb.TimeSkippingInfo{
+		CurrentTime: timestamppb.New(mutableState.Now()),
+		IsRunning:   tsi.GetConfig().GetEnabled(),
+	}
+	if ff := tsi.GetFastForwardInfo(); ff != nil {
+		var createTime *timestamppb.Timestamp
+		// The server sets target = create + fast_forward, so recover the
+		// creation virtual time by subtracting the configured duration.
+		if target := ff.GetTargetTime(); target != nil {
+			createTime = timestamppb.New(target.AsTime().Add(-tsi.GetConfig().GetFastForward().AsDuration()))
+		}
+		info.FastForward = &commonpb.TimeSkippingInfo_TimeSkippingFastForwardInfo{
+			CreateTime:   createTime,
+			TargetTime:   ff.GetTargetTime(),
+			HasCompleted: ff.GetHasReached(),
+		}
+	}
+	return info
+}
+
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
@@ -162,6 +188,10 @@ func Invoke(
 
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	if executionInfo.TimeSkippingInfo != nil {
+		result.WorkflowExtendedInfo.TimeSkippingInfo = makeTimeSkippingInfo(mutableState)
 	}
 
 	if shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
