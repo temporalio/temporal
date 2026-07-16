@@ -4854,8 +4854,9 @@ func (s *ScheduleCHASMSuite) TestScheduleNextActionTimeVisibility() {
 func (s *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpec() {
 	// A tiny compute bound trips the mirrored spec near-instantly; the default (~1.2M candidate
 	// scans per GetNextTime) makes this test burn seconds of CPU on every scheduler code path.
-	opts := append(scheduleCommonOpts(true), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
-	env := newScheduleEnv(s.T(), true, opts...)
+	env := newScheduleEnv(s.T(), true,
+		testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000),
+	)
 
 	sid := testcore.RandomizeStr("sched-cancelling-spec")
 	wid := testcore.RandomizeStr("sched-cancelling-spec-wf")
@@ -4887,8 +4888,9 @@ func (s *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpec() {
 // mirrored spec via UpdateSchedule, exercising the spec-recompile path on an existing schedule.
 func (s *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpecOnUpdate() {
 	// A tiny compute bound trips the mirrored spec near-instantly (see TestMirroredIncludeExcludeSpec).
-	opts := append(scheduleCommonOpts(true), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
-	env := newScheduleEnv(s.T(), true, opts...)
+	env := newScheduleEnv(s.T(), true,
+		testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000),
+	)
 
 	sid := testcore.RandomizeStr("sched-cancelling-update")
 	wid := testcore.RandomizeStr("sched-cancelling-update-wf")
