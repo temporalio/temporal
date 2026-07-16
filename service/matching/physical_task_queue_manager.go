@@ -900,6 +900,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
+		c.recordPollerScaleDecision(metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
 		return &taskqueuepb.PollerScalingDecision{
 			PollRequestDeltaSuggestion: -1,
 		}
@@ -912,16 +913,19 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		numPollers = 1
 	}
 	if !c.pollerScalingRateLimiter.AllowN(time.Now(), 1e6/numPollers) {
+		c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited)
 		return nil
 	}
 
 	delta := int32(0)
+	var reason metrics.ReasonString
 	stats := statsFn()
 	if stats.GetApproximateBacklogCount() > 0 &&
 		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
 		// sticky queues.
 		delta = 1
+		reason = metrics.PollerScaleReasonBacklog
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
@@ -932,15 +936,29 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
 			// since those (currently) don't get backlogged.
 			delta = 1
+			reason = metrics.PollerScaleReasonTaskRate
 		}
 	}
 
 	if delta == 0 {
 		return nil
 	}
+	// Both scale-up branches above set delta = 1, so the decision here is always a scale-up.
+	c.recordPollerScaleDecision(metrics.PollerScaleDecisionUp, reason)
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
+}
+
+// recordPollerScaleDecision emits the poller_scale_decision metric describing the direction of a
+// poller scaling decision (scale up, down, or hold) and the reason for it. It is a no-op unless the
+// opt-in dynamic config matching.enablePollerScalingDecisionMetrics is enabled for this namespace/task queue.
+func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string, reason metrics.ReasonString) {
+	if !c.partitionMgr.config.EnablePollerScalingDecisionMetrics() {
+		return
+	}
+	c.metricsHandler.Counter(metrics.PollerScaleDecisionCounter.Name()).
+		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {

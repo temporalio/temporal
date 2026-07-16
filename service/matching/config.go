@@ -139,6 +139,7 @@ type (
 		PollerScalingWaitTime               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond     dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -234,6 +235,7 @@ type (
 		PollerScalingWaitTime               func() time.Duration
 		PollerScalingDecisionsPerSecond     func() float64
 		PollerScalingTaskAddToDispatchRatio func() float64
+		EnablePollerScalingDecisionMetrics  func() bool
 
 		FairnessCounter               func() counter.CounterParams
 		FairnessPassDither            func() bool
@@ -388,6 +390,7 @@ func NewConfig(
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond:     dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 		PollerScalingTaskAddToDispatchRatio: dynamicconfig.MatchingPollerScalingTaskAddToDispatchRatio.Get(dc),
+		EnablePollerScalingDecisionMetrics:  dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
@@ -569,6 +572,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerScalingTaskAddToDispatchRatio: func() float64 {
 			return config.PollerScalingTaskAddToDispatchRatio(ns.String(), taskQueueName, taskType)
+		},
+		EnablePollerScalingDecisionMetrics: func() bool {
+			return config.EnablePollerScalingDecisionMetrics(ns.String(), taskQueueName, taskType)
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)
