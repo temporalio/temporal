@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/sdk/temporal"
@@ -739,13 +740,29 @@ func (d *ClientImpl) ListWorkerDeployments(
 		return nil, nil, err
 	}
 
-	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(persistenceResp.Executions))
-	for _, ex := range persistenceResp.Executions {
+	return d.workerDeploymentSummariesFromVisibilityPage(namespaceEntry.Name(), persistenceResp.Executions), persistenceResp.NextPageToken, nil
+}
+
+// workerDeploymentSummariesFromVisibilityPage collapses overlapping Visibility records for the
+// same deployment within one fetched page. Pagination state remains owned by Visibility.
+func (d *ClientImpl) workerDeploymentSummariesFromVisibilityPage(
+	namespaceName namespace.Name,
+	executions []*workflowpb.WorkflowExecutionInfo,
+) []*deploymentspb.WorkerDeploymentSummary {
+	type indexedSummary struct {
+		index     int
+		startTime time.Time
+	}
+
+	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(executions))
+	summaryByDeploymentName := make(map[string]indexedSummary, len(executions))
+	for _, ex := range executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
+			var err error
 			workerDeploymentInfo, err = DecodeWorkerDeploymentMemo(ex.GetMemo())
 			if err != nil {
-				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
+				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceName.String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
 				continue
 			}
 		} else {
@@ -758,17 +775,34 @@ func (d *ClientImpl) ListWorkerDeployments(
 			}
 		}
 
-		workerDeploymentSummaries = append(workerDeploymentSummaries, &deploymentspb.WorkerDeploymentSummary{
+		summary := &deploymentspb.WorkerDeploymentSummary{
 			Name:                  workerDeploymentInfo.DeploymentName,
 			CreateTime:            workerDeploymentInfo.CreateTime,
 			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
 			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
 			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
-		})
+		}
+
+		deploymentName := workerDeploymentInfo.GetDeploymentName()
+		startTime := ex.GetStartTime().AsTime()
+		if existing, ok := summaryByDeploymentName[deploymentName]; ok {
+			if startTime.After(existing.startTime) {
+				workerDeploymentSummaries[existing.index] = summary
+				existing.startTime = startTime
+				summaryByDeploymentName[deploymentName] = existing
+			}
+			continue
+		}
+
+		summaryByDeploymentName[deploymentName] = indexedSummary{
+			index:     len(workerDeploymentSummaries),
+			startTime: startTime,
+		}
+		workerDeploymentSummaries = append(workerDeploymentSummaries, summary)
 	}
 
-	return workerDeploymentSummaries, persistenceResp.NextPageToken, nil
+	return workerDeploymentSummaries
 }
 
 func (d *ClientImpl) SetCurrentVersion(

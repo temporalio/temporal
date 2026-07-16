@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -15,6 +16,8 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -23,11 +26,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	update2 "go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // testMaxIDLengthLimit is the current default value used by dynamic config for
@@ -92,9 +97,154 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 	return ns, mockNamespaceCache
 }
 
+func (d *deploymentWorkflowClientSuite) newWorkerDeploymentVisibilityExecution(
+	deploymentName string,
+	runID string,
+	startTime time.Time,
+	createTime time.Time,
+	currentVersion string,
+) *workflowpb.WorkflowExecutionInfo {
+	payload, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
+		DeploymentName: deploymentName,
+		CreateTime:     timestamppb.New(createTime),
+		RoutingConfig: &deploymentpb.RoutingConfig{
+			CurrentVersion: currentVersion,
+		},
+	})
+	d.Require().NoError(err)
+
+	return &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: GenerateDeploymentWorkflowID(deploymentName),
+			RunId:      runID,
+		},
+		StartTime: timestamppb.New(startTime),
+		Memo: &commonpb.Memo{
+			Fields: map[string]*commonpb.Payload{
+				WorkerDeploymentMemoField: payload,
+			},
+		},
+	}
+}
+
 func TestDeploymentWorkflowClientSuite(t *testing.T) {
 	d := new(deploymentWorkflowClientSuite)
 	suite.Run(t, d)
+}
+
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesContinueAsNewExecutionsWithinVisibilityPage() {
+	createTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
+	oldRunStartTime := createTime
+	newRunStartTime := createTime.Add(time.Second)
+	requestPageToken := []byte("request-page-token")
+	nextPageToken := []byte("next-page-token")
+	newExecution := d.newWorkerDeploymentVisibilityExecution(testDeployment, "new-run", newRunStartTime, createTime, "new-version")
+	newExecution.Memo = nil
+
+	d.VisibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   d.ns.ID(),
+		Namespace:     d.ns.Name(),
+		PageSize:      10,
+		NextPageToken: requestPageToken,
+		Query:         WorkerDeploymentVisibilityBaseListQuery,
+	}).Return(
+		&manager.ListWorkflowExecutionsResponse{
+			Executions: []*workflowpb.WorkflowExecutionInfo{
+				newExecution,
+				d.newWorkerDeploymentVisibilityExecution(testDeployment, "old-run", oldRunStartTime, createTime, "old-version"),
+			},
+			NextPageToken: nextPageToken,
+		},
+		nil,
+	)
+
+	summaries, actualNextPageToken, err := d.deploymentClient.ListWorkerDeployments(context.Background(), d.ns, 10, requestPageToken)
+	d.Require().NoError(err)
+	d.Require().Len(summaries, 1)
+	d.Equal(testDeployment, summaries[0].GetName())
+	d.Equal(newRunStartTime, summaries[0].GetCreateTime().AsTime())
+	d.Equal(worker_versioning.UnversionedVersionId, summaries[0].GetRoutingConfig().GetCurrentVersion())
+	d.Equal(nextPageToken, actualNextPageToken)
+}
+
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesRecreatedDeploymentExecutionsWithinVisibilityPage() {
+	oldCreateTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
+	newCreateTime := oldCreateTime.Add(time.Hour)
+	otherDeployment := testDeployment + "-other"
+	oldExecution := d.newWorkerDeploymentVisibilityExecution(testDeployment, "old-run", oldCreateTime, oldCreateTime, "old-version")
+
+	d.VisibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: d.ns.ID(),
+		Namespace:   d.ns.Name(),
+		PageSize:    10,
+		Query:       WorkerDeploymentVisibilityBaseListQuery,
+	}).Return(
+		&manager.ListWorkflowExecutionsResponse{
+			Executions: []*workflowpb.WorkflowExecutionInfo{
+				oldExecution,
+				d.newWorkerDeploymentVisibilityExecution(otherDeployment, "other-run", oldCreateTime.Add(30*time.Minute), oldCreateTime, "other-version"),
+				d.newWorkerDeploymentVisibilityExecution(testDeployment, "new-run", newCreateTime, newCreateTime, "new-version"),
+			},
+		},
+		nil,
+	)
+
+	summaries, _, err := d.deploymentClient.ListWorkerDeployments(context.Background(), d.ns, 10, nil)
+	d.Require().NoError(err)
+	d.Require().Len(summaries, 2)
+	d.Equal(testDeployment, summaries[0].GetName())
+	d.Equal(newCreateTime, summaries[0].GetCreateTime().AsTime())
+	d.Equal("new-version", summaries[0].GetRoutingConfig().GetCurrentVersion())
+	d.Equal(otherDeployment, summaries[1].GetName())
+}
+
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicationDoesNotSpanVisibilityPages() {
+	createTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
+	nextPageToken := []byte("next-page-token")
+
+	gomock.InOrder(
+		d.VisibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: d.ns.ID(),
+			Namespace:   d.ns.Name(),
+			PageSize:    1,
+			Query:       WorkerDeploymentVisibilityBaseListQuery,
+		}).Return(
+			&manager.ListWorkflowExecutionsResponse{
+				Executions: []*workflowpb.WorkflowExecutionInfo{
+					d.newWorkerDeploymentVisibilityExecution(testDeployment, "new-run", createTime.Add(time.Second), createTime, "new-version"),
+				},
+				NextPageToken: nextPageToken,
+			},
+			nil,
+		),
+		d.VisibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   d.ns.ID(),
+			Namespace:     d.ns.Name(),
+			PageSize:      1,
+			NextPageToken: nextPageToken,
+			Query:         WorkerDeploymentVisibilityBaseListQuery,
+		}).Return(
+			&manager.ListWorkflowExecutionsResponse{
+				Executions: []*workflowpb.WorkflowExecutionInfo{
+					d.newWorkerDeploymentVisibilityExecution(testDeployment, "old-run", createTime, createTime, "old-version"),
+				},
+			},
+			nil,
+		),
+	)
+
+	firstPage, actualNextPageToken, err := d.deploymentClient.ListWorkerDeployments(context.Background(), d.ns, 1, nil)
+	d.Require().NoError(err)
+	d.Require().Len(firstPage, 1)
+	d.Equal("new-version", firstPage[0].GetRoutingConfig().GetCurrentVersion())
+	d.Equal(nextPageToken, actualNextPageToken)
+
+	secondPage, actualNextPageToken, err := d.deploymentClient.ListWorkerDeployments(context.Background(), d.ns, 1, actualNextPageToken)
+	d.Require().NoError(err)
+	d.Require().Len(secondPage, 1)
+	d.Equal(testDeployment, secondPage[0].GetName())
+	d.Equal("old-version", secondPage[0].GetRoutingConfig().GetCurrentVersion())
+	d.Empty(actualNextPageToken)
 }
 
 func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
