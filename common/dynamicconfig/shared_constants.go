@@ -219,6 +219,18 @@ type SimplePartitionScalerSettings struct {
 	Downs []SimplePartitionScalerThreshold
 	Ups   []SimplePartitionScalerThreshold
 
+	// Backlog-based scaling: If these are > 0, then we'll a new partition for each partition
+	// whose backlog count grows above BacklogBase and has not shrunk below BacklogReset (for
+	// hysteresis).
+	BacklogReset int32
+	BacklogBase  int32
+
+	// BacklogCap adjusts task distribution with the above two settings: If > 0, then tasks
+	// are distributed based on the gap between the current backlog and BacklogCap,
+	// effectively making it a soft cap on backlog count. If 0, uniform distribution is used.
+	// When in use, they should be set so that Reset < Base < Cap.
+	BacklogCap int32
+
 	// Overall bounds (0 means don't enforce).
 	Min int32
 	Max int32

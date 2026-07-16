@@ -1348,6 +1348,13 @@ var (
 		WithDescription(
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
 	)
+	PollerScaleDecisionCounter = NewCounterDef(
+		"poller_scale_decision",
+		WithDescription(
+			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
+				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
+				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
+	)
 	// ----------------------------------------------------------------------------------------------------------------
 
 	PartitionCacheSize = NewGaugeDef(
@@ -1514,6 +1521,14 @@ var (
 	SchedulerGeneratorLoopCompleted = NewCounterDef(
 		"scheduler_generator_loop_completed",
 		WithDescription("The number of times a scheduler's generator stopped rescheduling itself without arming an idle task. The schedule is held open waiting for an external trigger (unpause, spec update, backfill completion)."),
+	)
+	ScheduleComputeLimitExceeded = NewCounterDef(
+		"schedule_compute_limit_exceeded",
+		WithDescription("The number of times a schedule's next-time search hit the hard compute iteration bound and stopped the schedule"),
+	)
+	ScheduleComputeLimitWarning = NewCounterDef(
+		"schedule_compute_limit_warning",
+		WithDescription("The number of times a schedule's next-time search crossed the warn compute iteration threshold; the search continued and the schedule was not stopped"),
 	)
 	ScheduleIdleTask = NewCounterDef(
 		"schedule_idle_task",
