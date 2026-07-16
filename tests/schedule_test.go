@@ -342,514 +342,6 @@ func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallback_ChasmCallbacks() {
 	s.resetWithAdditionalCallback(true)
 }
 
-func (s *ScheduleCHASMSuite) TestIdleClose() {
-	// testScheduleClosesFromIdle runs the idle-close matrix as parallel subtests.
-	cases := []scheduleClosesCase{
-		{
-			name:         "SingleDate",
-			prefix:       "sched-single-date-closes",
-			expectedRuns: 1,
-			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
-				return &schedulepb.ScheduleSpec{
-					Calendar: []*schedulepb.CalendarSpec{calendarSpec(now.Add(5 * time.Second))},
-				}
-			},
-		},
-		{
-			name:         "MultiDate",
-			prefix:       "sched-multi-date-closes",
-			expectedRuns: 2,
-			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
-				return &schedulepb.ScheduleSpec{
-					Calendar: []*schedulepb.CalendarSpec{
-						calendarSpec(now.Add(5 * time.Second)),
-						calendarSpec(now.Add(10 * time.Second)),
-					},
-				}
-			},
-		},
-		{
-			name:         "LimitedActions",
-			prefix:       "sched-limited-actions-closes",
-			expectedRuns: 2,
-			buildSpec: func(_ time.Time) *schedulepb.ScheduleSpec {
-				return intervalSpec(fastInterval)
-			},
-			state:          &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 2},
-			strictRunCount: true,
-		},
-		{
-			name:         "IntervalEndTime",
-			prefix:       "sched-interval-end-closes",
-			expectedRuns: 1,
-			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
-				spec := intervalSpec(fastInterval)
-				spec.EndTime = timestamppb.New(now.Add(10 * time.Second))
-				return spec
-			},
-		},
-	}
-	for _, c := range cases {
-		s.Run(c.name, func(s *ScheduleCHASMSuite) {
-			runScheduleClosesFromIdleCase(s, c)
-		})
-	}
-	// testManualOnlyUnpausedClosesFromIdle verifies that an unpaused manual-only
-	// (empty-spec) schedule closes once its IdleTime elapses (as opposed to
-	// testPausedEmptySpecStaysOpen, where a *paused* empty-spec schedule stays
-	// open).
-	s.Run("ManualOnly", func(s *ScheduleCHASMSuite) {
-		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
-
-		sid := testcore.RandomizeStr("sched-manual-only-unpaused")
-		wid := testcore.RandomizeStr("sched-manual-only-wf")
-		wt := testcore.RandomizeStr("sched-manual-only-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			// Empty spec: a manual-only schedule, no automated actions.
-			Spec:   &schedulepb.ScheduleSpec{},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// With no spec and no manual trigger, the schedule closes once its idle window elapses.
-		s.Awaitf(func(s *ScheduleCHASMSuite) {
-			s.True(scheduleClosed(s.Context(), env, sid))
-		}, awaitTimeout, pollInterval, "manual-only schedule should close after idle window")
-		s.Zero(runs.Load(), "a manual-only schedule must not fire any actions on its own")
-	})
-	// testPauseDuringIdleWindow covers setting pausing, and unpausing, while a
-	// schedule was idling.
-	s.Run("PauseDuringWindow", func(s *ScheduleCHASMSuite) {
-		// Deliberately longer than shortIdleTime: the pause/unpause RPCs must land
-		// inside the idle window (before the deadline) even under slow CI.
-		idleTime := 10 * time.Second
-		env := newEnvWithIdleTime(s.T(), true, idleTime)
-
-		sid := testcore.RandomizeStr("sched-pause-during-idle")
-		wid := testcore.RandomizeStr("sched-pause-during-idle-wf")
-		wt := testcore.RandomizeStr("sched-pause-during-idle-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			State:  &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 1},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// The single allowed action fires, exhausting the budget and arming idle.
-		s.AwaitTruef(func() bool { return runs.Load() == 1 },
-			awaitTimeout, pollInterval, "the one allowed action must fire before pausing")
-
-		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pause-during-idle"})
-
-		// Paused must hold the schedule open past the original idle deadline.
-		s.Never(func() bool { return scheduleClosed(s.Context(), env, sid) },
-			idleTime*2, pollInterval, "paused schedule must not close past original idle deadline")
-
-		// Unpause: the Generator re-arms idle and the schedule finally closes.
-		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "resume-after-idle"})
-		s.Awaitf(func(s *ScheduleCHASMSuite) {
-			s.True(scheduleClosed(s.Context(), env, sid))
-		}, awaitTimeout, pollInterval, "schedule must close after unpause via re-armed idle task")
-		s.Equal(int32(1), runs.Load(), "no extra actions should fire across pause/unpause")
-	})
-	// testBackfillBlocksIdleClose verifies that a schedule with no remaining
-	// automated actions and a pending backfill is not closed by the idle path
-	// until it drains.
-	s.Run("BackfillBlocks", func(s *ScheduleCHASMSuite) {
-		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
-
-		sid := testcore.RandomizeStr("sched-backfill-blocks-idle")
-		wid := testcore.RandomizeStr("sched-backfill-blocks-idle-wf")
-		wt := testcore.RandomizeStr("sched-backfill-blocks-idle-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec: intervalSpec(fastInterval),
-			State: &schedulepb.ScheduleState{
-				LimitedActions:   true,
-				RemainingActions: 1,
-			},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// The single allowed automated action fires, leaving the scheduler heading to idle.
-		s.AwaitTruef(func() bool { return runs.Load() == 1 }, awaitTimeout, pollInterval,
-			"the single allowed automated action should have fired")
-
-		// BUFFER_ALL is used to force each to run sequentially (versus in parallel with
-		// ALLOW_ALL), which is a better test to show the idle time is pushed back.
-		now := time.Now().UTC()
-		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-10*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL))
-
-		// Backfill fires despite the scheduler heading to idle; tick count in the 5s
-		// window varies with boundary alignment, so assert the lower bound.
-		s.AwaitTruef(func() bool { return runs.Load() >= 10 },
-			awaitTimeout, pollInterval,
-			"backfill should fire actions even though the scheduler was heading to idle")
-
-		s.Awaitf(func(s *ScheduleCHASMSuite) {
-			s.True(scheduleClosed(s.Context(), env, sid))
-		}, awaitTimeout, pollInterval,
-			"scheduler should close from idle once the backfill drains and IdleTime elapses")
-	})
-}
-
-func (s *ScheduleCHASMSuite) TestPausedBehavior() {
-	// testPausedDropsCatchup verifies that an action scheduled by the spec during
-	// a paused window is NOT invoked when the schedule is unpaused.
-	s.Run("DropsCatchup", func(s *ScheduleCHASMSuite) {
-		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
-
-		sid := testcore.RandomizeStr("sched-paused-drops-catchup")
-		wid := testcore.RandomizeStr("sched-paused-drops-catchup-wf")
-		wt := testcore.RandomizeStr("sched-paused-drops-catchup-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		// Single calendar entry a few seconds in the future. While paused, its
-		// time will pass. Offset must exceed worst-case CreateSchedule latency
-		// under parallel load so the entry is still genuinely in the future when
-		// the server materializes the schedule - otherwise the test passes for
-		// the wrong reason (HWM already past the entry at create time).
-		fireAt := time.Now().Add(10 * time.Second).UTC()
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Calendar: []*schedulepb.CalendarSpec{calendarSpec(fireAt)},
-			},
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		s.Awaitf(func(s *ScheduleCHASMSuite) {
-			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
-				Namespace:  env.Namespace().String(),
-				ScheduleId: sid,
-			})
-			s.NoError(err)
-			s.Empty(desc.Info.FutureActionTimes)
-		}, awaitTimeout, pollInterval,
-			"FutureActionTimes should empty out once the only calendar date passes (proves HWM advanced past it while paused)")
-
-		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "drops-catchup-test"})
-		s.Awaitf(func(s *ScheduleCHASMSuite) {
-			s.True(scheduleClosed(s.Context(), env, sid))
-		}, awaitTimeout, pollInterval,
-			"schedule should close from idle after unpause (no future actions, no replay)")
-	})
-	// testRecentActionsAdvanceWhilePaused verifies that an in-flight workflow's
-	// completion status surfaces in ListSchedules' RecentActions even while the
-	// schedule is paused. CHASM-only: the live Invoker updates BufferedStart on
-	// Nexus completion regardless of paused state, so the listed status moves
-	// from RUNNING to COMPLETED. V1's scheduler workflow does not advance its
-	// memo while paused, so the listed status stays at RUNNING until unpause.
-	s.Run("RecentActionsAdvance", func(s *ScheduleCHASMSuite) {
-		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
-
-		sid := testcore.RandomizeStr("sched-recentactions-paused")
-		wid := testcore.RandomizeStr("sched-recentactions-paused-wf")
-		wt := testcore.RandomizeStr("sched-recentactions-paused-wt")
-
-		// Gate the run so the RUNNING -> COMPLETED transition is driven explicitly.
-		var runs atomic.Int32
-		registerGatedWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// Wait for the first workflow to be reported as RUNNING in ListSchedules.
-		running := getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
-			return len(ent.Info.RecentActions) >= 1 &&
-				ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-		})
-		runningRunID := running.Info.RecentActions[0].GetStartWorkflowResult().GetRunId()
-		s.NotEmpty(runningRunID)
-
-		// Pause, then release the run: its COMPLETED status must surface while paused.
-		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pausing for the test"})
-
-		signaled := completeRunningWorkflows(s.Context(), s.T(), env, sid)
-		s.Equal(1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
-
-		// While paused, the listed RecentActions entry transitions to COMPLETED.
-		getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
-			for _, a := range ent.Info.RecentActions {
-				if a.GetStartWorkflowResult().GetRunId() == runningRunID &&
-					a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-					return true
-				}
-			}
-			return false
-		})
-		s.Equal(int32(1), runs.Load(), "exactly one run should have fired (SKIP overlap, then paused)")
-	})
-	// testFutureActionTimesAdvanceWhilePaused verifies that ListSchedules returns
-	// up-to-date FutureActionTimes for a paused schedule. CHASM's always-on
-	// Generator advances the high water mark and rebuilds FutureActionTimes
-	// against the spec even when paused, so listed times stay in the future and
-	// never roll into the past. The legacy V1 scheduler workflow does not advance
-	// while paused, so its projected times would freeze at pause time and
-	// eventually all sit in the past - hence this test is registered CHASM-only.
-	s.Run("FutureActionTimesAdvance", func(s *ScheduleCHASMSuite) {
-		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
-
-		sid := testcore.RandomizeStr("sched-future-actions-paused")
-		wid := testcore.RandomizeStr("sched-future-actions-paused-wf")
-		wt := testcore.RandomizeStr("sched-future-actions-paused-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// Wait for visibility to surface an initial FutureActionTimes projection.
-		initial := getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
-			return len(ent.Info.FutureActionTimes) > 0
-		})
-		initialFirst := initial.Info.FutureActionTimes[0].AsTime()
-
-		// While still paused, the earliest projected time must advance past the
-		// initial value: the Generator keeps ticking and republishing the
-		// projection, even though no workflows fire.
-		getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
-			return len(ent.Info.FutureActionTimes) > 0 &&
-				ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
-		})
-		s.Zero(runs.Load(), "a paused schedule must not fire any workflows")
-	})
-	// testBackfillOnPausedSchedule verifies that a paused schedule still processes
-	// a backfill request to completion, even though the schedule otherwise has no
-	// automated actions running.
-	s.Run("BackfillDrains", func(s *ScheduleCHASMSuite) {
-		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
-
-		sid := testcore.RandomizeStr("sched-backfill-paused")
-		wid := testcore.RandomizeStr("sched-backfill-paused-wf")
-		wt := testcore.RandomizeStr("sched-backfill-paused-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// Paused suppresses firing even though the 1s interval would otherwise tick.
-		s.Never(func() bool { return runs.Load() > 0 },
-			neverWindow, pollInterval,
-			"paused schedule must not fire automated actions")
-
-		now := time.Now().UTC()
-		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL))
-
-		s.AwaitTruef(func() bool { return runs.Load() >= 5 },
-			awaitTimeout, pollInterval,
-			"backfill should fire actions on a paused schedule")
-	})
-}
-
-func (s *ScheduleSuite) TestBackfill(chasmEnabled bool) {
-	s.Run("ReprocessCompletedActionExactTimePaused", func(s *ScheduleSuite) {
-		s.backfillReprocessesCompletedAction(chasmEnabled, true, 0)
-	})
-	s.Run("ReprocessCompletedActionExactTimeActive", func(s *ScheduleSuite) {
-		s.backfillReprocessesCompletedAction(chasmEnabled, false, 0)
-	})
-	s.Run("ReprocessCompletedActionInRange", func(s *ScheduleSuite) {
-		s.backfillReprocessesCompletedAction(chasmEnabled, true, 1)
-	})
-	// testBackfillWithSkipOverlap verifies that SKIP overlap correctly collapses a
-	// multi-tick backfill range to a single workflow execution.
-	s.Run("SkipOverlap", func(s *ScheduleSuite) {
-		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
-
-		sid := testcore.RandomizeStr("sched-backfill-skip")
-		wid := testcore.RandomizeStr("sched-backfill-skip-wf")
-		wt := testcore.RandomizeStr("sched-backfill-skip-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		now := time.Now().UTC()
-		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
-
-		// SKIP collapses the 5-tick backfill to exactly one fire, and it stays there.
-		s.AwaitTruef(func() bool { return runs.Load() == 1 },
-			awaitTimeout, pollInterval,
-			"SKIP backfill should fire exactly once")
-		s.Never(func() bool { return runs.Load() > 1 },
-			neverWindow, pollInterval,
-			"SKIP backfill must collapse to a single execution, not fire all 5 ticks")
-	})
-	// testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
-	// over a multi-tick backfill: the first start runs immediately, exactly one
-	// follow-up is buffered (Attempt=-1 deferred), the rest are dropped, and the
-	// deferred one runs once the first completes. Currently SKIPPED: fails on
-	// both V1 and CHASM because the deferred start never gets re-enabled after
-	// the running workflow completes. The first start fires, the rest never run.
-	// Likely a real bug in the BUFFER_ONE + backfill (Manual=true) interaction -
-	// recordCompletedAction's re-enable loop on Attempt==-1 may not be running
-	// against backfill-buffered starts. Worth a separate investigation.
-	s.Run("BufferOneOverlap", func(s *ScheduleSuite) {
-		// TODO(temporalio/temporal): track removing this skip once the BUFFER_ONE
-		// backfill deferred re-enable path is fixed. Verify by running:
-		//   go test ./tests/ -run 'TestScheduleCHASM/Backfill/BufferOneOverlap' -v
-		s.T().Skip("BUFFER_ONE backfill deferred re-enable is broken on both V1 and CHASM; see test doc")
-
-		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
-
-		sid := testcore.RandomizeStr("sched-backfill-buffer-one")
-		wid := testcore.RandomizeStr("sched-backfill-buffer-one-wf")
-		wt := testcore.RandomizeStr("sched-backfill-buffer-one-wt")
-
-		// Gate runs so the first-running / one-deferred / rest-dropped sequence is deterministic.
-		var runs atomic.Int32
-		registerGatedWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			Spec:   intervalSpec(fastInterval),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		now := time.Now().UTC()
-		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE))
-
-		// First backfill start runs with exactly one buffered behind it (BUFFER_ONE drops the rest).
-		s.Awaitf(func(s *ScheduleSuite) {
-			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
-				Namespace:  env.Namespace().String(),
-				ScheduleId: sid,
-			})
-			s.NoError(err)
-			s.Equal(int64(1), desc.GetInfo().GetBufferSize())
-			s.Len(desc.GetInfo().GetRunningWorkflows(), 1)
-		}, awaitTimeout, pollInterval, "expected exactly one running backfill start with one deferred behind it")
-		s.Equal(int32(1), runs.Load(), "only the first backfill start should have fired so far")
-
-		// Releasing the running start must re-enable the deferred one (Attempt=-1 -> 0) so it fires.
-		s.Equal(1, completeRunningWorkflows(s.Context(), s.T(), env, sid))
-		s.AwaitTruef(func() bool { return runs.Load() == 2 },
-			awaitTimeout, pollInterval,
-			"deferred backfill start must fire after the running one completes (Attempt=-1 -> 0 re-enable)")
-		s.Never(func() bool { return runs.Load() > 2 },
-			neverWindow, pollInterval,
-			"BUFFER_ONE must collapse the rest of the backfill ticks - only the deferred start re-enables")
-	})
-	// testMultiRangeBackfillCountedExactlyOnce asserts that the `ActionCount` is
-	// correctly counted when multiple backfillers are concurrently running.
-	s.Run("MultiRangeCountedExactlyOnce", func(s *ScheduleSuite) {
-		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
-
-		sid := testcore.RandomizeStr("sched-multi-range-backfill")
-		wid := testcore.RandomizeStr("sched-multi-range-backfill-wf")
-		wt := testcore.RandomizeStr("sched-multi-range-backfill-wt")
-
-		env.SdkWorker().RegisterWorkflowWithOptions(
-			func(ctx workflow.Context) error { return nil },
-			workflow.RegisterOptions{Name: wt},
-		)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			// 1m interval; each 2m backfill range below covers a couple of ticks.
-			Spec:   intervalSpec(time.Minute),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		now := time.Now().UTC()
-		threeYearsAgo := now.Add(-3 * 365 * 24 * time.Hour).Truncate(time.Minute)
-		thirtyMinutesAgo := now.Add(-30 * time.Minute).Truncate(time.Minute)
-		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{
-			BackfillRequest: []*schedulepb.BackfillRequest{
-				{
-					StartTime:     timestamppb.New(threeYearsAgo.Add(-2 * time.Minute)),
-					EndTime:       timestamppb.New(threeYearsAgo),
-					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-				},
-				{
-					StartTime:     timestamppb.New(thirtyMinutesAgo.Add(-2 * time.Minute)),
-					EndTime:       timestamppb.New(thirtyMinutesAgo),
-					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-				},
-			},
-		})
-
-		s.Awaitf(func(s *ScheduleSuite) {
-			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
-				Namespace:  env.Namespace().String(),
-				ScheduleId: sid,
-			})
-			s.NoError(err)
-			s.Equal(int64(6), desc.Info.ActionCount)
-			s.Empty(desc.Info.RunningWorkflows)
-		}, awaitTimeout, pollInterval,
-			"backfill should fire 6 actions and complete on a paused schedule")
-	})
-	// testBackfillRangeSmallerThanInterval covers the edge where a backfill range
-	// is narrower than the spec interval - no spec tick lands inside it, so no
-	// actions fire and the backfiller still drains cleanly.
-	s.Run("RangeSmallerThanInterval", func(s *ScheduleSuite) {
-		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
-
-		sid := testcore.RandomizeStr("sched-backfill-narrow")
-		wid := testcore.RandomizeStr("sched-backfill-narrow-wf")
-		wt := testcore.RandomizeStr("sched-backfill-narrow-wt")
-
-		var runs atomic.Int32
-		registerCountingWorkflow(env, wt, &runs)
-
-		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
-			// noOpInterval (1h) ticks on the hour; the backfill window below is mid-hour.
-			Spec:   intervalSpec(noOpInterval),
-			State:  &schedulepb.ScheduleState{Paused: true},
-			Action: startWorkflowAction(env, wid, wt),
-		})
-
-		// A 10s window (above the 1s resolution, below the 1h interval) anchored mid-hour
-		// in the previous hour: always in the past and provably free of an on-the-hour tick.
-		prevHour := time.Now().UTC().Truncate(time.Hour).Add(-time.Hour)
-		windowStart := prevHour.Add(20 * time.Minute)
-		windowEnd := windowStart.Add(10 * time.Second)
-		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(windowStart, windowEnd, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
-
-		// No spec tick falls inside a sub-interval window, so no action fires.
-		s.Never(func() bool { return runs.Load() > 0 },
-			neverWindow, pollInterval,
-			"backfill range narrower than spec interval must produce no actions")
-
-		// And the schedule must still be describable - the backfiller drained without
-		// firing anything and got cleaned up.
-		_, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
-			Namespace:  env.Namespace().String(),
-			ScheduleId: sid,
-		})
-		s.NoError(err, "schedule must remain describable after empty backfill")
-	})
-}
-
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
 // populated by both the V1 and V2 (CHASM) schedulers when at least one fire is
 // queued behind a still-running workflow. A schedule with a 1s interval and
@@ -913,6 +405,171 @@ func (s *ScheduleSuite) TestBufferSizeReportedWhenBuffered(chasmEnabled bool) {
 
 	env.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
 	env.GreaterOrEqual(len(lastDescribe.GetInfo().GetRunningWorkflows()), 1, "expected the buffered fire to be queued behind a running workflow")
+}
+
+func (s *ScheduleCHASMSuite) TestPausedBehavior() {
+	// testRecentActionsAdvanceWhilePaused verifies that an in-flight workflow's
+	// completion status surfaces in ListSchedules' RecentActions even while the
+	// schedule is paused. CHASM-only: the live Invoker updates BufferedStart on
+	// Nexus completion regardless of paused state, so the listed status moves
+	// from RUNNING to COMPLETED. V1's scheduler workflow does not advance its
+	// memo while paused, so the listed status stays at RUNNING until unpause.
+	s.Run("RecentActionsAdvance", func(s *ScheduleCHASMSuite) {
+		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
+
+		sid := testcore.RandomizeStr("sched-recentactions-paused")
+		wid := testcore.RandomizeStr("sched-recentactions-paused-wf")
+		wt := testcore.RandomizeStr("sched-recentactions-paused-wt")
+
+		// Gate the run so the RUNNING -> COMPLETED transition is driven explicitly.
+		var runs atomic.Int32
+		registerGatedWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// Wait for the first workflow to be reported as RUNNING in ListSchedules.
+		running := getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
+			return len(ent.Info.RecentActions) >= 1 &&
+				ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		})
+		runningRunID := running.Info.RecentActions[0].GetStartWorkflowResult().GetRunId()
+		s.NotEmpty(runningRunID)
+
+		// Pause, then release the run: its COMPLETED status must surface while paused.
+		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pausing for the test"})
+
+		signaled := completeRunningWorkflows(s.Context(), s.T(), env, sid)
+		s.Equal(1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
+
+		// While paused, the listed RecentActions entry transitions to COMPLETED.
+		getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
+			for _, a := range ent.Info.RecentActions {
+				if a.GetStartWorkflowResult().GetRunId() == runningRunID &&
+					a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+					return true
+				}
+			}
+			return false
+		})
+		s.Equal(int32(1), runs.Load(), "exactly one run should have fired (SKIP overlap, then paused)")
+	})
+
+	// testFutureActionTimesAdvanceWhilePaused verifies that ListSchedules returns
+	// up-to-date FutureActionTimes for a paused schedule. CHASM's always-on
+	// Generator advances the high water mark and rebuilds FutureActionTimes
+	// against the spec even when paused, so listed times stay in the future and
+	// never roll into the past. The legacy V1 scheduler workflow does not advance
+	// while paused, so its projected times would freeze at pause time and
+	// eventually all sit in the past - hence this test is registered CHASM-only.
+	s.Run("FutureActionTimesAdvance", func(s *ScheduleCHASMSuite) {
+		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
+
+		sid := testcore.RandomizeStr("sched-future-actions-paused")
+		wid := testcore.RandomizeStr("sched-future-actions-paused-wf")
+		wt := testcore.RandomizeStr("sched-future-actions-paused-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// Wait for visibility to surface an initial FutureActionTimes projection.
+		initial := getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
+			return len(ent.Info.FutureActionTimes) > 0
+		})
+		initialFirst := initial.Info.FutureActionTimes[0].AsTime()
+
+		// While still paused, the earliest projected time must advance past the
+		// initial value: the Generator keeps ticking and republishing the
+		// projection, even though no workflows fire.
+		getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
+			return len(ent.Info.FutureActionTimes) > 0 &&
+				ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
+		})
+		s.Zero(runs.Load(), "a paused schedule must not fire any workflows")
+	})
+
+	// testPausedDropsCatchup verifies that an action scheduled by the spec during
+	// a paused window is NOT invoked when the schedule is unpaused.
+	s.Run("DropsCatchup", func(s *ScheduleCHASMSuite) {
+		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
+
+		sid := testcore.RandomizeStr("sched-paused-drops-catchup")
+		wid := testcore.RandomizeStr("sched-paused-drops-catchup-wf")
+		wt := testcore.RandomizeStr("sched-paused-drops-catchup-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		// Single calendar entry a few seconds in the future. While paused, its
+		// time will pass. Offset must exceed worst-case CreateSchedule latency
+		// under parallel load so the entry is still genuinely in the future when
+		// the server materializes the schedule - otherwise the test passes for
+		// the wrong reason (HWM already past the entry at create time).
+		fireAt := time.Now().Add(10 * time.Second).UTC()
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Calendar: []*schedulepb.CalendarSpec{calendarSpec(fireAt)},
+			},
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+			})
+			s.NoError(err)
+			s.Empty(desc.Info.FutureActionTimes)
+		}, awaitTimeout, pollInterval,
+			"FutureActionTimes should empty out once the only calendar date passes (proves HWM advanced past it while paused)")
+
+		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "drops-catchup-test"})
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			s.True(scheduleClosed(s.Context(), env, sid))
+		}, awaitTimeout, pollInterval,
+			"schedule should close from idle after unpause (no future actions, no replay)")
+	})
+
+	// testBackfillOnPausedSchedule verifies that a paused schedule still processes
+	// a backfill request to completion, even though the schedule otherwise has no
+	// automated actions running.
+	s.Run("BackfillDrains", func(s *ScheduleCHASMSuite) {
+		env := newScheduleEnv(s.T(), true, scheduleCommonOpts(true)...)
+
+		sid := testcore.RandomizeStr("sched-backfill-paused")
+		wid := testcore.RandomizeStr("sched-backfill-paused-wf")
+		wt := testcore.RandomizeStr("sched-backfill-paused-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// Paused suppresses firing even though the 1s interval would otherwise tick.
+		s.Never(func() bool { return runs.Load() > 0 },
+			neverWindow, pollInterval,
+			"paused schedule must not fire automated actions")
+
+		now := time.Now().UTC()
+		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL))
+
+		s.AwaitTruef(func() bool { return runs.Load() >= 5 },
+			awaitTimeout, pollInterval,
+			"backfill should fire actions on a paused schedule")
+	})
 }
 
 // testBufferOneDeferredFiresAfterCompletion exercises the BUFFER_ONE deferred
@@ -4329,10 +3986,10 @@ func (s *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
 	)
 }
 
-// testTriggerImmediatelyOnActiveSchedule verifies that a TriggerImmediately
-// patch on a running schedule fires an extra action and leaves the schedule
-// active.
 func (s *ScheduleSuite) TestTriggerImmediately(chasmEnabled bool) {
+	// testTriggerImmediatelyOnActiveSchedule verifies that a TriggerImmediately
+	// patch on a running schedule fires an extra action and leaves the schedule
+	// active.
 	s.Run("OnActiveSchedule", func(s *ScheduleSuite) {
 		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 
@@ -4526,6 +4183,196 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 	s.Equal(paused, desc.GetSchedule().GetState().GetPaused())
 }
 
+func (s *ScheduleSuite) TestBackfill(chasmEnabled bool) {
+	s.Run("ReprocessCompletedActionExactTimePaused", func(s *ScheduleSuite) {
+		s.backfillReprocessesCompletedAction(chasmEnabled, true, 0)
+	})
+	s.Run("ReprocessCompletedActionExactTimeActive", func(s *ScheduleSuite) {
+		s.backfillReprocessesCompletedAction(chasmEnabled, false, 0)
+	})
+	s.Run("ReprocessCompletedActionInRange", func(s *ScheduleSuite) {
+		s.backfillReprocessesCompletedAction(chasmEnabled, true, 1)
+	})
+
+	// testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
+	// over a multi-tick backfill: the first start runs immediately, exactly one
+	// follow-up is buffered (Attempt=-1 deferred), the rest are dropped, and the
+	// deferred one runs once the first completes. Currently SKIPPED: fails on
+	// both V1 and CHASM because the deferred start never gets re-enabled after
+	// the running workflow completes. The first start fires, the rest never run.
+	// Likely a real bug in the BUFFER_ONE + backfill (Manual=true) interaction -
+	// recordCompletedAction's re-enable loop on Attempt==-1 may not be running
+	// against backfill-buffered starts. Worth a separate investigation.
+	s.Run("BufferOneOverlap", func(s *ScheduleSuite) {
+		// TODO(temporalio/temporal): track removing this skip once the BUFFER_ONE
+		// backfill deferred re-enable path is fixed. Verify by running:
+		//   go test ./tests/ -run 'TestScheduleCHASM/Backfill/BufferOneOverlap' -v
+		s.T().Skip("BUFFER_ONE backfill deferred re-enable is broken on both V1 and CHASM; see test doc")
+
+		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
+
+		sid := testcore.RandomizeStr("sched-backfill-buffer-one")
+		wid := testcore.RandomizeStr("sched-backfill-buffer-one-wf")
+		wt := testcore.RandomizeStr("sched-backfill-buffer-one-wt")
+
+		// Gate runs so the first-running / one-deferred / rest-dropped sequence is deterministic.
+		var runs atomic.Int32
+		registerGatedWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		now := time.Now().UTC()
+		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE))
+
+		// First backfill start runs with exactly one buffered behind it (BUFFER_ONE drops the rest).
+		s.Awaitf(func(s *ScheduleSuite) {
+			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+			})
+			s.NoError(err)
+			s.Equal(int64(1), desc.GetInfo().GetBufferSize())
+			s.Len(desc.GetInfo().GetRunningWorkflows(), 1)
+		}, awaitTimeout, pollInterval, "expected exactly one running backfill start with one deferred behind it")
+		s.Equal(int32(1), runs.Load(), "only the first backfill start should have fired so far")
+
+		// Releasing the running start must re-enable the deferred one (Attempt=-1 -> 0) so it fires.
+		s.Equal(1, completeRunningWorkflows(s.Context(), s.T(), env, sid))
+		s.AwaitTruef(func() bool { return runs.Load() == 2 },
+			awaitTimeout, pollInterval,
+			"deferred backfill start must fire after the running one completes (Attempt=-1 -> 0 re-enable)")
+		s.Never(func() bool { return runs.Load() > 2 },
+			neverWindow, pollInterval,
+			"BUFFER_ONE must collapse the rest of the backfill ticks - only the deferred start re-enables")
+	})
+
+	// testBackfillRangeSmallerThanInterval covers the edge where a backfill range
+	// is narrower than the spec interval - no spec tick lands inside it, so no
+	// actions fire and the backfiller still drains cleanly.
+	s.Run("RangeSmallerThanInterval", func(s *ScheduleSuite) {
+		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
+
+		sid := testcore.RandomizeStr("sched-backfill-narrow")
+		wid := testcore.RandomizeStr("sched-backfill-narrow-wf")
+		wt := testcore.RandomizeStr("sched-backfill-narrow-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			// noOpInterval (1h) ticks on the hour; the backfill window below is mid-hour.
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// A 10s window (above the 1s resolution, below the 1h interval) anchored mid-hour
+		// in the previous hour: always in the past and provably free of an on-the-hour tick.
+		prevHour := time.Now().UTC().Truncate(time.Hour).Add(-time.Hour)
+		windowStart := prevHour.Add(20 * time.Minute)
+		windowEnd := windowStart.Add(10 * time.Second)
+		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(windowStart, windowEnd, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
+
+		// No spec tick falls inside a sub-interval window, so no action fires.
+		s.Never(func() bool { return runs.Load() > 0 },
+			neverWindow, pollInterval,
+			"backfill range narrower than spec interval must produce no actions")
+
+		// And the schedule must still be describable - the backfiller drained without
+		// firing anything and got cleaned up.
+		_, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		s.NoError(err, "schedule must remain describable after empty backfill")
+	})
+
+	// testBackfillWithSkipOverlap verifies that SKIP overlap correctly collapses a
+	// multi-tick backfill range to a single workflow execution.
+	s.Run("SkipOverlap", func(s *ScheduleSuite) {
+		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
+
+		sid := testcore.RandomizeStr("sched-backfill-skip")
+		wid := testcore.RandomizeStr("sched-backfill-skip-wf")
+		wt := testcore.RandomizeStr("sched-backfill-skip-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		now := time.Now().UTC()
+		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
+
+		// SKIP collapses the 5-tick backfill to exactly one fire, and it stays there.
+		s.AwaitTruef(func() bool { return runs.Load() == 1 },
+			awaitTimeout, pollInterval,
+			"SKIP backfill should fire exactly once")
+		s.Never(func() bool { return runs.Load() > 1 },
+			neverWindow, pollInterval,
+			"SKIP backfill must collapse to a single execution, not fire all 5 ticks")
+	})
+
+	// testMultiRangeBackfillCountedExactlyOnce asserts that the `ActionCount` is
+	// correctly counted when multiple backfillers are concurrently running.
+	s.Run("MultiRangeCountedExactlyOnce", func(s *ScheduleSuite) {
+		env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
+
+		sid := testcore.RandomizeStr("sched-multi-range-backfill")
+		wid := testcore.RandomizeStr("sched-multi-range-backfill-wf")
+		wt := testcore.RandomizeStr("sched-multi-range-backfill-wt")
+
+		env.SdkWorker().RegisterWorkflowWithOptions(
+			func(ctx workflow.Context) error { return nil },
+			workflow.RegisterOptions{Name: wt},
+		)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			// 1m interval; each 2m backfill range below covers a couple of ticks.
+			Spec:   intervalSpec(time.Minute),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		now := time.Now().UTC()
+		threeYearsAgo := now.Add(-3 * 365 * 24 * time.Hour).Truncate(time.Minute)
+		thirtyMinutesAgo := now.Add(-30 * time.Minute).Truncate(time.Minute)
+		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{
+			BackfillRequest: []*schedulepb.BackfillRequest{
+				{
+					StartTime:     timestamppb.New(threeYearsAgo.Add(-2 * time.Minute)),
+					EndTime:       timestamppb.New(threeYearsAgo),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+				{
+					StartTime:     timestamppb.New(thirtyMinutesAgo.Add(-2 * time.Minute)),
+					EndTime:       timestamppb.New(thirtyMinutesAgo),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		})
+
+		s.Awaitf(func(s *ScheduleSuite) {
+			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+			})
+			s.NoError(err)
+			s.Equal(int64(6), desc.Info.ActionCount)
+			s.Empty(desc.Info.RunningWorkflows)
+		}, awaitTimeout, pollInterval,
+			"backfill should fire 6 actions and complete on a paused schedule")
+	})
+}
+
 func (s *ScheduleSuite) TestUpdateScheduleRequestIDTooLong(chasmEnabled bool) {
 	env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 
@@ -4716,11 +4563,63 @@ type scheduleClosesCase struct {
 	strictRunCount bool
 }
 
+// testScheduleClosesFromIdle runs the idle-close matrix as parallel subtests.
+func (s *ScheduleCHASMSuite) TestScheduleClosesFromIdle() {
+	cases := []scheduleClosesCase{
+		{
+			name:         "SingleDate",
+			prefix:       "sched-single-date-closes",
+			expectedRuns: 1,
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Calendar: []*schedulepb.CalendarSpec{calendarSpec(now.Add(5 * time.Second))},
+				}
+			},
+		},
+		{
+			name:         "MultiDate",
+			prefix:       "sched-multi-date-closes",
+			expectedRuns: 2,
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				return &schedulepb.ScheduleSpec{
+					Calendar: []*schedulepb.CalendarSpec{
+						calendarSpec(now.Add(5 * time.Second)),
+						calendarSpec(now.Add(10 * time.Second)),
+					},
+				}
+			},
+		},
+		{
+			name:         "LimitedActions",
+			prefix:       "sched-limited-actions-closes",
+			expectedRuns: 2,
+			buildSpec: func(_ time.Time) *schedulepb.ScheduleSpec {
+				return intervalSpec(fastInterval)
+			},
+			state:          &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 2},
+			strictRunCount: true,
+		},
+		{
+			name:         "IntervalEndTime",
+			prefix:       "sched-interval-end-closes",
+			expectedRuns: 1,
+			buildSpec: func(now time.Time) *schedulepb.ScheduleSpec {
+				spec := intervalSpec(fastInterval)
+				spec.EndTime = timestamppb.New(now.Add(10 * time.Second))
+				return spec
+			},
+		},
+	}
+	for _, c := range cases {
+		s.T().Run(c.name, func(t *testing.T) { t.Parallel(); runScheduleClosesFromIdleCase(t, c) })
+	}
+}
+
 // runScheduleClosesFromIdleCase drives a schedule whose spec exhausts itself,
 // then asserts (1) the expected number of runs fire, (2) FutureActionTimes
 // drains to zero, and (3) the schedule closes after IdleTime.
-func runScheduleClosesFromIdleCase(s *ScheduleCHASMSuite, c scheduleClosesCase) {
-	env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
+func runScheduleClosesFromIdleCase(t *testing.T, c scheduleClosesCase) {
+	env := newEnvWithIdleTime(t, true, shortIdleTime)
 
 	sid := testcore.RandomizeStr(c.prefix)
 	wid := testcore.RandomizeStr(c.prefix + "-wf")
@@ -4729,7 +4628,8 @@ func runScheduleClosesFromIdleCase(s *ScheduleCHASMSuite, c scheduleClosesCase) 
 	var runs atomic.Int32
 	registerCountingWorkflow(env, wt, &runs)
 
-	createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+	ctx := testcontext.For(t)
+	createSchedule(ctx, t, env, sid, &schedulepb.Schedule{
 		Spec:   c.buildSpec(time.Now().UTC()),
 		State:  c.state,
 		Action: startWorkflowAction(env, wid, wt),
@@ -4737,29 +4637,138 @@ func runScheduleClosesFromIdleCase(s *ScheduleCHASMSuite, c scheduleClosesCase) 
 
 	// A hard action budget must land on exactly expectedRuns; time-bounded specs
 	// may emit a stray tick before close, so they only require the lower bound.
-	s.AwaitTruef(func() bool {
+	await.RequireTruef(t, func() bool {
 		if c.strictRunCount {
 			return runs.Load() == c.expectedRuns
 		}
 		return runs.Load() >= c.expectedRuns
 	}, awaitTimeout, pollInterval, "schedule should fire its expected actions")
 
-	s.Awaitf(func(s *ScheduleCHASMSuite) {
-		resp, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+	await.RequireTruef(t, func() bool {
+		resp, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		s.NoError(err)
-		s.Empty(resp.Info.FutureActionTimes)
+		return descErr == nil && len(resp.Info.FutureActionTimes) == 0
 	}, awaitTimeout, pollInterval, "schedule should drain its future action times")
 
-	s.Awaitf(func(s *ScheduleCHASMSuite) {
-		s.True(scheduleClosed(s.Context(), env, sid))
-	}, awaitTimeout, pollInterval, "schedule should idle-close after IdleTime")
+	await.RequireTruef(t, func() bool { return scheduleClosed(ctx, env, sid) },
+		awaitTimeout, pollInterval, "schedule should idle-close after IdleTime")
 
 	if c.strictRunCount {
-		s.Equal(c.expectedRuns, runs.Load(), "schedule must not exceed its action budget")
+		require.Equal(t, c.expectedRuns, runs.Load(), "schedule must not exceed its action budget")
 	}
+}
+
+func (s *ScheduleCHASMSuite) TestIdleClose() {
+	// testManualOnlyUnpausedClosesFromIdle verifies that an unpaused manual-only
+	// (empty-spec) schedule closes once its IdleTime elapses (as opposed to
+	// testPausedEmptySpecStaysOpen, where a *paused* empty-spec schedule stays
+	// open).
+	s.Run("ManualOnly", func(s *ScheduleCHASMSuite) {
+		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
+
+		sid := testcore.RandomizeStr("sched-manual-only-unpaused")
+		wid := testcore.RandomizeStr("sched-manual-only-wf")
+		wt := testcore.RandomizeStr("sched-manual-only-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			// Empty spec: a manual-only schedule, no automated actions.
+			Spec:   &schedulepb.ScheduleSpec{},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// With no spec and no manual trigger, the schedule closes once its idle window elapses.
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			s.True(scheduleClosed(s.Context(), env, sid))
+		}, awaitTimeout, pollInterval, "manual-only schedule should close after idle window")
+		s.Zero(runs.Load(), "a manual-only schedule must not fire any actions on its own")
+	})
+
+	// testPauseDuringIdleWindow covers setting pausing, and unpausing, while a
+	// schedule was idling.
+	s.Run("PauseDuringWindow", func(s *ScheduleCHASMSuite) {
+		// Deliberately longer than shortIdleTime: the pause/unpause RPCs must land
+		// inside the idle window (before the deadline) even under slow CI.
+		idleTime := 10 * time.Second
+		env := newEnvWithIdleTime(s.T(), true, idleTime)
+
+		sid := testcore.RandomizeStr("sched-pause-during-idle")
+		wid := testcore.RandomizeStr("sched-pause-during-idle-wf")
+		wt := testcore.RandomizeStr("sched-pause-during-idle-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec:   intervalSpec(fastInterval),
+			State:  &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 1},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// The single allowed action fires, exhausting the budget and arming idle.
+		s.AwaitTruef(func() bool { return runs.Load() == 1 },
+			awaitTimeout, pollInterval, "the one allowed action must fire before pausing")
+
+		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pause-during-idle"})
+
+		// Paused must hold the schedule open past the original idle deadline.
+		s.Never(func() bool { return scheduleClosed(s.Context(), env, sid) },
+			idleTime*2, pollInterval, "paused schedule must not close past original idle deadline")
+
+		// Unpause: the Generator re-arms idle and the schedule finally closes.
+		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "resume-after-idle"})
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			s.True(scheduleClosed(s.Context(), env, sid))
+		}, awaitTimeout, pollInterval, "schedule must close after unpause via re-armed idle task")
+		s.Equal(int32(1), runs.Load(), "no extra actions should fire across pause/unpause")
+	})
+
+	// testBackfillBlocksIdleClose verifies that a schedule with no remaining
+	// automated actions and a pending backfill is not closed by the idle path
+	// until it drains.
+	s.Run("BackfillBlocks", func(s *ScheduleCHASMSuite) {
+		env := newEnvWithIdleTime(s.T(), true, shortIdleTime)
+
+		sid := testcore.RandomizeStr("sched-backfill-blocks-idle")
+		wid := testcore.RandomizeStr("sched-backfill-blocks-idle-wf")
+		wt := testcore.RandomizeStr("sched-backfill-blocks-idle-wt")
+
+		var runs atomic.Int32
+		registerCountingWorkflow(env, wt, &runs)
+
+		createSchedule(s.Context(), s.T(), env, sid, &schedulepb.Schedule{
+			Spec: intervalSpec(fastInterval),
+			State: &schedulepb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 1,
+			},
+			Action: startWorkflowAction(env, wid, wt),
+		})
+
+		// The single allowed automated action fires, leaving the scheduler heading to idle.
+		s.AwaitTruef(func() bool { return runs.Load() == 1 }, awaitTimeout, pollInterval,
+			"the single allowed automated action should have fired")
+
+		// BUFFER_ALL is used to force each to run sequentially (versus in parallel with
+		// ALLOW_ALL), which is a better test to show the idle time is pushed back.
+		now := time.Now().UTC()
+		patchSchedule(s.Context(), s.T(), env, sid, backfillPatch(now.Add(-10*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL))
+
+		// Backfill fires despite the scheduler heading to idle; tick count in the 5s
+		// window varies with boundary alignment, so assert the lower bound.
+		s.AwaitTruef(func() bool { return runs.Load() >= 10 },
+			awaitTimeout, pollInterval,
+			"backfill should fire actions even though the scheduler was heading to idle")
+
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			s.True(scheduleClosed(s.Context(), env, sid))
+		}, awaitTimeout, pollInterval,
+			"scheduler should close from idle once the backfill drains and IdleTime elapses")
+	})
 }
 
 // TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
