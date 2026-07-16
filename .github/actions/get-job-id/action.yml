@@ -35,12 +35,27 @@ runs:
         max_retries=6
         job_id=""
         json=""
+        response_file="$(mktemp)"
+        trap 'rm -f "$response_file"' EXIT
 
         for ((attempt = 1; attempt <= max_retries; attempt++)); do
-          json=$(curl -sSL \
+          http_code=$(curl -sSL \
+            -o "$response_file" \
+            -w "%{http_code}" \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "$job_url")
+          json="$(cat "$response_file")"
+
+          if [ "$http_code" != "200" ] || ! jq -e . >/dev/null 2>&1 <<< "$json"; then
+            if [ "$attempt" -lt "$max_retries" ]; then
+              echo "::notice::Jobs API did not return valid JSON for '$JOB_NAME' (HTTP $http_code, attempt $attempt/$max_retries); retrying in 5s"
+              sleep 5
+              continue
+            fi
+            echo "::error::Jobs API did not return valid JSON for '$JOB_NAME' after retries (HTTP $http_code)" >&2
+            exit 1
+          fi
 
           # Prefer matching both job name and the current runner name to disambiguate matrix jobs
           job_id=$(jq -r --arg name "$JOB_NAME" --arg runner "$RUNNER_NAME" '
