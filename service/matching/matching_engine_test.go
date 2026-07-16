@@ -1579,7 +1579,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.NoError(err)
 			s.NoError(pollErr)
 			s.NotNil(result)
-			s.NotEmpty(result.TaskToken)
+			s.Positive(len(result.TaskToken))
 		}
 
 		s.Equal(activityID, result.ActivityId)
@@ -3565,7 +3565,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		partitionType: prtn.Kind(),
 		versioned:     "unversioned",
 	}
-	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3608,7 +3608,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "versionSet",
 	}
-	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3649,7 +3649,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "buildId",
 	}
-	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
+	assert.Equal(s.T(), 2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 

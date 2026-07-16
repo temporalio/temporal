@@ -112,12 +112,12 @@ func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T
 			result := resp.GetResponse().GetSyncSuccess().GetPayload()
 			require.NotNil(t, result)
 
-			value, ok := result.GetMetadata()[commonnexus.SystemEndpointPayloadMetadataKey]
+			value, ok := result.GetMetadata()[commonnexus.SystemPayloadMetadataKey]
 			if tc.expectFlag {
-				require.True(t, ok, "expected %s metadata flag to be set", commonnexus.SystemEndpointPayloadMetadataKey)
+				require.True(t, ok, "expected %s metadata flag to be set", commonnexus.SystemPayloadMetadataKey)
 				require.Equal(t, "true", string(value))
 			} else {
-				require.False(t, ok, "expected %s metadata flag to be absent", commonnexus.SystemEndpointPayloadMetadataKey)
+				require.False(t, ok, "expected %s metadata flag to be absent", commonnexus.SystemPayloadMetadataKey)
 			}
 		})
 	}

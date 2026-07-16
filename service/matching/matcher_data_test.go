@@ -156,7 +156,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
+	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -183,7 +183,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
+	s.ErrorIs(context.DeadlineExceeded, pres.ctxErr)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -647,7 +647,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 
 	s.Len(removed, 25)
 	for _, t := range removed {
-		s.Equal(int64(0), t.event.TaskId%4)
+		s.Equal(t.event.TaskId%4, 0)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -657,7 +657,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.NotEqual(int64(0), t.event.TaskId%4)
+		s.NotEqual(t.event.TaskId%4, 0)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}

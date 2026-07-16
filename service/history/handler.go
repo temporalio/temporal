@@ -2543,17 +2543,14 @@ func (h *Handler) StartNexusOperation(
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
-		// This handler is exclusively used for operations dispatched through the
-		// system nexus endpoint (see buildNexusHandler); customer-registered
-		// endpoints are dispatched to workers via service/frontend/nexus_handler.go
-		// and never go through this encoding path. If the operation's result type
-		// itself carries a nested Payload, the wrapping Payload built above hides
-		// it inside opaque bytes, so flag it for whoever decodes it downstream.
+		// System Nexus results are serialized into an outer Payload. If a protobuf
+		// result contains nested user Payloads, serialization hides them in Data, so
+		// mark the outer Payload for downstream payload visitors.
 		if payload != nil && containsNestedPayload(ctx, resultValue) {
 			if payload.Metadata == nil {
 				payload.Metadata = make(map[string][]byte, 1)
 			}
-			payload.Metadata[commonnexus.SystemEndpointPayloadMetadataKey] = []byte("true")
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
 		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{

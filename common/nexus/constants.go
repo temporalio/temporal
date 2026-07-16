@@ -8,10 +8,9 @@ const SystemCallbackURL = "temporal://system"
 // Operation requests for this endpoint are routed internally within the history service.
 const SystemEndpoint = "__temporal_system"
 
-// SystemEndpointPayloadMetadataKey is the Payload metadata key set, with a value of "true", on the
-// response Payload of a SystemEndpoint Nexus operation whose result type embeds a nested
-// Payload/Payloads field. The nested Payload's bytes are hidden inside the outer Payload's opaque
-// Data, so this flag tells downstream consumers they must unwrap the outer Payload before any
-// further Payload processing (e.g. codec decoding) can reach what's inside. It is only ever set for
-// SystemEndpoint operations; it is absent (equivalent to false) in all other cases.
-const SystemEndpointPayloadMetadataKey = "__temporalSystemNexusEndpoint"
+// SystemPayloadMetadataKey is the Payload metadata key set, with a value of "true", on a
+// Temporal-generated payload whose message type embeds a nested Payload/Payloads field. The nested
+// Payload's bytes are hidden inside the outer Payload's opaque Data, so this flag tells downstream
+// consumers they must unwrap the outer Payload before any further Payload processing (e.g. codec
+// decoding) can reach what's inside.
+const SystemPayloadMetadataKey = "__temporal_system_payload"
