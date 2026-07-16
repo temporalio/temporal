@@ -129,10 +129,6 @@ func TestMixedBrain(t *testing.T) {
 	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 
-	// Standalone Nexus is a current-only feature. Enabling it on the current
-	// server lets omes exercise the StartNexusOperationExecution RPC; requests
-	// that the proxy routes to the release server come back with Unimplemented,
-	// which the omes scenario tolerates as a no-op.
 	dc := map[string]any{
 		"nexusoperation.enableStandalone": true,
 	}
