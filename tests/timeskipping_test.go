@@ -48,7 +48,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 	id := "functional-timeskipping-feature-disabled"
 	tl := "functional-timeskipping-feature-disabled-tq"
 
-	_, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
@@ -73,7 +73,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 		FastForward: durationpb.New(time.Hour),
 	}
 
-	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -102,7 +102,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 		FastForward: durationpb.New(time.Hour),
 	}
 
-	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -133,7 +133,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 		FastForward: durationpb.New(maxElapsedDuration),
 	}
 
-	resp, err := env.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), &workflowservice.ExecuteMultiOperationRequest{
+	resp, err := env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 			{
@@ -184,7 +184,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	tv := testvars.New(s.T())
 
 	// Start a workflow without any time-skipping config.
-	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -198,7 +198,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// collectOptionsEvents returns all WorkflowExecutionOptionsUpdated events in history order.
 	collectOptionsEvents := func() []*historypb.HistoryEvent {
-		histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		histResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 		})
@@ -212,7 +212,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 		return events
 	}
 	updateOptions := func(cfg *commonpb.TimeSkippingConfig) {
-		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(testcore.NewContext(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                env.Namespace().String(),
 			WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: cfg},
@@ -270,7 +270,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	// Start a workflow and drain the first workflow task to establish a reset point.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -354,7 +354,7 @@ func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowI
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(testcore.NewContext(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,
@@ -369,7 +369,7 @@ func (s *TimeSkippingTestSuite) getMutableState(env *testcore.TestEnv, workflowI
 // and a caller-specified run timeout. Used by tests that need the run timeout
 // to be long enough to fit a virtual-time skip.
 func (s *TimeSkippingTestSuite) startWorkflowWithTimeSkipping(env *testcore.TestEnv, tv *testvars.TestVars, runTimeout time.Duration) string {
-	resp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -702,7 +702,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 	)
 	wallStart := time.Now()
 
-	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
@@ -1001,7 +1001,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 	// Consequences:
 	//   - CloseTime − StartTime ≈ skip (≈ timerDuration).  (this is virtualDuration)
 	//   - CloseTime − ExecutionTime ≈ skip.  (public reported duration)
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
 	})
@@ -1205,7 +1205,7 @@ func (s *TimeSkippingTestSuite) TestWorkflowLifecycle_VirtualTimeContract() {
 func (s *TimeSkippingFastForwardFunctionalSuite) TestTimeSkipping_ExecutionTimeoutTimesOutIdleWorkflow() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	const executionTimeout = 5 * time.Minute
 
@@ -1251,7 +1251,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkippingTransitionEventOrdersAfterOption
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	// Start WITHOUT time skipping.
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{

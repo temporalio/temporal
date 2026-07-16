@@ -102,7 +102,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	parentWFType := tv.WorkflowType()
 	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
@@ -234,7 +234,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	parentWFType := tv.WorkflowType()
 	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
@@ -366,7 +366,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	gWFType := &commonpb.WorkflowType{Name: tv.WorkflowType().Name + "-g"}
 	pWFType := &commonpb.WorkflowType{Name: tv.WorkflowType().Name + "-p"}
@@ -538,7 +538,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	parentWFType := tv.WorkflowType()
 	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}
@@ -788,7 +788,7 @@ func (s *TimeSkippingPropagationTestSuite) getMutableState(env *testcore.TestEnv
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(testcore.NewContext(), &persistence.GetWorkflowExecutionRequest{
+	ms, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: env.NamespaceID().String(),
 		WorkflowID:  workflowID,
@@ -963,7 +963,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	wfID := tv.WorkflowID()
 
@@ -1107,7 +1107,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	wfType := tv.WorkflowType()
 	wfID := tv.WorkflowID()
@@ -1226,7 +1226,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	wfType := tv.WorkflowType()
 	wfID := tv.WorkflowID()
@@ -1360,7 +1360,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	wfType := tv.WorkflowType()
 	wfID := tv.WorkflowID()
@@ -1494,7 +1494,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	wfType := tv.WorkflowType()
 	wfID := tv.WorkflowID()
@@ -1620,7 +1620,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_PropagationDisabled(
 	env := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	parentWFType := tv.WorkflowType()
 	childWFType := &commonpb.WorkflowType{Name: parentWFType.Name + "-child"}

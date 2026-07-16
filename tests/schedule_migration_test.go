@@ -53,7 +53,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v2-exists")
 	wid := testcore.RandomizeStr("sched-migrate-v2-exists-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v2-exists-wt")
@@ -215,7 +215,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel")
 	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-sentinel-wt")
@@ -295,7 +295,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-dc")
 	wid := testcore.RandomizeStr("sched-migrate-dc-wf")
 	wt := testcore.RandomizeStr("sched-migrate-dc-wt")
@@ -403,7 +403,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v1-to-v2")
 	wid := testcore.RandomizeStr("sched-migrate-v1-to-v2-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v1-to-v2-wt")
@@ -541,7 +541,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1")
 	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-wt")
@@ -747,7 +747,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1Idempotent() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-idem")
 	wid := testcore.RandomizeStr("sched-migrate-v2-to-v1-idem-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v2-to-v1-idem-wt")
@@ -818,7 +818,7 @@ func (s *ScheduleMigrationTestSuite) TestCHASMScheduleDescribeAfterDisablingCrea
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
 	sid := testcore.RandomizeStr("sched-routing-after-disable")
@@ -918,7 +918,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1RoutingFallback(
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-v2-to-v1-routing")
 	wid := testcore.RandomizeStr("sched-v2-to-v1-routing-wf")
 	wt := testcore.RandomizeStr("sched-v2-to-v1-routing-wt")
@@ -1053,7 +1053,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleUpdateAfterDelete() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-update-after-delete")
 	wid := testcore.RandomizeStr("sched-update-after-delete-wf")
 	wt := testcore.RandomizeStr("sched-update-after-delete-wt")
@@ -1161,7 +1161,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2WithClosedV2() {
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v1-v2-closed")
 	wid := testcore.RandomizeStr("sched-migrate-v1-v2-closed-wf")
 	wt := testcore.RandomizeStr("sched-migrate-v1-v2-closed-wt")
@@ -1629,7 +1629,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	createCHASMSchedule := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
 		_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&schedulerpb.CreateScheduleRequest{
 				NamespaceId: env.NamespaceID().String(),
 				FrontendRequest: &workflowservice.CreateScheduleRequest{
@@ -1646,7 +1646,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	createCHASMSentinel := func(t *testing.T, sid string) {
 		_, err := env.GetTestCluster().SchedulerClient().CreateSentinel(
-			testcore.NewContext(),
+			s.Context(),
 			&schedulerpb.CreateSentinelRequest{
 				NamespaceId: env.NamespaceID().String(),
 				Namespace:   env.Namespace().String(),
@@ -1669,7 +1669,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 		inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
 		require.NoError(t, err)
 		_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
-			testcore.NewContext(),
+			s.Context(),
 			common.CreateHistoryStartWorkflowRequest(
 				env.NamespaceID().String(),
 				&workflowservice.StartWorkflowExecutionRequest{
@@ -1691,7 +1691,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 
 	createV1DummySentinel := func(t *testing.T, sid string) {
 		_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
-			testcore.NewContext(),
+			s.Context(),
 			common.CreateHistoryStartWorkflowRequest(
 				env.NamespaceID().String(),
 				&workflowservice.StartWorkflowExecutionRequest{
@@ -1713,7 +1713,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 	deleteAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
 		var trailer metadata.MD
 		_, err := env.FrontendClient().DeleteSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&workflowservice.DeleteScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -1765,7 +1765,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 		sid := testcore.RandomizeStr("sid")
 		createCHASMSentinel(s.T(), sid)
 		_, err := env.FrontendClient().DeleteSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&workflowservice.DeleteScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -1782,7 +1782,7 @@ func (s *ScheduleMigrationTestSuite) TestDeleteScheduleContextMetadata() {
 	s.Run("NeitherStack", func(s *ScheduleMigrationTestSuite) {
 		sid := testcore.RandomizeStr("nonexistent")
 		_, err := env.FrontendClient().DeleteSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&workflowservice.DeleteScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -1832,7 +1832,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 
 	createCHASMSchedule := func(t *testing.T, sid string, sched *schedulepb.Schedule) {
 		_, err := env.GetTestCluster().SchedulerClient().CreateSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&schedulerpb.CreateScheduleRequest{
 				NamespaceId: env.NamespaceID().String(),
 				FrontendRequest: &workflowservice.CreateScheduleRequest{
@@ -1860,7 +1860,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 		inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
 		require.NoError(t, err)
 		_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
-			testcore.NewContext(),
+			s.Context(),
 			common.CreateHistoryStartWorkflowRequest(
 				env.NamespaceID().String(),
 				&workflowservice.StartWorkflowExecutionRequest{
@@ -1883,7 +1883,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	patchAndAssertMetadata := func(t *testing.T, sid, expectedWfType, expectedTQ string) {
 		var trailer metadata.MD
 		_, err := env.FrontendClient().PatchSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&workflowservice.PatchScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -1918,7 +1918,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 	s.Run("CHASMSentinel_V1Gone", func(s *ScheduleMigrationTestSuite) {
 		sid := testcore.RandomizeStr("sid")
 		_, err := env.GetTestCluster().SchedulerClient().CreateSentinel(
-			testcore.NewContext(),
+			s.Context(),
 			&schedulerpb.CreateSentinelRequest{
 				NamespaceId: env.NamespaceID().String(),
 				Namespace:   env.Namespace().String(),
@@ -1928,7 +1928,7 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 		s.NoError(err)
 
 		_, err = env.FrontendClient().PatchSchedule(
-			testcore.NewContext(),
+			s.Context(),
 			&workflowservice.PatchScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
@@ -2116,7 +2116,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationRolloutPercent() {
 		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerMigrationRolloutPercent, 50),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
 

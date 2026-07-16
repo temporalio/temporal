@@ -45,27 +45,27 @@ func speculativeWorkflowTaskOutcomes(
 	return
 }
 
-func clearUpdateRegistryAndAbortPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
-	closeShard(s, tv.WorkflowID())
+func clearUpdateRegistryAndAbortPendingUpdates(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+	closeShard(ctx, env, tv.WorkflowID())
 }
 
-func loseUpdateRegistryAndAbandonPendingUpdates(s *testcore.TestEnv, tv *testvars.TestVars) {
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
+func loseUpdateRegistryAndAbandonPendingUpdates(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+	cleanup := env.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
 	defer cleanup()
-	closeShard(s, tv.WorkflowID())
+	closeShard(ctx, env, tv.WorkflowID())
 }
 
-func closeShard(s *testcore.TestEnv, wid string) {
-	s.T().Helper()
+func closeShard(ctx context.Context, env *testcore.TestEnv, wid string) {
+	env.T().Helper()
 
-	resp, err := s.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.Namespace().String(),
+	resp, err := env.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: env.Namespace().String(),
 	})
 	if err != nil {
-		s.T().Fatalf("Failed to describe namespace: %v", err)
+		env.T().Fatalf("Failed to describe namespace: %v", err)
 	}
 
-	s.CloseShard(resp.NamespaceInfo.Id, wid)
+	env.CloseShard(resp.NamespaceInfo.Id, wid)
 }
 
 type WorkflowUpdateSuite struct {
@@ -3410,7 +3410,7 @@ func (s *WorkflowUpdateSuite) TestScheduledSpeculativeWorkflowTask_LostUpdate() 
 	s.Nil(updateResult.response)
 
 	// Lose update registry. Speculative WFT and update registry disappear.
-	loseUpdateRegistryAndAbandonPendingUpdates(env, env.Tv())
+	loseUpdateRegistryAndAbandonPendingUpdates(s.Context(), env, env.Tv())
 
 	// Ensure, there is no WFT.
 	pollCtx, cancel := context.WithTimeout(s.Context(), common.MinLongPollTimeout*2)
@@ -3471,7 +3471,7 @@ func (s *WorkflowUpdateSuite) TestStartedSpeculativeWorkflowTask_LostUpdate() {
 	`, task.History)
 
 			// Lose update registry. Update is lost and NotFound error will be returned to RespondWorkflowTaskCompleted.
-			loseUpdateRegistryAndAbandonPendingUpdates(env, env.Tv())
+			loseUpdateRegistryAndAbandonPendingUpdates(s.Context(), env, env.Tv())
 
 			return env.UpdateAcceptCompleteCommands(env.Tv()), nil
 		case 3:
@@ -3586,7 +3586,7 @@ func (s *WorkflowUpdateSuite) TestFirstNormalWorkflowTask_UpdateResurrectedAfter
 	  3 WorkflowTaskStarted
 	`, task.History)
 			// Clear update registry. Update will be resurrected in registry from acceptance message.
-			clearUpdateRegistryAndAbortPendingUpdates(env, env.Tv())
+			clearUpdateRegistryAndAbortPendingUpdates(s.Context(), env, env.Tv())
 
 			return env.UpdateAcceptCompleteCommands(env.Tv()), nil
 		case 2:
@@ -3964,7 +3964,7 @@ func (s *WorkflowUpdateSuite) TestCompletedSpeculativeWorkflowTask_DeduplicateID
 
 			if tc.CloseShard {
 				// Close shard to make sure that for completed updates deduplication works even after shard reload.
-				closeShard(env, env.Tv().WorkflowID())
+				closeShard(s.Context(), env, env.Tv().WorkflowID())
 			}
 
 			// Send second update with the same ID. It must return immediately.
@@ -4099,7 +4099,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 	  7 WorkflowTaskStarted`, wt2.History)
 
 	// Clear update registry. Speculative WFT disappears from server.
-	clearUpdateRegistryAndAbortPendingUpdates(env, env.Tv())
+	clearUpdateRegistryAndAbortPendingUpdates(s.Context(), env, env.Tv())
 
 	// Wait for update request to be retry by frontend and recreated in registry. This will create a 3rd WFT as speculative.
 	waitUpdateAdmitted(env, env.Tv())
@@ -4229,7 +4229,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_BecauseOfDif
 	  6 WorkflowTaskStarted`, wt2.History)
 
 	// Clear update registry. Speculative WFT disappears from server.
-	clearUpdateRegistryAndAbortPendingUpdates(env, env.Tv())
+	clearUpdateRegistryAndAbortPendingUpdates(s.Context(), env, env.Tv())
 
 	// Wait for update request to be retry by frontend and recreated in registry. This will create a 3rd WFT as speculative.
 	waitUpdateAdmitted(env, env.Tv())
@@ -4341,7 +4341,7 @@ func (s *WorkflowUpdateSuite) TestStaleSpeculativeWorkflowTask_Fail_NewWorkflowT
 	  6 WorkflowTaskStarted`, wt2.History)
 
 	// Clear update registry. Speculative WFT disappears from server.
-	clearUpdateRegistryAndAbortPendingUpdates(env, env.Tv())
+	clearUpdateRegistryAndAbortPendingUpdates(s.Context(), env, env.Tv())
 
 	// Make sure UpdateWorkflowExecution call for the update "1" is retried and new (3rd) WFT is created as speculative with updateID=1.
 	waitUpdateAdmitted(env, tv1)
