@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
@@ -61,20 +60,25 @@ var (
 	}
 )
 
-func newScheduleEnv(t *testing.T, chasmEnabled bool, opts ...testcore.TestOption) *testcore.TestEnv {
-	t.Helper()
-	commonOpts := []testcore.TestOption{
+func scheduleCommonOpts(chasmEnabled bool) []testcore.TestOption {
+	opts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	}
 	if !chasmEnabled {
 		// only v1 needs the worker service
-		commonOpts = append(commonOpts, testcore.WithWorkerService("V1 scheduler"))
+		opts = append(opts, testcore.WithWorkerService("V1 scheduler"))
 	}
+	return opts
+}
+
+func newScheduleEnv(t *testing.T, chasmEnabled bool, opts ...testcore.TestOption) *testcore.TestEnv {
+	t.Helper()
 	if chasmEnabled {
 		testcontext.AttachDecorator(t, chasmScheduleContextKey{}, chasmContextFactory)
 	}
-	opts = append(commonOpts, opts...)
+	opts = append(scheduleCommonOpts(chasmEnabled), opts...)
 	opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}))
 	env := testcore.NewEnv(t, opts...)
 	t.Cleanup(func() {
