@@ -116,6 +116,7 @@ jobs:
           FULL_TEST_REASON: ${{ steps.determine_scope.outputs.full_test_reason }}
           DB_CONFIGS: |
             sqlite:
+              required: true
               persistence_type: sql
               persistence_driver: sqlite
               containers: []
