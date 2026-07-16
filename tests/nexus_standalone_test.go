@@ -107,42 +107,40 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 			{name: "WithEmptyRunID", runID: ""},
 		} {
 			s.Run(tc.name, func(s *NexusStandaloneTestSuite) {
-				s.Await(func(s *NexusStandaloneTestSuite) {
-					descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
-						Namespace:   env.Namespace().String(),
-						OperationId: "test-op",
-						RunId:       tc.runID,
-					})
-					s.NoError(err)
-					s.Equal(startResp.RunId, descResp.RunId)
+				descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+					Namespace:   env.Namespace().String(),
+					OperationId: "test-op",
+					RunId:       tc.runID,
+				})
+				s.NoError(err)
+				s.Equal(startResp.RunId, descResp.RunId)
 
-					info := descResp.GetInfo()
-					s.ProtoEqual(&nexuspb.NexusOperationExecutionInfo{
-						OperationId:            "test-op",
-						RunId:                  startResp.RunId,
-						Endpoint:               endpointName,
-						Service:                "test-service",
-						Operation:              "test-operation",
-						Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
-						State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
-						ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
-						ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
-						StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
-						NexusHeader:            testHeader,
-						UserMetadata:           testUserMetadata,
-						SearchAttributes:       testSearchAttributes,
-						Attempt:                1,
-					}, info, protorequire.IgnoreFields("state_transition_count", "state_size_bytes", "operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration"))
-					s.NotEmpty(descResp.GetLongPollToken())
-					s.NotEmpty(info.GetRequestId())
-					s.NotNil(info.GetScheduleTime())
-					s.NotNil(info.GetExpirationTime())
-					s.NotNil(info.GetExecutionDuration())
-					s.NotEmpty(info.GetOperationToken())
-					s.NotNil(info.GetLastAttemptCompleteTime())
-					s.NotZero(info.GetStateSizeBytes())
-				}, 10*time.Second, 100*time.Millisecond)
-			})
+				info := descResp.GetInfo()
+				s.ProtoEqual(&nexuspb.NexusOperationExecutionInfo{
+					OperationId:            "test-op",
+					RunId:                  startResp.RunId,
+					Endpoint:               endpointName,
+					Service:                "test-service",
+					Operation:              "test-operation",
+					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
+					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
+					ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
+					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
+					NexusHeader:            testHeader,
+					UserMetadata:           testUserMetadata,
+					SearchAttributes:       testSearchAttributes,
+					Attempt:                1,
+				}, info, protorequire.IgnoreFields("state_transition_count", "state_size_bytes", "operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration"))
+				s.NotEmpty(descResp.GetLongPollToken())
+				s.NotEmpty(info.GetRequestId())
+				s.NotNil(info.GetScheduleTime())
+				s.NotNil(info.GetExpirationTime())
+				s.NotNil(info.GetExecutionDuration())
+				s.NotEmpty(info.GetOperationToken())
+				s.NotNil(info.GetLastAttemptCompleteTime())
+				s.NotZero(info.GetStateSizeBytes())
+			}
 		}
 
 		s.Run("IncludeInput", func(s *NexusStandaloneTestSuite) {
