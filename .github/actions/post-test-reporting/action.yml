@@ -81,6 +81,8 @@ runs:
 
     - name: Get job ID
       id: get_job_id
+      # Artifact upload should not fail the test job when the GitHub jobs API is temporarily unavailable.
+      continue-on-error: true
       uses: ./.github/actions/get-job-id
       with:
         job_name: ${{ inputs.job_name }}
