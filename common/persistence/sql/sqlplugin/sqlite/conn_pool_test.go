@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/testing/await"
 )
 
 func TestConnPool_ClosesIdleDBAfterDelay(t *testing.T) {
@@ -46,11 +47,10 @@ func TestConnPool_CancelsPendingCloseWhenReused(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, db, nextDB)
 
-	time.Sleep(closeDelay * 2)
-	pool.mu.Lock()
-	_, ok := pool.pool[dsn]
-	pool.mu.Unlock()
-	require.True(t, ok)
+	timer := time.NewTimer(closeDelay * 2)
+	defer timer.Stop()
+	<-timer.C
+	requireConnPoolEntryExists(t, pool, dsn)
 
 	pool.Close(cfg)
 	requireConnPoolEntryRemoved(t, pool, dsn)
@@ -81,10 +81,18 @@ func newConnPoolTestDB(
 
 func requireConnPoolEntryRemoved(t *testing.T, pool *connPool, dsn string) {
 	t.Helper()
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		pool.mu.Lock()
 		defer pool.mu.Unlock()
 		_, ok := pool.pool[dsn]
 		return !ok
 	}, time.Second, 10*time.Millisecond)
+}
+
+func requireConnPoolEntryExists(t *testing.T, pool *connPool, dsn string) {
+	t.Helper()
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	_, ok := pool.pool[dsn]
+	require.True(t, ok)
 }
