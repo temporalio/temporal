@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"sync"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
@@ -18,9 +19,15 @@ type connPool struct {
 }
 
 type entry struct {
-	db       *sqlx.DB
-	refCount int
+	db         *sqlx.DB
+	refCount   int
+	closeTimer *time.Timer
 }
+
+// Temporal starts and stops logical SQLite DB handles during startup. Closing
+// the shared database immediately can make the next startup step fail with
+// "db is closed", so real close is delayed and canceled when the DSN is reused.
+const closeDelay = 100 * time.Millisecond
 
 func newConnPool() *connPool {
 	return &connPool{
@@ -45,7 +52,12 @@ func (cp *connPool) Allocate(
 	}
 
 	if entry, ok := cp.pool[dsn]; ok {
+		if entry.closeTimer != nil {
+			entry.closeTimer.Stop()
+			entry.closeTimer = nil
+		}
 		entry.refCount++
+		cp.pool[dsn] = entry
 		return entry.db, nil
 	}
 
@@ -76,11 +88,25 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	}
 
 	e.refCount--
-	// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
-	// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
-	// and "db is closed" error
-	// if e.refCount == 0 {
-	// 	e.db.Close()
-	// 	delete(cp.pool, dsn)
-	// }
+	if e.refCount == 0 {
+		e.closeTimer = time.AfterFunc(closeDelay, func() {
+			cp.closeIdle(dsn, e.db)
+		})
+		cp.pool[dsn] = e
+		return
+	}
+	cp.pool[dsn] = e
+}
+
+func (cp *connPool) closeIdle(dsn string, db *sqlx.DB) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	e, ok := cp.pool[dsn]
+	if !ok || e.db != db || e.refCount != 0 {
+		return
+	}
+
+	_ = e.db.Close()
+	delete(cp.pool, dsn)
 }

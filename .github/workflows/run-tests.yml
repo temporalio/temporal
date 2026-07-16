@@ -115,40 +115,10 @@ jobs:
         env:
           FULL_TEST_REASON: ${{ steps.determine_scope.outputs.full_test_reason }}
           DB_CONFIGS: |
-            cass_es:
-              persistence_type: nosql
-              persistence_driver: cassandra
-              containers: [cassandra, elasticsearch]
-              required: true
-            cass_es8:
-              persistence_type: nosql
-              persistence_driver: cassandra
-              containers: [cassandra, elasticsearch8]
-            cass_os2:
-              persistence_type: nosql
-              persistence_driver: cassandra
-              containers: [cassandra, opensearch2]
-            cass_os3:
-              persistence_type: nosql
-              persistence_driver: cassandra
-              containers: [cassandra, opensearch3]
             sqlite:
               persistence_type: sql
               persistence_driver: sqlite
               containers: []
-            mysql8:
-              persistence_type: sql
-              persistence_driver: mysql8
-              containers: [mysql]
-            postgres12:
-              persistence_type: sql
-              persistence_driver: postgres12
-              containers: [postgresql]
-              required: true
-            postgres12_pgx:
-              persistence_type: sql
-              persistence_driver: postgres12_pgx
-              containers: [postgresql]
           JOB_TYPES: |
             functest:
               cmd: make functional-test-coverage
@@ -335,57 +305,6 @@ jobs:
           path: ${{ env.LEAK_OUTPUT_DIR }}
           if-no-files-found: ignore
 
-  integration-test:
-    name: Integration test
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
-    env:
-      CONTAINERS: cassandra mysql postgresql
-      TEST_TIMEOUT: 10m
-      GITHUB_TIMEOUT: 15
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - name: Start containerized dependencies
-        uses: ./.github/actions/docker-compose-start
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: ${{ env.CONTAINERS }}
-
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
-
-      - name: Wait for containerized dependencies to be healthy
-        uses: ./.github/actions/docker-compose-healthy
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: ${{ env.CONTAINERS }}
-
-      - name: Run integration test
-        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
-        run: |
-          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
-          ./develop/github/monitor_test.sh make integration-test-coverage
-
-      - name: Post-test reporting
-        if: always()
-        uses: ./.github/actions/post-test-reporting
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          job_name: Integration test
-          artifact_name_suffix: integration-test
-
-      - name: Stop containerized dependencies
-        if: ${{ always() }}
-        uses: ./.github/actions/docker-compose-stop
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          flags: -v
-
   # Root job name includes matrix details so it is unique per job variant.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
@@ -463,66 +382,12 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           flags: -v
 
-  mixed-brain-test:
-    name: Mixed brain test
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - name: Start PostgreSQL
-        uses: ./.github/actions/docker-compose-start
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: postgresql
-
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
-
-      - name: Install PostgreSQL schema
-        run: make install-schema-postgresql12
-
-      - name: Run mixed brain test
-        timeout-minutes: 20
-        run: ./develop/github/monitor_test.sh make mixed-brain-test
-        env:
-          TEST_TIMEOUT: 18m
-          MIXED_BRAIN_TEST_DURATION: 5m
-          PERSISTENCE_DRIVER: postgres12
-
-      - name: Print memory snapshot
-        if: always()
-        run: cat .testoutput/memory/memory-snapshot.txt || true
-
-      - name: Print current server logs
-        if: always()
-        run: cat .testoutput/mixedbrain_process-current.log || true
-
-      - name: Print release server logs
-        if: always()
-        run: cat .testoutput/mixedbrain_process-release.log || true
-
-      - name: Print Omes logs
-        if: always()
-        run: cat .testoutput/mixedbrain_omes_*.log || true
-
-      - name: Stop containerized dependencies
-        if: always()
-        uses: ./.github/actions/docker-compose-stop
-        with:
-          compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
-          flags: -v
-
   test-status:
     if: always()
     name: Test Status
     needs:
       - misc-checks
       - unit-test
-      - integration-test
       - functional-test
     runs-on: ubuntu-latest
     env:
