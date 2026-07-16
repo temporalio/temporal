@@ -751,13 +751,7 @@ func (s *Scheduler) ListMatchingTimes(
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(frontendReq.StartTime)
 	for range maxListMatchingTimesCount {
-		res, err := cspec.GetNextTime(s.jitterSeed(), t1)
-		if err != nil {
-			// An over-excluded spec won't resolve until it's edited, so return a
-			// non-retryable code: retrying would just re-burn the compute bound each call.
-			return nil, scheduler.ErrScheduleSpecLimitHit
-		}
-		t1 = res.Next
+		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
 			break
 		}
