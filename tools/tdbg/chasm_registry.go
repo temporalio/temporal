@@ -6,6 +6,7 @@ import (
 	callbacklib "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	"go.temporal.io/server/chasm/lib/tquserdata"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/log"
 )
@@ -34,6 +35,10 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 	}
 
 	if err := registry.Register(callbacklib.NewNilLibrary()); err != nil {
+		return nil, err
+	}
+
+	if err := registry.Register(tquserdata.Library); err != nil {
 		return nil, err
 	}
 
