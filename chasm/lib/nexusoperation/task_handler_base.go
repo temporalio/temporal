@@ -168,34 +168,40 @@ func (b *nexusTaskHandlerBase) setupCallContext(ctx context.Context, timeout tim
 
 // recordCallOutcome records metrics and logs errors for the outcome of an outbound Nexus call.
 func (b *nexusTaskHandlerBase) recordCallOutcome(
-	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
-	endpointName string,
-	methodName string,
 	outcomeTag string,
 	callErr error,
 	callDuration time.Duration,
 	failureSource string,
+	traceCtx invocationTraceContext,
 ) {
-	methodTag := metrics.NexusMethodTag(methodName)
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	methodTag := metrics.NexusMethodTag(traceCtx.operationTag)
+	namespaceTag := metrics.NamespaceTag(traceCtx.namespaceName)
 	var destTag metrics.Tag
 	if endpoint != nil {
 		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	} else {
-		destTag = metrics.DestinationTag(endpointName)
+		destTag = metrics.DestinationTag(traceCtx.endpointName)
 	}
 	outcomeMetricTag := metrics.OutcomeTag(outcomeTag)
 	failureSourceTag := metrics.FailureSourceTag(failureSource)
 	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
 
-	if callErr != nil {
-		_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
-		if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-			b.logger.Debug(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
-		} else {
-			b.logger.Error(fmt.Sprintf("Nexus %s request failed", methodName), tag.Error(callErr))
-		}
+	b.logCallFailure(traceCtx, callErr, failureSource)
+}
+
+// logCallFailure logs a failed outbound Nexus call.
+func (b *nexusTaskHandlerBase) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
+	if callErr == nil {
+		return
+	}
+	tags := append(traceCtx.tags(), tag.Error(callErr))
+	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
+	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+		b.logger.Debug(msg, tags...)
+	} else {
+		b.logger.Error(msg, tags...)
 	}
 }
