@@ -478,7 +478,7 @@ func testBufferOverrunDropsActions(t *testing.T, newContext contextFactory) {
 	var runs atomic.Int32
 	registerGatedWorkflow(s, wt, &runs)
 
-	ctx := newContext(s.Context())
+	ctx := newContext(s.Context()) //nolint:staticcheck // SA1019
 	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
 		Spec:   intervalSpec(fastInterval),
 		Action: startWorkflowAction(s, wid, wt),
