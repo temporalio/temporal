@@ -24,7 +24,7 @@ func runSentinelHandlerTestCase(
 	callFn func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, specBuilder *legacyscheduler.SpecBuilder) error,
 ) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
-	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder := newLegacySpecBuilder(0, 0)
 
 	err := callFn(sentinel, ctx, specBuilder)
 

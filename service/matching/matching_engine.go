@@ -1220,39 +1220,200 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
+		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
+		// fully rolled out. This check is only needed during the transition since the legacy
+		// frontend fan-out path may send non-root partitions to this handler.
+		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+		}
+	}
+	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	if request.WorkerInstanceKey != "" {
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
-	e.removePollerFromHistory(ctx, request)
+	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// cancelOutstandingWorkerPollsForAllPartitions performs flat fan-out from the root partition.
+// It computes all partitions, groups them by destination matching host, processes local
+// partitions directly, and sends one CancelOutstandingWorkerPollsPartition RPC per remote host.
+func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	rootPartition tqid.Partition,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if rootPM == nil {
+		// Root not loaded means no pending polls anywhere — child partitions loading
+		// triggers root to load via user data fetch chain.
+		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
+			tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
+			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		)
+		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
+	}
+	cfg := rootPM.GetConfig()
+	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
+	numPartitions := cfg.NumReadPartitions()
+
+	e.logger.Debug("Initiating fan-out for worker poll cancellation",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
+		tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
+		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		tag.NewInt32("partition-count", int32(numPartitions)),
+	)
+
+	workers := []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+		WorkerInstanceKey: request.GetWorkerInstanceKey(),
+		WorkerIdentity:    request.GetWorkerIdentity(),
+	}}
+
+	// Group partitions by destination host. When Route() is unavailable or fails, each
+	// unroutable partition gets a synthetic key so it's sent as an individual RPC.
+	routingClient, _ := e.matchingRawClient.(matching.RoutingClient) //nolint:revive // unchecked-type-assertion: nil is the desired zero value
+	self := e.hostInfoProvider.HostInfo().Identity()
+	tq := rootPartition.TaskQueue()
+	partitionsByTarget := make(map[string][]*tqid.NormalPartition, numPartitions)
+
+	for i := range numPartitions {
+		partition := tq.NormalPartition(i)
+		target := ""
+		if routingClient != nil {
+			h, err := routingClient.Route(partition)
+			if err != nil {
+				e.logger.Warn("Failed to resolve matching host for poll cancellation, sending individual RPC",
+					tag.NewInt32("partition-id", int32(i)),
+					tag.Error(err))
+			} else {
+				target = h
+			}
+		}
+		if target == "" {
+			target = fmt.Sprintf("_unroutable_%d", i)
+		}
+		partitionsByTarget[target] = append(partitionsByTarget[target], partition)
+	}
+
+	// Process each target: local via direct call, remote via RPC.
+	var totalCancelled atomic.Int32
+	var wg sync.WaitGroup
+
+	for target, partitions := range partitionsByTarget {
+		partitionProtos := make([]*taskqueuespb.TaskQueuePartition, len(partitions))
+		for i, np := range partitions {
+			partitionProtos[i] = &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     np.TaskQueue().Name(),
+				TaskQueueType: np.TaskType(),
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(np.PartitionId())},
+			}
+		}
+		req := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+			NamespaceId:        request.GetNamespaceId(),
+			TaskQueuePartition: partitionProtos[0], // routing key
+			Partitions:         partitionProtos,
+			Workers:            workers,
+		}
+		if target == self {
+			resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				e.logger.Warn("Failed to cancel outstanding worker polls for local partitions",
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+			} else {
+				totalCancelled.Add(resp.GetCancelledCount())
+			}
+			continue
+		}
+		wg.Go(func() {
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				e.logger.Warn("Failed to cancel outstanding worker polls for remote host",
+					tag.NewStringTag("target-host", target),
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+				return
+			}
+			totalCancelled.Add(resp.GetCancelledCount())
+		})
+	}
+
+	wg.Wait()
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{
+		CancelledCount: totalCancelled.Load(),
+	}, nil
+}
+
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the
+// specified partitions. This is a leaf handler — no fan-out. Called by the matching root
+// during flat fan-out to process partitions on a remote host.
+func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	if len(request.GetPartitions()) == 0 || len(request.GetWorkers()) == 0 {
+		return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{}, nil
+	}
+
+	e.logger.Debug("Cancelling worker polls",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(request.GetTaskQueuePartition().GetTaskQueue()),
+		tag.NewInt("worker-count", len(request.GetWorkers())),
+		tag.NewInt("partition-count", len(request.GetPartitions())),
+	)
+
+	// Cancel polls for each worker.
+	var cancelledCount int32
+	for _, worker := range request.GetWorkers() {
+		if worker.GetWorkerInstanceKey() != "" {
+			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
+		}
+		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
+	}
+
+	// Remove each worker from poller history for each partition.
+	for _, partitionProto := range request.GetPartitions() {
+		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
+		for _, worker := range request.GetWorkers() {
+			e.removePollerFromHistory(ctx, partition, worker.GetWorkerIdentity())
+		}
+	}
+
+	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
+		CancelledCount: cancelledCount,
+	}, nil
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so
 // DescribeTaskQueue doesn't show stale pollers after worker shutdown.
 func (e *matchingEngineImpl) removePollerFromHistory(
 	ctx context.Context,
-	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	partition tqid.Partition,
+	workerIdentity string,
 ) {
-	workerIdentity := request.GetWorkerIdentity()
 	if workerIdentity == "" {
 		return
 	}
 
-	taskQueueName := request.GetTaskQueue().GetName()
-	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
-	if err != nil {
-		e.logger.Warn("Invalid task queue for poller history cleanup",
-			tag.WorkflowTaskQueueName(taskQueueName),
-			tag.Error(err))
-		return
-	}
-
+	taskQueueName := partition.RpcName()
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
 	if err != nil {
-		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
-			tag.WorkflowTaskQueueName(taskQueueName),
-			tag.Error(err))
 		return
 	}
 	if pm == nil {
@@ -2605,9 +2766,10 @@ pollLoop:
 		}
 
 		taskToken := &tokenspb.NexusTask{
-			NamespaceId: string(namespaceID),
-			TaskQueue:   taskQueueName,
-			TaskId:      task.nexus.taskID,
+			NamespaceId:   string(namespaceID),
+			TaskQueue:     taskQueueName,
+			TaskId:        task.nexus.taskID,
+			TaskQueueKind: partition.Kind(),
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 

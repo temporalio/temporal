@@ -104,7 +104,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 	}
 }
 
-func (h *invocationTaskHandler) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) (bool, error) {
+func (h *invocationTaskHandler) Validate(ctx chasm.Context, cb *Callback, attrs chasm.TaskInvocation, task *callbackspb.InvocationTask) (bool, error) {
 	return cb.Attempt == task.Attempt && cb.Status == callbackspb.CALLBACK_STATUS_SCHEDULED, nil
 }
 
@@ -175,7 +175,7 @@ func (h *backoffTaskHandler) Execute(
 func (h *backoffTaskHandler) Validate(
 	ctx chasm.Context,
 	callback *Callback,
-	taskAttr chasm.TaskAttributes,
+	taskAttr chasm.TaskInvocation,
 	task *callbackspb.BackoffTask,
 ) (bool, error) {
 	return callback.Status == callbackspb.CALLBACK_STATUS_BACKING_OFF && callback.Attempt == task.Attempt, nil

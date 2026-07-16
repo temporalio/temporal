@@ -86,6 +86,8 @@ var (
 	taskNotReadyReschedulePolicy               = common.CreateTaskNotReadyReschedulePolicy()
 	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
+
+	_ MaybeTerminalTaskError = terminalTaskError{}
 )
 
 const (
@@ -153,6 +155,27 @@ type (
 
 	TaskTypeTagProvider func(t tasks.Task, isActive bool, chasmRegistry *chasm.Registry) string
 )
+
+// terminalTaskError indicates a task hit an unexpected, unrecoverable invariant violation in its
+// own state. It is a generic implementation of a MaybeTerminalTaskError. The task framework treats it as terminal:
+// it records failure/corruption metrics, drops the task, and only sends it to the DLQ if that is enabled for the category.
+type terminalTaskError struct {
+	Message string
+}
+
+// NewTerminalTaskError returns an error that the task framework treats as terminal (non-retryable).
+func NewTerminalTaskError(message string) error {
+	return terminalTaskError{Message: message}
+}
+
+func (e terminalTaskError) Error() string {
+	return e.Message
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (terminalTaskError) IsTerminalTaskError() bool {
+	return true
+}
 
 func NewExecutable(
 	readerID int64,

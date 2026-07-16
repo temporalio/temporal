@@ -2358,11 +2358,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Task in tree but component says invalid (e.g. code-deployment) — still retry.
+	// Task in tree but component says invalid (e.g. code-deployment) — drop the physical task.
 	expectValidate(true, false, nil)
 	resp = timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NotNil(resp)
-	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	// Task not in tree — replication removed it, drop the physical task.
 	expectValidate(false, false, nil)
@@ -2501,8 +2501,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 				FastForward: durationpb.New(time.Hour),
 			},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
-				TargetTime:    timestamppb.New(s.now.Add(time.Hour)),
-				SourceEventId: 1,
+				TargetTime:                    timestamppb.New(s.now.Add(time.Hour)),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 			},
 		}
 		return pms, workflowKey
@@ -2515,7 +2515,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2535,7 +2535,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now.Add(time.Hour),
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)
@@ -2552,7 +2552,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
-			EventID:             1,
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: s.version, TransitionCount: 1},
 		}
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 			Return(&persistence.GetWorkflowExecutionResponse{State: pms}, nil)

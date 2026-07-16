@@ -3,6 +3,7 @@ package temporal
 import (
 	"net/http"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -239,5 +240,16 @@ func WithCustomMetricsHandler(provider metrics.Handler) ServerOption {
 func WithTestHooks(testHooks testhooks.TestHooks) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.testHooks = &testHooks
+	})
+}
+
+// WithCustomEventLoggerProvider sets a custom OTEL LoggerProvider used to emit structured
+// ("wide") events. Each service builds an events.Handler from it (see events.NewHandler). When
+// unset, events are discarded via a no-op provider.
+//
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithCustomEventLoggerProvider(loggerProvider otellog.LoggerProvider) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.eventLoggerProvider = loggerProvider
 	})
 }

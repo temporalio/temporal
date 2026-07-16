@@ -499,6 +499,49 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
 	s.Equal(task2, res.task, "key2 task should dispatch; key1 is rate-limited")
 }
 
+// TestPerKeyRateLimitRecycleWakesBlockedMatch verifies that recycling a per-fairness-key
+// rate-limit token immediately wakes a match that was blocked on that key's rate limit.
+func (s *MatcherDataSuite) TestPerKeyRateLimitRecycleWakesBlockedMatch() {
+	// Set per-key limit low (1 RPS, no burst) so consuming one token for a key puts its
+	// next allowed dispatch a full second into the future.
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
+
+	key1 := &commonpb.Priority{PriorityKey: 1, FairnessKey: "key1"}
+
+	// Dispatch one key1 task to consume the key's token. Don't finish it yet.
+	task1a := s.newBacklogTaskWithPriority(1, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
+	res := s.pollFakeTime(time.Second)
+	s.Require().Equal(task1a, res.task)
+
+	// Enqueue a second key1 task. key1 is now rate-limited, so it cannot match yet.
+	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1b))
+
+	// Start a poller in the background. It finds task1b but is blocked by key1's rate
+	// limit (a rate-limit timer is set), so it parks without matching. Use no contexts
+	// so it blocks indefinitely.
+	ch := make(chan *matchResult, 1)
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		ch <- s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Finish task1a with consumedToken=false, which recycles the key1 token and should unblock task1b.
+	res.task.finish(taskFinishResult{consumedToken: false})
+
+	// The parked poller should now match task1b without any fake-time advancement.
+	select {
+	case pres := <-ch:
+		s.Require().NoError(pres.ctxErr)
+		s.Equal(task1b, pres.task, "recycled token should immediately dispatch the blocked key1 task")
+	case <-time.After(time.Second):
+		s.FailNow("recycling the per-key token did not wake the blocked match")
+	}
+}
+
 func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
