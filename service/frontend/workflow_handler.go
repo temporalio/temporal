@@ -607,12 +607,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errRequestNotSet
 	}
 
-	// Exhaustive, typed pre-validation; every field is classified in
-	// startWorkflowRequestValidator, so new proto fields force a decision there.
-	if err := startWorkflowRequestValidator.ValidateAndNormalize(request); err != nil {
-		return nil, err
-	}
-
 	// Apply defaults before validation; must be first for idempotency on internal retries.
 	enums.SetDefaultWorkflowIDPolicies(
 		&request.WorkflowIdReusePolicy,
@@ -620,50 +614,17 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	)
 
-	if err := wh.validator.ValidateWorkflowID(request.GetWorkflowId()); err != nil {
+	// Exhaustive, typed validation and in-place normalization; every field is
+	// classified in the validator, so new proto fields force a decision there.
+	if err := wh.newStartWorkflowRequestValidator(ctx).ValidateAndNormalize(request); err != nil {
 		return nil, err
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validator.ValidateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validator.ValidateWorkflowStartDelay(request.GetCronSchedule(), request.WorkflowStartDelay); err != nil {
-		return nil, err
-	}
-
-	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
-		return nil, err
-	}
-
-	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
-		return nil, errWorkflowTypeNotSet
-	}
-
-	if len(request.WorkflowType.GetName()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWorkflowTypeTooLong
-	}
-
-	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
-		return nil, err
-	}
-
+	// The following steps are order-sensitive and stay in the handler: timeouts
+	// must be validated after retry-policy defaulting; search-attribute
+	// unaliasing must precede time-skipping validation and clones the request on
+	// change (non-idempotent), which the in-place validator cannot express.
 	if err := wh.validator.ValidateWorkflowTimeouts(request); err != nil {
-		return nil, err
-	}
-
-	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validator.ValidateWorkflowIDReusePolicy(
-		request.WorkflowIdReusePolicy,
-		request.WorkflowIdConflictPolicy); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateOnConflictOptions(request.OnConflictOptions); err != nil {
 		return nil, err
 	}
 
@@ -672,36 +633,14 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 	if sa != request.SearchAttributes {
-		// Since unaliasedSearchAttributesFrom is not idempotent, we need to clone the request so that
-		// in case of retries, the field is set to the original value.
 		request = common.CloneProto(request)
 		request.SearchAttributes = sa
 	}
 
-	if err := priorities.Validate(request.Priority); err != nil {
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 
-	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
-			return nil, err
-		}
-	}
-
-	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
-
-	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
-	allLinks = append(allLinks, request.GetLinks()...)
-	for _, cb := range request.GetCompletionCallbacks() {
-		allLinks = append(allLinks, cb.GetLinks()...)
-	}
-	if err := commonlinks.Validate(allLinks, wh.config.MaxLinksPerRequest(namespaceName.String()), wh.config.LinkMaxSize(namespaceName.String())); err != nil {
-		return nil, err
-	}
-
-	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
-		return nil, err
-	}
 	return request, nil
 }
 
