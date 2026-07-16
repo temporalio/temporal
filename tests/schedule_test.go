@@ -326,19 +326,19 @@ func TestScheduleV1Suite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleV1Suite{})
 }
 
-func (s *ScheduleCHASMSuite) TestScheduledWorkflowDoubleResetHSMCallbacks() {
+func (s *ScheduleCHASMSuite) TestDoubleReset_HSMCallbacks() {
 	s.scheduledWorkflowDoubleReset(false)
 }
 
-func (s *ScheduleCHASMSuite) TestScheduledWorkflowDoubleResetCHASMCallbacks() {
+func (s *ScheduleCHASMSuite) TestDoubleReset_ChasmCallbacks() {
 	s.scheduledWorkflowDoubleReset(true)
 }
 
-func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallbackHSMCallbacks() {
+func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallback_HSMCallbacks() {
 	s.resetWithAdditionalCallback(false)
 }
 
-func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallbackCHASMCallbacks() {
+func (s *ScheduleCHASMSuite) TestResetWithAdditionalCallback_ChasmCallbacks() {
 	s.resetWithAdditionalCallback(true)
 }
 
