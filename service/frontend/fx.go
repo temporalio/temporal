@@ -14,6 +14,7 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	"go.temporal.io/server/chasm/lib/tquserdata"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -134,6 +135,7 @@ var Module = fx.Options(
 	chasmscheduler.Module,
 	chasmworkflow.Module,
 	callback.Module,
+	tquserdata.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
