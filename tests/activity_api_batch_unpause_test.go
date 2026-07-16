@@ -85,7 +85,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(env *testcore.Te
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -201,7 +201,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_MatchAll() {
 	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
-	ctx := s.Context()
+	ctx := env.Context()
 
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-unpause-match-all-workflow")

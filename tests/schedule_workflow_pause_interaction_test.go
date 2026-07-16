@@ -140,17 +140,17 @@ func setupPausedScheduledWorkflow(
 	policy enumspb.ScheduleOverlapPolicy,
 	register func(s *testcore.TestEnv, wt string),
 ) *scheduledPauseFixture {
-	env := newScheduleEnv(t, false, pauseInteractionOpts(t)...)
+	s := newScheduleEnv(t, false, pauseInteractionOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-pause-" + policy.String())
 	wid := testcore.RandomizeStr("sched-pause-wf-" + policy.String())
 	wt := testcore.RandomizeStr("sched-pause-wt-" + policy.String())
 
-	register(env, wt)
+	register(s, wt)
 
-	ctx := newContext(env.Context())
-	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  env.Namespace().String(),
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -163,7 +163,7 @@ func setupPausedScheduledWorkflow(
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 						WorkflowId:   wid,
 						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					},
 				},
 			},
@@ -180,8 +180,8 @@ func setupPausedScheduledWorkflow(
 	// populated for every overlap policy (including ALLOW_ALL).
 	var execution *commonpb.WorkflowExecution
 	await.RequireTruef(t, func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  env.Namespace().String(),
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
 		if descErr != nil {
@@ -197,8 +197,8 @@ func setupPausedScheduledWorkflow(
 	}, scheduleStartWait, scheduleStartPoll, "schedule should start its first workflow")
 
 	// Pause that workflow.
-	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
-		Namespace:  env.Namespace().String(),
+	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
 		WorkflowId: execution.GetWorkflowId(),
 		RunId:      execution.GetRunId(),
 		Identity:   "functional-test",
@@ -209,18 +209,18 @@ func setupPausedScheduledWorkflow(
 
 	// Confirm the workflow reaches PAUSED.
 	await.RequireTrue(t, func() bool {
-		d, dErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
+		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
 			Execution: execution,
 		})
 		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
 	}, workflowStatusWait, workflowStatusPoll)
 
-	actionsAtPause, err := scheduleActionCount(ctx, env, sid)
+	actionsAtPause, err := scheduleActionCount(ctx, s, sid)
 	require.NoError(t, err)
 
 	return &scheduledPauseFixture{
-		s:              env,
+		s:              s,
 		ctx:            ctx,
 		sid:            sid,
 		wid:            wid,
@@ -330,17 +330,17 @@ func setupPausedTriggeredWorkflow(
 	register func(s *testcore.TestEnv, wt string),
 	afterStart func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution),
 ) *scheduledPauseFixture {
-	env := newScheduleEnv(t, false, opts...)
+	s := newScheduleEnv(t, false, opts...)
 
 	sid := testcore.RandomizeStr(idPrefix)
 	wid := testcore.RandomizeStr(idPrefix + "-wf")
 	wt := testcore.RandomizeStr(idPrefix + "-wt")
 
-	register(env, wt)
+	register(s, wt)
 
-	ctx := newContext(env.Context())
-	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  env.Namespace().String(),
+	ctx := newContext(s.Context())
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 		Schedule: &schedulepb.Schedule{
 			// Long interval + trigger-immediately so exactly one run starts.
@@ -354,7 +354,7 @@ func setupPausedTriggeredWorkflow(
 					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
 						WorkflowId:   wid,
 						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					},
 				},
 			},
@@ -373,8 +373,8 @@ func setupPausedTriggeredWorkflow(
 	// Wait for the first run to start.
 	var firstRun *commonpb.WorkflowExecution
 	await.RequireTruef(t, func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-			Namespace:  env.Namespace().String(),
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
 		if descErr != nil {
@@ -390,12 +390,12 @@ func setupPausedTriggeredWorkflow(
 	}, scheduleStartWait, scheduleStartPoll, "schedule should start its first workflow")
 
 	if afterStart != nil {
-		afterStart(env, firstRun)
+		afterStart(s, firstRun)
 	}
 
 	// Pause the first run.
-	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
-		Namespace:  env.Namespace().String(),
+	_, err = s.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  s.Namespace().String(),
 		WorkflowId: firstRun.GetWorkflowId(),
 		RunId:      firstRun.GetRunId(),
 		Identity:   "functional-test",
@@ -404,15 +404,15 @@ func setupPausedTriggeredWorkflow(
 	})
 	require.NoError(t, err)
 	await.RequireTrue(t, func() bool {
-		d, dErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
+		d, dErr := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
 			Execution: firstRun,
 		})
 		return dErr == nil && d.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
 	}, workflowStatusWait, workflowStatusPoll)
 
 	return &scheduledPauseFixture{
-		s:         env,
+		s:         s,
 		ctx:       ctx,
 		sid:       sid,
 		wid:       wid,

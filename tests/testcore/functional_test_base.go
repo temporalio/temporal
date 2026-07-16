@@ -661,8 +661,6 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 }
 
 // Context returns a context with RPC headers for use in this test.
-//
-// Deprecated: use the suite's Context method instead.
 func (s *FunctionalTestBase) Context() context.Context {
 	return NewContext()
 }

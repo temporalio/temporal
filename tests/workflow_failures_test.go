@@ -34,8 +34,8 @@ func TestWorkflowFailuresTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &WorkflowFailuresSuite{})
 }
 
-func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
-	env := testcore.NewEnv(s.T())
+func (suite *WorkflowFailuresSuite) TestWorkflowTimeout() {
+	s := testcore.NewEnv(suite.T())
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -45,7 +45,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -55,24 +55,24 @@ func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	time.Sleep(time.Second) //nolint:forbidigo
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for range 10 {
-		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
 
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-			env.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
+			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 			continue GetHistoryLoop
 		}
@@ -92,8 +92,8 @@ GetHistoryLoop:
 	closedCount := 0
 ListClosedLoop:
 	for range 10 {
-		resp, err3 := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       env.Namespace().String(),
+		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -103,7 +103,7 @@ ListClosedLoop:
 		s.NoError(err3)
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
-			env.Logger.Info("Closed WorkflowExecution is not yet visibile")
+			s.Logger.Info("Closed WorkflowExecution is not yet visibile")
 			time.Sleep(1000 * time.Millisecond) //nolint:forbidigo
 			continue ListClosedLoop
 		}
@@ -112,8 +112,8 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
-	env := testcore.NewEnv(s.T())
+func (suite *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -123,7 +123,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -133,9 +133,9 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 		Identity:            identity,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
-	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -165,9 +165,9 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalC", nil, identity))
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalD", nil, identity))
-			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalE", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalC", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalD", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 
@@ -197,7 +197,7 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 
 		workflowComplete = true
 		time.Sleep(time.Second) //nolint:forbidigo
-		env.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
+		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
 			len(task.History.Events)))
 		lastWorkflowTaskEvent := task.History.Events[task.StartedEventId-1]
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
@@ -217,24 +217,24 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              env.FrontendClient(),
-		Namespace:           env.Namespace().String(),
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              env.Logger,
+		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
 	// Make first workflow task to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask()
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// process activity
 	err = poller.PollAndProcessActivityTask(false)
-	env.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
 	// fail workflow task 5 times
@@ -243,17 +243,17 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 		s.NoError(err)
 	}
 
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalA", nil, identity)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
 	_, err = poller.PollAndProcessWorkflowTask()
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger workflow task
-	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalB", nil, identity)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail workflow task 2 more times
@@ -278,12 +278,12 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 
 	// Make complete workflow workflow task
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithExpectedAttemptCount(3))
-	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := env.GetHistory(env.Namespace().String(), workflowExecution)
+	events := s.GetHistory(s.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -320,8 +320,8 @@ func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
-func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
-	env := testcore.NewEnv(s.T())
+func (suite *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
+	s := testcore.NewEnv(suite.T())
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
@@ -329,7 +329,7 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
-		Namespace:          env.Namespace().String(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -338,7 +338,7 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 		Identity:           identity,
 	}
 
-	we0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.NotNil(we0)
 
@@ -357,13 +357,13 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              env.FrontendClient(),
-		Namespace:           env.Namespace().String(),
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              env.Logger,
+		Logger:              s.Logger,
 		T:                   s.T(),
 	}
 
@@ -372,7 +372,7 @@ func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfIn
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

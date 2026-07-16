@@ -204,7 +204,7 @@ func (s *NexusWorkflowUpdateTestSuite) newSimpleCallerWF(endpointName, childWfID
 // awaitUpdateAccepted polls the workflow history until a WorkflowExecutionUpdateAccepted
 // event is found, failing the test if it does not appear within 10 seconds.
 func (s *NexusWorkflowUpdateTestSuite) awaitUpdateAccepted(ctx context.Context, env *NexusTestEnv, workflowID, runID string) {
-	await.Require(s.Context(), s.T(), func(t *await.T) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -562,7 +562,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 	}()
 
 	// Wait until the update is accepted by checking DescribeWorkflowExecution.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetCallbacks(), "callbacks should be present")
@@ -823,7 +823,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 
 	// The update is reapplied and completes again in the new run.
 	// Wait for the update to complete in the new run before sending the second operation.
-	await.Require(s.Context(), s.T(), func(t *await.T) {
+	await.Require(env.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()

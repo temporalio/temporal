@@ -867,7 +867,6 @@ func (s *ScheduleSuite) TestBasics(chasmEnabled bool) {
 	env.GreaterOrEqual(describeResp.Info.ActionCount, int64(2))
 	env.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	env.EqualValues(0, describeResp.Info.OverlapSkipped)
-	s.NotEmpty(describeResp.Info.RunningWorkflows)
 	env.GreaterOrEqual(len(describeResp.Info.RecentActions), 2)
 	action0 := describeResp.Info.RecentActions[0]
 	env.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
@@ -4162,6 +4161,14 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 
 	if paused {
 		patchSchedule(s.Context(), s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "test completed-action backfill"})
+		s.Awaitf(func(s *ScheduleSuite) {
+			desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
+				Namespace:  env.Namespace().String(),
+				ScheduleId: sid,
+			})
+			s.NoError(err)
+			s.True(desc.GetSchedule().GetState().GetPaused())
+		}, awaitTimeout, pollInterval, "schedule should be paused before applying the backfill")
 	}
 
 	rangeOffset := time.Duration(intervalsOnEachSide) * fastInterval

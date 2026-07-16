@@ -7038,7 +7038,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	ctx, cancel := context.WithTimeout(s.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
 	defer cancel()
 
 	tv1 := env.Tv().WithBuildIDNumber(1)

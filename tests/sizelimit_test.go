@@ -265,8 +265,8 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 			select {
 			case <-sigSendDoneChan:
-			case <-s.Context().Done():
-				return nil, s.Context().Err()
+			case <-env.Context().Done():
+				return nil, env.Context().Err()
 			}
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
@@ -287,7 +287,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	select {
 	case <-sigReadyToSendChan:
-	case <-s.Context().Done():
+	case <-env.Context().Done():
 		s.FailNow("timed out waiting for workflow task handler to be ready")
 	}
 

@@ -150,7 +150,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverter() {
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx := s.Context()
+	ctx := env.Context()
 	env.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
 	env.SdkWorker().RegisterActivity(testActivity)
 	we, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
@@ -185,7 +185,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverterFailed() {
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx := s.Context()
+	ctx := env.Context()
 
 	env.SdkWorker().RegisterWorkflow(testDataConverterWorkflow)
 	env.SdkWorker().RegisterActivity(testActivity)
@@ -234,7 +234,7 @@ func (s *ClientDataConverterSuite) TestClientDataConverterWithChild() {
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx := s.Context()
+	ctx := env.Context()
 	env.SdkWorker().RegisterWorkflow(testParentWorkflow)
 	env.SdkWorker().RegisterWorkflow(testChildWorkflow)
 
