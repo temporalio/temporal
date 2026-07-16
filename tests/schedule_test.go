@@ -1902,7 +1902,7 @@ func (s *ScheduleSuite) TestListSchedulesFilterAndEntryFields(chasmEnabled bool)
 	}, 15*time.Second, 1*time.Second)
 }
 
-func (s *ScheduleSuite) TestListSchedulesFilterByScheduleID(chasmEnabled bool) {
+func (s *ScheduleSuite) TestListSchedulesFilterByScheduleId(chasmEnabled bool) {
 	env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 
 	sid1 := "sched-filter-by-id-alpha"
@@ -2031,7 +2031,7 @@ func (s *ScheduleSuite) TestListSchedulesFilterByScheduleID(chasmEnabled bool) {
 	}
 }
 
-func (s *ScheduleSuite) TestScheduleInternalTaskQueue(chasmEnabled bool) {
+func (s *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
 	env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 	errorMessageKeyword := "internal per-namespace task queue"
 
@@ -3723,7 +3723,7 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemoOnly() {
 	s.NotNil(describeResp.Schedule.Action, "schedule action should be preserved")
 }
 
-func (s *ScheduleSuite) TestCHASMUnpauseResumesProcessing(chasmEnabled bool) {
+func (s *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
 	env := newScheduleEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 
 	sid := "sched-test-unpause-resumes"
