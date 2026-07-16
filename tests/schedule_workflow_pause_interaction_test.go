@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -148,7 +149,7 @@ func setupPausedScheduledWorkflow(
 
 	register(env, wt)
 
-	ctx := newContext(env.Context())
+	ctx := newContext(testcontext.For(t))
 	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
@@ -338,7 +339,7 @@ func setupPausedTriggeredWorkflow(
 
 	register(env, wt)
 
-	ctx := newContext(env.Context())
+	ctx := newContext(testcontext.For(t))
 	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
