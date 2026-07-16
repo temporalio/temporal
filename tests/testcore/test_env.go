@@ -53,6 +53,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	// Deprecated: use the suite's Context() method instead.
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
@@ -445,6 +446,8 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
+//
+// Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
 	return e.ctx
 }
