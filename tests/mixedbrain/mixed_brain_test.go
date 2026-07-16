@@ -133,7 +133,7 @@ func TestMixedBrain(t *testing.T) {
 	// server lets omes exercise the StartNexusOperationExecution RPC; requests
 	// that the proxy routes to the release server come back with Unimplemented,
 	// which the omes scenario tolerates as a no-op.
-	currentDC := map[string]any{
+	dc := map[string]any{
 		"nexusoperation.enableStandalone": true,
 	}
 
@@ -142,7 +142,7 @@ func TestMixedBrain(t *testing.T) {
 		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
 			SourceDir:           sourceRoot(),
 			Persistence:         persistence,
-			DynamicConfigValues: currentDC,
+			DynamicConfigValues: dc,
 		})
 
 		var err error
@@ -168,6 +168,7 @@ func TestMixedBrain(t *testing.T) {
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
+			DynamicConfigValues: dc,
 		})
 	})
 	if t.Failed() {
