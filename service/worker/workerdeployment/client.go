@@ -740,12 +740,13 @@ func (d *ClientImpl) ListWorkerDeployments(
 		return nil, nil, err
 	}
 
-	return d.workerDeploymentSummariesFromVisibilityPage(namespaceEntry.Name(), persistenceResp.Executions), persistenceResp.NextPageToken, nil
+	return d.collapseDuplicateDeploymentSummaries(namespaceEntry.Name(), persistenceResp.Executions), persistenceResp.NextPageToken, nil
 }
 
-// workerDeploymentSummariesFromVisibilityPage collapses overlapping Visibility records for the
-// same deployment within one fetched page. Pagination state remains owned by Visibility.
-func (d *ClientImpl) workerDeploymentSummariesFromVisibilityPage(
+// collapseDuplicateDeploymentSummaries builds the per-deployment summaries for one fetched
+// Visibility page, collapsing overlapping records for the same deployment. Pagination state
+// remains owned by Visibility.
+func (d *ClientImpl) collapseDuplicateDeploymentSummaries(
 	namespaceName namespace.Name,
 	executions []*workflowpb.WorkflowExecutionInfo,
 ) []*deploymentspb.WorkerDeploymentSummary {
@@ -755,7 +756,7 @@ func (d *ClientImpl) workerDeploymentSummariesFromVisibilityPage(
 	}
 
 	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(executions))
-	summaryByDeploymentName := make(map[string]indexedSummary, len(executions))
+	summaryByDeploymentName := make(map[string]*indexedSummary, len(executions))
 	for _, ex := range executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
@@ -784,18 +785,27 @@ func (d *ClientImpl) workerDeploymentSummariesFromVisibilityPage(
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
 		}
 
+		// A single deployment can have more than one RUNNING Visibility record at once: creating a
+		// deployment immediately continues-as-new (and delete+recreate starts a fresh run), and
+		// Visibility is eventually consistent, so the successor run can become visible before the
+		// predecessor's close update lands. We collapse those into one summary, keeping the newest
+		// run. We key on the deployment name (stable across runs) and tiebreak on the raw execution
+		// start time
 		deploymentName := workerDeploymentInfo.GetDeploymentName()
 		startTime := ex.GetStartTime().AsTime()
 		if existing, ok := summaryByDeploymentName[deploymentName]; ok {
+			// Already seen this deployment on this page. Keep whichever run started later, but leave
+			// it in its original slot so the page's first-occurrence ordering is preserved.
 			if startTime.After(existing.startTime) {
 				workerDeploymentSummaries[existing.index] = summary
 				existing.startTime = startTime
-				summaryByDeploymentName[deploymentName] = existing
 			}
 			continue
 		}
 
-		summaryByDeploymentName[deploymentName] = indexedSummary{
+		// First time we've seen this deployment: remember the slot it's about to occupy (the current
+		// length is the index the append lands on) so a later, newer run can overwrite it in place.
+		summaryByDeploymentName[deploymentName] = &indexedSummary{
 			index:     len(workerDeploymentSummaries),
 			startTime: startTime,
 		}

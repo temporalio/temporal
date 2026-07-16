@@ -132,13 +132,16 @@ func TestDeploymentWorkflowClientSuite(t *testing.T) {
 	suite.Run(t, d)
 }
 
-func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesContinueAsNewExecutionsWithinVisibilityPage() {
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeployments_CollapsesDuplicateRunsWithinPage_NewestRunHasNoMemoYet() {
 	createTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
 	oldRunStartTime := createTime
 	newRunStartTime := createTime.Add(time.Second)
 	requestPageToken := []byte("request-page-token")
 	nextPageToken := []byte("next-page-token")
 	newExecution := d.newWorkerDeploymentVisibilityExecution(testDeployment, "new-run", newRunStartTime, createTime, "new-version")
+	// The newest run is a freshly started execution that hasn't upserted its memo yet, so it
+	// surfaces via the memo-nil fallback. Dedup still keeps it (newest start wins), and its summary
+	// is the synthesized Unversioned placeholder, which is the correct transient state.
 	newExecution.Memo = nil
 
 	d.VisibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
@@ -163,11 +166,12 @@ func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesCon
 	d.Require().Len(summaries, 1)
 	d.Equal(testDeployment, summaries[0].GetName())
 	d.Equal(newRunStartTime, summaries[0].GetCreateTime().AsTime())
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	d.Equal(worker_versioning.UnversionedVersionId, summaries[0].GetRoutingConfig().GetCurrentVersion())
 	d.Equal(nextPageToken, actualNextPageToken)
 }
 
-func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesRecreatedDeploymentExecutionsWithinVisibilityPage() {
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeployments_KeepsNewestRunAndPreservesOrderWithinPage() {
 	oldCreateTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
 	newCreateTime := oldCreateTime.Add(time.Hour)
 	otherDeployment := testDeployment + "-other"
@@ -194,11 +198,12 @@ func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicatesRec
 	d.Require().Len(summaries, 2)
 	d.Equal(testDeployment, summaries[0].GetName())
 	d.Equal(newCreateTime, summaries[0].GetCreateTime().AsTime())
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	d.Equal("new-version", summaries[0].GetRoutingConfig().GetCurrentVersion())
 	d.Equal(otherDeployment, summaries[1].GetName())
 }
 
-func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicationDoesNotSpanVisibilityPages() {
+func (d *deploymentWorkflowClientSuite) TestListWorkerDeployments_DoesNotCollapseDuplicatesAcrossPages() {
 	createTime := time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)
 	nextPageToken := []byte("next-page-token")
 
@@ -236,6 +241,7 @@ func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicationDo
 	firstPage, actualNextPageToken, err := d.deploymentClient.ListWorkerDeployments(context.Background(), d.ns, 1, nil)
 	d.Require().NoError(err)
 	d.Require().Len(firstPage, 1)
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	d.Equal("new-version", firstPage[0].GetRoutingConfig().GetCurrentVersion())
 	d.Equal(nextPageToken, actualNextPageToken)
 
@@ -243,6 +249,7 @@ func (d *deploymentWorkflowClientSuite) TestListWorkerDeploymentsDeduplicationDo
 	d.Require().NoError(err)
 	d.Require().Len(secondPage, 1)
 	d.Equal(testDeployment, secondPage[0].GetName())
+	//nolint:staticcheck // SA1019: worker versioning v0.31
 	d.Equal("old-version", secondPage[0].GetRoutingConfig().GetCurrentVersion())
 	d.Empty(actualNextPageToken)
 }
