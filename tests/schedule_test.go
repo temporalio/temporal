@@ -556,7 +556,11 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 		}
 		s.NotNil(first)
 		s.NotNil(deferred)
-		s.Equal(fastInterval, deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()))
+		s.Equal(
+			fastInterval,
+			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()),
+			"deferred fire must be the start buffered one interval after the first tick, not a later fresh action",
+		)
 	}, awaitTimeout, pollInterval)
 }
 
