@@ -13,9 +13,11 @@ import (
 
 // pollBacklogWeightFloor is added to each partition's backlog size when weighting polls. It
 // compensates for the incoming task rate: a partition reading near-zero backlog right now is
-// still receiving fresh task adds, so we keep some poller presence there rather than weighting it
-// to nearly nothing. Could be made adaptive to the actual add rate later. (Blueprint: weight by
-// size+100.)
+// still receiving fresh task adds, so we keep some poller presence there.
+//
+// Note: Does not account for the fact that task adds are themselves unevenly distributed based
+// on backlog count. However, doing that accounting would inevitably have some delay, so adding
+// a constant to all partitions regardless of actual add rate might actually perform better.
 const pollBacklogWeightFloor = 100
 
 type (
