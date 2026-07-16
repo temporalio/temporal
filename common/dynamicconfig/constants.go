@@ -1512,6 +1512,19 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
+		"matching.enablePollerScalingDecisionMetrics",
+		false,
+		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
+metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
+scoped by namespace and/or task queue.`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),
@@ -3426,6 +3439,20 @@ The configured value will be divided by the number of worker hosts to get the pe
 		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
+	)
+	SchedulerSpecMaxIterations = NewGlobalIntSetting(
+		"scheduler.specMaxIterations",
+		2*7*24*60*60,
+		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
+scheduler evaluates while searching for a schedule's next action time before giving up with an
+error and stopping the schedule.`,
+	)
+	SchedulerSpecWarnIterations = NewGlobalIntSetting(
+		"scheduler.specWarnIterations",
+		24*60*60,
+		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
+while searching for a schedule's next action time before emitting a warning (metric + log). It
+is non-fatal: the search continues past this threshold.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

@@ -184,16 +184,25 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	removedStarts := 0
 	retriedStarts := 0
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		removedStarts++
-		return failed[start.RequestId]
+		failed := failed[start.RequestId]
+		if failed {
+			removedStarts++
+		}
+		return failed
 	})
 	i.CancelWorkflows = slices.DeleteFunc(i.GetCancelWorkflows(), func(we *commonpb.WorkflowExecution) bool {
-		removedStarts++
-		return canceled[we.RunId]
+		canceled := canceled[we.RunId]
+		if canceled {
+			removedStarts++
+		}
+		return canceled
 	})
 	i.TerminateWorkflows = slices.DeleteFunc(i.GetTerminateWorkflows(), func(we *commonpb.WorkflowExecution) bool {
-		removedStarts++
-		return terminated[we.RunId]
+		terminated := terminated[we.RunId]
+		if terminated {
+			removedStarts++
+		}
+		return terminated
 	})
 
 	// Update BufferedStarts with results, dropping duplicates.
@@ -364,17 +373,6 @@ func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 			start.GetRunId() == "" &&
 			!start.GetBackoffTime().AsTime().After(lastProcessed)
 	})
-}
-
-// isWorkflowStarted returns true if a workflow with the given ID has already
-// been started (has a RunId set).
-func (i *Invoker) isWorkflowStarted(workflowID string) bool {
-	for _, start := range i.GetBufferedStarts() {
-		if start.GetWorkflowId() == workflowID && start.GetRunId() != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // runningWorkflowExecutions returns the list of workflow executions that

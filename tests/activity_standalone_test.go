@@ -5679,6 +5679,66 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			"expected timeout type=Heartbeat but is %s", pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 
+	t.Run("HeartbeatDetailsSurfacedOnTimeout", func(t *testing.T) {
+		// Start activity (no retries), worker accepts task and records a heartbeat with details,
+		// then stops heartbeating so the heartbeat timeout fires.
+		// Verify: the timeout failure surfaces the last reported heartbeat details, matching the
+		// workflow-embedded activity behavior.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			HeartbeatTimeout:    durationpb.New(1 * time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1, // No retries
+			},
+		})
+		require.NoError(t, err)
+
+		// Worker accepts task (starts the activity)
+		pollTaskResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		// Worker records a heartbeat with details, then stops heartbeating.
+		heartbeatDetails := payloads.EncodeString("progress before timeout")
+		_, err = env.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Long poll for completion (heartbeat timeout will fire)
+		pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		timeoutFailureInfo := pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo()
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutFailureInfo.GetTimeoutType(),
+			"expected timeout type=Heartbeat but is %s", timeoutFailureInfo.GetTimeoutType())
+		protorequire.ProtoEqual(t, heartbeatDetails, timeoutFailureInfo.GetLastHeartbeatDetails())
+
+		// The details are also surfaced via DescribeActivityExecution.
+		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, heartbeatDetails, desc.GetInfo().GetHeartbeatDetails())
+	})
+
 	t.Run("ActivityRetriesOnHeartbeatTimeout", func(t *testing.T) {
 		// Start activity (with retries), worker accepts task, time passes beyond
 		// heartbeat timeout, worker never heartbeats.
