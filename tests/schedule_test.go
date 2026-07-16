@@ -132,14 +132,10 @@ func newScheduleEnv(t *testing.T, opts ...testcore.TestOption) *testcore.TestEnv
 
 type chasmScheduleContextKey struct{}
 
-func attachScheduleContext(t *testing.T, chasmEnabled bool) {
+func newScheduleSuiteEnv(t *testing.T, chasmEnabled bool, opts ...testcore.TestOption) *testcore.TestEnv {
 	if chasmEnabled {
 		testcontext.AttachDecorator(t, chasmScheduleContextKey{}, chasmContextFactory)
 	}
-}
-
-func newScheduleSuiteEnv(t *testing.T, chasmEnabled bool, opts ...testcore.TestOption) *testcore.TestEnv {
-	attachScheduleContext(t, chasmEnabled)
 	return newScheduleEnv(t, opts...)
 }
 
@@ -445,13 +441,13 @@ func (s *ScheduleCHASMSuite) TestRecentActionsAdvanceWhilePaused() {
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
 	runningRunID := running.Info.RecentActions[0].GetStartWorkflowResult().GetRunId()
-	require.NotEmpty(s.T(), runningRunID)
+	s.NotEmpty(runningRunID)
 
 	// Pause, then release the run: its COMPLETED status must surface while paused.
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pausing for the test"})
 
 	signaled := completeRunningWorkflows(ctx, s.T(), env, sid)
-	require.Equal(s.T(), 1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
+	s.Equal(1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
 
 	// While paused, the listed RecentActions entry transitions to COMPLETED.
 	getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, func(ent *schedulepb.ScheduleListEntry) bool {
@@ -463,7 +459,7 @@ func (s *ScheduleCHASMSuite) TestRecentActionsAdvanceWhilePaused() {
 		}
 		return false
 	})
-	require.Equal(s.T(), int32(1), runs.Load(), "exactly one run should have fired (SKIP overlap, then paused)")
+	s.Equal(int32(1), runs.Load(), "exactly one run should have fired (SKIP overlap, then paused)")
 }
 
 // testFutureActionTimesAdvanceWhilePaused verifies that ListSchedules returns
@@ -503,7 +499,7 @@ func (s *ScheduleCHASMSuite) TestFutureActionTimesAdvanceWhilePaused() {
 		return len(ent.Info.FutureActionTimes) > 0 &&
 			ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
 	})
-	require.Zero(s.T(), runs.Load(), "a paused schedule must not fire any workflows")
+	s.Zero(runs.Load(), "a paused schedule must not fire any workflows")
 }
 
 // testBufferOneDeferredFiresAfterCompletion exercises the BUFFER_ONE deferred
@@ -533,33 +529,33 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 	})
 
 	// Exactly one workflow runs with exactly one start buffered behind it (BUFFER_ONE caps the buffer at one).
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
-	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
-	require.Equal(s.T(), int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
+		s.NoError(err)
+		s.Equal(int64(1), desc.GetInfo().GetBufferSize())
+		s.Len(desc.GetInfo().GetRunningWorkflows(), 1)
+	}, awaitTimeout, pollInterval)
+	s.Equal(int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
 
 	// Releasing the running workflow must re-enable the deferred start (Attempt=-1 -> 0) so it fires.
-	require.Equal(s.T(), 1, completeRunningWorkflows(ctx, s.T(), env, sid))
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 2 },
-		awaitTimeout, pollInterval,
-		"deferred start must fire after the running workflow completes - regression for the Attempt=-1 -> 0 re-enable path")
+	s.Equal(1, completeRunningWorkflows(ctx, s.T(), env, sid))
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(2), runs.Load(), "deferred start must fire after the running workflow completes - regression for the Attempt=-1 -> 0 re-enable path")
+	}, awaitTimeout, pollInterval)
 
 	// The fire is specifically the tick buffered directly behind the first start,
 	// not a fresh action generated after completion. RecentActions lists the
 	// completed first tick and the still-running deferred start; with no jitter the
 	// deferred start's nominal time is exactly one interval after the first tick's.
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if descErr != nil {
-			return false
-		}
+		s.NoError(err)
 		var first, deferred *schedulepb.ScheduleActionResult
 		for _, r := range desc.GetInfo().GetRecentActions() {
 			if r.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -568,10 +564,10 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 				first = r
 			}
 		}
-		return first != nil && deferred != nil &&
-			deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()) == fastInterval
-	}, awaitTimeout, pollInterval,
-		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
+		s.NotNil(first)
+		s.NotNil(deferred)
+		s.Equal(fastInterval, deferred.GetScheduleTime().AsTime().Sub(first.GetScheduleTime().AsTime()))
+	}, awaitTimeout, pollInterval)
 }
 
 func (s *ScheduleSuite) TestDeletedScheduleOperations(chasmEnabled bool) {
@@ -1252,7 +1248,7 @@ func (s *ScheduleSuite) TestScheduleContinuesAfterWorkflowRetryFailure(chasmEnab
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Two FAILED actions proves the schedule kept firing past the first retry-failure.
 	var failedActions int
@@ -1344,7 +1340,7 @@ func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
 
 	ctx := s.Context()
 	_, err := env.FrontendClient().CreateSchedule(ctx, req)
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// getCompletionCallback returns the Nexus completion callback the scheduler attached, found in the
 	// run's WorkflowExecutionStarted event.
@@ -1680,11 +1676,11 @@ func (s *ScheduleSuite) TestLimitMemoSpecSize(chasmEnabled bool) {
 
 	// Verify the memo field length limit was enforced.
 	entry := getScheduleEntryFromVisibility(s.Context(), s.T(), env, sid, nil)
-	require.NotNil(s.T(), entry)
+	s.NotNil(entry)
 	spec := entry.GetInfo().GetSpec()
-	require.Len(s.T(), spec.GetInterval(), expectedLimit)
-	require.Len(s.T(), spec.GetStructuredCalendar(), expectedLimit)
-	require.Len(s.T(), spec.GetExcludeStructuredCalendar(), expectedLimit)
+	s.Len(spec.GetInterval(), expectedLimit)
+	s.Len(spec.GetStructuredCalendar(), expectedLimit)
+	s.Len(spec.GetExcludeStructuredCalendar(), expectedLimit)
 }
 
 func (s *ScheduleSuite) TestCountSchedules(chasmEnabled bool) {
@@ -1972,7 +1968,7 @@ func (s *ScheduleSuite) TestListSchedulesFilterByScheduleID(chasmEnabled bool) {
 			MaximumPageSize: 10,
 			Query:           query,
 		})
-		require.NoError(s.T(), err)
+		s.NoError(err)
 		var ids []string
 		for _, e := range listResp.Schedules {
 			ids = append(ids, e.ScheduleId)
@@ -3552,16 +3548,16 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
 			},
 		},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Verify initial memo.
 	describeResp, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Equal(s.T(), memo1.Data, describeResp.Memo.Fields["key1"].Data)
-	require.Equal(s.T(), memo2.Data, describeResp.Memo.Fields["key2"].Data)
+	s.NoError(err)
+	s.Equal(memo1.Data, describeResp.Memo.Fields["key1"].Data)
+	s.Equal(memo2.Data, describeResp.Memo.Fields["key2"].Data)
 
 	// Update: replace memo with only key3 (key1 and key2 should be gone).
 	memo3 := payload.EncodeString("new")
@@ -3577,17 +3573,17 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
 			},
 		},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Verify replaced memo.
 	describeResp, err = env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Nil(s.T(), describeResp.Memo.Fields["key1"], "key1 should be gone after replace")
-	require.Nil(s.T(), describeResp.Memo.Fields["key2"], "key2 should be gone after replace")
-	require.Equal(s.T(), memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be set")
+	s.NoError(err)
+	s.Nil(describeResp.Memo.Fields["key1"], "key1 should be gone after replace")
+	s.Nil(describeResp.Memo.Fields["key2"], "key2 should be gone after replace")
+	s.Equal(memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be set")
 
 	// Update with nil memo (no change).
 	_, err = env.FrontendClient().UpdateSchedule(s.Context(), &workflowservice.UpdateScheduleRequest{
@@ -3597,15 +3593,15 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Verify memo unchanged.
 	describeResp, err = env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Equal(s.T(), memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be unchanged")
+	s.NoError(err)
+	s.Equal(memo3.Data, describeResp.Memo.Fields["key3"].Data, "key3 should be unchanged")
 
 	// Update with empty memo (clear all).
 	_, err = env.FrontendClient().UpdateSchedule(s.Context(), &workflowservice.UpdateScheduleRequest{
@@ -3618,15 +3614,15 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
 			Fields: map[string]*commonpb.Payload{},
 		},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Verify memo cleared.
 	describeResp, err = env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Empty(s.T(), describeResp.Memo.GetFields(), "memo should be empty after replace with empty map")
+	s.NoError(err)
+	s.Empty(describeResp.Memo.GetFields(), "memo should be empty after replace with empty map")
 }
 
 func (s *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
@@ -3667,7 +3663,7 @@ func (s *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Update with memo should be rejected.
 	_, err = env.FrontendClient().UpdateSchedule(s.Context(), &workflowservice.UpdateScheduleRequest{
@@ -3682,10 +3678,10 @@ func (s *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
 			},
 		},
 	})
-	require.Error(s.T(), err)
+	s.Error(err)
 	var failedPrecondition *serviceerror.FailedPrecondition
-	require.ErrorAs(s.T(), err, &failedPrecondition)
-	require.Contains(s.T(), err.Error(), "memo updates are not supported on workflow-backed schedules")
+	s.ErrorAs(err, &failedPrecondition)
+	s.Contains(err.Error(), "memo updates are not supported on workflow-backed schedules")
 }
 
 func (s *ScheduleCHASMSuite) TestUpdateScheduleMemoOnly() {
@@ -3735,7 +3731,7 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemoOnly() {
 			Fields: map[string]*commonpb.Payload{"key1": memo1},
 		},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Update only memo, without setting the schedule field.
 	memo2 := payload.EncodeString("val2")
@@ -3748,18 +3744,18 @@ func (s *ScheduleCHASMSuite) TestUpdateScheduleMemoOnly() {
 			Fields: map[string]*commonpb.Payload{"key1": memo2},
 		},
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Verify memo was updated and schedule is still intact.
 	describeResp, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Equal(s.T(), memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
-	require.NotNil(s.T(), describeResp.Schedule.Spec, "schedule spec should not be nil")
-	require.NotEmpty(s.T(), describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
-	require.NotNil(s.T(), describeResp.Schedule.Action, "schedule action should be preserved")
+	s.NoError(err)
+	s.Equal(memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
+	s.NotNil(describeResp.Schedule.Spec, "schedule spec should not be nil")
+	s.NotEmpty(describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
+	s.NotNil(describeResp.Schedule.Action, "schedule action should be preserved")
 }
 
 func (s *ScheduleSuite) TestCHASMUnpauseResumesProcessing(chasmEnabled bool) {
@@ -3879,19 +3875,19 @@ func (s *ScheduleCHASMSuite) TestPausedDropsCatchup() {
 		Action: startWorkflowAction(env, wid, wt),
 	})
 
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleCHASMSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && len(desc.Info.FutureActionTimes) == 0
-	}, awaitTimeout, pollInterval,
-		"FutureActionTimes should empty out once the only calendar date passes (proves HWM advanced past it while paused)")
+		s.NoError(err)
+		s.Empty(desc.Info.FutureActionTimes)
+	}, awaitTimeout, pollInterval)
 
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "drops-catchup-test"})
-	await.RequireTruef(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		awaitTimeout, pollInterval,
-		"schedule should close from idle after unpause (no future actions, no replay)")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid), "schedule should close from idle after unpause (no future actions, no replay)")
+	}, awaitTimeout, pollInterval)
 }
 
 // testPausedScheduleNeverIdles verifies that a paused schedule is held open
@@ -3912,34 +3908,28 @@ func (s *ScheduleSuite) TestPausedScheduleNeverIdles(chasmEnabled bool) {
 		Action: startWorkflowAction(env, wid, wt),
 	})
 
-	await.RequireTruef(s.T(),
-		func() bool { return runs.Load() >= 1 },
-		awaitTimeout, pollInterval,
-		"schedule should have fired at least once before pause",
-	)
+	s.Await(func(s *ScheduleSuite) {
+		s.GreaterOrEqual(runs.Load(), int32(1), "schedule should have fired at least once before pause")
+	}, awaitTimeout, pollInterval)
 
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "never-idles-test"})
 
 	// Across a window well past IdleTime, the schedule must never idle-close.
-	require.Never(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		3*shortIdleTime, pollInterval,
-		"paused schedule must not close from idle even past IdleTime")
+	s.Never(func() bool { return scheduleClosed(ctx, env, sid) }, 3*shortIdleTime, pollInterval, "paused schedule must not close from idle even past IdleTime")
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.True(s.T(), desc.Schedule.State.Paused, "paused schedule must stay paused")
+	s.NoError(err)
+	s.True(desc.Schedule.State.Paused, "paused schedule must stay paused")
 
 	// Also verify by unpausing and seeing actions resume.
 	runsBeforeUnpause := runs.Load()
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "never-idles-test-resume"})
-	await.RequireTruef(s.T(),
-		func() bool { return runs.Load() > runsBeforeUnpause },
-		awaitTimeout, pollInterval,
-		"paused-then-unpaused schedule should resume firing (it should not have closed)",
-	)
+	s.Await(func(s *ScheduleSuite) {
+		s.Greater(runs.Load(), runsBeforeUnpause, "paused-then-unpaused schedule should resume firing (it should not have closed)")
+	}, awaitTimeout, pollInterval)
 }
 
 // testPausedEmptySpecStaysOpen verifies that a schedule created with an empty
@@ -3967,16 +3957,14 @@ func (s *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
 		Action: startWorkflowAction(env, wid, wt),
 	})
 
-	require.Never(s.T(), func() bool { return runs.Load() > 0 },
-		neverWindow, pollInterval,
-		"empty paused spec must not fire any actions automatically")
+	s.Never(func() bool { return runs.Load() > 0 }, neverWindow, pollInterval, "empty paused spec must not fire any actions automatically")
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.True(s.T(), desc.Schedule.State.Paused, "schedule must still be paused")
+	s.NoError(err)
+	s.True(desc.Schedule.State.Paused, "schedule must still be paused")
 
 	// Unpause + TriggerImmediately to sanity-check the schedule is functional,
 	// not just open.
@@ -3985,11 +3973,9 @@ func (s *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
 		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 	})
 
-	await.RequireTruef(s.T(),
-		func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval,
-		"manual trigger after unpause should fire exactly one action",
-	)
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(1), runs.Load(), "manual trigger after unpause should fire exactly one action")
+	}, awaitTimeout, pollInterval)
 }
 
 // testTriggerImmediatelyOnActiveSchedule verifies that a TriggerImmediately
@@ -4018,29 +4004,28 @@ func (s *ScheduleSuite) TestTriggerImmediatelyOnActiveSchedule(chasmEnabled bool
 		},
 	})
 
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && len(desc.Info.FutureActionTimes) > 0
-	}, awaitTimeout, pollInterval, "schedule should reach active state with future actions planned")
-	require.Zero(s.T(), runs.Load(), "no automated action should fire before the trigger")
+		s.NoError(err)
+		s.NotEmpty(desc.Info.FutureActionTimes)
+	}, awaitTimeout, pollInterval)
+	s.Zero(runs.Load(), "no automated action should fire before the trigger")
 
 	patchSchedule(ctx, s.T(), env, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
-	await.RequireTruef(s.T(),
-		func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval,
-		"TriggerImmediately should fire exactly one action on the active schedule",
-	)
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(1), runs.Load(), "TriggerImmediately should fire exactly one action on the active schedule")
+	}, awaitTimeout, pollInterval)
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.NotEmpty(s.T(), desc.Info.RecentActions, "RecentActions should include the manual trigger")
-	require.NotEmpty(s.T(), desc.Info.FutureActionTimes, "schedule should still have future automated actions planned")
+	s.NoError(err)
+	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
+	s.NotEmpty(desc.Info.FutureActionTimes, "schedule should still have future automated actions planned")
 }
 
 // testTriggerImmediatelyOnPausedSchedule verifies that TriggerImmediately fires
@@ -4064,23 +4049,21 @@ func (s *ScheduleSuite) TestTriggerImmediatelyOnPausedSchedule(chasmEnabled bool
 	})
 
 	// Paused suppresses firing even though the 1s interval would otherwise tick.
-	require.Never(s.T(), func() bool { return runs.Load() > 0 },
-		neverWindow, pollInterval,
-		"paused schedule must not fire automated actions before the trigger")
+	s.Never(func() bool { return runs.Load() > 0 }, neverWindow, pollInterval, "paused schedule must not fire automated actions before the trigger")
 
 	patchSchedule(ctx, s.T(), env, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
 
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval,
-		"TriggerImmediately must fire exactly one action despite the schedule being paused")
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(1), runs.Load(), "TriggerImmediately must fire exactly one action despite the schedule being paused")
+	}, awaitTimeout, pollInterval)
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.NotEmpty(s.T(), desc.Info.RecentActions, "RecentActions should include the manual trigger")
-	require.True(s.T(), desc.Schedule.State.Paused, "schedule must still be paused after trigger fires")
+	s.NoError(err)
+	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
+	s.True(desc.Schedule.State.Paused, "schedule must still be paused after trigger fires")
 }
 
 // testTriggerImmediatelyAfterActionsExhausted verifies that TriggerImmediately
@@ -4103,23 +4086,20 @@ func (s *ScheduleSuite) TestTriggerImmediatelyAfterActionsExhausted(chasmEnabled
 		Action: startWorkflowAction(env, wid, wt),
 	})
 
-	require.Never(s.T(), func() bool { return runs.Load() > 0 },
-		neverWindow, pollInterval,
-		"exhausted schedule must not auto-fire before the trigger")
+	s.Never(func() bool { return runs.Load() > 0 }, neverWindow, pollInterval, "exhausted schedule must not auto-fire before the trigger")
 
 	patchSchedule(ctx, s.T(), env, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval,
-		"TriggerImmediately must fire exactly once despite RemainingActions=0")
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(1), runs.Load(), "TriggerImmediately must fire exactly once despite RemainingActions=0")
+	}, awaitTimeout, pollInterval)
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.NotEmpty(s.T(), desc.Info.RecentActions, "RecentActions should include the manual trigger")
-	require.Equal(s.T(), int64(0), desc.Schedule.State.RemainingActions,
-		"manual trigger must not consume a LimitedActions slot")
+	s.NoError(err)
+	s.NotEmpty(desc.Info.RecentActions, "RecentActions should include the manual trigger")
+	s.Equal(int64(0), desc.Schedule.State.RemainingActions, "manual trigger must not consume a LimitedActions slot")
 }
 
 func (s *ScheduleSuite) TestBackfillReprocessesCompletedActionExactTimePaused(chasmEnabled bool) {
@@ -4139,8 +4119,7 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 	paused bool,
 	intervalsOnEachSide int,
 ) {
-	attachScheduleContext(s.T(), chasmEnabled)
-	env := testcore.NewEnv(s.T(), scheduleCommonOpts(chasmEnabled)...)
+	env := newScheduleSuiteEnv(s.T(), chasmEnabled, scheduleCommonOpts(chasmEnabled)...)
 
 	sid := testcore.RandomizeStr("sched-backfill-reprocess")
 	wid := testcore.RandomizeStr("sched-backfill-reprocess-wf")
@@ -4160,23 +4139,23 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 	})
 
 	var completedTime time.Time
-	await.RequireTruef(s.T(), func() bool {
-		desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if err != nil {
-			return false
-		}
+		s.NoError(err)
+		found := false
 		for _, action := range desc.GetInfo().GetRecentActions() {
 			if action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 				completedTime = action.GetScheduleTime().AsTime()
-				return true
+				found = true
+				break
 			}
 		}
-		return false
-	}, awaitTimeout, pollInterval, "the automatic action should complete")
-	require.Equal(s.T(), int32(1), runs.Load())
+		s.True(found, "the automatic action should complete")
+	}, awaitTimeout, pollInterval)
+	s.Equal(int32(1), runs.Load())
 
 	if paused {
 		patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "test completed-action backfill"})
@@ -4190,17 +4169,18 @@ func (s *ScheduleSuite) backfillReprocessesCompletedAction(
 	))
 
 	expectedRuns := int32(2 + 2*intervalsOnEachSide)
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == expectedRuns }, neverWindow, pollInterval,
-		"backfill should reprocess the completed action exactly once")
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(expectedRuns, runs.Load(), "backfill should reprocess the completed action exactly once")
+	}, neverWindow, pollInterval)
 
 	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err)
-	require.Equal(s.T(), int64(expectedRuns), desc.GetInfo().GetActionCount())
-	require.Empty(s.T(), desc.GetInfo().GetRunningWorkflows())
-	require.Equal(s.T(), paused, desc.GetSchedule().GetState().GetPaused())
+	s.NoError(err)
+	s.Equal(int64(expectedRuns), desc.GetInfo().GetActionCount())
+	s.Empty(desc.GetInfo().GetRunningWorkflows())
+	s.Equal(paused, desc.GetSchedule().GetState().GetPaused())
 }
 
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
@@ -4239,23 +4219,23 @@ func (s *ScheduleSuite) TestBackfillWithBufferOneOverlap(chasmEnabled bool) {
 	patchSchedule(ctx, s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE))
 
 	// First backfill start runs with exactly one buffered behind it (BUFFER_ONE drops the rest).
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
-	}, awaitTimeout, pollInterval, "expected exactly one running backfill start with one deferred behind it")
-	require.Equal(s.T(), int32(1), runs.Load(), "only the first backfill start should have fired so far")
+		s.NoError(err)
+		s.Equal(int64(1), desc.GetInfo().GetBufferSize())
+		s.Len(desc.GetInfo().GetRunningWorkflows(), 1)
+	}, awaitTimeout, pollInterval)
+	s.Equal(int32(1), runs.Load(), "only the first backfill start should have fired so far")
 
 	// Releasing the running start must re-enable the deferred one (Attempt=-1 -> 0) so it fires.
-	require.Equal(s.T(), 1, completeRunningWorkflows(ctx, s.T(), env, sid))
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 2 },
-		awaitTimeout, pollInterval,
-		"deferred backfill start must fire after the running one completes (Attempt=-1 -> 0 re-enable)")
-	require.Never(s.T(), func() bool { return runs.Load() > 2 },
-		neverWindow, pollInterval,
-		"BUFFER_ONE must collapse the rest of the backfill ticks - only the deferred start re-enables")
+	s.Equal(1, completeRunningWorkflows(ctx, s.T(), env, sid))
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(2), runs.Load(), "deferred backfill start must fire after the running one completes (Attempt=-1 -> 0 re-enable)")
+	}, awaitTimeout, pollInterval)
+	s.Never(func() bool { return runs.Load() > 2 }, neverWindow, pollInterval, "BUFFER_ONE must collapse the rest of the backfill ticks - only the deferred start re-enables")
 }
 
 // testBackfillRangeSmallerThanInterval covers the edge where a backfill range
@@ -4287,9 +4267,7 @@ func (s *ScheduleSuite) TestBackfillRangeSmallerThanInterval(chasmEnabled bool) 
 	patchSchedule(ctx, s.T(), env, sid, backfillPatch(windowStart, windowEnd, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
 
 	// No spec tick falls inside a sub-interval window, so no action fires.
-	require.Never(s.T(), func() bool { return runs.Load() > 0 },
-		neverWindow, pollInterval,
-		"backfill range narrower than spec interval must produce no actions")
+	s.Never(func() bool { return runs.Load() > 0 }, neverWindow, pollInterval, "backfill range narrower than spec interval must produce no actions")
 
 	// And the schedule must still be describable - the backfiller drained without
 	// firing anything and got cleaned up.
@@ -4297,7 +4275,7 @@ func (s *ScheduleSuite) TestBackfillRangeSmallerThanInterval(chasmEnabled bool) 
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 	})
-	require.NoError(s.T(), err, "schedule must remain describable after empty backfill")
+	s.NoError(err, "schedule must remain describable after empty backfill")
 }
 
 // testBackfillWithSkipOverlap verifies that SKIP overlap correctly collapses a
@@ -4323,12 +4301,10 @@ func (s *ScheduleSuite) TestBackfillWithSkipOverlap(chasmEnabled bool) {
 	patchSchedule(ctx, s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
 
 	// SKIP collapses the 5-tick backfill to exactly one fire, and it stays there.
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval,
-		"SKIP backfill should fire exactly once")
-	require.Never(s.T(), func() bool { return runs.Load() > 1 },
-		neverWindow, pollInterval,
-		"SKIP backfill must collapse to a single execution, not fire all 5 ticks")
+	s.Await(func(s *ScheduleSuite) {
+		s.Equal(int32(1), runs.Load(), "SKIP backfill should fire exactly once")
+	}, awaitTimeout, pollInterval)
+	s.Never(func() bool { return runs.Load() > 1 }, neverWindow, pollInterval, "SKIP backfill must collapse to a single execution, not fire all 5 ticks")
 }
 
 func (s *ScheduleSuite) TestUpdateScheduleRequestIDTooLong(chasmEnabled bool) {
@@ -4360,7 +4336,7 @@ func (s *ScheduleSuite) TestUpdateScheduleRequestIDTooLong(chasmEnabled bool) {
 		RequestId:  strings.Repeat("x", 1001),
 	})
 	var invalidArgReqID *serviceerror.InvalidArgument
-	require.ErrorAs(s.T(), err, &invalidArgReqID)
+	s.ErrorAs(err, &invalidArgReqID)
 }
 
 func (s *ScheduleSuite) TestUpdateScheduleBlobSizeLimit(chasmEnabled bool) {
@@ -4406,7 +4382,7 @@ func (s *ScheduleSuite) TestUpdateScheduleBlobSizeLimit(chasmEnabled bool) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	require.NoError(s.T(), err)
+	s.NoError(err)
 
 	// Update with an oversized memo that exceeds the blob size limit.
 	largeMemo := &commonpb.Memo{
@@ -4423,7 +4399,7 @@ func (s *ScheduleSuite) TestUpdateScheduleBlobSizeLimit(chasmEnabled bool) {
 		Memo:       largeMemo,
 	})
 	var invalidArgBlob *serviceerror.InvalidArgument
-	require.ErrorAs(s.T(), err, &invalidArgBlob)
+	s.ErrorAs(err, &invalidArgBlob)
 }
 
 // TestScheduleCreationRolloutPercent verifies that
@@ -4642,9 +4618,10 @@ func (s *ScheduleCHASMSuite) TestManualOnlyUnpausedClosesFromIdle() {
 	})
 
 	// With no spec and no manual trigger, the schedule closes once its idle window elapses.
-	await.RequireTruef(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		awaitTimeout, pollInterval, "manual-only schedule should close after idle window")
-	require.Zero(s.T(), runs.Load(), "a manual-only schedule must not fire any actions on its own")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid), "manual-only schedule should close after idle window")
+	}, awaitTimeout, pollInterval)
+	s.Zero(runs.Load(), "a manual-only schedule must not fire any actions on its own")
 }
 
 // testPauseDuringIdleWindow covers setting pausing, and unpausing, while a
@@ -4670,20 +4647,21 @@ func (s *ScheduleCHASMSuite) TestPauseDuringIdleWindow() {
 	})
 
 	// The single allowed action fires, exhausting the budget and arming idle.
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 1 },
-		awaitTimeout, pollInterval, "the one allowed action must fire before pausing")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.Equal(int32(1), runs.Load(), "the one allowed action must fire before pausing")
+	}, awaitTimeout, pollInterval)
 
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "pause-during-idle"})
 
 	// Paused must hold the schedule open past the original idle deadline.
-	require.Never(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		idleTime*2, pollInterval, "paused schedule must not close past original idle deadline")
+	s.Never(func() bool { return scheduleClosed(ctx, env, sid) }, idleTime*2, pollInterval, "paused schedule must not close past original idle deadline")
 
 	// Unpause: the Generator re-arms idle and the schedule finally closes.
 	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Unpause: "resume-after-idle"})
-	await.RequireTruef(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		awaitTimeout, pollInterval, "schedule must close after unpause via re-armed idle task")
-	require.Equal(s.T(), int32(1), runs.Load(), "no extra actions should fire across pause/unpause")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid), "schedule must close after unpause via re-armed idle task")
+	}, awaitTimeout, pollInterval)
+	s.Equal(int32(1), runs.Load(), "no extra actions should fire across pause/unpause")
 }
 
 // testBackfillBlocksIdleClose verifies that a schedule with no remaining
@@ -4710,8 +4688,9 @@ func (s *ScheduleCHASMSuite) TestBackfillBlocksIdleClose() {
 	})
 
 	// The single allowed automated action fires, leaving the scheduler heading to idle.
-	await.RequireTruef(s.T(), func() bool { return runs.Load() == 1 }, awaitTimeout, pollInterval,
-		"the single allowed automated action should have fired")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.Equal(int32(1), runs.Load(), "the single allowed automated action should have fired")
+	}, awaitTimeout, pollInterval)
 
 	// BUFFER_ALL is used to force each to run sequentially (versus in parallel with
 	// ALLOW_ALL), which is a better test to show the idle time is pushed back.
@@ -4720,13 +4699,13 @@ func (s *ScheduleCHASMSuite) TestBackfillBlocksIdleClose() {
 
 	// Backfill fires despite the scheduler heading to idle; tick count in the 5s
 	// window varies with boundary alignment, so assert the lower bound.
-	await.RequireTruef(s.T(), func() bool { return runs.Load() >= 10 },
-		awaitTimeout, pollInterval,
-		"backfill should fire actions even though the scheduler was heading to idle")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.GreaterOrEqual(runs.Load(), int32(10), "backfill should fire actions even though the scheduler was heading to idle")
+	}, awaitTimeout, pollInterval)
 
-	await.RequireTruef(s.T(), func() bool { return scheduleClosed(ctx, env, sid) },
-		awaitTimeout, pollInterval,
-		"scheduler should close from idle once the backfill drains and IdleTime elapses")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.True(scheduleClosed(s.Context(), env, sid), "scheduler should close from idle once the backfill drains and IdleTime elapses")
+	}, awaitTimeout, pollInterval)
 }
 
 // testMultiRangeBackfillCountedExactlyOnce asserts that the `ActionCount` is
@@ -4769,17 +4748,15 @@ func (s *ScheduleSuite) TestMultiRangeBackfillCountedExactlyOnce(chasmEnabled bo
 		},
 	})
 
-	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if descErr != nil {
-			return false
-		}
-		return desc.Info.ActionCount == 6 && len(desc.Info.RunningWorkflows) == 0
-	}, awaitTimeout, pollInterval,
-		"backfill should fire 6 actions and complete on a paused schedule")
+		s.NoError(err)
+		s.Equal(int64(6), desc.Info.ActionCount)
+		s.Empty(desc.Info.RunningWorkflows)
+	}, awaitTimeout, pollInterval)
 }
 
 // testBackfillOnPausedSchedule verifies that a paused schedule still processes
@@ -4803,16 +4780,14 @@ func (s *ScheduleCHASMSuite) TestBackfillOnPausedSchedule() {
 	})
 
 	// Paused suppresses firing even though the 1s interval would otherwise tick.
-	require.Never(s.T(), func() bool { return runs.Load() > 0 },
-		neverWindow, pollInterval,
-		"paused schedule must not fire automated actions")
+	s.Never(func() bool { return runs.Load() > 0 }, neverWindow, pollInterval, "paused schedule must not fire automated actions")
 
 	now := time.Now().UTC()
 	patchSchedule(ctx, s.T(), env, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL))
 
-	await.RequireTruef(s.T(), func() bool { return runs.Load() >= 5 },
-		awaitTimeout, pollInterval,
-		"backfill should fire actions on a paused schedule")
+	s.Await(func(s *ScheduleCHASMSuite) {
+		s.GreaterOrEqual(runs.Load(), int32(5), "backfill should fire actions on a paused schedule")
+	}, awaitTimeout, pollInterval)
 }
 
 // TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
