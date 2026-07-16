@@ -199,6 +199,35 @@ func TestTQLoadBalancerWeighted_EqualWeightsBalances(t *testing.T) {
 	}
 }
 
+func TestTQLoadBalancerWeighted_FillsEachBeforeDoubling(t *testing.T) {
+	partitionCount := 4
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	assert.NoError(t, err)
+	tqlb := newTaskQueueLoadBalancer(f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+
+	// Even with extremely skewed weights, every partition must receive its first poller before
+	// any partition receives a second: a zero-poller partition always has the minimum
+	// poller/weight ratio (0), so it wins regardless of weight. A naive weighted-random picker
+	// would instead pile onto partition 3 immediately.
+	weights := []int64{100, 100, 100, 100000}
+
+	// During the first partitionCount picks, no partition should ever exceed one poller.
+	for range partitionCount {
+		tqlb.pickReadPartitionWeighted(partitionCount, weights)
+		assert.LessOrEqual(t, maxPollerCount(tqlb), 1,
+			"no partition should get a 2nd poller until every partition has 1")
+	}
+	// After exactly partitionCount picks, every partition has exactly one poller.
+	for i, c := range tqlb.pollerCounts {
+		assert.Equalf(t, 1, c, "partition %d should have exactly one poller after the first round", i)
+	}
+
+	// Only now do weights take effect: the next poll goes to the highest-weight partition.
+	tqlb.pickReadPartitionWeighted(partitionCount, weights)
+	assert.Equal(t, 2, tqlb.pollerCounts[3],
+		"once every partition has one poller, the highest-weight partition gets the next")
+}
+
 func TestTQLoadBalancerWeighted_Release(t *testing.T) {
 	partitionCount := 3
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
