@@ -22,8 +22,14 @@ import (
 
 type generatorHandlerOption func(*scheduler.GeneratorTaskHandlerOptions)
 
-func withGeneratorConfig(c *scheduler.Config) generatorHandlerOption {
-	return func(o *scheduler.GeneratorTaskHandlerOptions) { o.Config = c }
+// withTweakables overrides the handler config's Tweakables, starting from the
+// current defaults so callers set only the fields they care about.
+func withTweakables(fn func(*scheduler.Tweakables)) generatorHandlerOption {
+	return func(o *scheduler.GeneratorTaskHandlerOptions) {
+		tw := o.Config.Tweakables("")
+		fn(&tw)
+		o.Config.Tweakables = func(string) scheduler.Tweakables { return tw }
+	}
 }
 
 func withGeneratorMetrics(h metrics.Handler) generatorHandlerOption {
@@ -130,7 +136,7 @@ func TestGeneratorTask_BufferOverrunDropsActions(t *testing.T) {
 
 	const maxBufferSize = 2
 	handler := newGeneratorHandler(env,
-		withGeneratorConfig(configWithTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = maxBufferSize })),
+		withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = maxBufferSize }),
 		withGeneratorMetrics(rec))
 
 	ctx := env.MutableContext()
@@ -176,7 +182,7 @@ func TestGeneratorTask_BufferOverrunDropsActions(t *testing.T) {
 func TestGeneratorTask_MaxBufferSizeDisabledBuffersAll(t *testing.T) {
 	env := newTestEnv(t)
 
-	handler := newGeneratorHandler(env, withGeneratorConfig(configWithTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = 0 })))
+	handler := newGeneratorHandler(env, withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = 0 }))
 
 	ctx := env.MutableContext()
 	sched := env.Scheduler

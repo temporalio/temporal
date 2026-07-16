@@ -113,12 +113,15 @@ func (g *GeneratorTaskHandler) Execute(
 	}
 
 	if result.DroppedCount > 0 {
+		// Only system log on the first drop, as it's likely that a case that overruns
+		// will continue to overrun.
 		if scheduler.Info.BufferDropped == 0 {
-			generator.getOrCreateEventLog(ctx).LogEvent(ctx,
-				fmt.Sprintf("buffer overrun, dropped %d actions", result.DroppedCount))
-			logger.Warn("Buffer overrun, dropping actions",
+			logger.Warn("Buffer is overruning, dropping actions",
 				tag.Int64("dropped-count", result.DroppedCount))
 		}
+
+		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("buffer overrun, dropped %d actions", result.DroppedCount))
 		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
