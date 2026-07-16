@@ -27,6 +27,8 @@ func TestUserCustomSearchAttributes(t *testing.T) {
 		{
 			name: "reserved only",
 			fields: map[string]*commonpb.Payload{
+				sadefs.ExecutionStatus:           {},
+				"TemporalSystemExecutionStatus":  {},
 				sadefs.TemporalSchedulePaused:    {},
 				sadefs.TemporalNamespaceDivision: {},
 			},
@@ -36,6 +38,8 @@ func TestUserCustomSearchAttributes(t *testing.T) {
 			name: "mixed",
 			fields: map[string]*commonpb.Payload{
 				"CustomKeywordField":             userPayload,
+				sadefs.ExecutionStatus:           {},
+				"TemporalSystemExecutionStatus":  {},
 				sadefs.TemporalSchedulePaused:    {},
 				sadefs.TemporalNamespaceDivision: {},
 			},
