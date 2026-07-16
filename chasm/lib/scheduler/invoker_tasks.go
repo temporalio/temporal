@@ -778,6 +778,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,
