@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -101,13 +100,12 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.NextTime(scheduler, end)
-		wakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
 		if err != nil {
 			return nil, err
 		}
 
 		return &ProcessedTimeRange{
-			NextWakeupTime: wakeup,
+			NextWakeupTime: next.Next,
 			LastActionTime: end,
 			BufferedStarts: nil,
 		}, nil
@@ -127,9 +125,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	var droppedCount int64
 	recordedGenerateLatency := false
 	limitReached := false
-	computeLimitWarning := false
 	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
-		computeLimitWarning = computeLimitWarning || next.ComputeLimitWarning
 		lastAction = next.Next
 
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
@@ -190,48 +186,11 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 		}
 	}
 
-	// Fold any warning seen mid-loop into the terminal result so it isn't lost.
-	next.ComputeLimitWarning = next.ComputeLimitWarning || computeLimitWarning
-	nextWakeup, err := s.checkNextScheduleResult(scheduler, metricsHandler, next, err)
-	if err != nil {
-		return nil, err
-	}
-
 	return &ProcessedTimeRange{
-		NextWakeupTime: nextWakeup,
+		NextWakeupTime: next.Next,
 		LastActionTime: lastAction,
 		BufferedStarts: bufferedStarts,
 	}, nil
-}
-
-// checkNextScheduleResult resolves a NextTime result/error into a next-wakeup time.
-// and handles error cases
-func (s *SpecProcessorImpl) checkNextScheduleResult(
-	scheduler *Scheduler,
-	metricsHandler metrics.Handler,
-	next legacyscheduler.GetNextTimeResult,
-	err error,
-) (time.Time, error) {
-	if err == nil {
-		// Warn (non-fatal) case: the search went long but still resolved.
-		if next.ComputeLimitWarning {
-			metricsHandler.Counter(metrics.ScheduleComputeLimitWarning.Name()).Record(1)
-			newTaggedLogger(s.logger, scheduler).Warn(
-				"schedule spec next-time search crossed the warn threshold; continuing (spec may be over-excluded)")
-		}
-		return next.Next, nil
-	}
-
-	// special case: broken or pathological spec
-	// in this particular case, just swallow the error and log.
-	// The spec will just degrade to return nothing.
-	if errors.Is(err, legacyscheduler.ErrComputeLimitExceeded) {
-		metricsHandler.Counter(metrics.ScheduleComputeLimitExceeded.Name()).Record(1)
-		newTaggedLogger(s.logger, scheduler).Warn(
-			"schedule spec next-time search hit the compute limit; taking no further action until the spec is changed")
-		return time.Time{}, nil
-	}
-	return time.Time{}, err
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
@@ -251,5 +210,5 @@ func (s *SpecProcessorImpl) NextTime(scheduler *Scheduler, after time.Time) (leg
 		return legacyscheduler.GetNextTimeResult{}, err
 	}
 
-	return spec.GetNextTime(scheduler.jitterSeed(), after)
+	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
 }
