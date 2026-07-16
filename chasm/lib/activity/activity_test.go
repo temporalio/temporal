@@ -508,6 +508,60 @@ func TestActivityTaskTokenWithoutAttemptStampAcceptedForCurrentRetryAttempt(t *t
 	require.NoError(t, err)
 }
 
+func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return testTime },
+			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+				namespaceRegistry: nsRegistry,
+			}),
+		},
+	}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+			ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+			StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+			HeartbeatTimeout:       durationpb.New(time.Minute),
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			Count:        1,
+			Stamp:        7,
+			StartedStamp: 7,
+		}),
+		Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	attempt := activity.LastAttempt.Get(ctx)
+	originalStamp := attempt.GetStamp()
+	originalStartedStamp := attempt.GetStartedStamp()
+
+	_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId: "test-activity-id",
+			ActivityOptions: &apiactivitypb.ActivityOptions{
+				HeartbeatTimeout: durationpb.New(2 * time.Minute),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+		},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, originalStamp+1, attempt.GetStamp())
+	require.Equal(t, originalStartedStamp, attempt.GetStartedStamp())
+}
+
 func TestContextMetadata(t *testing.T) {
 	t.Run("returns activity type and task queue", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
