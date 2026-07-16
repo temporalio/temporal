@@ -3387,20 +3387,6 @@ The configured value will be divided by the number of worker hosts to get the pe
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
-	SchedulerSpecMaxIterations = NewGlobalIntSetting(
-		"scheduler.specMaxIterations",
-		2*7*24*60*60,
-		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
-scheduler evaluates while searching for a schedule's next action time before giving up with an
-error and stopping the schedule.`,
-	)
-	SchedulerSpecWarnIterations = NewGlobalIntSetting(
-		"scheduler.specWarnIterations",
-		24*60*60,
-		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
-while searching for a schedule's next action time before emitting a warning (metric + log). It
-is non-fatal: the search continues past this threshold.`,
-	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
