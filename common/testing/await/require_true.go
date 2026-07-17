@@ -1,6 +1,7 @@
 package await
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ const requireTrueMisuseHint = "do not use test assertions inside the predicate -
 // side effects in the predicate - use [Require] for these.
 func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval time.Duration) {
 	tb.Helper()
-	run(testcontext.Current(tb), tb, func(t *T) {
+	run(contextFor(tb), tb, func(t *T) {
 		if !condition() {
 			t.Fail()
 		}
@@ -28,9 +29,17 @@ func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval tim
 // in the failure message when the condition is not satisfied before the timeout.
 func RequireTruef(tb testing.TB, condition func() bool, timeout, pollInterval time.Duration, msg string, args ...any) {
 	tb.Helper()
-	run(testcontext.Current(tb), tb, func(t *T) {
+	run(contextFor(tb), tb, func(t *T) {
 		if !condition() {
 			t.Fail()
 		}
 	}, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false)
+}
+
+func contextFor(tb testing.TB) context.Context {
+	tb.Helper()
+	if ctx, ok := testcontext.Get(tb); ok {
+		return ctx
+	}
+	return tb.Context()
 }

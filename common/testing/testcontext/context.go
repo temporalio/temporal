@@ -100,20 +100,20 @@ func For(tb testing.TB, opts ...Option) context.Context {
 	return st.currentContext()
 }
 
-// Current returns the current [testContext] if one exists, or tb.Context otherwise.
-func Current(tb testing.TB) context.Context {
+// Get returns the current [testContext] for tb, if one exists.
+func Get(tb testing.TB) (context.Context, bool) {
 	tb.Helper()
 
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
 	if !ok {
-		return tb.Context()
+		return nil, false
 	}
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.currentContext()
+	return st.currentContext(), true
 }
 
 // Option configures the [testContext] returned by [For].
