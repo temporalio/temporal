@@ -124,6 +124,12 @@ func TestMatch_Partial(t *testing.T) {
 	match.StartWorkflowExecutionRequest{Namespace: match.Eq("other")}.EqualPartial(r2, actual)
 	require.True(t, r2.failed)
 	require.Contains(t, r2.msg, "namespace")
+
+	// match.Any() is a misuse in partial mode (ignore by omission instead).
+	r3 := &recorder{}
+	match.StartWorkflowExecutionRequest{Namespace: match.Any()}.EqualPartial(r3, actual)
+	require.True(t, r3.failed)
+	require.Contains(t, r3.msg, "redundant in EqualPartial")
 }
 
 func TestMatch_Map(t *testing.T) {
