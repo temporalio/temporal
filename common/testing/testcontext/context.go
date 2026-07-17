@@ -186,17 +186,18 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
 	requestedDeadline := util.MinTime(time.Now().Add(d), maxDeadline)
 
-	// Context deadlines are immutable; extending the test context means
-	// replacing it and replaying metadata/decorators.
+	// Extend the test context if the requested deadline is after the current deadline.
 	if requestedDeadline.After(testDeadline) {
 		next := newTestContext(tb, requestedDeadline, st.decorators)
 		st.pushContext(next)
 		testDeadline = next.deadline
 	}
 
+	// Callers holding an older test context should move to the current one.
 	if owned {
 		return st.currentContext()
 	}
+
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
 	}
