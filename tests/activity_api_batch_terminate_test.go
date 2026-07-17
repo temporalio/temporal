@@ -36,10 +36,10 @@ func TestActivityAPIBatchTerminateClientTestSuite(t *testing.T) {
 // flags) and additionally enables the "batch operations" worker service and
 // raises the per-namespace concurrent batch limit to the functional-test limit.
 func newStandaloneActivityBatchEnv(t *testing.T) *standaloneActivityEnv {
-	return newStandaloneActivityBatchEnvWithOperators(t, true)
+	return newStandaloneActivityBatchEnvWithBatchOperations(t, true)
 }
 
-func newStandaloneActivityBatchEnvWithOperators(t *testing.T, enableBatchActivityOperators bool) *standaloneActivityEnv {
+func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool) *standaloneActivityEnv {
 	env := &standaloneActivityEnv{
 		TestEnv: testcore.NewEnv(
 			t,
@@ -60,9 +60,7 @@ func newStandaloneActivityBatchEnvWithOperators(t *testing.T, enableBatchActivit
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.StartDelayEnabled, nsValues(true))
-	if enableBatchActivityOperators {
-		cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchActivityOperators, nsValues(true))
-	}
+	cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
 	return env
 }
 
@@ -273,74 +271,53 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ta
 	s.Contains(err.Error(), "target_executions[0]")
 }
 
-func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchOperatorsDisabled() {
-	env := newStandaloneActivityBatchEnvWithOperators(s.T(), false)
-	ctx := s.Context()
-
-	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace:       env.Namespace().String(),
-		VisibilityQuery: "ActivityType = 'activity-type'",
-		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
-			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
-				Identity: "batch-terminator",
-				Reason:   "test",
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestBatchOperationsForStandaloneActivitiesDisabled() {
+	tests := []struct {
+		name    string
+		request *workflowservice.StartBatchOperationRequest
+	}{
+		{
+			name: "cancel",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{
+					CancelActivitiesOperation: &batchpb.BatchOperationCancelActivities{},
+				},
 			},
 		},
-		JobId:  uuid.NewString(),
-		Reason: "test",
-	})
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
-	s.ErrorContains(err, "not supported for this namespace")
-}
-
-func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_InFlightLegacyExecutionsContinueAfterDisable() {
-	env := newStandaloneActivityBatchEnvWithOperators(s.T(), false)
-	ctx := s.Context()
-	disableOperators := env.OverrideDynamicConfig(dynamicconfig.FrontendEnableBatchActivityOperators, true)
-
-	activityID := testcore.RandomizeStr(s.T().Name())
-	startResp := env.startAndValidateActivity(ctx, s.T(), activityID, testcore.RandomizeStr(s.T().Name()))
-	jobID := uuid.NewString()
-	legacyExecutions := []*commonpb.WorkflowExecution{{WorkflowId: activityID, RunId: startResp.GetRunId()}}
-	request := &workflowservice.StartBatchOperationRequest{
-		Namespace: env.Namespace().String(),
-		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
-			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
-				Identity: "batch-terminator",
-				Reason:   "test",
+		{
+			name: "terminate",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+					TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{},
+				},
 			},
 		},
-		JobId:  jobID,
-		Reason: "test",
+		{
+			name: "delete",
+			request: &workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
+					DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
+				},
+			},
+		},
 	}
-	//nolint:staticcheck // Exercises an in-flight batch created with the deprecated selector.
-	request.Executions = legacyExecutions
-	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, request)
-	s.NoError(err)
 
-	disableOperators()
-	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace:       env.Namespace().String(),
-		VisibilityQuery: "ActivityType = 'activity-type'",
-		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
-			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
-				Identity: "batch-terminator",
-				Reason:   "test",
-			},
-		},
-		JobId:  uuid.NewString(),
-		Reason: "test",
-	})
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
+	for _, test := range tests {
+		s.Run(test.name, func(s *ActivityAPIBatchTerminateClientTestSuite) {
+			env := newStandaloneActivityBatchEnvWithBatchOperations(s.T(), false)
+			ctx := s.Context()
 
-	assertBatchOperationType(ctx, s.T(), env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, "", []*commonpb.Execution{{
-		Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
-		BusinessId: activityID,
-		RunId:      startResp.GetRunId(),
-	}})
-	env.eventuallyTerminated(ctx, s.T(), activityID, startResp.GetRunId())
+			test.request.Namespace = env.Namespace().String()
+			test.request.VisibilityQuery = "ActivityType = 'activity-type'"
+			test.request.JobId = uuid.NewString()
+			test.request.Reason = "test"
+
+			_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, test.request)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgument)
+			s.ErrorContains(err, "not supported for this namespace")
+		})
+	}
 }
 
 func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_NoMatchingActivitiesCompletes() {

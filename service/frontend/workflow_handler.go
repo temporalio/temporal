@@ -5722,7 +5722,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-		if !wh.config.EnableBatchActivityOperators(request.Namespace) || !wh.IsStandaloneActivityEnabled(request.Namespace) {
+		if !wh.config.EnableBatchOperationsForStandaloneActivities(request.Namespace) ||
+			!wh.IsStandaloneActivityEnabled(request.Namespace) {
 			return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported for this namespace", op)
 		}
 	default:
