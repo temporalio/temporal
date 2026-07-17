@@ -76,7 +76,7 @@ func TestMatch_Pass(t *testing.T) {
 	m.WorkflowIdReusePolicy = match.AnyOf(match.IsEmpty()) // any-of
 
 	r := &recorder{}
-	m.Test(r, actual)
+	m.Equal(r, actual)
 	require.False(t, r.failed, r.msg)
 }
 
@@ -88,7 +88,7 @@ func TestMatch_Mismatch(t *testing.T) {
 	m.WorkflowId = match.NotEmpty() // actual is empty -> also fails
 
 	r := &recorder{}
-	m.Test(r, actual)
+	m.Equal(r, actual)
 	require.True(t, r.failed)
 	require.Contains(t, r.msg, "namespace")
 	require.Contains(t, r.msg, "workflow_id")
@@ -101,22 +101,40 @@ func TestMatch_ExhaustiveRequiresEveryField(t *testing.T) {
 	m := match.StartWorkflowExecutionRequest{Namespace: match.Any()}
 
 	r := &recorder{}
-	m.Test(r, actual)
+	m.Equal(r, actual)
 	require.True(t, r.failed)
 	require.Contains(t, r.msg, "no matcher specified")
 	require.Contains(t, r.msg, "workflow_id")
 	require.NotContains(t, r.msg, "namespace:", "the specified field must not be flagged")
 }
 
+func TestMatch_Partial(t *testing.T) {
+	actual := &workflowservice.StartWorkflowExecutionRequest{Namespace: "ns", WorkflowId: "wf-1"}
+
+	// Only the specified fields are checked; the rest are ignored (no Any() needed).
+	r := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		Namespace:  match.Eq("ns"),
+		WorkflowId: match.NotEmpty(),
+	}.EqualPartial(r, actual)
+	require.False(t, r.failed, r.msg)
+
+	// A specified field that mismatches still fails in partial mode.
+	r2 := &recorder{}
+	match.StartWorkflowExecutionRequest{Namespace: match.Eq("other")}.EqualPartial(r2, actual)
+	require.True(t, r2.failed)
+	require.Contains(t, r2.msg, "namespace")
+}
+
 func TestMatch_Map(t *testing.T) {
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"k": {}}}
 
 	r := &recorder{}
-	match.Memo{Fields: match.NotEmpty()}.Test(r, memo)
+	match.Memo{Fields: match.NotEmpty()}.Equal(r, memo)
 	require.False(t, r.failed, r.msg)
 
 	r2 := &recorder{}
-	match.Memo{Fields: match.IsEmpty()}.Test(r2, memo)
+	match.Memo{Fields: match.IsEmpty()}.Equal(r2, memo)
 	require.True(t, r2.failed)
 }
 
@@ -134,7 +152,7 @@ func TestMatch_Oneof(t *testing.T) {
 		UserMetadata:      match.IsEmpty(),
 		EventGroupMarkers: match.IsEmpty(),
 		Attributes:        match.NotEmpty(), // oneof member is set
-	}.Test(r, cmd)
+	}.Equal(r, cmd)
 	require.False(t, r.failed, r.msg)
 
 	r2 := &recorder{}
@@ -143,7 +161,7 @@ func TestMatch_Oneof(t *testing.T) {
 		UserMetadata:      match.Any(),
 		EventGroupMarkers: match.Any(),
 		Attributes:        match.IsEmpty(), // but it is set -> fails
-	}.Test(r2, cmd)
+	}.Equal(r2, cmd)
 	require.True(t, r2.failed)
 	require.Contains(t, r2.msg, "attributes")
 }

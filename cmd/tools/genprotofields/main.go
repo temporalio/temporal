@@ -354,8 +354,8 @@ func renderMessage(b *bytes.Buffer, m *messageModel) {
 }
 
 // renderMatch emits the match package: a matcher struct per message (one `any`
-// field per proto field) plus a Test method that checks every field, enforcing
-// exhaustiveness via the same field model used for the handles.
+// field per proto field) plus Equal (exhaustive) and EqualPartial (only-specified)
+// assertions, sharing the field model used for the handles.
 func renderMatch(pkg string, msgs []*messageModel) []byte {
 	imports := newImports()
 	const requirePath = "github.com/stretchr/testify/require"
@@ -377,17 +377,30 @@ func renderMatch(pkg string, msgs []*messageModel) []byte {
 	for _, m := range msgs {
 		typeExpr := "*" + imports.aliasByPath[m.PkgPath] + "." + m.GoName
 
-		fmt.Fprintf(&b, "\n// %s is an exhaustive matcher for %s. Every field must be\n", m.GoName, typeExpr)
-		fmt.Fprintln(&b, "// assigned a match.Matcher or a literal; an unset field fails the match.")
+		fmt.Fprintf(&b, "\n// %s matches %s field by field. Assign each field a\n", m.GoName, typeExpr)
+		fmt.Fprintln(&b, "// match.Matcher or a bare literal (compared with Eq).")
 		fmt.Fprintf(&b, "type %s struct {\n", m.GoName)
 		for _, f := range m.Fields {
 			fmt.Fprintf(&b, "\t%s any\n", f.GoName)
 		}
 		fmt.Fprintln(&b, "}")
 
-		fmt.Fprintf(&b, "\n// Test asserts that actual matches m, reporting every field mismatch.\n")
-		fmt.Fprintf(&b, "func (m %s) Test(t require.TestingT, actual %s) {\n", m.GoName, typeExpr)
-		fmt.Fprintf(&b, "\te := newEval(%q)\n", m.GoName)
+		fmt.Fprintf(&b, "\n// Equal asserts that actual matches m exhaustively: every field must be\n")
+		fmt.Fprintln(&b, "// assigned a matcher or literal (use match.Any() to ignore one).")
+		fmt.Fprintf(&b, "func (m %s) Equal(t require.TestingT, actual %s) {\n", m.GoName, typeExpr)
+		fmt.Fprintf(&b, "\tif h, ok := t.(interface{ Helper() }); ok {\n\t\th.Helper()\n\t}\n")
+		fmt.Fprintf(&b, "\tm.eval(t, actual, true)\n")
+		fmt.Fprintln(&b, "}")
+
+		fmt.Fprintf(&b, "\n// EqualPartial asserts that actual matches the fields set on m; unset\n")
+		fmt.Fprintln(&b, "// (nil) fields are ignored.")
+		fmt.Fprintf(&b, "func (m %s) EqualPartial(t require.TestingT, actual %s) {\n", m.GoName, typeExpr)
+		fmt.Fprintf(&b, "\tif h, ok := t.(interface{ Helper() }); ok {\n\t\th.Helper()\n\t}\n")
+		fmt.Fprintf(&b, "\tm.eval(t, actual, false)\n")
+		fmt.Fprintln(&b, "}")
+
+		fmt.Fprintf(&b, "\nfunc (m %s) eval(t require.TestingT, actual %s, exhaustive bool) {\n", m.GoName, typeExpr)
+		fmt.Fprintf(&b, "\te := newEval(%q, exhaustive)\n", m.GoName)
 		for _, f := range m.Fields {
 			fmt.Fprintf(&b, "\te.field(%q, m.%s, actual.Get%s())\n", f.ProtoName, f.GoName, f.GoName)
 		}

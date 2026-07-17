@@ -9,8 +9,8 @@ import (
 	workflowservicepb "go.temporal.io/api/workflowservice/v1"
 )
 
-// StartWorkflowExecutionRequest is an exhaustive matcher for *workflowservicepb.StartWorkflowExecutionRequest. Every field must be
-// assigned a match.Matcher or a literal; an unset field fails the match.
+// StartWorkflowExecutionRequest matches *workflowservicepb.StartWorkflowExecutionRequest field by field. Assign each field a
+// match.Matcher or a bare literal (compared with Eq).
 type StartWorkflowExecutionRequest struct {
 	Namespace                    any
 	WorkflowId                   any
@@ -43,9 +43,26 @@ type StartWorkflowExecutionRequest struct {
 	TimeSkippingConfig           any
 }
 
-// Test asserts that actual matches m, reporting every field mismatch.
-func (m StartWorkflowExecutionRequest) Test(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest) {
-	e := newEval("StartWorkflowExecutionRequest")
+// Equal asserts that actual matches m exhaustively: every field must be
+// assigned a matcher or literal (use match.Any() to ignore one).
+func (m StartWorkflowExecutionRequest) Equal(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, true)
+}
+
+// EqualPartial asserts that actual matches the fields set on m; unset
+// (nil) fields are ignored.
+func (m StartWorkflowExecutionRequest) EqualPartial(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, false)
+}
+
+func (m StartWorkflowExecutionRequest) eval(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest, exhaustive bool) {
+	e := newEval("StartWorkflowExecutionRequest", exhaustive)
 	e.field("namespace", m.Namespace, actual.GetNamespace())
 	e.field("workflow_id", m.WorkflowId, actual.GetWorkflowId())
 	e.field("workflow_type", m.WorkflowType, actual.GetWorkflowType())
@@ -78,8 +95,8 @@ func (m StartWorkflowExecutionRequest) Test(t require.TestingT, actual *workflow
 	e.report(t)
 }
 
-// StartWorkflowExecutionResponse is an exhaustive matcher for *workflowservicepb.StartWorkflowExecutionResponse. Every field must be
-// assigned a match.Matcher or a literal; an unset field fails the match.
+// StartWorkflowExecutionResponse matches *workflowservicepb.StartWorkflowExecutionResponse field by field. Assign each field a
+// match.Matcher or a bare literal (compared with Eq).
 type StartWorkflowExecutionResponse struct {
 	RunId               any
 	FirstExecutionRunId any
@@ -89,9 +106,26 @@ type StartWorkflowExecutionResponse struct {
 	Link                any
 }
 
-// Test asserts that actual matches m, reporting every field mismatch.
-func (m StartWorkflowExecutionResponse) Test(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse) {
-	e := newEval("StartWorkflowExecutionResponse")
+// Equal asserts that actual matches m exhaustively: every field must be
+// assigned a matcher or literal (use match.Any() to ignore one).
+func (m StartWorkflowExecutionResponse) Equal(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, true)
+}
+
+// EqualPartial asserts that actual matches the fields set on m; unset
+// (nil) fields are ignored.
+func (m StartWorkflowExecutionResponse) EqualPartial(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, false)
+}
+
+func (m StartWorkflowExecutionResponse) eval(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse, exhaustive bool) {
+	e := newEval("StartWorkflowExecutionResponse", exhaustive)
 	e.field("run_id", m.RunId, actual.GetRunId())
 	e.field("first_execution_run_id", m.FirstExecutionRunId, actual.GetFirstExecutionRunId())
 	e.field("started", m.Started, actual.GetStarted())
@@ -101,21 +135,38 @@ func (m StartWorkflowExecutionResponse) Test(t require.TestingT, actual *workflo
 	e.report(t)
 }
 
-// Memo is an exhaustive matcher for *commonpb.Memo. Every field must be
-// assigned a match.Matcher or a literal; an unset field fails the match.
+// Memo matches *commonpb.Memo field by field. Assign each field a
+// match.Matcher or a bare literal (compared with Eq).
 type Memo struct {
 	Fields any
 }
 
-// Test asserts that actual matches m, reporting every field mismatch.
-func (m Memo) Test(t require.TestingT, actual *commonpb.Memo) {
-	e := newEval("Memo")
+// Equal asserts that actual matches m exhaustively: every field must be
+// assigned a matcher or literal (use match.Any() to ignore one).
+func (m Memo) Equal(t require.TestingT, actual *commonpb.Memo) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, true)
+}
+
+// EqualPartial asserts that actual matches the fields set on m; unset
+// (nil) fields are ignored.
+func (m Memo) EqualPartial(t require.TestingT, actual *commonpb.Memo) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, false)
+}
+
+func (m Memo) eval(t require.TestingT, actual *commonpb.Memo, exhaustive bool) {
+	e := newEval("Memo", exhaustive)
 	e.field("fields", m.Fields, actual.GetFields())
 	e.report(t)
 }
 
-// Command is an exhaustive matcher for *commandpb.Command. Every field must be
-// assigned a match.Matcher or a literal; an unset field fails the match.
+// Command matches *commandpb.Command field by field. Assign each field a
+// match.Matcher or a bare literal (compared with Eq).
 type Command struct {
 	CommandType       any
 	UserMetadata      any
@@ -123,9 +174,26 @@ type Command struct {
 	Attributes        any
 }
 
-// Test asserts that actual matches m, reporting every field mismatch.
-func (m Command) Test(t require.TestingT, actual *commandpb.Command) {
-	e := newEval("Command")
+// Equal asserts that actual matches m exhaustively: every field must be
+// assigned a matcher or literal (use match.Any() to ignore one).
+func (m Command) Equal(t require.TestingT, actual *commandpb.Command) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, true)
+}
+
+// EqualPartial asserts that actual matches the fields set on m; unset
+// (nil) fields are ignored.
+func (m Command) EqualPartial(t require.TestingT, actual *commandpb.Command) {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	m.eval(t, actual, false)
+}
+
+func (m Command) eval(t require.TestingT, actual *commandpb.Command, exhaustive bool) {
+	e := newEval("Command", exhaustive)
 	e.field("command_type", m.CommandType, actual.GetCommandType())
 	e.field("user_metadata", m.UserMetadata, actual.GetUserMetadata())
 	e.field("event_group_markers", m.EventGroupMarkers, actual.GetEventGroupMarkers())

@@ -112,7 +112,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 		Status:              match.Any(),
 		Link:                match.Any(),
 		FirstExecutionRunId: match.Any(),
-	}.Test(s.T(), response)
+	}.Equal(s.T(), response)
 
 	task := response.GetEagerWorkflowTask()
 	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")

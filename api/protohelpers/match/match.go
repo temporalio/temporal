@@ -75,20 +75,29 @@ func coerce(want any) Matcher {
 // eval accumulates per-field match failures for a single message. Generated
 // Test methods drive it: one field call per proto field, then report.
 type eval struct {
-	typeName string
-	failures []string
+	typeName   string
+	exhaustive bool
+	failures   []string
 }
 
-func newEval(typeName string) *eval {
-	return &eval{typeName: typeName}
+func newEval(typeName string, exhaustive bool) *eval {
+	return &eval{typeName: typeName, exhaustive: exhaustive}
 }
 
-// field checks got against want (a Matcher or a bare literal). A nil want is a
-// failure, enforcing exhaustiveness: every field must be given a matcher (use
-// Any to ignore one).
+// field checks got against want (a Matcher or a bare literal). A nil want means
+// the field was not specified: in exhaustive mode that is a failure (every field
+// must be given a matcher; use Any to ignore one), in partial mode it is skipped.
 func (e *eval) field(name string, want any, got any) {
 	if want == nil {
-		e.failures = append(e.failures, fmt.Sprintf("%s: no matcher specified (use match.Any() to ignore)", name))
+		if e.exhaustive {
+			e.failures = append(e.failures, fmt.Sprintf("%s: no matcher specified (use match.Any() to ignore)", name))
+		}
+		return
+	}
+	if !e.exhaustive && predicate.IsAny(want) {
+		// In partial mode a field is ignored by omission; an explicit Any() is a
+		// redundant misuse and likely a mistake.
+		e.failures = append(e.failures, fmt.Sprintf("%s: match.Any() is redundant in EqualPartial; omit the field instead", name))
 		return
 	}
 	if res := coerce(want).Eval(got); !res.OK {

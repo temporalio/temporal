@@ -34,9 +34,22 @@ func (f Func) Eval(got any) Result { return f(got) }
 // pass is a reusable successful result.
 var pass = Result{OK: true}
 
+// anyPredicate matches any value. It is a distinct type (rather than a Func) so
+// callers can detect an explicit Any via IsAny — e.g. to reject it where
+// ignoring a field is expressed by omission instead.
+type anyPredicate struct{}
+
+func (anyPredicate) Eval(any) Result { return pass }
+
 // Any matches any value.
 func Any() Predicate {
-	return Func(func(any) Result { return pass })
+	return anyPredicate{}
+}
+
+// IsAny reports whether p is the predicate returned by Any.
+func IsAny(p any) bool {
+	_, ok := p.(anyPredicate)
+	return ok
 }
 
 // NotEmpty matches when got holds a non-zero value: a non-empty string, a
