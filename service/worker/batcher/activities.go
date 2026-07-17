@@ -605,11 +605,11 @@ func (a *activities) startTaskProcessor(
 // the identifying fields of the target of a single call. Deriving the request ID
 // lets the server's idempotency checks collapse retries of the same call.
 func deterministicRequestID(jobID string, parts ...string) string {
-	key := jobID
+	var key strings.Builder
 	for _, part := range parts {
-		key += ":" + part
+		key.WriteString(":" + part)
 	}
-	return uuid.NewSHA1(uuid.Nil, []byte(key)).String()
+	return uuid.NewSHA1(uuid.Nil, []byte(key.String())).String()
 }
 
 // processSingleTask processes a single batch task, bounding its execution with a
