@@ -233,12 +233,12 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("caps attempt context with parent deadline", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
 		defer cancel()
 
 		tb := newRecordingTB()
 		tb.run(func() {
-			await.Require(parentCtx, tb, func(t *await.T) {
+			await.Require(ctx, tb, func(t *await.T) {
 				deadline, ok := t.Context().Deadline()
 				if !ok {
 					t.Error("missing deadline")
@@ -259,13 +259,13 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("parent context cancellation stops polling", func(t *testing.T) {
 		t.Parallel()
 
-		parentCtx, cancel := context.WithCancel(testcontext.For(t))
+		ctx, cancel := context.WithCancel(testcontext.For(t))
 		defer cancel()
 		var attempts atomic.Int32
 
 		tb := newRecordingTB()
 		tb.run(func() {
-			await.Require(parentCtx, tb, func(t *await.T) {
+			await.Require(ctx, tb, func(t *await.T) {
 				attempts.Add(1)
 				t.Error("not ready")
 				cancel()

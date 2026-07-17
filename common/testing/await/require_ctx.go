@@ -68,7 +68,7 @@ func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, p
 }
 
 func run(
-	parentCtx context.Context,
+	ctx context.Context,
 	tb testing.TB,
 	condition func(*T),
 	cfg config,
@@ -84,37 +84,29 @@ func run(
 		return
 	}
 	// Guard: context.WithDeadline panics on a nil parent.
-	if parentCtx == nil {
+	if ctx == nil {
 		tb.Fatalf("%s: nil context", funcName)
 		return
 	}
 
 	start := time.Now()
-
-	// Reserve enough test-context time for the await itself plus post-await reserve.
-	extension := testcontext.EnsureRemaining(tb, cfg.totalTimeout+postAwaitTimeoutReserve())
-
-	// Only swap in the refreshed context if the caller passed a [testcontext].
-	if extension.ExtendedBy > 0 && extension.Contains(parentCtx) {
-		parentCtx = extension.CurrentContext()
-	}
-
-	// Use the shortest applicable deadline: await timeout, test-context cap, or
-	// parent context deadline.
 	deadline := start.Add(cfg.totalTimeout)
+
+	// Ensure enough test-context time for the await itself plus post-await reserve.
+	ctx, extension := testcontext.EnsureRemaining(tb, ctx, cfg.totalTimeout+postAwaitTimeoutReserve())
 	if !extension.Deadline.IsZero() && extension.Deadline.Before(deadline) {
 		deadline = extension.Deadline
 	}
 
-	// Cap at the parent context's deadline if it's earlier than our timeout.
-	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
-		deadline = parentDeadline
+	// Cap at the context's deadline if it's earlier than our timeout.
+	if ctxDeadline, hasDeadline := ctx.Deadline(); hasDeadline && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
 	}
 
 	// Deadline capping can leave no time to run; report that as 0, not a
 	// negative duration.
 	effectiveTimeout := max(0, time.Until(deadline))
-	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
+	awaitCtx, awaitCancel := context.WithDeadline(ctx, deadline)
 	defer awaitCancel()
 
 	report := timeoutReport{effectiveTimeout: effectiveTimeout}
