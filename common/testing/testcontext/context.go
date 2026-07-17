@@ -1,6 +1,7 @@
 package testcontext
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"slices"
@@ -31,8 +32,8 @@ var testContexts = contextStore{
 }
 
 type config struct {
-	timeout    time.Duration
-	timeoutSet bool
+	// timeout is the explicitly requested timeout, or zero to use the default.
+	timeout time.Duration
 }
 
 type contextDecorator struct {
@@ -54,7 +55,7 @@ func DefaultTimeout() time.Duration {
 func For(tb testing.TB, opts ...Option) context.Context {
 	tb.Helper()
 
-	cfg := config{timeout: DefaultTimeout()}
+	var cfg config
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -75,7 +76,6 @@ func WithTimeout(timeout time.Duration) Option {
 			return
 		}
 		cfg.timeout = effectiveTimeout(timeout)
-		cfg.timeoutSet = true
 	}
 }
 
@@ -86,7 +86,7 @@ func WithTimeout(timeout time.Duration) Option {
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
 	tb.Helper()
 
-	st := getContextState(tb, config{timeout: DefaultTimeout()})
+	st := getContextState(tb, config{})
 	st.attachDecorator(tb, contextDecorator{
 		key:      key,
 		decorate: decorator,
@@ -110,12 +110,13 @@ func getContextState(tb testing.TB, cfg config) *contextState {
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	if !ok {
+		timeout := cmp.Or(cfg.timeout, DefaultTimeout())
 		st = &contextState{
 			testStart:         time.Now(),
-			configuredTimeout: cfg.timeout,
+			configuredTimeout: timeout,
 			decorators:        make(map[any]struct{}),
 		}
-		st.resetContextDeadline(tb, st.testStart.Add(cfg.timeout))
+		st.resetContextDeadline(tb, st.testStart.Add(timeout))
 		testContexts.byTest[tb] = st
 
 		tb.Cleanup(func() {
@@ -130,9 +131,9 @@ func getContextState(tb testing.TB, cfg config) *contextState {
 	}
 	testContexts.Unlock()
 
-	// A freshly created context adopts cfg.timeout, so only an existing one can
-	// conflict with an explicitly requested timeout.
-	if ok && cfg.timeoutSet {
+	// A freshly created context adopts the requested timeout, so only an
+	// existing one can conflict with an explicitly requested timeout.
+	if ok && cfg.timeout != 0 {
 		st.mu.Lock()
 		configured := st.configuredTimeout
 		st.mu.Unlock()
