@@ -668,7 +668,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		}
 		inDelayWindow := a.firstDispatchTime().After(ctx.Now(a))
 		pausedBeforeFirstAttempt := a.GetFirstAttemptStartedTime() == nil && a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-		if !(inDelayWindow || pausedBeforeFirstAttempt) {
+		if !(inDelayWindow || pausedBeforeFirstAttempt) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
 			return nil, serviceerror.NewFailedPrecondition(
 				"cannot update start_delay: the first activity attempt has already been dispatched")
 		}
