@@ -5119,7 +5119,7 @@ func (s *Versioning3Suite) startWorkflow(
 		VersioningOverride: override,
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	return we.GetRunId()
 }
@@ -5134,7 +5134,7 @@ func (s *Versioning3Suite) queryWorkflow(
 		Query:     tv.Query(),
 	}
 
-	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout)
+	shortCtx, cancel := context.WithTimeout(s.Context(), common.MinLongPollTimeout)
 	defer cancel()
 	response, err := env.FrontendClient().QueryWorkflow(shortCtx, request)
 	return response, err
@@ -7038,7 +7038,7 @@ func (s *Versioning3Suite) TestPinnedCaN_FailedTransientNotificationRefiresDespi
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 
-	ctx, cancel := context.WithTimeout(env.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(s.Context(), time.Minute)
 	defer cancel()
 
 	tv1 := env.Tv().WithBuildIDNumber(1)
@@ -8387,7 +8387,7 @@ func (s *Versioning3Suite) TestVersioning3_NoWorkerVersionOnStartedEvents() {
 	updateResultCh2 := sendUpdate(s.Context(), env, tvUpd2)
 
 	// Poll and fail the WFT with deployment options to trigger a transient retry.
-	failCtx := testcore.NewContext()
+	failCtx := s.Context()
 	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(failCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),

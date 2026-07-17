@@ -644,18 +644,17 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 // recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
 // set the outcome failure directly and leave the attempt failure as is.
 func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
-	outcome := a.Outcome.Get(ctx)
-
 	failure := &failurepb.Failure{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-				TimeoutType: timeoutType,
+				TimeoutType:          timeoutType,
+				LastHeartbeatDetails: a.lastHeartbeatDetails(ctx),
 			},
 		},
 	}
 
-	outcome.Variant = &activitypb.ActivityOutcome_Failed_{
+	a.Outcome.Get(ctx).Variant = &activitypb.ActivityOutcome_Failed_{
 		Failed: &activitypb.ActivityOutcome_Failed{
 			Failure: failure,
 		},
@@ -773,6 +772,16 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 			},
 		},
 	}
+}
+
+// lastHeartbeatDetails returns the details recorded by the most recent heartbeat, or nil if
+// the activity never heartbeated.
+func (a *Activity) lastHeartbeatDetails(ctx chasm.Context) *commonpb.Payloads {
+	heartbeat, ok := a.LastHeartbeat.TryGet(ctx)
+	if !ok {
+		return nil
+	}
+	return heartbeat.GetDetails()
 }
 
 // RecordHeartbeat records a heartbeat for the activity.

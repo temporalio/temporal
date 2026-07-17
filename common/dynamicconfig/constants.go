@@ -276,6 +276,26 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
 	)
+	PersistenceHealthSignalPercentilesEnabled = NewGlobalBoolSetting(
+		"system.persistenceHealthSignalPercentilesEnabled",
+		false,
+		`PersistenceHealthSignalPercentilesEnabled determines whether persistence latency is tracked using distribution objects`,
+	)
+	PersistenceHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.persistenceHealthSignalLatencyWindowCount",
+		10,
+		`PersistenceHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	PersistenceHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.persistenceHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`PersistenceHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	PersistenceHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.persistenceHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"persistenceHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the persistence system",
+	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
 		10*time.Second,
@@ -1511,6 +1531,12 @@ a decision to scale down the number of pollers will be issued`,
 		10,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
+	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
@@ -3130,7 +3156,7 @@ existing workflows to attach callbacks.`,
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
-		false,
+		true,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
 	)
