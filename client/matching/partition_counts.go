@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/tqid"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -108,10 +109,14 @@ func invokeWithPartitionCounts[Req, Res any](
 	logger log.Logger,
 	cache *partitionCache,
 	pkey string,
+	p tqid.Partition,
+	tq *tqid.TaskQueue,
 	request Req,
 	opts []grpc.CallOption,
 	op func(
 		ctx context.Context,
+		p tqid.Partition,
+		tq *tqid.TaskQueue,
 		pc PartitionCounts,
 		request Req,
 		opts []grpc.CallOption,
@@ -126,7 +131,7 @@ func invokeWithPartitionCounts[Req, Res any](
 	pc := cache.lookup(pkey)
 
 	for attempt := 0; ; attempt++ {
-		res, err := op(pc.appendToOutgoingContext(ctx), pc, request, opts)
+		res, err := op(pc.appendToOutgoingContext(ctx), p, tq, pc, request, opts)
 
 		// update cache on trailer on both success and error. if the trailer has no data,
 		// this removes the key from the cache.
