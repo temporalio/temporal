@@ -147,7 +147,7 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 
 // EnsureRemaining extends the test-scoped context so at least d remains from
 // now, if its current deadline is earlier. It is capped so the total test
-// timeout never exceeds max(maxTimeout, configuredTimeout). If tb has no
+// timeout never exceeds max(maxTimeout, timeout). If tb has no
 // test context created by this package, EnsureRemaining is a no-op.
 //
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
@@ -178,7 +178,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 
 	// Preserve longer configured timeouts; otherwise bound extensions.
 	effectiveMaxTimeout := maxTimeout * debug.TimeoutMultiplier
-	maxDeadline := st.testStart.Add(max(effectiveMaxTimeout, st.configuredTimeout))
+	maxDeadline := st.createdAt.Add(max(effectiveMaxTimeout, st.timeout))
 	requestedDeadline = util.MinTime(requestedDeadline, maxDeadline)
 
 	// Context deadlines are immutable; extending the test context means
@@ -214,19 +214,19 @@ type contextState struct {
 	contextHistory []context.Context
 	// cancels tracks every replacement context so cleanup can release them all.
 	cancels           []context.CancelFunc
-	testStart         time.Time
-	configuredTimeout time.Duration
+	createdAt         time.Time
+	timeout           time.Duration
 	decorators        map[any]struct{}
 	orderedDecorators []contextDecorator
 }
 
 func newContextState(tb testing.TB, timeout time.Duration) *contextState {
 	st := &contextState{
-		testStart:         time.Now(),
-		configuredTimeout: timeout,
-		decorators:        make(map[any]struct{}),
+		createdAt:  time.Now(),
+		timeout:    timeout,
+		decorators: make(map[any]struct{}),
 	}
-	st.useContext(newTestContext(tb, st.testStart.Add(timeout), st.orderedDecorators))
+	st.useContext(newTestContext(tb, st.createdAt.Add(timeout), st.orderedDecorators))
 	return st
 }
 
@@ -255,7 +255,7 @@ func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 	// existing one can conflict with an explicitly requested timeout.
 	if ok && cfg.timeout != 0 {
 		st.mu.Lock()
-		configured := st.configuredTimeout
+		configured := st.timeout
 		st.mu.Unlock()
 		if cfg.timeout != configured {
 			tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", configured, cfg.timeout)
@@ -275,10 +275,10 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	defer s.mu.Unlock()
 
 	timedOut = s.ctx.Err() == context.DeadlineExceeded
-	timeout = s.configuredTimeout
+	timeout = s.timeout
 
 	if deadline, ok := s.ctx.Deadline(); ok {
-		timeout = deadline.Sub(s.testStart)
+		timeout = deadline.Sub(s.createdAt)
 	}
 	// Match testing cleanup semantics: release the newest context first.
 	for _, cancel := range slices.Backward(s.cancels) {
