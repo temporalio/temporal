@@ -116,6 +116,15 @@ func Get(tb testing.TB) (context.Context, bool) {
 	return st.currentContext(), true
 }
 
+// GetOrDefault returns the current [testContext] for tb, or tb.Context if none exists.
+func GetOrDefault(tb testing.TB) context.Context {
+	tb.Helper()
+	if ctx, ok := Get(tb); ok {
+		return ctx
+	}
+	return tb.Context()
+}
+
 // Option configures the [testContext] returned by [GetOrCreate].
 type Option func(*config)
 

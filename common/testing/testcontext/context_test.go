@@ -325,6 +325,18 @@ func TestGet(t *testing.T) {
 	})
 }
 
+func TestGetOrDefault(t *testing.T) {
+	t.Run("returns testing context when no test context exists", func(t *testing.T) {
+		require.True(t, GetOrDefault(t) == t.Context())
+	})
+
+	t.Run("returns current test context", func(t *testing.T) {
+		want := GetOrCreate(t)
+
+		require.True(t, GetOrDefault(t) == want)
+	})
+}
+
 type recordingTB struct {
 	testing.TB
 
