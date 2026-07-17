@@ -95,7 +95,7 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 type contextState struct {
 	mu                sync.Mutex
 	ctx               context.Context
-	knownContexts     []context.Context
+	ownedContexts     []context.Context
 	cancels           []context.CancelFunc
 	testStart         time.Time
 	configuredTimeout time.Duration
@@ -177,10 +177,10 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		currentDeadline = st.setDeadline(tb, target)
 	}
 
-	return st.contextWithDeadline(tb, ctx, currentDeadline)
+	return st.capContextDeadline(tb, ctx, currentDeadline)
 }
 
-func (s *contextState) contextWithDeadline(
+func (s *contextState) capContextDeadline(
 	tb testing.TB,
 	ctx context.Context,
 	deadline time.Time,
@@ -189,7 +189,7 @@ func (s *contextState) contextWithDeadline(
 	if ctx == nil {
 		return ctx
 	}
-	if slices.Contains(s.knownContexts, ctx) {
+	if slices.Contains(s.ownedContexts, ctx) {
 		return s.ctx
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !deadline.Before(ctxDeadline) {
@@ -229,7 +229,7 @@ func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator
 		return
 	}
 	s.ctx = decorator.decorate(s.ctx)
-	s.knownContexts = append(s.knownContexts, s.ctx)
+	s.ownedContexts = append(s.ownedContexts, s.ctx)
 	s.decorators[decorator.key] = struct{}{}
 	s.orderedDecorators = append(s.orderedDecorators, decorator)
 }
@@ -261,7 +261,7 @@ func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) time.Time 
 		ctx = decorator.decorate(ctx)
 	}
 	s.ctx = ctx
-	s.knownContexts = append(s.knownContexts, ctx)
+	s.ownedContexts = append(s.ownedContexts, ctx)
 	s.cancels = append(s.cancels, cancel)
 	return deadline
 }
@@ -288,7 +288,7 @@ func (s *contextState) release() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ctx = nil
-	s.knownContexts = nil
+	s.ownedContexts = nil
 	s.cancels = nil
 	s.decorators = nil
 	s.orderedDecorators = nil
