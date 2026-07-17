@@ -176,13 +176,12 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	// Check if the current context has a deadline.
+	// Validate the context.
 	testDeadline, ok := st.currentContext().Deadline()
 	if !ok {
 		tb.Fatal("testcontext: current context has no deadline")
 		return ctx
 	}
-	// Check if the context is derived from this test's context.
 	if !slices.Contains(st.contextStack, ctx) {
 		tb.Fatalf("testcontext: context is not derived from this test's context; are you using context.Background()?")
 		return ctx
