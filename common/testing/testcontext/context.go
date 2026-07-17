@@ -137,7 +137,7 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 
 // EnsureRemaining extends the test-scoped context so at least d remains from
 // now, if its current deadline is earlier. It is capped so the total test
-// timeout never exceeds max(maxTestTimeout, configuredTimeout). If tb has no
+// timeout never exceeds max(maxTimeout, configuredTimeout). If tb has no
 // test context created by this package, EnsureRemaining is a no-op.
 //
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
@@ -159,43 +159,34 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	currentDeadline, ok := st.ctx.Deadline()
+	testDeadline, ok := st.ctx.Deadline()
 	if !ok {
 		return ctx
 	}
 
-	target := time.Now().Add(d)
+	requestedDeadline := time.Now().Add(d)
 
 	// Preserve longer configured timeouts; otherwise bound extensions.
 	effectiveMaxTimeout := maxTimeout * debug.TimeoutMultiplier
-	capDeadline := st.testStart.Add(max(effectiveMaxTimeout, st.configuredTimeout))
-	if capDeadline.Before(target) {
-		target = capDeadline
+	maxDeadline := st.testStart.Add(max(effectiveMaxTimeout, st.configuredTimeout))
+	if maxDeadline.Before(requestedDeadline) {
+		requestedDeadline = maxDeadline
 	}
-	if target.After(currentDeadline) {
+	if requestedDeadline.After(testDeadline) {
 		// Context deadlines are immutable; replace and replay decorators.
-		currentDeadline = st.setDeadline(tb, target)
+		testDeadline = st.setDeadline(tb, requestedDeadline)
 	}
 
-	return st.capContextDeadline(tb, ctx, currentDeadline)
-}
-
-func (s *contextState) capContextDeadline(
-	tb testing.TB,
-	ctx context.Context,
-	deadline time.Time,
-) context.Context {
-	tb.Helper()
 	if ctx == nil {
 		return ctx
 	}
-	if slices.Contains(s.ownedContexts, ctx) {
-		return s.ctx
+	if slices.Contains(st.ownedContexts, ctx) {
+		return st.ctx
 	}
-	if ctxDeadline, ok := ctx.Deadline(); ok && !deadline.Before(ctxDeadline) {
+	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
 	}
-	ctx, cancel := context.WithDeadline(ctx, deadline)
+	ctx, cancel := context.WithDeadline(ctx, testDeadline)
 	tb.Cleanup(cancel)
 	return ctx
 }
