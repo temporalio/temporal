@@ -160,6 +160,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		return ctx
 	}
 
+	// Check if there is a [testContext] for this TB.
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
@@ -170,17 +171,16 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
+	// Check if the current context has a deadline.
 	testDeadline, ok := st.currentContext().Deadline()
 	if !ok {
 		return ctx
 	}
 
-	requestedDeadline := time.Now().Add(d)
-
 	// Preserve longer configured timeouts; otherwise bound extensions.
 	effectiveMaxTimeout := maxTimeout * debug.TimeoutMultiplier
 	maxDeadline := st.createdAt.Add(max(effectiveMaxTimeout, st.timeout))
-	requestedDeadline = util.MinTime(requestedDeadline, maxDeadline)
+	requestedDeadline := util.MinTime(time.Now().Add(d), maxDeadline)
 
 	// Context deadlines are immutable; extending the test context means
 	// replacing it and replaying metadata/decorators.
