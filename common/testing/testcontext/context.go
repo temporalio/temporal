@@ -178,8 +178,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	}
 
 	// Preserve longer configured timeouts; otherwise bound extensions.
-	effectiveMaxTimeout := maxTimeout * debug.TimeoutMultiplier
-	maxDeadline := st.createdAt.Add(max(effectiveMaxTimeout, st.timeout))
+	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
 	requestedDeadline := util.MinTime(time.Now().Add(d), maxDeadline)
 
 	// Context deadlines are immutable; extending the test context means
