@@ -21,6 +21,7 @@ const (
 	testNameMetadataKey = "temporal-test-name"
 )
 
+// contextStore tracks one context state per test.
 type contextStore struct {
 	sync.Mutex
 	byTest map[testing.TB]*contextState
@@ -32,16 +33,19 @@ var testContexts = contextStore{
 	byTest: make(map[testing.TB]*contextState),
 }
 
+// config records options for creating or validating a test-scoped context.
 type config struct {
 	// timeout is the explicitly requested timeout, or zero to use the default.
 	timeout time.Duration
 }
 
+// contextDecorator records a keyed transformation to replay on replacement contexts.
 type contextDecorator struct {
 	key      any
 	decorate func(context.Context) context.Context
 }
 
+// testContext bundles a context with its cancel function and applied deadline.
 type testContext struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -201,6 +205,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	return ctx
 }
 
+// contextState is the mutable per-test context state shared by test helpers.
 type contextState struct {
 	mu  sync.Mutex
 	ctx context.Context
