@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultTimeout = 90 * time.Second
-	// maxTimeout caps how far EnsureRemaining can extend a test context.
+	// maxTimeout caps how far EnsureRemaining can extend a [testContext].
 	maxTimeout          = 2 * time.Minute
 	testNameMetadataKey = "temporal-test-name"
 )
@@ -83,7 +83,7 @@ func DefaultTimeout() time.Duration {
 // For returns the [testContext] for tb. The context is canceled
 // when the test ends or when the configured test timeout expires.
 //
-// The first call creates the per-test context and fixes its timeout. Later calls
+// The first call creates the [testContext] and fixes its timeout. Later calls
 // return the same context, but an explicit different timeout fails instead of
 // being silently ignored.
 func For(tb testing.TB, opts ...Option) context.Context {
@@ -130,7 +130,7 @@ func WithTimeout(timeout time.Duration) Option {
 }
 
 // AttachDecorator applies decorator to the [testContext] once for key.
-// Reusing the same key is a no-op. If the test context does not exist yet,
+// Reusing the same key is a no-op. If the [testContext] does not exist yet,
 // AttachDecorator creates it with the default timeout. Call [For] with [WithTimeout]
 // first when using a custom timeout.
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
@@ -165,9 +165,9 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 // EnsureRemaining extends the [testContext] so at least minRemaining
 // remains from now. Capped at [maxTimeout].
 //
-// If ctx is one of this test's contexts, EnsureRemaining returns the current
+// If ctx is from the [testContext] history, EnsureRemaining returns the current
 // [testContext]. Otherwise, it fails because ctx is not derived from the
-// test context chain.
+// [testContext] chain.
 func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Duration) context.Context {
 	tb.Helper()
 	if ctx == nil {
@@ -203,7 +203,7 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
 	requestedDeadline := util.MinTime(time.Now().Add(minRemaining), maxDeadline)
 
-	// Extend the test context if the requested deadline is after the current deadline.
+	// Extend the [testContext] if the requested deadline is after the current deadline.
 	if requestedDeadline.After(testDeadline) {
 		next := newTestContext(tb, requestedDeadline, st.decorators)
 		st.pushContext(next)
@@ -212,13 +212,13 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 	return st.currentContext()
 }
 
-// contextState is the mutable per-test context state shared by test helpers.
+// contextState is the mutable [testContext] state shared by test helpers.
 type contextState struct {
 	createdAt time.Time
 	timeout   time.Duration
 
 	mu sync.Mutex
-	// contextStack lets EnsureRemaining recognize stale test contexts after
+	// contextStack lets EnsureRemaining recognize stale [testContext]s after
 	// deadline resets. The last entry is the current context.
 	contextStack []context.Context
 	// cancelStack tracks every replacement context so cleanup can release them all.
