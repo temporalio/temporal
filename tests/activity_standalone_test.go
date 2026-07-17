@@ -4791,6 +4791,62 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		verifyListQuery(t, fmt.Sprintf("ExecutionStatus = 'Running' AND ActivityType = '%s'", activityType), 10)
 	})
 
+	t.Run("QueryPausedActivity", func(t *testing.T) {
+		pausedActivityID := testcore.RandomizeStr(t.Name())
+		pausedActivityType := testcore.RandomizeStr(t.Name())
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          pausedActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: pausedActivityType},
+			Identity:            env.Tv().WorkerIdentity(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Minute),
+			RequestId:           env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PauseActivityExecution(s.Context(), &workflowservice.PauseActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: pausedActivityID,
+			RunId:      startResp.GetRunId(),
+			Identity:   env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		var resp *workflowservice.ListActivityExecutionsResponse
+		s.AwaitTrue(
+			func() bool {
+				resp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					PageSize:  10,
+					Query:     fmt.Sprintf("ExecutionStatus = 'Paused' AND ActivityId = '%s'", pausedActivityID),
+				})
+				return err == nil && len(resp.GetExecutions()) == 1
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED, resp.GetExecutions()[0].GetStatus())
+
+		var allResp *workflowservice.ListActivityExecutionsResponse
+		s.AwaitTrue(
+			func() bool {
+				allResp, err = env.FrontendClient().ListActivityExecutions(s.Context(), &workflowservice.ListActivityExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					PageSize:  10,
+				})
+				for _, execution := range allResp.GetExecutions() {
+					if execution.GetActivityId() == pausedActivityID {
+						return execution.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED
+					}
+				}
+				return false
+			},
+			testcore.WaitForESToSettle,
+			100*time.Millisecond,
+		)
+	})
+
 	t.Run("QueryByTaskQueue", func(t *testing.T) {
 		verifyListQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", taskQueue, activityType), 10)
 	})
@@ -8082,6 +8138,7 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED, descResp.GetInfo().GetStatus())
 
 		// Update start_delay while paused
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
@@ -10366,6 +10423,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED, descResp.GetInfo().GetStatus())
 
 		// Attempt to poll — the dispatch task was invalidated by the stamp bump, so no task should
 		// be available. Use a short-lived context to avoid blocking the test.
