@@ -180,6 +180,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	if !ok {
 		return ctx
 	}
+	owned := slices.Contains(st.contextStack, ctx)
 
 	// Preserve longer configured timeouts; otherwise bound extensions.
 	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
@@ -193,8 +194,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		testDeadline = next.deadline
 	}
 
-	// Callers holding an older test context should move to the current one.
-	if slices.Contains(st.contextStack, ctx) {
+	if owned {
 		return st.currentContext()
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
