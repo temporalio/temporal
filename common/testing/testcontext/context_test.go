@@ -247,15 +247,21 @@ func TestEnsureRemaining(t *testing.T) {
 		})
 	})
 
-	t.Run("preserves unowned context with earlier deadline", func(t *testing.T) {
+	t.Run("fails for unowned context with earlier deadline", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			For(t, WithTimeout(5*time.Millisecond))
-			unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-			defer cancel()
+			tb := newRecordingTB()
+			tb.run(func() {
+				For(tb, WithTimeout(5*time.Millisecond))
+				unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+				defer cancel()
 
-			refreshed := EnsureRemaining(t, unowned, 10*time.Millisecond)
+				EnsureRemaining(tb, unowned, 10*time.Millisecond)
+			})
 
-			require.Same(t, unowned, refreshed)
+			require.Equal(t,
+				"testcontext: context is not derived from this test's context; are you using context.Background()?",
+				tb.fatal(),
+			)
 		})
 	})
 
