@@ -259,8 +259,8 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	if deadline, ok := s.ctx.Deadline(); ok {
 		timeout = deadline.Sub(s.testStart)
 	}
-	for i := len(s.cancels) - 1; i >= 0; i-- {
-		s.cancels[i]()
+	for _, cancel := range slices.Backward(s.cancels) {
+		cancel()
 	}
 
 	s.ctx = nil
