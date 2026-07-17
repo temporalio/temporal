@@ -174,11 +174,10 @@ func TestEnsureRemaining(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
 
-			extension := EnsureRemaining(t, 250*time.Millisecond)
+			refreshed, extension := EnsureRemaining(t, ctx, 250*time.Millisecond)
 			require.Equal(t, 150*time.Millisecond, extension.ExtendedBy)
 			require.Equal(t, start.Add(250*time.Millisecond), extension.Deadline)
 
-			refreshed := For(t)
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
 			require.Equal(t, extension.Deadline, refreshedDeadline)
@@ -193,9 +192,10 @@ func TestEnsureRemaining(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
 
-			extension := EnsureRemaining(t, 10*time.Minute)
+			refreshed, extension := EnsureRemaining(t, ctx, 10*time.Minute)
 			require.Equal(t, maxTimeout-100*time.Millisecond, extension.ExtendedBy)
 			require.Equal(t, start.Add(maxTimeout), extension.Deadline)
+			require.Same(t, extension.CurrentContext(), refreshed)
 		})
 	})
 
@@ -209,27 +209,25 @@ func TestEnsureRemaining(t *testing.T) {
 		ctx := For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
-		extension := EnsureRemaining(t, time.Second)
+		refreshed, extension := EnsureRemaining(t, ctx, time.Second)
 		require.Positive(t, extension.ExtendedBy)
 
-		refreshed := For(t)
 		require.Equal(t, "decorated", refreshed.Value(key{}))
 	})
 
 	t.Run("preserves test name metadata", func(t *testing.T) {
-		For(t, WithTimeout(100*time.Millisecond))
-		extension := EnsureRemaining(t, time.Second)
+		ctx := For(t, WithTimeout(100*time.Millisecond))
+		refreshed, extension := EnsureRemaining(t, ctx, time.Second)
 		require.Positive(t, extension.ExtendedBy)
 
-		refreshed := For(t)
 		md, ok := metadata.FromOutgoingContext(refreshed)
 		require.True(t, ok)
 		require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
 	})
 
 	t.Run("preserves original configured timeout", func(t *testing.T) {
-		For(t, WithTimeout(100*time.Millisecond))
-		extension := EnsureRemaining(t, time.Second)
+		ctx := For(t, WithTimeout(100*time.Millisecond))
+		_, extension := EnsureRemaining(t, ctx, time.Second)
 		require.Positive(t, extension.ExtendedBy)
 
 		For(t, WithTimeout(100*time.Millisecond))
@@ -239,26 +237,38 @@ func TestEnsureRemaining(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			original := For(t, WithTimeout(5*time.Millisecond))
 
-			extension := EnsureRemaining(t, 10*time.Millisecond)
-			firstRefresh := extension.CurrentContext()
-			require.True(t, extension.Contains(original))
-			require.True(t, extension.Contains(firstRefresh))
+			firstRefresh, extension := EnsureRemaining(t, original, 10*time.Millisecond)
+			require.True(t, extension.contains(original))
+			require.True(t, extension.contains(firstRefresh))
 
-			extension = EnsureRemaining(t, 20*time.Millisecond)
-			require.True(t, extension.Contains(original))
-			require.True(t, extension.Contains(firstRefresh))
-			require.True(t, extension.Contains(extension.CurrentContext()))
+			refreshed, extension := EnsureRemaining(t, firstRefresh, 20*time.Millisecond)
+			require.True(t, extension.contains(original))
+			require.True(t, extension.contains(firstRefresh))
+			require.True(t, extension.contains(refreshed))
+		})
+	})
+
+	t.Run("preserves unowned context", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			For(t, WithTimeout(5*time.Millisecond))
+			unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+			defer cancel()
+
+			refreshed, extension := EnsureRemaining(t, unowned, 10*time.Millisecond)
+
+			require.Positive(t, extension.ExtendedBy)
+			require.Same(t, unowned, refreshed)
 		})
 	})
 
 	t.Run("safe concurrent calls", func(t *testing.T) {
-		For(t, WithTimeout(100*time.Millisecond))
+		ctx := For(t, WithTimeout(100*time.Millisecond))
 
 		var wg sync.WaitGroup
 		var negative atomic.Int32
 		for range 8 {
 			wg.Go(func() {
-				extension := EnsureRemaining(t, 10*time.Millisecond)
+				_, extension := EnsureRemaining(t, ctx, 10*time.Millisecond)
 				if extension.ExtendedBy < 0 {
 					negative.Add(1)
 				}

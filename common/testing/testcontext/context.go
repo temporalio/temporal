@@ -49,9 +49,9 @@ type Extension struct {
 	knownContexts  []context.Context
 }
 
-// Contains reports whether ctx is the test-scoped context observed by
+// contains reports whether ctx is the test-scoped context observed by
 // EnsureRemaining.
-func (e Extension) Contains(ctx context.Context) bool {
+func (e Extension) contains(ctx context.Context) bool {
 	return slices.Contains(e.knownContexts, ctx)
 }
 
@@ -160,20 +160,20 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 // timeout never exceeds max(maxTestTimeout, configuredTimeout). If tb has no
 // test context created by this package, EnsureRemaining is a no-op.
 //
-// Existing context values returned by earlier calls to [For] keep their
-// original deadline; call [For] again after EnsureRemaining to observe the
-// extended deadline.
-func EnsureRemaining(tb testing.TB, d time.Duration) Extension {
+// If ctx is one of this test's contexts and the deadline was extended,
+// EnsureRemaining returns the current test-scoped context. Otherwise, it returns
+// ctx unchanged.
+func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) (context.Context, Extension) {
 	tb.Helper()
 	if d <= 0 {
-		return Extension{}
+		return ctx, Extension{}
 	}
 
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
 	if !ok {
-		return Extension{}
+		return ctx, Extension{}
 	}
 
 	st.mu.Lock()
@@ -181,7 +181,7 @@ func EnsureRemaining(tb testing.TB, d time.Duration) Extension {
 
 	currentDeadline, ok := st.ctx.Deadline()
 	if !ok {
-		return Extension{}
+		return ctx, Extension{}
 	}
 
 	target := time.Now().Add(d)
@@ -198,12 +198,16 @@ func EnsureRemaining(tb testing.TB, d time.Duration) Extension {
 	}
 	granted := target.Sub(currentDeadline)
 	if granted <= 0 {
-		return st.extension(currentDeadline, 0)
+		return ctx, st.extension(currentDeadline, 0)
 	}
 
 	// Context deadlines are immutable; replace and replay decorators.
 	st.setDeadline(tb, target)
-	return st.extension(target, granted)
+	extension := st.extension(target, granted)
+	if extension.contains(ctx) {
+		return extension.CurrentContext(), extension
+	}
+	return ctx, extension
 }
 
 func (s *contextState) extension(deadline time.Time, granted time.Duration) Extension {
