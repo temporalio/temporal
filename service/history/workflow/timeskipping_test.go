@@ -546,80 +546,80 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	})
 }
 
-func (s *mutableStateSuite) TestTryTrippingTimeSkippingCircuitBreaker() {
-	setBreaker := func(window time.Duration, maxSkipsPerWindow int) {
-		s.mockConfig.TimeSkippingCircuitBreaker = func(string) dynamicconfig.TimeSkippingCircuitBreakerSettings {
-			return dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: window, MaxSkipsPerWindow: maxSkipsPerWindow}
+func (s *mutableStateSuite) TestTryTrippingTimeSkippingRunawayProtector() {
+	// A skip is "busy" when it lands sooner than WorkerMinLatency+TimerProcessorMaxTimeShift after
+	// the previous one. Here that interval is 100ms+shift; advancing the time source by more than the
+	// interval between skips makes them non-busy.
+	setProtector := func(maxBusySkip int, shift time.Duration) {
+		s.mockConfig.TimeSkippingRunawayProtector = func(string) dynamicconfig.TimeSkippingRunawayProtectorConfig {
+			return dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: maxBusySkip, WorkerMinLatency: 100 * time.Millisecond}
 		}
+		s.mockConfig.TimerProcessorMaxTimeShift = func() time.Duration { return shift }
 	}
 	enabledTSI := func() *persistencespb.TimeSkippingInfo {
 		return &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}}
 	}
 
-	s.Run("NilTimeSkippingInfo_NoTripNoPanic", func() {
-		setBreaker(time.Minute, 1)
-		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.mutableState.timeSkippingInfoUpdated = false
-		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
-		s.False(s.mutableState.timeSkippingInfoUpdated)
-	})
-
-	s.Run("BreakerDisabled_NoTrip", func() {
-		setBreaker(time.Minute, 0) // MaxSkipsPerWindow <= 0 disables the breaker
+	s.Run("ProtectorDisabled_NoTrip", func() {
+		setProtector(0, time.Hour) // maxBusySkip <= 0 disables the protector
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
 		for range 100 {
-			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
 		}
-		// the config guard returns before allocating the window counter
-		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo())
+		// the config guard returns before touching the counter
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount)
 	})
 
-	s.Run("UnderThreshold_NoTrip", func() {
-		setBreaker(time.Minute, 5)
-		s.mutableState.timeSource = clock.NewEventTimeSource()
-		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-		for range 5 {
-			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
-		}
-		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
-		s.True(tsi.GetConfig().GetEnabled())
-		s.EqualValues(5, tsi.GetCircuitBreakerInfo().GetSkipWindowCount())
-	})
-
-	s.Run("OutOfWindow_ResetsWindow", func() {
-		setBreaker(time.Minute, 5)
+	s.Run("SlowSkips_NoTrip", func() {
+		setProtector(2, time.Second) // busy interval = 100ms + 1s = 1.1s
 		timeSource := clock.NewEventTimeSource()
 		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-
-		for range 3 {
-			s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+		for range 10 {
+			timeSource.Advance(2 * time.Second) // each skip is spaced beyond the busy interval
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
 		}
-		cbi := s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo()
-		s.EqualValues(3, cbi.GetSkipWindowCount())
-		windowStart := cbi.GetSkipWindowStartRealTime().AsTime()
-
-		// a skip past the window boundary starts a fresh window with the counter reset to 1
-		timeSource.Advance(time.Minute)
-		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
-		cbi = s.mutableState.executionInfo.GetTimeSkippingInfo().GetCircuitBreakerInfo()
-		s.EqualValues(1, cbi.GetSkipWindowCount(), "counter resets when the skip lands outside the window")
-		s.True(cbi.GetSkipWindowStartRealTime().AsTime().After(windowStart), "window start advances to the new skip")
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "well-spaced skips never count as busy")
 	})
 
-	s.Run("OverThreshold_Trips", func() {
-		setBreaker(time.Minute, 2)
-		s.mutableState.timeSource = clock.NewEventTimeSource()
+	s.Run("SlowSkipClearsStreak", func() {
+		setProtector(3, time.Second) // busy interval = 1.1s
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
-		s.False(s.mutableState.tryTrippingTimeSkippingCircuitBreaker())
+
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // first skip: no prior gap
+		for range 2 {
+			timeSource.Advance(100 * time.Millisecond) // < interval -> busy
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		}
+		s.Equal(2, s.mutableState.timeSkippingRunawayProtector.busySkipCount)
+
+		// a normally-spaced skip clears the streak
+		timeSource.Advance(2 * time.Second)
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "a well-spaced skip resets the busy streak")
+	})
+
+	s.Run("ConsecutiveBusySkips_Trips", func() {
+		setProtector(2, time.Hour) // huge interval -> every same-instant skip is busy
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // busySkipCount 0
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 1
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 2
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.True(s.mutableState.tryTrippingTimeSkippingCircuitBreaker(), "the skip past MaxSkipsPerWindow trips the breaker")
+		s.True(s.mutableState.tryTrippingTimeSkippingRunawayProtector(), "the skip past maxBusySkip trips the protector") // 3 > 2
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.False(tsi.GetConfig().GetEnabled(), "time skipping is disabled on trip")
-		s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER, tsi.GetDisabledReason())
-		s.EqualValues(0, tsi.GetCircuitBreakerInfo().GetSkipWindowCount(), "counter is reset on trip")
+		s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR, tsi.GetDisabledReason())
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "counter is reset on trip")
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
 }

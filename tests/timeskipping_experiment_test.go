@@ -46,9 +46,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Experiment_BusyLoopFrequency() 
 		s.T(),
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
-		// Disable the circuit breaker so we measure the *natural* busy-loop rate.
-		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingCircuitBreaker,
-			dynamicconfig.TimeSkippingCircuitBreakerSettings{Window: time.Minute, MaxSkipsPerWindow: 0}),
+		// Disable the runaway protector so we measure the *natural* busy-loop rate.
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingRunawayProtector,
+			dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: 0}),
 		// EXPERIMENT KNOB: floors newly-created scheduled tasks to ~now+this; suspected 1s gate.
 		testcore.WithDynamicConfig(dynamicconfig.TimerProcessorMaxTimeShift, 50*time.Millisecond),
 	)

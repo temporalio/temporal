@@ -345,13 +345,6 @@ message TimeSkippingInfo {
   // Time skipping can be disabled internally by the system, and this field
   // explains the reason of it.
   TimeSkippingDisabledReason disabled_reason = 6;
-
-  CircuitBreakerInfo circuit_breaker_info = 10;
-
-  message CircuitBreakerInfo {
-    google.protobuf.Timestamp skip_window_start_real_time = 1;
-    int32 skip_window_count = 2;
-  }
 }
 
 message FastForwardInfo {
@@ -998,5 +991,5 @@ enum TimeSkippingDisabledReason {
   // enabled, or was disabled explicitly by the user via a config update.
   TIME_SKIPPING_DISABLED_REASON_UNSPECIFIED = 0;
   TIME_SKIPPING_DISABLED_REASON_FAST_FORWARD_REACHED = 1;
-  TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER = 2;
+  TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR = 2;
 }

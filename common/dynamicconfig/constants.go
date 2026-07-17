@@ -3540,16 +3540,16 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
-	TimeSkippingCircuitBreaker = NewNamespaceTypedSettingWithConverter(
-		"history.timeSkippingCircuitBreaker",
-		ConvertStructure(TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkipsPerWindow: 25}),
-		TimeSkippingCircuitBreakerSettings{Window: 5 * time.Second, MaxSkipsPerWindow: 25},
-		`TimeSkippingCircuitBreaker bounds how fast a single run may skip time before the circuit
-breaker disables time skipping for that run. It counts the run's skip transitions over Window (real
-wall-clock) and trips when the count exceeds MaxSkipsPerWindow. This bounds the real-time CPU a fast
-runaway (e.g. an activity/cron that fails instantly and reschedules) can spend skipping, while still
-leaving room for a genuinely busy workflow to skip at a normal rate (a real worker round-trip is on
-the order of 100ms, so a legitimate run skips only a handful of times per second). Set
-MaxSkipsPerWindow to 0 to disable the circuit breaker.`,
+	TimeSkippingRunawayProtector = NewNamespaceTypedSettingWithConverter(
+		"history.timeSkippingRunawayProtector",
+		ConvertStructure(TimeSkippingRunawayProtectorConfig{MaxBusySkip: 50, WorkerMinLatency: 100 * time.Millisecond}),
+		TimeSkippingRunawayProtectorConfig{MaxBusySkip: 50, WorkerMinLatency: 100 * time.Millisecond},
+		`TimeSkippingRunawayProtectorConfig detects and stops an endless instant-retry loop under time
+skipping. When something (e.g. an activity or cron) fails immediately and reschedules, time skipping
+fast-forwards straight to the next attempt, which may fail again. The protector spots this by pace: a skip that lands
+sooner than WorkerMinLatency + TimerProcessorMaxTimeShift after the previous one is faster than any
+real retry could physically complete, so it counts as a "busy" skip. After MaxBusySkip consecutive
+busy skips the protector disables time skipping for that run; a normally-spaced skip clears the
+streak. Set MaxBusySkip to 0 to disable the protector.`,
 	)
 )

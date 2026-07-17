@@ -229,11 +229,13 @@ type SimplePartitionScalerThreshold struct {
 	TargetRate int           // target tasks/second per partition
 }
 
-// TimeSkippingCircuitBreakerSettings is enforced per run: its counters are not propagated across a
-// chain of runs (continue-as-new, retry, cron), so every run starts from a clean slate.
-type TimeSkippingCircuitBreakerSettings struct {
-	Window            time.Duration
-	MaxSkipsPerWindow int
+type TimeSkippingRunawayProtectorConfig struct {
+	// MaxBusySkip is the number of consecutive busy skips a run may perform before the protector
+	// disables time skipping for that run. <= 0 disables the protector.
+	MaxBusySkip int
+	// WorkerMinLatency is the minimum realistic worker<->server round trip per skip cycle, added to
+	// TimerProcessorMaxTimeShift to set the interval below which a skip counts as busy.
+	WorkerMinLatency time.Duration
 }
 
 type LatencyHealthCheckSettings struct {

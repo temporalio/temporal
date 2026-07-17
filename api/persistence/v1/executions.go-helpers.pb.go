@@ -1121,7 +1121,7 @@ var (
 	TimeSkippingDisabledReason_shorthandValue = map[string]int32{
 		"Unspecified":        0,
 		"FastForwardReached": 1,
-		"CircuitBreaker":     2,
+		"RunawayProtector":   2,
 	}
 )
 

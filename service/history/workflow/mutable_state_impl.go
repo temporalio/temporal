@@ -216,6 +216,11 @@ type (
 		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
 		timeSkippingInfoUpdated bool
 
+		// timeSkippingRunawayProtector guards against a run that skips time in a real-time busy loop. It is
+		// purely in-memory (not persisted): a reload/eviction mid-loop just restarts the window,
+		// which is acceptable since a genuine runaway re-trips within one window.
+		timeSkippingRunawayProtector timeSkippingRunawayProtector
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)

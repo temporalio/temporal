@@ -56,8 +56,8 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	}
 	ms.executionInfo.TimeSkippingInfo.Config = config
 	ms.applyFastForward(nil)
-	// reset circuit breaker info whenever tiem skipping config is udpated
-	tsi.CircuitBreakerInfo = nil
+	// re-arm the runaway protector whenever the time-skipping config is updated
+	ms.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
@@ -303,65 +303,70 @@ func (util *TimeSkippingInfoUtil) IsEnabled() bool {
 // =============================================================================
 // Time Skipping Runtime Methods for all executions
 // =============================================================================
-func (ms *MutableStateImpl) tryTrippingTimeSkippingCircuitBreaker() (tripped bool) {
+// timeSkippingRunawayProtector is the in-memory state a single run uses to detect a real-time
+// time-skipping busy loop: it counts consecutive "busy" skips (skips that land sooner than one
+// legitimately-paced skip interval after the previous one). lastSkipTime is real wall-clock time.
+type timeSkippingRunawayProtector struct {
+	lastSkipTime  time.Time
+	busySkipCount int
+}
+
+func (ms *MutableStateImpl) tryTrippingTimeSkippingRunawayProtector() (tripped bool) {
 	// todo: add to chasm executions
-	tripped = ms.shouldTripTimeSkippingCircuitBreaker()
+	tripped = ms.recordSkipForTimeSkippingRunawayProtector()
 	if tripped {
-		ms.tripTimeSkippingCircuitBreaker()
+		ms.tripTimeSkippingRunawayProtector()
 	}
 	return tripped
 }
 
-func (ms *MutableStateImpl) shouldTripTimeSkippingCircuitBreaker() bool {
+// recordSkipForTimeSkippingRunawayProtector records one skip and reports whether the run has now
+// performed more than MaxBusySkip consecutive busy skips.
+func (ms *MutableStateImpl) recordSkipForTimeSkippingRunawayProtector() (isTripped bool) {
 	// todo: may exclude certain execution types if the application layer has built enough protection
 	nsName := ms.namespaceEntry.Name().String()
-	cb := ms.config.TimeSkippingCircuitBreaker(nsName)
-	if cb.MaxSkipsPerWindow <= 0 || cb.Window <= 0 {
+	cfg := ms.config.TimeSkippingRunawayProtector(nsName)
+	maxBusySkip := cfg.MaxBusySkip
+	if maxBusySkip <= 0 {
 		return false
 	}
-	tsi := ms.executionInfo.GetTimeSkippingInfo()
-	if tsi == nil {
-		return false
-	}
-	cbi := tsi.CircuitBreakerInfo
-	if cbi == nil {
-		cbi = &persistencespb.TimeSkippingInfo_CircuitBreakerInfo{}
-		tsi.CircuitBreakerInfo = cbi
-	}
+	// A legitimately-paced skip cycle costs at least one TimerProcessorMaxTimeShift of real time (the
+	// earliest a just-created backoff timer can fire) plus one worker<->server round trip. A skip that
+	// lands sooner than that is a "busy" skip; MaxBusySkip consecutive busy skips is a busy loop. A
+	// skip spaced at least an interval apart is legitimate and clears the streak.
+	expectedSkipInterval := cfg.WorkerMinLatency + ms.config.TimerProcessorMaxTimeShift()
 
 	realNow := ms.ToRealTime(ms.Now())
-	if start := cbi.GetSkipWindowStartRealTime(); start == nil || realNow.Sub(start.AsTime()) >= cb.Window {
-		cbi.SkipWindowStartRealTime = timestamppb.New(realNow)
-		cbi.SkipWindowCount = 0
+	p := &ms.timeSkippingRunawayProtector
+	if !p.lastSkipTime.IsZero() && realNow.Sub(p.lastSkipTime) < expectedSkipInterval {
+		p.busySkipCount++
+	} else {
+		p.busySkipCount = 0
 	}
-	cbi.SkipWindowCount++
-	ms.timeSkippingInfoUpdated = true
-	return int(cbi.SkipWindowCount) > cb.MaxSkipsPerWindow
+	p.lastSkipTime = realNow
+	return p.busySkipCount > maxBusySkip
 }
 
-func (ms *MutableStateImpl) tripTimeSkippingCircuitBreaker() {
+func (ms *MutableStateImpl) tripTimeSkippingRunawayProtector() {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 	if tsi == nil || tsi.GetConfig() == nil {
 		return
 	}
-	cbi := tsi.GetCircuitBreakerInfo()
-	windowStart := cbi.GetSkipWindowStartRealTime().AsTime()
-	windowCount := cbi.GetSkipWindowCount()
+	busySkipCount := ms.timeSkippingRunawayProtector.busySkipCount
 
 	tsi.Config.Enabled = false
-	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_CIRCUIT_BREAKER
-	tsi.CircuitBreakerInfo = &persistencespb.TimeSkippingInfo_CircuitBreakerInfo{}
+	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR
+	ms.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 	ms.timeSkippingInfoUpdated = true
-	ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingCircuitBreakerTrippedCounter.Name()).Record(1)
+	ms.metricsHandler.Counter(metrics.ExecutionTimeSkippingRunawayProtectorTrippedCounter.Name()).Record(1)
 
 	wfKey := ms.GetWorkflowKey()
-	ms.logger.Warn("time-skipping circuit breaker tripped, disabling time skipping",
+	ms.logger.Warn("time-skipping runaway protector tripped, disabling time skipping",
 		tag.WorkflowNamespaceID(wfKey.NamespaceID),
 		tag.WorkflowID(wfKey.WorkflowID),
 		tag.WorkflowRunID(wfKey.RunID),
 		tag.ArchetypeID(ms.ChasmTree().ArchetypeID()),
-		tag.NewInt32("time-skipping-skip-window-count", windowCount),
-		tag.NewTimeTag("time-skipping-skip-window-start", windowStart),
+		tag.NewInt("time-skipping-busy-skip-count", busySkipCount),
 	)
 }
 
@@ -515,8 +520,8 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. pass a circuit breaker before any state changes
-		if ms.tryTrippingTimeSkippingCircuitBreaker() {
+		// 3. pass the runaway protector before any state changes
+		if ms.tryTrippingTimeSkippingRunawayProtector() {
 			return false
 		}
 		// 4. state change.
