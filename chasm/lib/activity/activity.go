@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -195,7 +196,6 @@ func NewEmbeddedActivity(
 }
 
 func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID string) (*matchingservice.AddActivityTaskRequest, error) {
-	// Get latest component ref and unmarshal into proto ref
 	componentRef, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
@@ -211,6 +211,23 @@ func (a *Activity) createAddActivityTaskRequest(ctx chasm.Context, namespaceID s
 		ComponentRef:           componentRef,
 		Stamp:                  a.LastAttempt.Get(ctx).GetStamp(),
 	}, nil
+}
+
+// buildCancelCommandTaskToken builds the serialized task token for a cancel command.
+// The token must match what was sent to the worker in the poll response.
+func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef chasm.ComponentRef) ([]byte, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	key := ctx.ExecutionKey()
+
+	token := tasktoken.NewStandaloneActivityTaskToken(
+		key.NamespaceID,
+		key.BusinessID, // activityID
+		a.GetActivityType().GetName(),
+		attempt.GetCount(),
+		attempt.GetComponentRef(),
+	)
+
+	return token.Marshal()
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -571,6 +588,13 @@ func (a *Activity) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
+	// If the activity is running on a worker, proactively notify the worker via Nexus.
+	// Must be done before the transition since it checks current status.
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		a.addCancelCommandDispatchTask(ctx)
+	}
+
 	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.ActivityTerminatedScope)
 	if err != nil {
 		return chasm.TerminateComponentResponse{}, err
@@ -591,6 +615,23 @@ func (a *Activity) getOrCreateLastHeartbeat(ctx chasm.MutableContext) *activityp
 		a.LastHeartbeat = chasm.NewDataField(ctx, heartbeat)
 	}
 	return heartbeat
+}
+
+// addCancelCommandDispatchTask schedules a side-effect task to dispatch a cancel command to the
+// worker via the Nexus worker commands control queue. No-op if the worker doesn't support worker
+// commands (i.e., has no control queue).
+func (a *Activity) addCancelCommandDispatchTask(ctx chasm.MutableContext) {
+	controlQueue := a.LastAttempt.Get(ctx).GetWorkerControlTaskQueue()
+	if controlQueue == "" {
+		return
+	}
+	ctx.AddTask(
+		a,
+		chasm.TaskAttributes{
+			Destination: controlQueue,
+		},
+		&activitypb.CancelCommandDispatchTask{},
+	)
 }
 
 func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request *activitypb.RequestCancelActivityExecutionRequest) (
@@ -636,6 +677,8 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		a.addCancelCommandDispatchTask(ctx)
 	}
 
 	return &activitypb.RequestCancelActivityExecutionResponse{}, nil

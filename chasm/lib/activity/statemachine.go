@@ -144,11 +144,19 @@ var TransitionStarted = chasm.NewTransition(
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 		attempt := a.LastAttempt.Get(ctx)
+
+		// Store the ComponentRef that matching used to build the poll token. This is
+		// the ref from the dispatch task data, which matching also embeds in the task
+		// token sent to the worker. Using this ref (rather than ctx.Ref) guarantees
+		// the cancel command token matches the poll token.
+		attempt.ComponentRef = request.GetComponentRef()
+
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
 		attempt.StartRequestId = request.GetRequestId()
 		attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 		attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 		attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+		attempt.WorkerControlTaskQueue = request.GetPollRequest().GetWorkerControlTaskQueue()
 		if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
 			attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
 				BuildId:        versionDirective.GetBuildId(),

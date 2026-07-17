@@ -462,7 +462,13 @@ type ActivityAttemptState struct {
 	SdkName string `protobuf:"bytes,10,opt,name=sdk_name,json=sdkName,proto3" json:"sdk_name,omitempty"`
 	// The version of the SDK of the worker that most recently picked up an attempt of this activity (from the gRPC
 	// `client-version` header on PollActivityTaskQueue). Same overwrite semantics as sdk_name.
-	SdkVersion    string `protobuf:"bytes,11,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
+	SdkVersion string `protobuf:"bytes,11,opt,name=sdk_version,json=sdkVersion,proto3" json:"sdk_version,omitempty"`
+	// The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+	WorkerControlTaskQueue string `protobuf:"bytes,12,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
+	// The serialized ComponentRef captured when the attempt was scheduled. Used to
+	// construct the task token for both dispatch to matching and cancel commands.
+	ComponentRef  []byte `protobuf:"bytes,13,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -572,6 +578,20 @@ func (x *ActivityAttemptState) GetSdkVersion() string {
 		return x.SdkVersion
 	}
 	return ""
+}
+
+func (x *ActivityAttemptState) GetWorkerControlTaskQueue() string {
+	if x != nil {
+		return x.WorkerControlTaskQueue
+	}
+	return ""
+}
+
+func (x *ActivityAttemptState) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type ActivityHeartbeatState struct {
@@ -960,7 +980,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
 	"\x16ActivityTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\xa4\x06\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\x84\a\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -974,7 +994,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\bsdk_name\x18\n" +
 	" \x01(\tR\asdkName\x12\x1f\n" +
 	"\vsdk_version\x18\v \x01(\tR\n" +
-	"sdkVersion\x1a\x80\x01\n" +
+	"sdkVersion\x129\n" +
+	"\x19worker_control_task_queue\x18\f \x01(\tR\x16workerControlTaskQueue\x12#\n" +
+	"\rcomponent_ref\x18\r \x01(\fR\fcomponentRef\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +
