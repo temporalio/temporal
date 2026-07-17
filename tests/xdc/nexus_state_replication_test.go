@@ -82,6 +82,13 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 			Timeout:     1 * time.Second,
 		},
 	}
+	if !s.enableTransitionHistory {
+		// CHASM callbacks rely on transition history for replication (their outbound
+		// task fails with "state has empty transition history" otherwise), so when
+		// transition history is disabled fall back to the legacy HSM callback
+		// implementation, which works with event-based replication.
+		s.dynamicConfigOverrides[dynamicconfig.EnableCHASMCallbacks.Key()] = false
+	}
 	s.setupSuite()
 }
 
