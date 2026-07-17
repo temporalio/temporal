@@ -48,6 +48,29 @@ type testContext struct {
 	deadline time.Time
 }
 
+func newTestContext(tb testing.TB, deadline time.Time, decorators []contextDecorator) testContext {
+	if goTestDeadline, ok := tb.Context().Deadline(); ok {
+		// The Go test deadline is a hard external cap.
+		deadline = util.MinTime(deadline, goTestDeadline)
+	}
+
+	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
+
+	// Annotate gRPC requests with the test name for OTEL tracing.
+	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
+
+	// Apply context decorators, in order.
+	for _, decorator := range decorators {
+		ctx = decorator.decorate(ctx)
+	}
+
+	return testContext{
+		ctx:      ctx,
+		cancel:   cancel,
+		deadline: deadline,
+	}
+}
+
 // DefaultTimeout returns the effective default timeout for test-scoped contexts.
 func DefaultTimeout() time.Duration {
 	return effectiveTimeout(0)
@@ -110,7 +133,7 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 		return
 	}
 	st.ctx = decorator(st.ctx)
-	st.ownedContexts = append(st.ownedContexts, st.ctx)
+	st.contextHistory = append(st.contextHistory, st.ctx)
 	st.decorators[key] = struct{}{}
 	st.orderedDecorators = append(st.orderedDecorators, contextDecorator{
 		key:      key,
@@ -121,9 +144,9 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 type contextState struct {
 	mu  sync.Mutex
 	ctx context.Context
-	// ownedContexts lets EnsureRemaining recognize stale test contexts after
+	// contextHistory lets EnsureRemaining recognize stale test contexts after
 	// deadline resets and return the current replacement.
-	ownedContexts []context.Context
+	contextHistory []context.Context
 	// cancels tracks every replacement context so cleanup can release them all.
 	cancels           []context.CancelFunc
 	testStart         time.Time
@@ -138,7 +161,7 @@ func newContextState(tb testing.TB, timeout time.Duration) *contextState {
 		configuredTimeout: timeout,
 		decorators:        make(map[any]struct{}),
 	}
-	st.useContext(st.newTestContext(tb, st.testStart.Add(timeout)))
+	st.useContext(newTestContext(tb, st.testStart.Add(timeout), st.orderedDecorators))
 	return st
 }
 
@@ -215,7 +238,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	// Context deadlines are immutable; extending the test context means
 	// replacing it and replaying metadata/decorators.
 	if requestedDeadline.After(testDeadline) {
-		next := st.newTestContext(tb, requestedDeadline)
+		next := newTestContext(tb, requestedDeadline, st.orderedDecorators)
 		st.useContext(next)
 		testDeadline = next.deadline
 	}
@@ -224,7 +247,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		return ctx
 	}
 	// Callers holding an older test context should move to the current one.
-	if slices.Contains(st.ownedContexts, ctx) {
+	if slices.Contains(st.contextHistory, ctx) {
 		return st.ctx
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
@@ -236,30 +259,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	return ctx
 }
 
-func (s *contextState) newTestContext(tb testing.TB, deadline time.Time) testContext {
-	if goTestDeadline, ok := tb.Context().Deadline(); ok {
-		// The Go test deadline is a hard external cap.
-		deadline = util.MinTime(deadline, goTestDeadline)
-	}
-
-	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
-
-	for _, decorator := range s.orderedDecorators {
-		ctx = decorator.decorate(ctx)
-	}
-	return testContext{
-		ctx:      ctx,
-		cancel:   cancel,
-		deadline: deadline,
-	}
-}
-
 func (s *contextState) useContext(ctx testContext) {
 	s.ctx = ctx.ctx
-	s.ownedContexts = append(s.ownedContexts, ctx.ctx)
+	s.contextHistory = append(s.contextHistory, ctx.ctx)
 	s.cancels = append(s.cancels, ctx.cancel)
 }
 
@@ -279,7 +281,7 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	}
 
 	s.ctx = nil
-	s.ownedContexts = nil
+	s.contextHistory = nil
 	s.cancels = nil
 	s.decorators = nil
 	s.orderedDecorators = nil
