@@ -7971,7 +7971,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		// update not taken effect, the elapsed original delay would dispatch immediately on unpause.
 		pollCtx, cancel := context.WithTimeout(s.Context(), 3*time.Second)
 		defer cancel()
-		pollResp, _ := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		pollResp, err := env.pollActivityTaskQueue(pollCtx, taskQueue)
+		// A long-poll that gets no task within its timeout gets a non-error empty response
+		require.NoError(t, err)
 		require.Empty(t, pollResp.GetTaskToken(),
 			"activity must not dispatch within the extended start_delay after unpause")
 	})
