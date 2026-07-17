@@ -3560,27 +3560,53 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace, "", nil))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace, "", nil), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace, "", nil), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace, "", nil))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace, "", nil))
 
 	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace, "", nil), &invalidArgumentErr)
 
 	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace, "", nil), &invalidArgumentErr)
+
+	// A run that can chain into an unbounded number of successor runs (cron, or a retry policy with
+	// unlimited attempts) must carry a FastForward budget; the per-run protector cannot bound the chain.
+	enabled := &commonpb.TimeSkippingConfig{Enabled: true}
+	enabledWithFF := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(time.Hour)}
+
+	// No cron and no retry: the per-run protector suffices, FastForward is not required.
+	s.Require().NoError(wh.validateTimeSkippingConfig(enabled, s.testNamespace, "", nil))
+
+	// Cron without a FastForward budget is rejected; with one it is accepted.
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(enabled, s.testNamespace, "@every 1m", nil), &invalidArgumentErr)
+	s.Require().NoError(wh.validateTimeSkippingConfig(enabledWithFF, s.testNamespace, "@every 1m", nil))
+
+	// An unlimited retry policy (MaximumAttempts == 0) requires a FastForward budget.
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(enabled, s.testNamespace, "", &commonpb.RetryPolicy{MaximumAttempts: 0}), &invalidArgumentErr)
+	s.Require().NoError(wh.validateTimeSkippingConfig(enabledWithFF, s.testNamespace, "", &commonpb.RetryPolicy{MaximumAttempts: 0}))
+
+	// A finite retry policy bounds the chain on its own, so no FastForward is required.
+	s.Require().NoError(wh.validateTimeSkippingConfig(enabled, s.testNamespace, "", &commonpb.RetryPolicy{MaximumAttempts: 5}))
+	s.Require().NoError(wh.validateTimeSkippingConfig(enabled, s.testNamespace, "", &commonpb.RetryPolicy{MaximumAttempts: 1}))
+
+	// Time skipping disabled: the cron/retry requirement does not apply.
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace, "@every 1m", nil))
+
+	// nil config is always fine.
+	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace, "@every 1m", &commonpb.RetryPolicy{MaximumAttempts: 0}))
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

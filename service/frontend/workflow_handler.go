@@ -694,7 +694,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName, request.GetCronSchedule(), request.GetRetryPolicy()); err != nil {
 		return nil, err
 	}
 	return request, nil
@@ -703,6 +703,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
+	cronSchedule string,
+	retryPolicy *commonpb.RetryPolicy,
 ) error {
 	if tsc == nil {
 		return nil
@@ -723,6 +725,15 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 	}
 	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
 		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
+	}
+
+	// A run that can chain into an unbounded number of successor runs (cron, or a retry policy with
+	// unlimited attempts) needs a FastForward budget: the runaway protector is per run and cannot bound
+	// a cross-run instant-completion loop. A finite retry policy stops on its own.
+	retriesUnlimited := retryPolicy != nil && retryPolicy.GetMaximumAttempts() == 0
+	if (cronSchedule != "" || retriesUnlimited) && tsc.GetFastForward() == nil {
+		return serviceerror.NewInvalidArgument(
+			"time_skipping_config: fast_forward is required when time skipping is enabled with a cron schedule or an unlimited retry policy")
 	}
 
 	return nil
@@ -2348,7 +2359,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName, request.GetCronSchedule(), request.GetRetryPolicy()); err != nil {
 		return nil, err
 	}
 
@@ -2403,6 +2414,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 			if err := wh.validateTimeSkippingConfig(
 				updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 				namespace.Name(request.GetNamespace()),
+				"", nil,
 			); err != nil {
 				return nil, err
 			}
@@ -5780,6 +5792,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 				if err := wh.validateTimeSkippingConfig(
 					updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 					namespace.Name(request.GetNamespace()),
+					"", nil,
 				); err != nil {
 					return nil, err
 				}
@@ -5791,6 +5804,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		if err := wh.validateTimeSkippingConfig(
 			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 			namespace.Name(request.GetNamespace()),
+			"", nil,
 		); err != nil {
 			return nil, err
 		}
@@ -6860,7 +6874,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
 		return nil, err
 	}
-	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
+	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace()), "", nil); err != nil {
 		return nil, err
 	}
 
