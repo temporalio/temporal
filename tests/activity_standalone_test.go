@@ -4080,7 +4080,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	s.Run("DeadlineExceeded", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
-		ctx := testcore.NewContext()
+		ctx := s.Context()
 
 		// Start an activity and get initial long-poll state token
 		activityID := env.Tv().ActivityID()
@@ -4157,7 +4157,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	s.Run("NotFound", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
-		ctx := testcore.NewContext()
+		ctx := s.Context()
 
 		existingActivityID := env.Tv().ActivityID()
 		tq := env.Tv().TaskQueue()
@@ -4241,7 +4241,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	s.Run("InvalidArgument", func(s *standaloneActivityTestSuite) {
 		env := s.newTestEnv()
 		t := s.T()
-		ctx := testcore.NewContext()
+		ctx := s.Context()
 
 		existingActivityID := env.Tv().ActivityID()
 		tq := env.Tv().TaskQueue()
@@ -4550,7 +4550,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	env := s.newTestEnv()
 	t := s.T()
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	existingActivityID := env.Tv().ActivityID()
 	tq := env.Tv().TaskQueue()
@@ -4613,7 +4613,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument() {
 	env := s.newTestEnv()
 	t := s.T()
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 
 	existingNamespace := env.Namespace().String()
 	validRunID := "11111111-2222-3333-4444-555555555555"
@@ -5049,7 +5049,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 func (s *standaloneActivityTestSuite) TestHeartbeat() {
 	env := s.newTestEnv()
 	t := s.T()
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	heartbeatDetails := payloads.EncodeString("Heartbeat Details")
 
 	t.Run("InvalidArgument", func(t *testing.T) {
