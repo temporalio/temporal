@@ -42,6 +42,12 @@ type contextDecorator struct {
 	decorate func(context.Context) context.Context
 }
 
+type testContext struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	deadline time.Time
+}
+
 // DefaultTimeout returns the effective default timeout for test-scoped contexts.
 func DefaultTimeout() time.Duration {
 	return effectiveTimeout(0)
@@ -132,7 +138,7 @@ func newContextState(tb testing.TB, timeout time.Duration) *contextState {
 		configuredTimeout: timeout,
 		decorators:        make(map[any]struct{}),
 	}
-	st.resetContextDeadline(tb, st.testStart.Add(timeout))
+	st.useContext(st.newTestContext(tb, st.testStart.Add(timeout)))
 	return st
 }
 
@@ -209,7 +215,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	// Context deadlines are immutable; extending the test context means
 	// replacing it and replaying metadata/decorators.
 	if requestedDeadline.After(testDeadline) {
-		testDeadline = st.resetContextDeadline(tb, requestedDeadline)
+		next := st.newTestContext(tb, requestedDeadline)
+		st.useContext(next)
+		testDeadline = next.deadline
 	}
 
 	if ctx == nil {
@@ -228,7 +236,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	return ctx
 }
 
-func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
+func (s *contextState) newTestContext(tb testing.TB, deadline time.Time) testContext {
 	if goTestDeadline, ok := tb.Context().Deadline(); ok {
 		// The Go test deadline is a hard external cap.
 		deadline = util.MinTime(deadline, goTestDeadline)
@@ -242,10 +250,17 @@ func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) t
 	for _, decorator := range s.orderedDecorators {
 		ctx = decorator.decorate(ctx)
 	}
-	s.ctx = ctx
-	s.ownedContexts = append(s.ownedContexts, ctx)
-	s.cancels = append(s.cancels, cancel)
-	return deadline
+	return testContext{
+		ctx:      ctx,
+		cancel:   cancel,
+		deadline: deadline,
+	}
+}
+
+func (s *contextState) useContext(ctx testContext) {
+	s.ctx = ctx.ctx
+	s.ownedContexts = append(s.ownedContexts, ctx.ctx)
+	s.cancels = append(s.cancels, ctx.cancel)
 }
 
 func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
