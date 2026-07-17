@@ -40,26 +40,6 @@ type contextDecorator struct {
 	decorate func(context.Context) context.Context
 }
 
-// Extension describes the effect of an EnsureRemaining call.
-type Extension struct {
-	Deadline   time.Time
-	ExtendedBy time.Duration
-
-	currentContext context.Context
-	knownContexts  []context.Context
-}
-
-// contains reports whether ctx is the test-scoped context observed by
-// EnsureRemaining.
-func (e Extension) contains(ctx context.Context) bool {
-	return slices.Contains(e.knownContexts, ctx)
-}
-
-// CurrentContext returns the current test-scoped context after EnsureRemaining.
-func (e Extension) CurrentContext() context.Context {
-	return e.currentContext
-}
-
 // DefaultTimeout returns the effective default timeout for test-scoped contexts.
 func DefaultTimeout() time.Duration {
 	return effectiveTimeout(0)
@@ -160,20 +140,20 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 // timeout never exceeds max(maxTestTimeout, configuredTimeout). If tb has no
 // test context created by this package, EnsureRemaining is a no-op.
 //
-// If ctx is one of this test's contexts and the deadline was extended,
-// EnsureRemaining returns the current test-scoped context. Otherwise, it returns
-// ctx unchanged.
-func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) (context.Context, Extension) {
+// If ctx is one of this test's contexts, EnsureRemaining returns the current
+// test-scoped context. Otherwise, it caps ctx at the test-scoped context
+// deadline when needed.
+func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) context.Context {
 	tb.Helper()
 	if d <= 0 {
-		return ctx, Extension{}
+		return ctx
 	}
 
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
 	if !ok {
-		return ctx, Extension{}
+		return ctx
 	}
 
 	st.mu.Lock()
@@ -181,7 +161,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) (conte
 
 	currentDeadline, ok := st.ctx.Deadline()
 	if !ok {
-		return ctx, Extension{}
+		return ctx
 	}
 
 	target := time.Now().Add(d)
@@ -196,27 +176,36 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) (conte
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(target) {
 		target = goTestDeadline
 	}
-	granted := target.Sub(currentDeadline)
-	if granted <= 0 {
-		return ctx, st.extension(currentDeadline, 0)
+	if target.After(currentDeadline) {
+		// Context deadlines are immutable; replace and replay decorators.
+		st.setDeadline(tb, target)
+		currentDeadline = target
 	}
 
-	// Context deadlines are immutable; replace and replay decorators.
-	st.setDeadline(tb, target)
-	extension := st.extension(target, granted)
-	if extension.contains(ctx) {
-		return extension.CurrentContext(), extension
-	}
-	return ctx, extension
+	return st.contextWithDeadline(tb, ctx, currentDeadline)
 }
 
-func (s *contextState) extension(deadline time.Time, granted time.Duration) Extension {
-	return Extension{
-		Deadline:       deadline,
-		ExtendedBy:     granted,
-		currentContext: s.ctx,
-		knownContexts:  append([]context.Context(nil), s.knownContexts...),
+func (s *contextState) contextWithDeadline(
+	tb testing.TB,
+	ctx context.Context,
+	deadline time.Time,
+) context.Context {
+	tb.Helper()
+	if ctx == nil {
+		return ctx
 	}
+	if slices.Contains(s.knownContexts, ctx) {
+		return s.ctx
+	}
+	if deadline.IsZero() {
+		return ctx
+	}
+	if ctxDeadline, ok := ctx.Deadline(); ok && !deadline.Before(ctxDeadline) {
+		return ctx
+	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	tb.Cleanup(cancel)
+	return ctx
 }
 
 func (s *contextState) configure(tb testing.TB, cfg config) {
