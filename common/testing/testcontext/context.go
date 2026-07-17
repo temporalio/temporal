@@ -61,7 +61,9 @@ func For(tb testing.TB, opts ...Option) context.Context {
 
 	st := getContextState(tb, cfg.timeout)
 	st.configure(tb, cfg)
-	return st.context()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.ctx
 }
 
 // Option configures the test-scoped context returned by [For].
@@ -221,12 +223,6 @@ func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator
 	s.ownedContexts = append(s.ownedContexts, s.ctx)
 	s.decorators[decorator.key] = struct{}{}
 	s.orderedDecorators = append(s.orderedDecorators, decorator)
-}
-
-func (s *contextState) context() context.Context {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ctx
 }
 
 func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
