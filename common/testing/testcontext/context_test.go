@@ -269,10 +269,24 @@ func TestEnsureRemaining(t *testing.T) {
 			})
 
 			require.Equal(t,
-				"testcontext: context is not derived from this test's context; use testcontext.For(t)",
+				"testcontext: context is not derived from this test's context; are you using context.Background()?",
 				tb.fatal(),
 			)
 		})
+	})
+
+	t.Run("fails for non-positive minimum remaining", func(t *testing.T) {
+		tb := newRecordingTB()
+		tb.run(func() {
+			ctx := For(tb, WithTimeout(5*time.Millisecond))
+
+			EnsureRemaining(tb, ctx, 0)
+		})
+
+		require.Equal(t,
+			"testcontext: min remaining must be positive: 0s",
+			tb.fatal(),
+		)
 	})
 
 	t.Run("safe concurrent calls", func(t *testing.T) {
