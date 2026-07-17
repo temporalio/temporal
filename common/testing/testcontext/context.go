@@ -100,29 +100,20 @@ func GetOrCreate(tb testing.TB, opts ...Option) context.Context {
 	return st.currentContext()
 }
 
-// Get returns the current [testContext] for tb, if one exists.
-func Get(tb testing.TB) (context.Context, bool) {
+// GetOrDefault returns the current [testContext] for tb, or tb.Context if none exists.
+func GetOrDefault(tb testing.TB) context.Context {
 	tb.Helper()
 
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
 	if !ok {
-		return nil, false
+		return tb.Context()
 	}
 
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.currentContext(), true
-}
-
-// GetOrDefault returns the current [testContext] for tb, or tb.Context if none exists.
-func GetOrDefault(tb testing.TB) context.Context {
-	tb.Helper()
-	if ctx, ok := Get(tb); ok {
-		return ctx
-	}
-	return tb.Context()
+	return st.currentContext()
 }
 
 // Option configures the [testContext] returned by [GetOrCreate].
