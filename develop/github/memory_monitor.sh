@@ -84,9 +84,7 @@ write_file_section() {
   local file="$2"
 
   echo "--- ${title} ---"
-  if [[ -r "$file" ]]; then
-    cat "$file"
-  else
+  if [[ ! -r "$file" ]] || ! cat "$file" 2>/dev/null; then
     echo "(${file} not available)"
   fi
   echo
