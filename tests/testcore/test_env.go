@@ -299,8 +299,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
 	// Extend the test context deadline to account for environment setup time.
-	ctx := testcontext.For(t)
-	ctx = testcontext.EnsureRemaining(t, ctx, testcontext.DefaultTimeout())
+	ctx := testcontext.EnsureRemaining(t, testcontext.For(t), testcontext.DefaultTimeout())
 
 	env := &TestEnv{
 		FunctionalTestBase: base,
