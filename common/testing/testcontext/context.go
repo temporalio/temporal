@@ -118,7 +118,7 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 		configuredTimeout: timeout,
 		decorators:        make(map[any]struct{}),
 	}
-	st.setDeadline(tb, st.testStart.Add(timeout))
+	st.resetContextDeadline(tb, st.testStart.Add(timeout))
 	testContexts.byTest[tb] = st
 
 	tb.Cleanup(func() {
@@ -174,7 +174,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	}
 	if requestedDeadline.After(testDeadline) {
 		// Context deadlines are immutable; replace and replay decorators.
-		testDeadline = st.setDeadline(tb, requestedDeadline)
+		testDeadline = st.resetContextDeadline(tb, requestedDeadline)
 	}
 
 	if ctx == nil {
@@ -237,7 +237,7 @@ func (s *contextState) err() error {
 	return s.ctx.Err()
 }
 
-func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) time.Time {
+func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
 		// The Go test deadline is a hard external cap.
 		deadline = goTestDeadline
