@@ -9,7 +9,8 @@
 #
 # 2. Profile capture:
 #       When usage crosses HEAP_PROFILE_CAPTURE_THRESHOLD, captures a heap
-#       profile in HEAP_PROFILES_DIR before running analysis.
+#       profile plus related Go pprof outputs in HEAP_PROFILES_DIR before
+#       running analysis.
 #
 # 3. OOM kill:
 #       When usage crosses OOM_TERMINATION_THRESHOLD, reuses any previously
@@ -36,6 +37,7 @@ readonly SNAPSHOT_INTERVAL_SECONDS="${SNAPSHOT_INTERVAL_SECONDS:-1}"
 readonly SNAPSHOT_PRINT_INTERVAL_SECONDS="${SNAPSHOT_PRINT_INTERVAL_SECONDS:-30}"
 readonly SNAPSHOT_FILE="${SNAPSHOT_FILE:-$SNAPSHOT_DIR/memory-snapshot.txt}"
 readonly SNAPSHOT_HISTORY_FILE="${SNAPSHOT_HISTORY_FILE:-$SNAPSHOT_DIR/memory-history.txt}"
+readonly SYSTEM_DIAGNOSTICS_FILE="${SYSTEM_DIAGNOSTICS_FILE:-$SNAPSHOT_DIR/system-diagnostics.txt}"
 
 # Heap profile config.
 # Capture before the termination threshold so the diagnostic profile is usually
@@ -75,6 +77,73 @@ fetch_pprof() {
   local pprof_profile="$1"
   local output_file="$2"
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${pprof_profile}" -o "$output_file" 2>/dev/null
+}
+
+write_file_section() {
+  local title="$1"
+  local file="$2"
+
+  echo "--- ${title} ---"
+  if [[ -r "$file" ]]; then
+    cat "$file"
+  else
+    echo "(${file} not available)"
+  fi
+  echo
+}
+
+write_command_section() {
+  local title="$1"
+  shift
+
+  echo "--- ${title} ---"
+  "$@" || true
+  echo
+}
+
+top_memory_pids() {
+  ps -eo pid=,rss= --sort=-rss | awk 'NR<=8 {print $1}'
+}
+
+write_process_diagnostics() {
+  local pid
+
+  write_command_section "Processes by RSS" ps -eo pid,ppid,pgid,%mem,rss:10,vsz:10,etime,stat,comm,args --sort=-rss
+
+  if [[ -n "${MONITORED_PROCESS_GROUP:-}" ]]; then
+    echo "--- Monitored Process Group ---"
+    ps -eo pid,ppid,pgid,%mem,rss:10,vsz:10,etime,stat,comm,args --sort=-rss |
+      awk -v pgid="$MONITORED_PROCESS_GROUP" 'NR == 1 || $3 == pgid'
+    echo
+  fi
+
+  for pid in $(top_memory_pids); do
+    if [[ ! -d "/proc/$pid" ]]; then
+      continue
+    fi
+
+    echo "--- Process ${pid}: status ---"
+    cat "/proc/$pid/status" 2>/dev/null || true
+    echo
+
+    write_file_section "Process ${pid}: smaps_rollup" "/proc/$pid/smaps_rollup"
+
+    echo "--- Process ${pid}: file descriptors ---"
+    find "/proc/$pid/fd" -maxdepth 1 -type l -printf '%f -> %l\n' 2>/dev/null | sort | head -200 || true
+    echo
+  done
+}
+
+write_system_diagnostics() {
+  {
+    echo "System diagnostics at $(date '+%Y-%m-%d %H:%M:%S')"
+    echo
+    write_file_section "/proc/meminfo" "/proc/meminfo"
+    write_file_section "/proc/pressure/memory" "/proc/pressure/memory"
+    write_file_section "/proc/vmstat" "/proc/vmstat"
+    write_command_section "free -m" free -m
+    write_process_diagnostics
+  } > "$SYSTEM_DIAGNOSTICS_FILE"
 }
 
 # Print heap profile analysis.
@@ -159,6 +228,10 @@ capture_heap_profile() {
   heap_profile_path_prefix="$HEAP_PROFILES_DIR/$(date '+%Y%m%d-%H%M%S')-${memory_pct}pct"
   mkdir -p "$(dirname "$heap_profile_path_prefix")"
   fetch_pprof "heap" "${heap_profile_path_prefix}.pb.gz" || true
+  fetch_pprof "allocs" "${heap_profile_path_prefix}-allocs.pb.gz" || true
+  fetch_pprof "goroutine" "${heap_profile_path_prefix}-goroutine.pb.gz" || true
+  fetch_pprof "goroutine?debug=2" "${heap_profile_path_prefix}-goroutine-debug-2.txt" || true
+  fetch_pprof "threadcreate?debug=1" "${heap_profile_path_prefix}-threadcreate.txt" || true
   heap_profile_summary="$(print_heap_profile_summary "${heap_profile_path_prefix}.pb.gz")"
 
   printf '\n%s\n' "$heap_profile_summary"
@@ -228,6 +301,7 @@ snapshot() {
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
   if [[ "$is_new_high" == "true" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
+    write_system_diagnostics
     write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
     MEMORY_HIGH_WATER_MARK="$memory_pct"
   fi
