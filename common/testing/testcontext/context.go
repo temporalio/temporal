@@ -97,7 +97,7 @@ func For(tb testing.TB, opts ...Option) context.Context {
 	st := getOrCreateContextState(tb, cfg)
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.ctx
+	return st.currentContext()
 }
 
 // Option configures the test-scoped context returned by [For].
@@ -142,8 +142,7 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 		key:      key,
 		decorate: decorator,
 	}
-	st.ctx = next.decorate(st.ctx)
-	st.contextHistory = append(st.contextHistory, st.ctx)
+	st.stackContexts = append(st.stackContexts, next.decorate(st.currentContext()))
 	st.decorators = append(st.decorators, next)
 }
 
@@ -171,7 +170,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	testDeadline, ok := st.ctx.Deadline()
+	testDeadline, ok := st.currentContext().Deadline()
 	if !ok {
 		return ctx
 	}
@@ -187,7 +186,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	// replacing it and replaying metadata/decorators.
 	if requestedDeadline.After(testDeadline) {
 		next := newTestContext(tb, requestedDeadline, st.decorators)
-		st.useContext(next)
+		st.pushContext(next)
 		testDeadline = next.deadline
 	}
 
@@ -195,8 +194,8 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		return ctx
 	}
 	// Callers holding an older test context should move to the current one.
-	if slices.Contains(st.contextHistory, ctx) {
-		return st.ctx
+	if slices.Contains(st.stackContexts, ctx) {
+		return st.currentContext()
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
@@ -209,16 +208,15 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 
 // contextState is the mutable per-test context state shared by test helpers.
 type contextState struct {
-	mu  sync.Mutex
-	ctx context.Context
-	// contextHistory lets EnsureRemaining recognize stale test contexts after
-	// deadline resets and return the current replacement.
-	contextHistory []context.Context
-	// cancels tracks every replacement context so cleanup can release them all.
-	cancels    []context.CancelFunc
-	createdAt  time.Time
-	timeout    time.Duration
-	decorators []contextDecorator
+	mu sync.Mutex
+	// stackContexts lets EnsureRemaining recognize stale test contexts after
+	// deadline resets. The last entry is the current context.
+	stackContexts []context.Context
+	// stackCancels tracks every replacement context so cleanup can release them all.
+	stackCancels []context.CancelFunc
+	createdAt    time.Time
+	timeout      time.Duration
+	decorators   []contextDecorator
 }
 
 func newContextState(tb testing.TB, timeout time.Duration) *contextState {
@@ -226,7 +224,7 @@ func newContextState(tb testing.TB, timeout time.Duration) *contextState {
 		createdAt: time.Now(),
 		timeout:   timeout,
 	}
-	st.useContext(newTestContext(tb, st.createdAt.Add(timeout), st.decorators))
+	st.pushContext(newTestContext(tb, st.createdAt.Add(timeout), st.decorators))
 	return st
 }
 
@@ -264,30 +262,32 @@ func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 	return st
 }
 
-func (s *contextState) useContext(ctx testContext) {
-	s.ctx = ctx.ctx
-	s.contextHistory = append(s.contextHistory, ctx.ctx)
-	s.cancels = append(s.cancels, ctx.cancel)
+func (s *contextState) currentContext() context.Context {
+	return s.stackContexts[len(s.stackContexts)-1]
+}
+
+func (s *contextState) pushContext(ctx testContext) {
+	s.stackContexts = append(s.stackContexts, ctx.ctx)
+	s.stackCancels = append(s.stackCancels, ctx.cancel)
 }
 
 func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	timedOut = s.ctx.Err() == context.DeadlineExceeded
+	timedOut = s.currentContext().Err() == context.DeadlineExceeded
 	timeout = s.timeout
 
-	if deadline, ok := s.ctx.Deadline(); ok {
+	if deadline, ok := s.currentContext().Deadline(); ok {
 		timeout = deadline.Sub(s.createdAt)
 	}
 	// Match testing cleanup semantics: release the newest context first.
-	for _, cancel := range slices.Backward(s.cancels) {
+	for _, cancel := range slices.Backward(s.stackCancels) {
 		cancel()
 	}
 
-	s.ctx = nil
-	s.contextHistory = nil
-	s.cancels = nil
+	s.stackContexts = nil
+	s.stackCancels = nil
 	s.decorators = nil
 	return timedOut, timeout
 }
