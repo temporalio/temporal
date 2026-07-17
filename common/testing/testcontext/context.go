@@ -147,13 +147,11 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 }
 
 // EnsureRemaining extends the test-scoped context so at least minRemaining
-// remains from now, if its current deadline is earlier. It is capped so the
-// total test timeout never exceeds max(maxTimeout, timeout). If tb has no
-// test context created by this package, EnsureRemaining is a no-op.
+// remains from now. Capped at [maxTimeout].
 //
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
-// test-scoped context. Otherwise, it caps ctx at the test-scoped context
-// deadline when needed.
+// test-scoped context. Otherwise, it fails because ctx is not derived from the
+// test context chain.
 func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Duration) context.Context {
 	tb.Helper()
 	if ctx == nil {
@@ -165,7 +163,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 		return ctx
 	}
 
-	// Check if there is a [testContext] for this TB.
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	testContexts.Unlock()
@@ -176,7 +173,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	// Validate the context.
 	testDeadline, ok := st.currentContext().Deadline()
 	if !ok {
 		tb.Fatal("testcontext: current context has no deadline")
