@@ -161,6 +161,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 		return nil
 	}
 	if minRemaining <= 0 {
+		tb.Fatalf("testcontext: min remaining must be positive: %v", minRemaining)
 		return ctx
 	}
 
