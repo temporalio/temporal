@@ -7899,17 +7899,15 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 	})
 
 	// While paused before the first attempt, start_delay stays editable even after the original
-	// delay window has elapsed: pause pulls the activity out of dispatch, so extending start_delay
-	// defers the dispatch that unpause would otherwise perform immediately.
+	// delay window has elapsed: extending start_delay defers the dispatch that unpause would
+	// otherwise perform immediately.
 	s.Run("UpdateWhilePaused_AfterWindow_ExtendsDispatch", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		// Short so the sleep below stays fast; only needs to be > 0.
-		originalDelay := 1 * time.Second
-		// Long enough that a dispatch after unpause lands well beyond the short poll below.
+		originalDelay := 3 * time.Second
 		newDelay := 30 * time.Second
 
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
@@ -7933,9 +7931,6 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 
-		// 2s > originalDelay (1s) so the original delay window is firmly in the past.
-		time.Sleep(2 * time.Second) //nolint:forbidigo
-
 		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -7943,6 +7938,9 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, descResp.GetInfo().GetRunState())
+
+		// wait until original delay window is in the past.
+		time.Sleep(originalDelay) //nolint:forbidigo
 
 		// The first attempt never started, so start_delay is still editable despite the elapsed window.
 		_, err = env.FrontendClient().UpdateActivityExecutionOptions(s.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{
