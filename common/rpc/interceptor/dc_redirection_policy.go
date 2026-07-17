@@ -68,6 +68,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"RequestCancelActivityExecution":   {},
 	"TerminateActivityExecution":       {},
 	"DeleteActivityExecution":          {},
+	"StartNexusOperationExecution":     {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
