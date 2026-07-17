@@ -362,7 +362,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
@@ -376,7 +375,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
@@ -689,7 +687,6 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	config := defaultTestConfig()
 	config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(50 * time.Millisecond)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)

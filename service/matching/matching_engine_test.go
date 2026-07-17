@@ -6952,7 +6952,6 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
 
 	config := NewConfig(dcCollection)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 
@@ -7050,7 +7049,6 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	_, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
 
 	config := NewConfig(dcCollection)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
 

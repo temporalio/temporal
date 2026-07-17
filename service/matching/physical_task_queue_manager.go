@@ -379,10 +379,6 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	if !c.config.EnableMigration() {
-		return
-	}
-
 	var drainBacklogMgr backlogManager
 	var logger log.Logger
 	switch c.backlogMgr.(type) {
