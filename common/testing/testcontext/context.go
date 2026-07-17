@@ -122,15 +122,13 @@ func getContextState(tb testing.TB, timeout time.Duration) *contextState {
 	testContexts.byTest[tb] = st
 
 	tb.Cleanup(func() {
-		err := st.err()
-		st.cancel()
+		timedOut, timeout := st.cleanup()
 		testContexts.Lock()
 		delete(testContexts.byTest, tb)
 		testContexts.Unlock()
-		if err == context.DeadlineExceeded {
-			tb.Errorf("test exceeded timeout of %v", st.currentTimeout())
+		if timedOut {
+			tb.Errorf("test exceeded timeout of %v", timeout)
 		}
-		st.release()
 	})
 	return st
 }
@@ -231,12 +229,6 @@ func (s *contextState) context() context.Context {
 	return s.ctx
 }
 
-func (s *contextState) err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.ctx.Err()
-}
-
 func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
 		// The Go test deadline is a hard external cap.
@@ -257,32 +249,26 @@ func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) t
 	return deadline
 }
 
-func (s *contextState) cancel() {
+func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	timedOut = s.ctx.Err() == context.DeadlineExceeded
+	timeout = s.configuredTimeout
+
+	if deadline, ok := s.ctx.Deadline(); ok {
+		timeout = deadline.Sub(s.testStart)
+	}
 	for i := len(s.cancels) - 1; i >= 0; i-- {
 		s.cancels[i]()
 	}
-}
 
-func (s *contextState) currentTimeout() time.Duration {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if deadline, ok := s.ctx.Deadline(); ok {
-		return deadline.Sub(s.testStart)
-	}
-	return s.configuredTimeout
-}
-
-func (s *contextState) release() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.ctx = nil
 	s.ownedContexts = nil
 	s.cancels = nil
 	s.decorators = nil
 	s.orderedDecorators = nil
+	return timedOut, timeout
 }
 
 func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration) {
