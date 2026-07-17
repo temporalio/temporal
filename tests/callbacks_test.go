@@ -79,14 +79,14 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	testOpts := append([]testcore.TestOption{}, opts...)
 	testOpts = append(
 		testOpts,
-		scheduleCommonOpts(s.T())...,
+		scheduleCommonOpts(false)...,
 	)
 	testOpts = append(
 		testOpts,
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, false),
 	)
-	env := newScheduleEnv(s.T(), testOpts...)
+	env := newScheduleEnv(s.T(), false, testOpts...)
 
 	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-token-migration")
