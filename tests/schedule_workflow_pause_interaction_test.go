@@ -149,7 +149,7 @@ func setupPausedScheduledWorkflow(
 
 	register(env, wt)
 
-	ctx := newContext(testcontext.For(t))
+	ctx := newContext(testcontext.GetOrCreate(t))
 	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
@@ -339,7 +339,7 @@ func setupPausedTriggeredWorkflow(
 
 	register(env, wt)
 
-	ctx := newContext(testcontext.For(t))
+	ctx := newContext(testcontext.GetOrCreate(t))
 	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
