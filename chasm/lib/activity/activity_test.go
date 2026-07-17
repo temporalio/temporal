@@ -18,6 +18,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
@@ -253,6 +255,83 @@ func TestActivityTerminate(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 			}
+		})
+	}
+}
+
+// Check that we do not emit a StartToCloseLatency metric when cancelling an activity that has no
+// attempt in progress. Cancelling a SCHEDULED or PAUSED activity transitions straight to Canceled,
+// and the status captured before the CancelRequested transition must be forwarded so that the
+// metric is not emitted.
+func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
+	testCases := []struct {
+		name   string
+		status activitypb.ActivityExecutionStatus
+	}{
+		{
+			name:   "scheduled during retry backoff, stale StartedTime",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		{
+			name:   "paused during retry backoff, stale StartedTime",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
+				},
+			}
+
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					RetryPolicy:            defaultRetryPolicy,
+					Status:                 tc.status,
+					ScheduleTime:           timestamppb.New(defaultTime),
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+					ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+					StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+				},
+				// A stale StartedTime from a prior attempt: no attempt is currently running, so
+				// StartToCloseLatency must not be recorded on cancellation.
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Count:       1,
+					StartedTime: timestamppb.New(defaultTime),
+				}),
+				Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+				FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{Reason: "test"},
+			})
+			require.NoError(t, err)
+			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+
+			snapshot := capture.Snapshot()
+			require.NotEmpty(t, snapshot[metrics.ActivityCancel.Name()])
+			require.NotEmpty(t, snapshot[metrics.ActivityScheduleToCloseLatency.Name()])
+			require.Empty(t, snapshot[metrics.ActivityStartToCloseLatency.Name()],
+				"no attempt was running; StartToCloseLatency must not be recorded")
 		})
 	}
 }
