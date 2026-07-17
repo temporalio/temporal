@@ -273,11 +273,19 @@ func CreateSchedulerFromMigration(
 ) (*Scheduler, error) {
 	state := req.GetState()
 
+	// Default to a non-nil empty result, matching NewScheduler. Migrated state
+	// may carry no completion result (e.g. a schedule migrated before its first
+	// action), and startWorkflow dereferences LastCompletionResult unconditionally.
+	lastCompletion := state.GetLastCompletionResult()
+	if lastCompletion == nil {
+		lastCompletion = &schedulerpb.LastCompletionResult{}
+	}
+
 	sched := &Scheduler{
 		SchedulerState:       state.GetSchedulerState(),
 		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
-		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+		LastCompletionResult: chasm.NewDataField(ctx, lastCompletion),
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
