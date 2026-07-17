@@ -2,6 +2,8 @@ package testcontext
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -257,16 +259,19 @@ func TestEnsureRemaining(t *testing.T) {
 		})
 	})
 
-	t.Run("caps unowned context", func(t *testing.T) {
+	t.Run("fails for unowned context without earlier deadline", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			start := time.Now()
-			For(t, WithTimeout(5*time.Millisecond))
+			tb := newRecordingTB()
+			tb.run(func() {
+				For(tb, WithTimeout(5*time.Millisecond))
 
-			refreshed := EnsureRemaining(t, context.Background(), 10*time.Millisecond)
+				EnsureRemaining(tb, context.Background(), 10*time.Millisecond)
+			})
 
-			refreshedDeadline, ok := refreshed.Deadline()
-			require.True(t, ok)
-			require.Equal(t, start.Add(10*time.Millisecond), refreshedDeadline)
+			require.Equal(t,
+				"testcontext: context is not derived from this test's context; use testcontext.For(t)",
+				tb.fatal(),
+			)
 		})
 	})
 
@@ -281,4 +286,71 @@ func TestEnsureRemaining(t *testing.T) {
 		}
 		wg.Wait()
 	})
+}
+
+type recordingTB struct {
+	testing.TB
+
+	mu       sync.Mutex
+	cleanups []func()
+	fatals   []string
+}
+
+func newRecordingTB() *recordingTB {
+	return &recordingTB{}
+}
+
+func (r *recordingTB) Helper() {}
+
+func (r *recordingTB) Name() string {
+	return "recordingTB"
+}
+
+func (r *recordingTB) Context() context.Context {
+	return context.Background()
+}
+
+func (r *recordingTB) Cleanup(fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanups = append(r.cleanups, fn)
+}
+
+func (r *recordingTB) Fatalf(format string, args ...any) {
+	r.mu.Lock()
+	r.fatals = append(r.fatals, fmt.Sprintf(format, args...))
+	r.mu.Unlock()
+	runtime.Goexit()
+}
+
+func (r *recordingTB) run(fn func()) {
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			r.runCleanups()
+			close(done)
+		}()
+		fn()
+	}()
+	<-done
+}
+
+func (r *recordingTB) runCleanups() {
+	r.mu.Lock()
+	cleanups := r.cleanups
+	r.cleanups = nil
+	r.mu.Unlock()
+
+	for _, cleanup := range cleanups {
+		cleanup()
+	}
+}
+
+func (r *recordingTB) fatal() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.fatals) == 0 {
+		return ""
+	}
+	return r.fatals[len(r.fatals)-1]
 }

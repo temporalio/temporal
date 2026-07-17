@@ -200,9 +200,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
 	}
-	// Preserve unrelated caller values/cancellation while enforcing the test cap.
-	ctx, cancel := context.WithDeadline(ctx, testDeadline)
-	tb.Cleanup(cancel)
+	tb.Fatalf("testcontext: context is not derived from this test's context; use testcontext.For(t)")
 	return ctx
 }
 
