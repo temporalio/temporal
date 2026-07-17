@@ -257,7 +257,7 @@ should_capture_heap_profile() {
 }
 
 snapshot() {
-  local memory_total_kb memory_available_kb memory_used_kb memory_used_mb memory_pct is_new_high should_terminate_process_group
+  local memory_total_kb memory_available_kb memory_used_kb memory_used_mb memory_pct is_new_high should_terminate_process_group wrote_snapshot
 
   memory_total_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
   memory_available_kb="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
@@ -290,18 +290,24 @@ snapshot() {
     should_terminate_process_group=true
   fi
 
-  if should_capture_heap_profile "$now" "$memory_pct" "$is_new_high" "$should_terminate_process_group"; then
-    HEAP_PROFILE_SECTION="$(capture_heap_profile "$memory_pct")"
-    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
-    HAS_CAPTURED_HEAP_PROFILE=true
-  fi
-
-  # Write the snapshot only at new memory highs so the final artifact represents
-  # the worst observed point without emitting one file per sample.
+  # Capture lightweight diagnostics before slower pprof fetches. Near test exit
+  # or OOM, the test process can disappear while profiles are being collected.
+  wrote_snapshot=false
   if [[ "$is_new_high" == "true" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
     write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
     write_system_diagnostics
     MEMORY_HIGH_WATER_MARK="$memory_pct"
+    wrote_snapshot=true
+  fi
+
+  if should_capture_heap_profile "$now" "$memory_pct" "$is_new_high" "$should_terminate_process_group"; then
+    HEAP_PROFILE_SECTION="$(capture_heap_profile "$memory_pct")"
+    LAST_HEAP_PROFILE_CAPTURE_TIME="$now"
+    HAS_CAPTURED_HEAP_PROFILE=true
+
+    if [[ "$wrote_snapshot" == "true" ]]; then
+      write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
+    fi
   fi
 
   if [[ "$should_terminate_process_group" == "true" ]]; then
