@@ -133,16 +133,18 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	if decorator == nil {
 		tb.Fatal("testcontext: context decorator must not be nil")
 	}
-	if _, ok := st.decorators[key]; ok {
-		return
+	for _, existing := range st.decorators {
+		if existing.key == key {
+			return
+		}
 	}
-	st.ctx = decorator(st.ctx)
-	st.contextHistory = append(st.contextHistory, st.ctx)
-	st.decorators[key] = struct{}{}
-	st.orderedDecorators = append(st.orderedDecorators, contextDecorator{
+	next := contextDecorator{
 		key:      key,
 		decorate: decorator,
-	})
+	}
+	st.ctx = next.decorate(st.ctx)
+	st.contextHistory = append(st.contextHistory, st.ctx)
+	st.decorators = append(st.decorators, next)
 }
 
 // EnsureRemaining extends the test-scoped context so at least d remains from
@@ -184,7 +186,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	// Context deadlines are immutable; extending the test context means
 	// replacing it and replaying metadata/decorators.
 	if requestedDeadline.After(testDeadline) {
-		next := newTestContext(tb, requestedDeadline, st.orderedDecorators)
+		next := newTestContext(tb, requestedDeadline, st.decorators)
 		st.useContext(next)
 		testDeadline = next.deadline
 	}
@@ -213,20 +215,18 @@ type contextState struct {
 	// deadline resets and return the current replacement.
 	contextHistory []context.Context
 	// cancels tracks every replacement context so cleanup can release them all.
-	cancels           []context.CancelFunc
-	createdAt         time.Time
-	timeout           time.Duration
-	decorators        map[any]struct{}
-	orderedDecorators []contextDecorator
+	cancels    []context.CancelFunc
+	createdAt  time.Time
+	timeout    time.Duration
+	decorators []contextDecorator
 }
 
 func newContextState(tb testing.TB, timeout time.Duration) *contextState {
 	st := &contextState{
-		createdAt:  time.Now(),
-		timeout:    timeout,
-		decorators: make(map[any]struct{}),
+		createdAt: time.Now(),
+		timeout:   timeout,
 	}
-	st.useContext(newTestContext(tb, st.createdAt.Add(timeout), st.orderedDecorators))
+	st.useContext(newTestContext(tb, st.createdAt.Add(timeout), st.decorators))
 	return st
 }
 
@@ -289,7 +289,6 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	s.contextHistory = nil
 	s.cancels = nil
 	s.decorators = nil
-	s.orderedDecorators = nil
 	return timedOut, timeout
 }
 
