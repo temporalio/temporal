@@ -52,6 +52,7 @@ type (
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
+		TimeSkippingFastForwardNotifier *TimeSkippingFastForwardNotifier
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
@@ -94,5 +95,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
+		f.TimeSkippingFastForwardNotifier,
 	)
 }

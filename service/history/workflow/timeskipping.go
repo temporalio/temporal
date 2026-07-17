@@ -70,6 +70,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
 		if tsi.FastForwardInfo != nil {
 			tsi.FastForwardInfo = nil
+			ms.timeSkippingFastForwardUpdated = true
 		}
 		return
 	}
@@ -93,6 +94,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		HasReached:                    false,
 		LastUpdateVersionedTransition: currentVersionedTransition,
 	}
+	ms.timeSkippingFastForwardUpdated = true
 	ms.AddTasks(&tasks.TimeSkippingTimerTask{
 		WorkflowKey:         ms.GetWorkflowKey(),
 		VisibilityTimestamp: targetTime,
@@ -121,6 +123,36 @@ func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationp
 	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
 		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
 	}
+}
+
+// BuildTimeSkippingInfo converts the persisted time-skipping state into the public
+// common.v1.TimeSkippingInfo. virtualTime is the execution's current virtual clock (CurrentTime).
+// It returns nil when the execution has no time-skipping state.
+func BuildTimeSkippingInfo(
+	tsi *persistencespb.TimeSkippingInfo,
+	virtualTime time.Time,
+) *commonpb.TimeSkippingInfo {
+	if tsi == nil {
+		return nil
+	}
+	info := &commonpb.TimeSkippingInfo{
+		CurrentTime: timestamppb.New(virtualTime),
+		IsRunning:   tsi.GetConfig().GetEnabled(),
+	}
+	if ff := tsi.GetFastForwardInfo(); ff != nil {
+		var createTime *timestamppb.Timestamp
+		// The server sets target = create + fast_forward, so recover the creation virtual time
+		// by subtracting the configured duration.
+		if target := ff.GetTargetTime(); target != nil {
+			createTime = timestamppb.New(target.AsTime().Add(-tsi.GetConfig().GetFastForward().AsDuration()))
+		}
+		info.FastForward = &commonpb.TimeSkippingInfo_TimeSkippingFastForwardInfo{
+			CreateTime:   createTime,
+			TargetTime:   ff.GetTargetTime(),
+			HasCompleted: ff.GetHasReached(),
+		}
+	}
+	return info
 }
 
 // -- Propagation Methods of Time Skipping
@@ -503,10 +535,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
 		tsi.FastForwardInfo.HasReached = true
+		ms.timeSkippingFastForwardUpdated = true
 	}
 
 	ms.timeSkippingInfoUpdated = true
 	return nil
+}
+
+// timeSkippingFastForwardUpdate returns the current TimeSkippingInfo to broadcast to waiters when
+// the fast-forward changed in this transaction, or nil when it did not.
+func (ms *MutableStateImpl) timeSkippingFastForwardUpdate() *commonpb.TimeSkippingInfo {
+	if !ms.timeSkippingFastForwardUpdated {
+		return nil
+	}
+	return BuildTimeSkippingInfo(ms.executionInfo.GetTimeSkippingInfo(), ms.Now())
+}
+
+// GetTimeSkippingFastForwardUpdate returns the TimeSkippingInfo captured at the last
+// close-transaction when the fast-forward changed (nil when it did not), so the workflow context
+// can broadcast it to waiters after a successful active persist.
+func (ms *MutableStateImpl) GetTimeSkippingFastForwardUpdate() *commonpb.TimeSkippingInfo {
+	return ms.pendingTimeSkippingFastForwardUpdate
 }
 
 func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkipping(

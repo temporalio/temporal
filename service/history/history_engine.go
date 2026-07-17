@@ -102,52 +102,53 @@ import (
 
 type (
 	historyEngineImpl struct {
-		status                     int32
-		currentClusterName         string
-		shardContext               historyi.ShardContext
-		timeSource                 clock.TimeSource
-		clusterMetadata            cluster.Metadata
-		executionManager           persistence.ExecutionManager
-		queueProcessors            map[tasks.Category]queues.Queue
-		replicationAckMgr          replication.AckManager
-		nDCHistoryReplicator       ndc.HistoryReplicator
-		nDCHistoryImporter         ndc.HistoryImporter
-		nDCActivityStateReplicator ndc.ActivityStateReplicator
-		nDCWorkflowStateReplicator ndc.WorkflowStateReplicator
-		nDCHSMStateReplicator      ndc.HSMStateReplicator
-		replicationProcessorMgr    replication.TaskProcessor
-		eventNotifier              events.Notifier
-		tokenSerializer            *tasktoken.Serializer
-		metricsHandler             metrics.Handler
-		logger                     log.Logger
-		throttledLogger            log.Logger
-		config                     *configs.Config
-		workflowRebuilder          workflowRebuilder
-		workflowResetter           ndc.WorkflowResetter
-		sdkClientFactory           sdk.ClientFactory
-		eventsReapplier            ndc.EventsReapplier
-		matchingClient             matchingservice.MatchingServiceClient
-		rawMatchingClient          matchingservice.MatchingServiceClient
-		replicationDLQHandler      replication.DLQHandler
-		persistenceVisibilityMgr   manager.VisibilityManager
-		searchAttributesValidator  *searchattribute.Validator
-		workflowDeleteManager      deletemanager.DeleteManager
-		serializer                 serialization.Serializer
-		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		chasmEngine                chasm.Engine
-		versionChecker             headers.VersionChecker
-		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
-		workerDeploymentClient     workerdeployment.Client
-		routingInfoCache           worker_versioning.RoutingInfoCache
-		tracer                     trace.Tracer
-		taskCategoryRegistry       tasks.TaskCategoryRegistry
-		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		chasmWorkflowRegistry      *chasmworkflow.Registry
-		workflowCache              wcache.Cache
-		replicationProgressCache   replication.ProgressCache
-		syncStateRetriever         replication.SyncStateRetriever
-		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
-		testHooks                  testhooks.TestHooks
+		status                          int32
+		currentClusterName              string
+		shardContext                    historyi.ShardContext
+		timeSource                      clock.TimeSource
+		clusterMetadata                 cluster.Metadata
+		executionManager                persistence.ExecutionManager
+		queueProcessors                 map[tasks.Category]queues.Queue
+		replicationAckMgr               replication.AckManager
+		nDCHistoryReplicator            ndc.HistoryReplicator
+		nDCHistoryImporter              ndc.HistoryImporter
+		nDCActivityStateReplicator      ndc.ActivityStateReplicator
+		nDCWorkflowStateReplicator      ndc.WorkflowStateReplicator
+		nDCHSMStateReplicator           ndc.HSMStateReplicator
+		replicationProcessorMgr         replication.TaskProcessor
+		eventNotifier                   events.Notifier
+		tokenSerializer                 *tasktoken.Serializer
+		metricsHandler                  metrics.Handler
+		logger                          log.Logger
+		throttledLogger                 log.Logger
+		config                          *configs.Config
+		workflowRebuilder               workflowRebuilder
+		workflowResetter                ndc.WorkflowResetter
+		sdkClientFactory                sdk.ClientFactory
+		eventsReapplier                 ndc.EventsReapplier
+		matchingClient                  matchingservice.MatchingServiceClient
+		rawMatchingClient               matchingservice.MatchingServiceClient
+		replicationDLQHandler           replication.DLQHandler
+		persistenceVisibilityMgr        manager.VisibilityManager
+		searchAttributesValidator       *searchattribute.Validator
+		workflowDeleteManager           deletemanager.DeleteManager
+		serializer                      serialization.Serializer
+		workflowConsistencyChecker      api.WorkflowConsistencyChecker
+		chasmEngine                     chasm.Engine
+		timeSkippingFastForwardNotifier *TimeSkippingFastForwardNotifier
+		versionChecker                  headers.VersionChecker
+		versionCache                    worker_versioning.VersionMembershipAndReactivationStatusCache
+		workerDeploymentClient          workerdeployment.Client
+		routingInfoCache                worker_versioning.RoutingInfoCache
+		tracer                          trace.Tracer
+		taskCategoryRegistry            tasks.TaskCategoryRegistry
+		commandHandlerRegistry          *workflow.CommandHandlerRegistry
+		chasmWorkflowRegistry           *chasmworkflow.Registry
+		workflowCache                   wcache.Cache
+		replicationProgressCache        replication.ProgressCache
+		syncStateRetriever              replication.SyncStateRetriever
+		outboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		testHooks                       testhooks.TestHooks
 	}
 )
 
@@ -181,6 +182,7 @@ func NewEngineWithShardContext(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
+	timeSkippingFastForwardNotifier *TimeSkippingFastForwardNotifier,
 ) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -203,39 +205,40 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl := &historyEngineImpl{
-		status:                     common.DaemonStatusInitialized,
-		currentClusterName:         currentClusterName,
-		shardContext:               shard,
-		clusterMetadata:            shard.GetClusterMetadata(),
-		timeSource:                 shard.GetTimeSource(),
-		executionManager:           executionManager,
-		tokenSerializer:            tasktoken.NewSerializer(),
-		logger:                     log.With(logger, tag.ComponentHistoryEngine),
-		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsHandler:             shard.GetMetricsHandler(),
-		eventNotifier:              eventNotifier,
-		config:                     config,
-		sdkClientFactory:           sdkClientFactory,
-		matchingClient:             matchingClient,
-		rawMatchingClient:          rawMatchingClient,
-		persistenceVisibilityMgr:   persistenceVisibilityMgr,
-		workflowDeleteManager:      workflowDeleteManager,
-		serializer:                 serializer,
-		workflowConsistencyChecker: workflowConsistencyChecker,
-		versionChecker:             headers.NewDefaultVersionChecker(),
-		tracer:                     tracerProvider.Tracer(consts.LibraryName),
-		taskCategoryRegistry:       taskCategoryRegistry,
-		commandHandlerRegistry:     commandHandlerRegistry,
-		chasmWorkflowRegistry:      chasmWorkflowRegistry,
-		workflowCache:              workflowCache,
-		replicationProgressCache:   replicationProgressCache,
-		syncStateRetriever:         syncStateRetriever,
-		outboundQueueCBPool:        outboundQueueCBPool,
-		testHooks:                  testHooks,
-		chasmEngine:                chasmEngine,
-		versionCache:               versionCache,
-		workerDeploymentClient:     workerDeploymentClient,
-		routingInfoCache:           routingInfoCache,
+		status:                          common.DaemonStatusInitialized,
+		currentClusterName:              currentClusterName,
+		shardContext:                    shard,
+		clusterMetadata:                 shard.GetClusterMetadata(),
+		timeSource:                      shard.GetTimeSource(),
+		executionManager:                executionManager,
+		tokenSerializer:                 tasktoken.NewSerializer(),
+		logger:                          log.With(logger, tag.ComponentHistoryEngine),
+		throttledLogger:                 log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
+		metricsHandler:                  shard.GetMetricsHandler(),
+		eventNotifier:                   eventNotifier,
+		config:                          config,
+		sdkClientFactory:                sdkClientFactory,
+		matchingClient:                  matchingClient,
+		rawMatchingClient:               rawMatchingClient,
+		persistenceVisibilityMgr:        persistenceVisibilityMgr,
+		workflowDeleteManager:           workflowDeleteManager,
+		serializer:                      serializer,
+		workflowConsistencyChecker:      workflowConsistencyChecker,
+		versionChecker:                  headers.NewDefaultVersionChecker(),
+		tracer:                          tracerProvider.Tracer(consts.LibraryName),
+		taskCategoryRegistry:            taskCategoryRegistry,
+		commandHandlerRegistry:          commandHandlerRegistry,
+		chasmWorkflowRegistry:           chasmWorkflowRegistry,
+		workflowCache:                   workflowCache,
+		replicationProgressCache:        replicationProgressCache,
+		syncStateRetriever:              syncStateRetriever,
+		outboundQueueCBPool:             outboundQueueCBPool,
+		testHooks:                       testHooks,
+		chasmEngine:                     chasmEngine,
+		timeSkippingFastForwardNotifier: timeSkippingFastForwardNotifier,
+		versionCache:                    versionCache,
+		workerDeploymentClient:          workerDeploymentClient,
+		routingInfoCache:                routingInfoCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -533,6 +536,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
 		e.outboundQueueCBPool,
+		e.timeSkippingFastForwardNotifier,
 	)
 }
 
@@ -881,6 +885,12 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {
 	if e.chasmEngine != nil {
 		e.chasmEngine.NotifyExecution(executionKey)
+	}
+}
+
+func (e *historyEngineImpl) NotifyTimeSkippingFastForwardUpdate(executionKey chasm.ExecutionKey, info *commonpb.TimeSkippingInfo) {
+	if e.timeSkippingFastForwardNotifier != nil {
+		e.timeSkippingFastForwardNotifier.Notify(executionKey, info)
 	}
 }
 

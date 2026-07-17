@@ -92,6 +92,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(NewTimeSkippingFastForwardNotifier),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),

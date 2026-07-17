@@ -426,6 +426,18 @@ func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), executionKey, componentRef)
 }
 
+// NotifyTimeSkippingFastForwardUpdate mocks base method.
+func (m *MockEngine) NotifyTimeSkippingFastForwardUpdate(executionKey chasm.ExecutionKey, info *common.TimeSkippingInfo) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyTimeSkippingFastForwardUpdate", executionKey, info)
+}
+
+// NotifyTimeSkippingFastForwardUpdate indicates an expected call of NotifyTimeSkippingFastForwardUpdate.
+func (mr *MockEngineMockRecorder) NotifyTimeSkippingFastForwardUpdate(executionKey, info any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyTimeSkippingFastForwardUpdate", reflect.TypeOf((*MockEngine)(nil).NotifyTimeSkippingFastForwardUpdate), executionKey, info)
+}
+
 // NotifyNewHistoryEvent mocks base method.
 func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()

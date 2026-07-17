@@ -3731,6 +3731,20 @@ func (mr *MockMutableStateMockRecorder) ToRealTime(virtualTime any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTime", reflect.TypeOf((*MockMutableState)(nil).ToRealTime), virtualTime)
 }
 
+// GetTimeSkippingFastForwardUpdate mocks base method.
+func (m *MockMutableState) GetTimeSkippingFastForwardUpdate() *common.TimeSkippingInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimeSkippingFastForwardUpdate")
+	ret0, _ := ret[0].(*common.TimeSkippingInfo)
+	return ret0
+}
+
+// GetTimeSkippingFastForwardUpdate indicates an expected call of GetTimeSkippingFastForwardUpdate.
+func (mr *MockMutableStateMockRecorder) GetTimeSkippingFastForwardUpdate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSkippingFastForwardUpdate", reflect.TypeOf((*MockMutableState)(nil).GetTimeSkippingFastForwardUpdate))
+}
+
 // UpdateActivity mocks base method.
 func (m *MockMutableState) UpdateActivity(arg0 int64, arg1 ActivityUpdater) error {
 	m.ctrl.T.Helper()

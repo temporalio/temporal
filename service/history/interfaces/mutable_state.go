@@ -423,6 +423,10 @@ type (
 		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
 		// adjusting for accumulated skipped duration which may have happened.
 		ToRealTime(virtualTime time.Time) time.Time
+		// GetTimeSkippingFastForwardUpdate returns the TimeSkippingInfo captured at the last
+		// close-transaction when the fast-forward changed (nil otherwise), for broadcasting to
+		// DescribeWorkflowExecution waiters after a successful active persist.
+		GetTimeSkippingFastForwardUpdate() *commonpb.TimeSkippingInfo
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

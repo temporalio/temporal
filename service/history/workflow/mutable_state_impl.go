@@ -216,6 +216,17 @@ type (
 		// timeSkippingInfoUpdated is used to track if executionInfo.TimeSkippingInfo is updated.
 		timeSkippingInfoUpdated bool
 
+		// timeSkippingFastForwardUpdated is set when the time-skipping fast-forward changed in this
+		// transaction (set, reset, cleared, or completed). It drives an execution-level
+		// notification carrying the current TimeSkippingInfo to waiters (e.g.
+		// DescribeWorkflowExecution), and is reset at close-transaction.
+		timeSkippingFastForwardUpdated bool
+
+		// pendingTimeSkippingFastForwardUpdate holds the TimeSkippingInfo (built with ms.Now())
+		// captured at the last close-transaction when the fast-forward changed, so the workflow
+		// context can broadcast it to waiters after a successful active persist. Nil when unchanged.
+		pendingTimeSkippingFastForwardUpdate *commonpb.TimeSkippingInfo
+
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
 		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
@@ -7524,6 +7535,10 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		Checksum:        result.checksum,
 	}
 
+	// Capture the fast-forward update (built with ms.Now()) before cleanupTransaction resets the
+	// dirty flag; the workflow context reads it after a successful active persist to notify waiters.
+	ms.pendingTimeSkippingFastForwardUpdate = ms.timeSkippingFastForwardUpdate()
+
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
@@ -7568,6 +7583,8 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		DBRecordVersion: ms.dbRecordVersion,
 		Checksum:        result.checksum,
 	}
+
+	ms.pendingTimeSkippingFastForwardUpdate = ms.timeSkippingFastForwardUpdate()
 
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
@@ -8371,6 +8388,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.workflowTaskUpdated = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
+	ms.timeSkippingFastForwardUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})

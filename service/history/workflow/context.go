@@ -866,6 +866,20 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
+	// Broadcast a time-skipping fast-forward update to active waiters (e.g. DescribeWorkflowExecution)
+	// after the write is durable. Only on the active path; replication has no waiters to notify.
+	if updateWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+		if update := c.MutableState.GetTimeSkippingFastForwardUpdate(); update != nil {
+			if engine, err := shardContext.GetEngine(ctx); err == nil {
+				engine.NotifyTimeSkippingFastForwardUpdate(chasm.ExecutionKey{
+					NamespaceID: c.workflowKey.NamespaceID,
+					BusinessID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+				}, update)
+			}
+		}
+	}
+
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 

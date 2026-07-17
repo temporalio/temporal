@@ -60,33 +60,72 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 	return target
 }
 
-// makeTimeSkippingInfo converts the persisted time-skipping state into the
-// public common.v1.TimeSkippingInfo. CurrentTime is the execution's virtual
-// clock; IsRunning tracks the config's enabled flag, which the server clears
-// once a fast-forward completes.
-func makeTimeSkippingInfo(mutableState historyi.MutableState) *commonpb.TimeSkippingInfo {
-	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	info := &commonpb.TimeSkippingInfo{
-		CurrentTime: timestamppb.New(mutableState.Now()),
-		IsRunning:   tsi.GetConfig().GetEnabled(),
-	}
-	if ff := tsi.GetFastForwardInfo(); ff != nil {
-		var createTime *timestamppb.Timestamp
-		// The server sets target = create + fast_forward, so recover the
-		// creation virtual time by subtracting the configured duration.
-		if target := ff.GetTargetTime(); target != nil {
-			createTime = timestamppb.New(target.AsTime().Add(-tsi.GetConfig().GetFastForward().AsDuration()))
-		}
-		info.FastForward = &commonpb.TimeSkippingInfo_TimeSkippingFastForwardInfo{
-			CreateTime:   createTime,
-			TargetTime:   ff.GetTargetTime(),
-			HasCompleted: ff.GetHasReached(),
-		}
-	}
-	return info
+// ExecutionNotifier delivers time-skipping fast-forward updates for an execution: Subscribe returns
+// a channel that receives the current TimeSkippingInfo whenever the fast-forward changes (set,
+// reset, cleared, or completed), plus an unsubscribe function. It fires on close-transaction, no
+// history event required.
+type ExecutionNotifier interface {
+	Subscribe(key chasm.ExecutionKey) (<-chan *commonpb.TimeSkippingInfo, func())
 }
 
+// Invoke handles DescribeWorkflowExecution. When the request sets WaitTimeskippingCompletion and
+// the execution has a pending time-skipping fast-forward, it blocks until the fast-forward
+// completes (or is cleared) or the request context deadline is reached, returning the latest state
+// in either case.
 func Invoke(
+	ctx context.Context,
+	req *historyservice.DescribeWorkflowExecutionRequest,
+	shard historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	persistenceVisibilityMgr manager.VisibilityManager,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	executionNotifier ExecutionNotifier,
+) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+	if !req.GetRequest().GetWaitTimeskippingCompletion() || executionNotifier == nil {
+		return describeOnce(ctx, req, shard, workflowConsistencyChecker, persistenceVisibilityMgr, outboundQueueCBPool)
+	}
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: req.NamespaceId,
+		BusinessID:  req.Request.Execution.WorkflowId,
+		RunID:       req.Request.Execution.RunId,
+	}
+	// Subscribe before the initial read: any fast-forward change after we subscribe is delivered on
+	// the channel, and any change before it is reflected in the read below, so we never miss the
+	// completion. This waits without holding the workflow lock.
+	channel, unsubscribe := executionNotifier.Subscribe(executionKey)
+	defer unsubscribe()
+
+	result, err := describeOnce(ctx, req, shard, workflowConsistencyChecker, persistenceVisibilityMgr, outboundQueueCBPool)
+	if err != nil {
+		return nil, err
+	}
+	if !fastForwardPending(result.GetWorkflowExtendedInfo().GetTimeSkippingInfo()) {
+		return result, nil
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Deadline reached: return the latest state with the fast-forward still pending.
+			return result, nil
+		case info := <-channel:
+			// The notification carries the fresh TimeSkippingInfo; patch it into the response so
+			// waiters get up-to-date fast-forward info and virtual time without re-reading.
+			result.WorkflowExtendedInfo.TimeSkippingInfo = info
+			if !fastForwardPending(info) {
+				return result, nil
+			}
+		}
+	}
+}
+
+func fastForwardPending(info *commonpb.TimeSkippingInfo) bool {
+	ff := info.GetFastForward()
+	return ff != nil && !ff.GetHasCompleted()
+}
+
+func describeOnce(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
 	shard historyi.ShardContext,
@@ -190,9 +229,10 @@ func Invoke(
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}
 
-	if executionInfo.TimeSkippingInfo != nil {
-		result.WorkflowExtendedInfo.TimeSkippingInfo = makeTimeSkippingInfo(mutableState)
-	}
+	result.WorkflowExtendedInfo.TimeSkippingInfo = workflow.BuildTimeSkippingInfo(
+		executionInfo.GetTimeSkippingInfo(),
+		mutableState.Now(),
+	)
 
 	if shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
 		executionStats := executionInfo.GetExecutionStats()
