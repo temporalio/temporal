@@ -26,6 +26,7 @@ env:
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
+  HEAP_PROFILE_CAPTURE_THRESHOLD: 60
 
 jobs:
   test-setup:
