@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -987,6 +988,102 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	mockSdk.AssertExpectations(s.T())
 }
 
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAllActivityPages() {
+	type pageSpec struct {
+		size       int
+		fetchToken string
+		nextToken  string
+	}
+	pages := []pageSpec{
+		{size: 5, nextToken: "p2"},
+		{size: 5, fetchToken: "p2", nextToken: "p3"},
+		{size: 3, fetchToken: "p3"},
+	}
+	const total = 13
+
+	for i, pg := range pages {
+		executions := make([]*activitypb.ActivityExecutionListInfo, pg.size)
+		for j := range executions {
+			executions[j] = &activitypb.ActivityExecutionListInfo{
+				ActivityId: fmt.Sprintf("p%d-activity%d", i, j),
+				RunId:      fmt.Sprintf("p%d-run%d", i, j),
+			}
+		}
+		fetchToken := pg.fetchToken
+		s.mockFrontendClient.EXPECT().ListActivityExecutions(gomock.Any(), gomock.Cond(func(r *workflowservice.ListActivityExecutionsRequest) bool {
+			return r.GetNamespace() == "test-namespace" &&
+				r.GetQuery() == "ActivityType = 'test-activity'" &&
+				string(r.GetNextPageToken()) == fetchToken
+		})).Return(&workflowservice.ListActivityExecutionsResponse{
+			Executions:    executions,
+			NextPageToken: []byte(pg.nextToken),
+		}, nil)
+	}
+
+	mockSdk := &mocks.Client{}
+	mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
+
+	var processed int64
+	var invalidTargets int64
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ sdkclient.Client,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case task := <-taskCh:
+				if task.targetExecution == nil ||
+					task.targetExecution.GetType() != enumspb.EXECUTION_TYPE_ACTIVITY ||
+					task.targetExecution.GetBusinessId() == "" || task.targetExecution.GetRunId() == "" {
+					atomic.AddInt64(&invalidTargets, 1)
+				}
+				atomic.AddInt64(&processed, 1)
+				select {
+				case respCh <- taskResponse{page: task.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		namespace:     "test-namespace",
+		adjustedQuery: "ActivityType = 'test-activity'",
+		batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		concurrency:   3,
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	env := s.NewTestActivityEnvironment()
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, mockSdk, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.Require().NoError(err)
+
+	var hbd HeartBeatDetails
+	s.Require().NoError(encoded.Get(&hbd))
+	s.Equal(total, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
+	s.Equal(int64(total), atomic.LoadInt64(&processed))
+	s.Zero(atomic.LoadInt64(&invalidTargets))
+	mockSdk.AssertExpectations(s.T())
+}
+
 // TestProcessWorkflowsWithProactiveFetching_InitialTargetExecutions verifies
 // that config.initialTargetExecutions builds tasks with the field the batch
 // type's processor actually reads: executionInfo for workflow batch types,
@@ -1073,6 +1170,72 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialTarge
 			s.Equal(!tt.wantExecutionInfo, gotTargetExecution)
 		})
 	}
+}
+
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_LegacyActivityExecutions() {
+	legacyExecutions := []*commonpb.WorkflowExecution{
+		{WorkflowId: "activity-id", RunId: "activity-run-id"},
+	}
+
+	var gotExecutionInfo bool
+	var gotTargetExecution *commonpb.Execution
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ sdkclient.Client,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case task := <-taskCh:
+				if task.executionInfo == nil && task.targetExecution == nil {
+					continue
+				}
+				gotExecutionInfo = task.executionInfo != nil
+				gotTargetExecution = task.targetExecution
+				select {
+				case respCh <- taskResponse{page: task.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		concurrency:       1,
+		initialExecutions: legacyExecutions,
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	env := s.NewTestActivityEnvironment()
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, nil, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.Require().NoError(err)
+
+	var hbd HeartBeatDetails
+	s.Require().NoError(encoded.Get(&hbd))
+	s.Equal(1, hbd.SuccessCount)
+	s.False(gotExecutionInfo)
+	s.Equal(&commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+		BusinessId: "activity-id",
+		RunId:      "activity-run-id",
+	}, gotTargetExecution)
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_UnknownOperation() {

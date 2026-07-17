@@ -32,7 +32,7 @@ func (s *WorkflowAPIBatchUpdateOptionsClientTestSuite) TestWorkflowBatchUpdateOp
 		s.Run(selector.name, func(s *WorkflowAPIBatchUpdateOptionsClientTestSuite) {
 			env := newWorkflowBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			workflowType := testcore.RandomizeStr(t.Name())
 			env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})

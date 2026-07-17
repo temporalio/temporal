@@ -169,7 +169,7 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 		s.Run(selector.name, func(s *WorkflowAPIBatchTerminateClientTestSuite) {
 			env := newWorkflowBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			workflowType := testcore.RandomizeStr(t.Name())
 			env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})
@@ -230,7 +230,7 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 // execution and no-oping.
 func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_TargetExecutionTypeMismatch() {
 	env := newWorkflowBatchEnv(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	req := &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),

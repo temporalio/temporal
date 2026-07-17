@@ -4123,9 +4123,8 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 		{"reset activities", enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, batcher.BatchTypeResetActivities, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY},
 		{"unpause activities", enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, batcher.BatchTypeUnpauseActivities, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY},
 		{"update activity options", enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, batcher.BatchTypeUpdateActivitiesOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS},
-		// The disambiguated _WORKFLOW enum variants assigned by StartBatchOperation
-		// are written with the workflow-suffixed memo string and read back as the
-		// same non-deprecated *_WORKFLOW operation type.
+		// The disambiguated _WORKFLOW enum variants retain the legacy persisted
+		// memo strings during rollout and read back as the non-deprecated type.
 		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
 		{"cancel workflows", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
 		{"signal workflows", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
@@ -4172,6 +4171,41 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 	for memo, expected := range legacy {
 		t.Run("legacy "+memo, func(t *testing.T) {
 			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+
+	suffixed := map[string]enumspb.BatchOperationType{
+		"terminate_workflows":     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel_workflows":        enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal_workflows":        enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete_workflows":        enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset_workflows":         enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_workflow_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	}
+	for memo, expected := range suffixed {
+		t.Run("suffixed "+memo, func(t *testing.T) {
+			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+}
+
+func TestWorkflowBatchOperationMemoRollingUpgradeCompatibility(t *testing.T) {
+	cases := []struct {
+		name       string
+		batchType  enumspb.BatchOperationType
+		legacyMemo string
+	}{
+		{"terminate", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, "terminate"},
+		{"cancel", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, "cancel"},
+		{"signal", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, "signal"},
+		{"delete", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, "delete"},
+		{"reset", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, "reset"},
+		{"update options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, "update_options"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.legacyMemo, snakeCaseBatchType(tt.batchType),
+				"workflow batch memos written during a rolling upgrade must remain readable by pre-upgrade frontends")
 		})
 	}
 }

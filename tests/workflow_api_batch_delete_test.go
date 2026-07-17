@@ -32,7 +32,7 @@ func (s *WorkflowAPIBatchDeleteClientTestSuite) TestWorkflowBatchDelete_Success(
 		s.Run(selector.name, func(s *WorkflowAPIBatchDeleteClientTestSuite) {
 			env := newWorkflowBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			workflowType := testcore.RandomizeStr(t.Name())
 			env.SdkWorker().RegisterWorkflowWithOptions(blockingWorkflow, workflow.RegisterOptions{Name: workflowType})

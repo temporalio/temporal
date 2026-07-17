@@ -42,7 +42,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 		s.Run(selector.name, func(s *ActivityAPIBatchCancelClientTestSuite) {
 			env := newStandaloneActivityBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			activityType := env.Tv().ActivityType().GetName()
 			taskQueue := testcore.RandomizeStr(t.Name())
@@ -68,13 +68,13 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 				JobId:  jobID,
 				Reason: "test",
 			}
-			selector.apply(t, env, ctx, activityType, activities, req)
+			expectedQuery, expectedExecutions := selector.apply(t, env, ctx, activityType, activities, req)
 
 			_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY)
+			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must reach the Canceled status.
 			for _, a := range activities {
@@ -91,7 +91,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_ExcludesNonRunning() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
-	ctx := env.Context()
+	ctx := s.Context()
 
 	activityType := env.Tv().ActivityType().GetName()
 

@@ -282,18 +282,32 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 			}
 		}
 	} else if len(config.initialExecutions) > 0 {
-		// Use initial executions - convert WorkflowExecution to WorkflowExecutionInfo
-		executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialExecutions))
-		for _, exec := range config.initialExecutions {
-			executionInfos = append(executionInfos, &workflowpb.WorkflowExecutionInfo{
-				Execution: exec,
-			})
-		}
-
-		p = &page{
-			executionInfos: executionInfos,
-			nextPageToken:  config.initialPageToken,
-			pageNumber:     hbd.CurrentPage,
+		if isActivityBatchType(config.batchType) {
+			targetExecutions := make([]*commonpb.Execution, 0, len(config.initialExecutions))
+			for _, exec := range config.initialExecutions {
+				targetExecutions = append(targetExecutions, &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+					BusinessId: exec.GetWorkflowId(),
+					RunId:      exec.GetRunId(),
+				})
+			}
+			p = &page{
+				targetExecutionInfo: targetExecutions,
+				nextPageToken:       config.initialPageToken,
+				pageNumber:          hbd.CurrentPage,
+			}
+		} else {
+			executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialExecutions))
+			for _, exec := range config.initialExecutions {
+				executionInfos = append(executionInfos, &workflowpb.WorkflowExecutionInfo{
+					Execution: exec,
+				})
+			}
+			p = &page{
+				executionInfos: executionInfos,
+				nextPageToken:  config.initialPageToken,
+				pageNumber:     hbd.CurrentPage,
+			}
 		}
 	} else {
 		// Fetch page of executions if needed

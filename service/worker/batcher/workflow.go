@@ -38,21 +38,21 @@ const (
 	// executions (as opposed to a visibility query) in memo, encoded as a
 	// []*commonpb.Execution.
 	BatchOperationExecutionsMemo = "batch_operation_executions"
-	// Workflow batch operation memo type strings. Each operation is suffixed with
-	// the execution type it targets (workflows).
+	// Workflow batch operation memo type strings retain their legacy persisted
+	// values so pre-upgrade frontends can read jobs started during a rollout.
 
 	// BatchTypeTerminateWorkflows is batch type for terminating workflows
-	BatchTypeTerminateWorkflows = "terminate_workflows"
+	BatchTypeTerminateWorkflows = "terminate"
 	// BatchTypeCancelWorkflows is batch type for canceling workflows
-	BatchTypeCancelWorkflows = "cancel_workflows"
+	BatchTypeCancelWorkflows = "cancel"
 	// BatchTypeSignalWorkflows is batch type for signaling workflows
-	BatchTypeSignalWorkflows = "signal_workflows"
+	BatchTypeSignalWorkflows = "signal"
 	// BatchTypeDeleteWorkflows is batch type for deleting workflows
-	BatchTypeDeleteWorkflows = "delete_workflows"
+	BatchTypeDeleteWorkflows = "delete"
 	// BatchTypeResetWorkflows is batch type for resetting workflows
-	BatchTypeResetWorkflows = "reset_workflows"
+	BatchTypeResetWorkflows = "reset"
 	// BatchTypeUpdateWorkflowOptions is batch type for updating the options of workflow executions
-	BatchTypeUpdateWorkflowOptions = "update_workflow_options"
+	BatchTypeUpdateWorkflowOptions = "update_options"
 
 	// Activity batch operation memo type strings. Each operation is suffixed with
 	// the execution type it targets (activities).
@@ -237,9 +237,6 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-		if len(params.GetTargetExecutions()) > 0 {
-			return serviceerror.NewInvalidArgument("executions cannot be used with activity batch operations; use target executions")
-		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		if op.SignalOperation.GetSignal() == "" {

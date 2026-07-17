@@ -69,7 +69,7 @@ func (s *WorkflowAPIBatchResetClientTestSuite) TestWorkflowBatchReset_Success() 
 		s.Run(selector.name, func(s *WorkflowAPIBatchResetClientTestSuite) {
 			env := newWorkflowBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			var attemptCounts sync.Map
 			activityFn, workflowFn := newResetTestActivityAndWorkflow(&attemptCounts)

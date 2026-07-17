@@ -12,10 +12,12 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -34,6 +36,10 @@ func TestActivityAPIBatchTerminateClientTestSuite(t *testing.T) {
 // flags) and additionally enables the "batch operations" worker service and
 // raises the per-namespace concurrent batch limit to the functional-test limit.
 func newStandaloneActivityBatchEnv(t *testing.T) *standaloneActivityEnv {
+	return newStandaloneActivityBatchEnvWithOperators(t, true)
+}
+
+func newStandaloneActivityBatchEnvWithOperators(t *testing.T, enableBatchActivityOperators bool) *standaloneActivityEnv {
 	env := &standaloneActivityEnv{
 		TestEnv: testcore.NewEnv(
 			t,
@@ -54,6 +60,9 @@ func newStandaloneActivityBatchEnv(t *testing.T) *standaloneActivityEnv {
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.StartDelayEnabled, nsValues(true))
+	if enableBatchActivityOperators {
+		cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchActivityOperators, nsValues(true))
+	}
 	return env
 }
 
@@ -72,6 +81,8 @@ func assertBatchOperationType(
 	env *standaloneActivityEnv,
 	jobID string,
 	expected enumspb.BatchOperationType,
+	expectedQuery string,
+	expectedExecutions []*commonpb.Execution,
 ) {
 	t.Helper()
 
@@ -83,6 +94,8 @@ func assertBatchOperationType(
 		})
 		require.NoError(c, err)
 		require.Equal(c, expected, desc.GetOperationType())
+		require.Equal(c, expectedQuery, desc.GetQuery())
+		protorequire.ProtoSliceEqual(c, expectedExecutions, desc.GetExecutions())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	//nolint:forbidigo // for tests with waits
@@ -104,24 +117,21 @@ func assertBatchOperationType(
 }
 
 // batchTargetSelector describes a way to scope a batch operation's targets:
-// either a visibility query (which requires the target executions to be
-// indexed in visibility before the batch starts) or an explicit list of
-// target executions (no indexing wait needed, since the executions are
-// named directly).
+// a visibility query, the deprecated Executions field, or TargetExecutions.
 type batchTargetSelector struct {
 	name string
 	// apply sets either VisibilityQuery or TargetExecutions on req to target
 	// the given activities.
-	apply func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest)
+	apply func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) (expectedQuery string, expectedExecutions []*commonpb.Execution)
 }
 
 // batchTargetSelectors enumerates the ways a caller can scope an activity
-// batch operation's targets, so the same test body can be run against both.
+// batch operation's targets.
 func batchTargetSelectors() []batchTargetSelector {
 	return []batchTargetSelector{
 		{
 			name: "VisibilityQuery",
-			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) {
+			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) (string, []*commonpb.Execution) {
 				// ExecutionStatus = 'Running' is intentionally omitted: for
 				// terminate/cancel the server adds it automatically
 				// (adjustQueryBatchTypeEnum), and delete doesn't need it since
@@ -141,11 +151,33 @@ func batchTargetSelectors() []batchTargetSelector {
 				}, testcore.WaitForESToSettle, 100*time.Millisecond)
 
 				req.VisibilityQuery = query
+				return query, nil
+			},
+		},
+		{
+			name: "Executions",
+			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) (string, []*commonpb.Execution) {
+				legacyExecutions := make([]*commonpb.WorkflowExecution, 0, len(activities))
+				expectedExecutions := make([]*commonpb.Execution, 0, len(activities))
+				for _, a := range activities {
+					legacyExecutions = append(legacyExecutions, &commonpb.WorkflowExecution{
+						WorkflowId: a.activityID,
+						RunId:      a.runID,
+					})
+					expectedExecutions = append(expectedExecutions, &commonpb.Execution{
+						Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+						BusinessId: a.activityID,
+						RunId:      a.runID,
+					})
+				}
+				//nolint:staticcheck // Exercises rollout compatibility for in-flight activity batches.
+				req.Executions = legacyExecutions
+				return "", expectedExecutions
 			},
 		},
 		{
 			name: "TargetExecutions",
-			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) {
+			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) (string, []*commonpb.Execution) {
 				executions := make([]*commonpb.Execution, 0, len(activities))
 				for _, a := range activities {
 					executions = append(executions, &commonpb.Execution{
@@ -155,6 +187,7 @@ func batchTargetSelectors() []batchTargetSelector {
 					})
 				}
 				req.TargetExecutions = executions
+				return "", executions
 			},
 		},
 	}
@@ -165,7 +198,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 		s.Run(selector.name, func(s *ActivityAPIBatchTerminateClientTestSuite) {
 			env := newStandaloneActivityBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			activityType := env.Tv().ActivityType().GetName()
 			taskQueue := testcore.RandomizeStr(t.Name())
@@ -191,13 +224,13 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 				JobId:  jobID,
 				Reason: "test",
 			}
-			selector.apply(t, env, ctx, activityType, activities, req)
+			expectedQuery, expectedExecutions := selector.apply(t, env, ctx, activityType, activities, req)
 
 			_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY)
+			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must reach the Terminated status.
 			for _, a := range activities {
@@ -214,7 +247,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 // execution and no-oping.
 func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_TargetExecutionTypeMismatch() {
 	env := newStandaloneActivityBatchEnv(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	req := &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
@@ -240,6 +273,107 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ta
 	s.Contains(err.Error(), "target_executions[0]")
 }
 
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchOperatorsDisabled() {
+	env := newStandaloneActivityBatchEnvWithOperators(s.T(), false)
+	ctx := s.Context()
+
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
+		VisibilityQuery: "ActivityType = 'activity-type'",
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: "batch-terminator",
+				Reason:   "test",
+			},
+		},
+		JobId:  uuid.NewString(),
+		Reason: "test",
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "not supported for this namespace")
+}
+
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_InFlightLegacyExecutionsContinueAfterDisable() {
+	env := newStandaloneActivityBatchEnvWithOperators(s.T(), false)
+	ctx := s.Context()
+	disableOperators := env.OverrideDynamicConfig(dynamicconfig.FrontendEnableBatchActivityOperators, true)
+
+	activityID := testcore.RandomizeStr(s.T().Name())
+	startResp := env.startAndValidateActivity(ctx, s.T(), activityID, testcore.RandomizeStr(s.T().Name()))
+	jobID := uuid.NewString()
+	legacyExecutions := []*commonpb.WorkflowExecution{{WorkflowId: activityID, RunId: startResp.GetRunId()}}
+	request := &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: "batch-terminator",
+				Reason:   "test",
+			},
+		},
+		JobId:  jobID,
+		Reason: "test",
+	}
+	//nolint:staticcheck // Exercises an in-flight batch created with the deprecated selector.
+	request.Executions = legacyExecutions
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, request)
+	s.NoError(err)
+
+	disableOperators()
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
+		VisibilityQuery: "ActivityType = 'activity-type'",
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: "batch-terminator",
+				Reason:   "test",
+			},
+		},
+		JobId:  uuid.NewString(),
+		Reason: "test",
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+
+	assertBatchOperationType(ctx, s.T(), env, jobID, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, "", []*commonpb.Execution{{
+		Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+		BusinessId: activityID,
+		RunId:      startResp.GetRunId(),
+	}})
+	env.eventuallyTerminated(ctx, s.T(), activityID, startResp.GetRunId())
+}
+
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_NoMatchingActivitiesCompletes() {
+	env := newStandaloneActivityBatchEnv(s.T())
+	jobID := uuid.NewString()
+	ctx := s.Context()
+
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
+		VisibilityQuery: fmt.Sprintf("ActivityId = '%s'", uuid.NewString()),
+		Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: "batch-terminator",
+				Reason:   "test",
+			},
+		},
+		JobId:  jobID,
+		Reason: "test",
+	})
+	s.NoError(err)
+
+	//nolint:forbidigo // for tests with waits
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		require.NoError(c, err)
+		require.Equal(c, enumspb.BATCH_OPERATION_STATE_COMPLETED, desc.GetState())
+		require.Zero(c, desc.GetTotalOperationCount())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 // TestActivityBatchTerminate_ExcludesNonRunning verifies that a batch terminate
 // query omitting `ExecutionStatus = 'Running'` still only targets the running
 // activity: the server must add the filter automatically (adjustQueryBatchTypeEnum)
@@ -247,7 +381,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ta
 func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_ExcludesNonRunning() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
-	ctx := env.Context()
+	ctx := s.Context()
 
 	activityType := env.Tv().ActivityType().GetName()
 

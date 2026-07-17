@@ -39,7 +39,7 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 		s.Run(selector.name, func(s *WorkflowAPIBatchSignalClientTestSuite) {
 			env := newWorkflowBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			workflowType := testcore.RandomizeStr(t.Name())
 			env.SdkWorker().RegisterWorkflowWithOptions(signalReceivingWorkflow, workflow.RegisterOptions{Name: workflowType})

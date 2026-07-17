@@ -28,7 +28,7 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 		s.Run(selector.name, func(s *ActivityAPIBatchDeleteClientTestSuite) {
 			env := newStandaloneActivityBatchEnv(s.T())
 			t := s.T()
-			ctx := env.Context()
+			ctx := s.Context()
 
 			activityType := env.Tv().ActivityType().GetName()
 			taskQueue := testcore.RandomizeStr(t.Name())
@@ -51,13 +51,13 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 				JobId:  jobID,
 				Reason: "test",
 			}
-			selector.apply(t, env, ctx, activityType, activities, req)
+			expectedQuery, expectedExecutions := selector.apply(t, env, ctx, activityType, activities, req)
 
 			_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
 			s.NoError(err)
 
 			// Describe/List should report the correct operation type for the batch.
-			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY)
+			assertBatchOperationType(ctx, t, env, jobID, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, expectedQuery, expectedExecutions)
 
 			// All three activities must be deleted (no longer describable).
 			for _, a := range activities {
@@ -74,7 +74,7 @@ func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_Success(
 func (s *ActivityAPIBatchDeleteClientTestSuite) TestActivityBatchDelete_IncludesNonRunning() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
-	ctx := env.Context()
+	ctx := s.Context()
 
 	activityType := env.Tv().ActivityType().GetName()
 

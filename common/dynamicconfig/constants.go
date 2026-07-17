@@ -1131,7 +1131,7 @@ so forwarding by endpoint ID will not work out of the box.`,
 	)
 	FrontendEnableBatchActivityOperators = NewNamespaceBoolSetting(
 		"frontend.enableBatchActivityOperators",
-		true,
+		false,
 		`FrontendEnableBatchActivityOperators decides whether to support batch cancel, terminate or delete on standalone activities in the frontend`,
 	)
 
