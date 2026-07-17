@@ -156,6 +156,10 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 // deadline when needed.
 func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) context.Context {
 	tb.Helper()
+	if ctx == nil {
+		tb.Fatal("testcontext: nil context")
+		return nil
+	}
 	if d <= 0 {
 		return ctx
 	}
@@ -189,9 +193,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		testDeadline = next.deadline
 	}
 
-	if ctx == nil {
-		return ctx
-	}
 	// Callers holding an older test context should move to the current one.
 	if slices.Contains(st.contextStack, ctx) {
 		return st.currentContext()
