@@ -308,15 +308,20 @@ func TestEnsureRemaining(t *testing.T) {
 	})
 }
 
-func TestCurrent(t *testing.T) {
-	t.Run("returns testing context when no test context exists", func(t *testing.T) {
-		require.True(t, Current(t) == t.Context())
+func TestGet(t *testing.T) {
+	t.Run("reports false when no test context exists", func(t *testing.T) {
+		ctx, ok := Get(t)
+
+		require.False(t, ok)
+		require.Nil(t, ctx)
 	})
 
 	t.Run("returns current test context", func(t *testing.T) {
-		ctx := For(t)
+		want := For(t)
+		got, ok := Get(t)
 
-		require.True(t, Current(t) == ctx)
+		require.True(t, ok)
+		require.True(t, got == want)
 	})
 }
 
