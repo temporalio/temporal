@@ -64,6 +64,33 @@ func AnyOf(options ...any) Matcher {
 	})
 }
 
+// Custom builds a Matcher from fn, which inspects the field's typed value and
+// returns an error explaining why it does not match (nil means it matches). It
+// is the escape hatch for checks the built-in matchers don't cover — repeated
+// element-wise, map-by-key, cross-value, and so on:
+//
+//	Links: match.Custom(func(links []*commonpb.Link) error {
+//		if len(links) != 2 {
+//			return fmt.Errorf("want 2 links, got %d", len(links))
+//		}
+//		return nil
+//	})
+//
+// V is inferred from fn. For a field whose Go type cannot be named (e.g. a
+// oneof wrapper), use V = any and type-switch inside fn.
+func Custom[V any](fn func(got V) error) Matcher {
+	return predicate.Func(func(got any) predicate.Result {
+		v, ok := got.(V)
+		if !ok {
+			return predicate.Result{Reason: fmt.Sprintf("custom matcher: unexpected value type %T", got)}
+		}
+		if err := fn(v); err != nil {
+			return predicate.Result{Reason: err.Error()}
+		}
+		return predicate.Result{OK: true}
+	})
+}
+
 // coerce returns want as a Matcher, wrapping a bare literal in Eq.
 func coerce(want any) Matcher {
 	if m, ok := want.(Matcher); ok {

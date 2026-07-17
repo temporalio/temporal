@@ -165,6 +165,36 @@ func TestMatch_Nested(t *testing.T) {
 	require.Contains(t, r3.msg, "expected a non-nil message")
 }
 
+func TestMatch_Custom(t *testing.T) {
+	actual := &workflowservice.StartWorkflowExecutionRequest{
+		Links: []*commonpb.Link{{}, {}},
+	}
+
+	// A custom check the built-in matchers don't cover: exact element count.
+	r := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		Links: match.Custom(func(links []*commonpb.Link) error {
+			if len(links) != 2 {
+				return fmt.Errorf("want 2 links, got %d", len(links))
+			}
+			return nil
+		}),
+	}.EqualPartial(r, actual)
+	require.False(t, r.failed, r.msg)
+
+	r2 := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		Links: match.Custom(func(links []*commonpb.Link) error {
+			if len(links) != 5 {
+				return fmt.Errorf("want 5 links, got %d", len(links))
+			}
+			return nil
+		}),
+	}.EqualPartial(r2, actual)
+	require.True(t, r2.failed)
+	require.Contains(t, r2.msg, "want 5 links, got 2")
+}
+
 func TestMatch_Map(t *testing.T) {
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"k": {}}}
 
