@@ -118,10 +118,12 @@ func combine(a, b own) own {
 }
 
 // signature is the polar ObjectFact of a function: where each result's ownership
-// comes from, and which parameters leak (a borrowed argument flows into a proto
-// that escapes). Absence means "all results owned, no leaks".
+// comes from, whether each slice result has fresh backing storage, and which
+// parameters leak (a borrowed argument flows into a proto that escapes). Absence
+// means "all results owned, no fresh slice results, no leaks".
 type signature struct {
 	Results []own
+	Fresh   []bool
 	Leaks   []bool
 }
 
@@ -144,6 +146,9 @@ func (s *signature) String() string {
 	if anyBool(s.Leaks) {
 		parts = append(parts, "embeds param")
 	}
+	if anyBool(s.Fresh) {
+		parts = append(parts, "fresh result")
+	}
 	return strings.Join(parts, ", ")
 }
 
@@ -153,7 +158,7 @@ func (s *signature) trivial() bool {
 			return false
 		}
 	}
-	return !anyBool(s.Leaks)
+	return !anyBool(s.Leaks) && !anyBool(s.Fresh)
 }
 
 // canonical returns the minimal equivalent signature (type simplification): own
@@ -175,7 +180,11 @@ func (s *signature) canonical() *signature {
 	for len(l) > 0 && !l[len(l)-1] {
 		l = l[:len(l)-1]
 	}
-	return &signature{Results: r, Leaks: l}
+	f := append([]bool(nil), s.Fresh...)
+	for len(f) > 0 && !f[len(f)-1] {
+		f = f[:len(f)-1]
+	}
+	return &signature{Results: r, Leaks: l, Fresh: f}
 }
 
 // ---- configuration ----------------------------------------------------------
@@ -334,8 +343,8 @@ func run(pass *analysis.Pass) (any, error) {
 			c.sinkIfaces = append(c.sinkIfaces, iface)
 		}
 	}
+	c.infer() // compute & export per-function polar signatures
 	c.collectSliceWrites()
-	c.infer()  // compute & export per-function polar signatures
 	c.report() // flag borrowed values reaching owned-requiring sinks
 	return nil, nil
 }
@@ -458,6 +467,14 @@ func (c *checker) collectDeclSliceWrites(ds *ast.DeclStmt, aliases map[*types.Va
 			continue
 		}
 		c.collectExprSliceWrites(vs.Values, aliases)
+		if len(vs.Values) == 1 && len(vs.Names) > 1 {
+			if call, ok := unparen(vs.Values[0]).(*ast.CallExpr); ok {
+				for i, name := range vs.Names {
+					c.bindSliceLocalCallResult(name, call, i, aliases, fresh)
+				}
+				continue
+			}
+		}
 		if len(vs.Names) != len(vs.Values) {
 			continue
 		}
@@ -468,6 +485,14 @@ func (c *checker) collectDeclSliceWrites(ds *ast.DeclStmt, aliases map[*types.Va
 }
 
 func (c *checker) collectAssignSliceWrites(as *ast.AssignStmt, aliases map[*types.Var]*types.Var, fresh map[*types.Var]bool) {
+	if len(as.Rhs) == 1 && len(as.Lhs) > 1 {
+		if call, ok := unparen(as.Rhs[0]).(*ast.CallExpr); ok {
+			for i, lhs := range as.Lhs {
+				c.bindSliceLocalCallResult(lhs, call, i, aliases, fresh)
+			}
+			return
+		}
+	}
 	if len(as.Lhs) != len(as.Rhs) {
 		return
 	}
@@ -489,13 +514,36 @@ func (c *checker) collectAssignSliceWrites(as *ast.AssignStmt, aliases map[*type
 	}
 }
 
+func (c *checker) bindSliceLocalCallResult(
+	lhs ast.Expr,
+	call *ast.CallExpr,
+	i int,
+	aliases map[*types.Var]*types.Var,
+	fresh map[*types.Var]bool,
+) {
+	id, ok := unparen(lhs).(*ast.Ident)
+	if !ok {
+		return
+	}
+	v, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Var)
+	if !ok {
+		return
+	}
+	delete(aliases, v)
+	if c.callResultFresh(call, i) {
+		fresh[v] = true
+	} else {
+		delete(fresh, v)
+	}
+}
+
 func (c *checker) bindSliceLocal(lhs ast.Expr, rhs ast.Expr, aliases map[*types.Var]*types.Var, fresh map[*types.Var]bool) {
 	id, ok := lhs.(*ast.Ident)
 	if !ok {
 		return
 	}
-	v, _ := c.pass.TypesInfo.ObjectOf(id).(*types.Var)
-	if v == nil {
+	v, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Var)
+	if !ok {
 		return
 	}
 	if src := c.sliceSource(rhs, aliases); src != nil {
@@ -531,23 +579,22 @@ func (c *checker) collectExprSliceWrites(exprs []ast.Expr, aliases map[*types.Va
 }
 
 func (c *checker) collectCallSliceWrites(call *ast.CallExpr, aliases map[*types.Var]*types.Var) {
-	name := calledName(call)
 	switch {
-	case name == "append":
+	case c.isBuiltinCall(call, "append"):
 		if len(call.Args) > 0 {
 			if src := c.sliceSource(call.Args[0], aliases); src != nil {
 				c.markSliceWrite(src, sliceMutates)
 			}
 		}
 		return
-	case name == "copy":
+	case c.isBuiltinCall(call, "copy"):
 		if len(call.Args) > 0 {
 			if src := c.sliceSource(call.Args[0], aliases); src != nil {
 				c.markSliceWrite(src, sliceMutates)
 			}
 		}
 		return
-	case name == "len" || name == "cap":
+	case c.isBuiltinCall(call, "len") || c.isBuiltinCall(call, "cap"):
 		return
 	}
 	if c.isKnownSliceMutator(call) {
@@ -663,17 +710,29 @@ func (c *checker) isFreshSlice(expr ast.Expr, fresh map[*types.Var]bool) bool {
 		v, _ := c.pass.TypesInfo.ObjectOf(e).(*types.Var)
 		return v != nil && fresh[v]
 	case *ast.CallExpr:
-		if calledName(e) == "make" && kindOf(c.pass.TypesInfo.TypeOf(e)) == "slice" {
+		if c.isBuiltinCall(e, "make") && kindOf(c.pass.TypesInfo.TypeOf(e)) == "slice" {
 			return true
 		}
-		if calledName(e) == "append" && len(e.Args) > 0 {
+		if c.isBuiltinCall(e, "append") && len(e.Args) > 0 {
 			return c.isFreshSlice(e.Args[0], fresh)
 		}
-		return c.isSanitizer(e)
+		if c.isSanitizer(e) {
+			return true
+		}
+		return c.callResultFresh(e, 0)
 	case *ast.CompositeLit:
 		return kindOf(c.pass.TypesInfo.TypeOf(e)) == "slice"
 	}
 	return false
+}
+
+func (c *checker) callResultFresh(call *ast.CallExpr, i int) bool {
+	callee := c.calleeFunc(call)
+	if callee == nil {
+		return false
+	}
+	sig := c.signatureOf(callee)
+	return sig != nil && i < len(sig.Fresh) && sig.Fresh[i]
 }
 
 func (c *checker) isKnownSliceMutator(call *ast.CallExpr) bool {
@@ -701,6 +760,15 @@ func calledName(call *ast.CallExpr) string {
 		return fun.Sel.Name
 	}
 	return ""
+}
+
+func (c *checker) isBuiltinCall(call *ast.CallExpr, name string) bool {
+	id, ok := unparen(call.Fun).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	builtin, ok := c.pass.TypesInfo.ObjectOf(id).(*types.Builtin)
+	return ok && builtin.Name() == name
 }
 
 func isIndexOrSliceMutation(expr ast.Expr) bool {
@@ -900,7 +968,326 @@ func (c *checker) inferSignature(fn *types.Func, fd *ast.FuncDecl) *signature {
 			out.Leaks[i] = true
 		}
 	}
+	out.Fresh = c.inferFreshResults(fn, fd, nr)
 	return out
+}
+
+type freshValue struct {
+	fresh   bool
+	origins map[freshOrigin]struct{}
+}
+
+type freshOrigin struct {
+	pos    token.Pos
+	result int
+}
+
+func freshAt(pos token.Pos) freshValue {
+	return freshResultAt(pos, -1)
+}
+
+func freshResultAt(pos token.Pos, result int) freshValue {
+	origin := freshOrigin{pos: pos, result: result}
+	return freshValue{fresh: true, origins: map[freshOrigin]struct{}{origin: {}}}
+}
+
+func mergeFresh(a, b freshValue) freshValue {
+	if !a.fresh || !b.fresh {
+		return freshValue{}
+	}
+	origins := make(map[freshOrigin]struct{}, len(a.origins)+len(b.origins))
+	for pos := range a.origins {
+		origins[pos] = struct{}{}
+	}
+	for pos := range b.origins {
+		origins[pos] = struct{}{}
+	}
+	return freshValue{fresh: true, origins: origins}
+}
+
+type freshCtx struct {
+	c *checker
+}
+
+type freshResults struct {
+	values  []bool
+	origins []map[freshOrigin]struct{}
+	seen    []bool
+}
+
+func newFreshResults(n int) *freshResults {
+	return &freshResults{
+		values:  make([]bool, n),
+		origins: make([]map[freshOrigin]struct{}, n),
+		seen:    make([]bool, n),
+	}
+}
+
+func (c *checker) inferFreshResults(fn *types.Func, fd *ast.FuncDecl, nr int) []bool {
+	if nr == 0 {
+		return nil
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok {
+		return make([]bool, nr)
+	}
+	fc := freshCtx{c: c}
+	results := newFreshResults(nr)
+	named := namedResultVars(c.pass, fd, nr)
+	f := &flow[freshValue]{
+		c:        c,
+		owned:    freshValue{},
+		merge:    mergeFresh,
+		classify: fc.classify,
+		callRes:  fc.callResult,
+	}
+	f.onExprs = func(exprs []ast.Expr, env map[*types.Var]freshValue) {
+		fc.invalidateCalls(exprs, env)
+	}
+	f.onAssign = func(as *ast.AssignStmt, env map[*types.Var]freshValue) {
+		fc.invalidateRetainedAssignments(as, env)
+	}
+	f.onSend = func(expr ast.Expr, env map[*types.Var]freshValue) {
+		fc.invalidateAliases(fc.classify(expr, env), env)
+	}
+	f.onReturn = func(exprs []ast.Expr, env map[*types.Var]freshValue) {
+		results.record(fc.returnValues(exprs, env, named, nr))
+	}
+	f.run(fd.Body)
+	return results.finish(sig)
+}
+
+func (fc freshCtx) returnValues(
+	exprs []ast.Expr,
+	env map[*types.Var]freshValue,
+	named []*types.Var,
+	nr int,
+) []freshValue {
+	values := make([]freshValue, nr)
+	switch {
+	case len(exprs) == nr:
+		for i, expr := range exprs {
+			values[i] = fc.classify(expr, env)
+		}
+	case len(exprs) == 1 && nr > 1:
+		if call, ok := unparen(exprs[0]).(*ast.CallExpr); ok {
+			for i := range values {
+				values[i] = fc.callResult(call, i, env)
+			}
+		}
+	case len(exprs) == 0:
+		for i, v := range named {
+			values[i] = env[v]
+		}
+	default:
+	}
+	return values
+}
+
+func (r *freshResults) record(values []freshValue) {
+	for i, value := range values {
+		if r.origins[i] == nil {
+			r.origins[i] = map[freshOrigin]struct{}{}
+		}
+		for origin := range value.origins {
+			r.origins[i][origin] = struct{}{}
+		}
+		if !r.seen[i] {
+			r.values[i] = value.fresh
+			r.seen[i] = true
+		} else {
+			r.values[i] = r.values[i] && value.fresh
+		}
+	}
+}
+
+func (r *freshResults) finish(sig *types.Signature) []bool {
+	for i := range r.values {
+		r.values[i] = kindOf(sig.Results().At(i).Type()) == "slice" && r.seen[i] && r.values[i]
+	}
+	for i := range r.values {
+		for j := i + 1; j < len(r.values); j++ {
+			if originsOverlap(r.origins[i], r.origins[j]) {
+				r.values[i] = false
+				r.values[j] = false
+			}
+		}
+	}
+	return r.values
+}
+
+func originsOverlap(a, b map[freshOrigin]struct{}) bool {
+	for origin := range a {
+		if _, ok := b[origin]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func namedResultVars(pass *analysis.Pass, fd *ast.FuncDecl, nr int) []*types.Var {
+	results := make([]*types.Var, nr)
+	if fd.Type.Results == nil {
+		return results
+	}
+	i := 0
+	for _, field := range fd.Type.Results.List {
+		for _, name := range field.Names {
+			if i < len(results) {
+				if v, ok := pass.TypesInfo.Defs[name].(*types.Var); ok {
+					results[i] = v
+				}
+			}
+			i++
+		}
+		if len(field.Names) == 0 {
+			i++
+		}
+	}
+	return results
+}
+
+func (fc freshCtx) classify(expr ast.Expr, env map[*types.Var]freshValue) freshValue {
+	switch e := unparen(expr).(type) {
+	case *ast.Ident:
+		if e.Name == "nil" {
+			return freshValue{fresh: true}
+		}
+		if v, ok := fc.c.pass.TypesInfo.ObjectOf(e).(*types.Var); ok {
+			return env[v]
+		}
+		return freshValue{}
+	case *ast.CompositeLit:
+		if kindOf(fc.c.pass.TypesInfo.TypeOf(e)) == "slice" {
+			return freshAt(e.Pos())
+		}
+		value := freshValue{fresh: true}
+		for _, elt := range e.Elts {
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				elt = kv.Value
+			}
+			candidate := fc.classify(elt, env)
+			if candidate.fresh {
+				value = mergeFresh(value, candidate)
+			}
+		}
+		return value
+	case *ast.SliceExpr:
+		return fc.classify(e.X, env)
+	case *ast.UnaryExpr:
+		return fc.classify(e.X, env)
+	case *ast.CallExpr:
+		return fc.callResult(e, 0, env)
+	}
+	return freshValue{}
+}
+
+func (fc freshCtx) callResult(call *ast.CallExpr, i int, env map[*types.Var]freshValue) freshValue {
+	switch {
+	case fc.c.isBuiltinCall(call, "make"):
+		if i == 0 && kindOf(fc.c.pass.TypesInfo.TypeOf(call)) == "slice" {
+			return freshAt(call.Pos())
+		}
+	case fc.c.isBuiltinCall(call, "append"):
+		if i == 0 && len(call.Args) > 0 {
+			base := fc.classify(call.Args[0], env)
+			if base.fresh && len(base.origins) == 0 {
+				return freshAt(call.Pos())
+			}
+			return base
+		}
+	default:
+	}
+	if i == 0 && fc.c.isSanitizer(call) {
+		return freshAt(call.Pos())
+	}
+	callee := fc.c.calleeFunc(call)
+	if callee == nil {
+		return freshValue{}
+	}
+	sig := fc.c.signatureOf(callee)
+	if sig != nil && i < len(sig.Fresh) && sig.Fresh[i] {
+		return freshResultAt(call.Pos(), i)
+	}
+	return freshValue{}
+}
+
+func (fc freshCtx) invalidateCalls(exprs []ast.Expr, env map[*types.Var]freshValue) {
+	for _, expr := range exprs {
+		ast.Inspect(expr, func(n ast.Node) bool {
+			return fc.invalidateCallNode(n, env)
+		})
+	}
+}
+
+func (fc freshCtx) invalidateCallNode(n ast.Node, env map[*types.Var]freshValue) bool {
+	if lit, ok := n.(*ast.FuncLit); ok {
+		fc.invalidateClosure(lit, env)
+		return false
+	}
+	call, ok := n.(*ast.CallExpr)
+	if !ok || fc.isFreshnessSafeCall(call) {
+		return true
+	}
+	for _, arg := range call.Args {
+		fc.invalidateAliases(fc.classify(arg, env), env)
+	}
+	if sel, ok := unparen(call.Fun).(*ast.SelectorExpr); ok {
+		fc.invalidateAliases(fc.classify(sel.X, env), env)
+	}
+	return true
+}
+
+func (fc freshCtx) invalidateClosure(lit *ast.FuncLit, env map[*types.Var]freshValue) {
+	ast.Inspect(lit.Body, func(n ast.Node) bool {
+		id, ok := n.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if v, ok := fc.c.pass.TypesInfo.ObjectOf(id).(*types.Var); ok {
+			fc.invalidateAliases(env[v], env)
+		}
+		return true
+	})
+}
+
+func (fc freshCtx) isFreshnessSafeCall(call *ast.CallExpr) bool {
+	for _, name := range []string{"append", "cap", "copy", "len", "make"} {
+		if fc.c.isBuiltinCall(call, name) {
+			return true
+		}
+	}
+	return fc.c.isSanitizer(call)
+}
+
+func (fc freshCtx) invalidateRetainedAssignments(as *ast.AssignStmt, env map[*types.Var]freshValue) {
+	if len(as.Lhs) != len(as.Rhs) {
+		return
+	}
+	for i, lhs := range as.Lhs {
+		id, ok := unparen(lhs).(*ast.Ident)
+		if ok {
+			v, varOK := fc.c.pass.TypesInfo.ObjectOf(id).(*types.Var)
+			if varOK && (v.Pkg() == nil || v.Parent() != v.Pkg().Scope()) {
+				continue
+			}
+		}
+		fc.invalidateAliases(fc.classify(as.Rhs[i], env), env)
+	}
+}
+
+func (freshCtx) invalidateAliases(value freshValue, env map[*types.Var]freshValue) {
+	if !value.fresh || len(value.origins) == 0 {
+		return
+	}
+	for v, candidate := range env {
+		for origin := range value.origins {
+			if _, ok := candidate.origins[origin]; ok {
+				env[v] = freshValue{}
+				break
+			}
+		}
+	}
 }
 
 // paramIdxs returns the parameter indices an ownership value may root to (the
@@ -1107,6 +1494,7 @@ type flow[T any] struct {
 	onExprs  func([]ast.Expr, map[*types.Var]T)      // per-statement expression hook (sinks)
 	onAssign func(*ast.AssignStmt, map[*types.Var]T) // field-assignment hook
 	onReturn func([]ast.Expr, map[*types.Var]T)      // return hook (result inference)
+	onSend   func(ast.Expr, map[*types.Var]T)
 }
 
 func cloneEnv[T any](e map[*types.Var]T) map[*types.Var]T {
@@ -1152,6 +1540,9 @@ func (f *flow[T]) step(stmt ast.Stmt, env map[*types.Var]T) {
 		}
 	case *ast.SendStmt:
 		f.exprs([]ast.Expr{s.Value}, env)
+		if f.onSend != nil {
+			f.onSend(s.Value, env)
+		}
 	case *ast.GoStmt:
 		f.exprs([]ast.Expr{s.Call}, env)
 	case *ast.DeferStmt:
@@ -1161,6 +1552,14 @@ func (f *flow[T]) step(stmt ast.Stmt, env map[*types.Var]T) {
 			for _, spec := range gd.Specs {
 				if vs, ok := spec.(*ast.ValueSpec); ok {
 					f.exprs(vs.Values, env)
+					if len(vs.Values) == 1 && len(vs.Names) > 1 {
+						if call, ok := unparen(vs.Values[0]).(*ast.CallExpr); ok {
+							for i, name := range vs.Names {
+								f.bind(env, name, f.callRes(call, i, env))
+							}
+							continue
+						}
+					}
 					if len(vs.Names) == len(vs.Values) {
 						for i, name := range vs.Names {
 							f.bind(env, name, f.classify(vs.Values[i], env))
@@ -1220,6 +1619,9 @@ func (f *flow[T]) step(stmt ast.Stmt, env map[*types.Var]T) {
 		for _, cc := range s.Body.List {
 			if comm, ok := cc.(*ast.CommClause); ok {
 				ce := cloneEnv(env)
+				if comm.Comm != nil {
+					f.step(comm.Comm, ce)
+				}
 				f.walk(comm.Body, ce)
 				branches = append(branches, ce)
 			}
@@ -2044,7 +2446,7 @@ func anyBool(b []bool) bool {
 }
 
 func sigEqual(a, b *signature) bool {
-	if len(a.Results) != len(b.Results) || len(a.Leaks) != len(b.Leaks) {
+	if len(a.Results) != len(b.Results) || len(a.Leaks) != len(b.Leaks) || len(a.Fresh) != len(b.Fresh) {
 		return false
 	}
 	for i := range a.Results {
@@ -2054,6 +2456,11 @@ func sigEqual(a, b *signature) bool {
 	}
 	for i := range a.Leaks {
 		if a.Leaks[i] != b.Leaks[i] {
+			return false
+		}
+	}
+	for i := range a.Fresh {
+		if a.Fresh[i] != b.Fresh[i] {
 			return false
 		}
 	}
