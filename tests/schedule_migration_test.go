@@ -1319,7 +1319,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		testcore.WithSdkWorker(),
 	)
 
-	ctx := testcontext.For(t)
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-migrate-no-dup")
 	wid := testcore.RandomizeStr("sched-migrate-no-dup-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-dup-wt")
@@ -1467,7 +1467,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
 
-	ctx := testcontext.For(t)
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-migrate-defer-running")
 	wid := testcore.RandomizeStr("sched-migrate-defer-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-defer-running-wt")

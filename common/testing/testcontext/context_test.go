@@ -23,7 +23,7 @@ func TestWithTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t)
+			ctx := GetOrCreate(t)
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), deadline)
@@ -36,7 +36,7 @@ func TestWithTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t, WithTimeout(time.Second))
+			ctx := GetOrCreate(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(time.Second), deadline)
@@ -47,7 +47,7 @@ func TestWithTimeout(t *testing.T) {
 func TestNameMetadata(t *testing.T) {
 	t.Parallel()
 
-	ctx := For(t)
+	ctx := GetOrCreate(t)
 	md, ok := metadata.FromOutgoingContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, []string{t.Name()}, md.Get(testNameMetadataKey))
@@ -68,11 +68,11 @@ func TestContextDecorators(t *testing.T) {
 		}
 
 		AttachDecorator(t, key{}, decorator)
-		ctx := For(t)
+		ctx := GetOrCreate(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
 		AttachDecorator(t, key{}, decorator)
-		ctx = For(t)
+		ctx = GetOrCreate(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 		require.Equal(t, int32(1), calls.Load(), "decorator should only be applied once")
 	})
@@ -90,7 +90,7 @@ func TestContextDecorators(t *testing.T) {
 
 		AttachDecorator(t, key{}, decorator)
 		AttachDecorator(t, key{}, decorator)
-		ctx := For(t)
+		ctx := GetOrCreate(t)
 
 		require.Equal(t, "decorated", ctx.Value(key{}))
 		require.Equal(t, int32(1), calls.Load(), "decorator should only be applied once")
@@ -108,7 +108,7 @@ func TestContextDecorators(t *testing.T) {
 		AttachDecorator(t, key2{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key2{}, "two")
 		})
-		ctx := For(t)
+		ctx := GetOrCreate(t)
 
 		require.Equal(t, "one", ctx.Value(key1{}))
 		require.Equal(t, "two", ctx.Value(key2{}))
@@ -119,13 +119,13 @@ func TestContextDecorators(t *testing.T) {
 
 		type key struct{}
 
-		ctx := For(t)
+		ctx := GetOrCreate(t)
 		require.Nil(t, ctx.Value(key{}))
 
 		AttachDecorator(t, key{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key{}, "decorated")
 		})
-		ctx = For(t)
+		ctx = GetOrCreate(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 	})
 }
@@ -135,7 +135,7 @@ func TestCleanupCancelsContext(t *testing.T) {
 
 	var ctx context.Context
 	t.Run("subtest", func(t *testing.T) {
-		ctx = For(t)
+		ctx = GetOrCreate(t)
 		require.NoError(t, ctx.Err())
 	})
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
@@ -147,7 +147,7 @@ func TestEnvTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t)
+			ctx := GetOrCreate(t)
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(10*time.Second), deadline)
@@ -159,7 +159,7 @@ func TestEnvTimeout(t *testing.T) {
 
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t, WithTimeout(time.Second))
+			ctx := GetOrCreate(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(time.Second), deadline)
@@ -171,7 +171,7 @@ func TestEnsureRemaining(t *testing.T) {
 	t.Run("extends when remaining time is too short", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t, WithTimeout(100*time.Millisecond))
+			ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
 			originalDeadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
@@ -187,7 +187,7 @@ func TestEnsureRemaining(t *testing.T) {
 	t.Run("caps ensured remaining time", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			start := time.Now()
-			ctx := For(t, WithTimeout(100*time.Millisecond))
+			ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
 			originalDeadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
@@ -203,11 +203,11 @@ func TestEnsureRemaining(t *testing.T) {
 	t.Run("replays decorators", func(t *testing.T) {
 		type key struct{}
 
-		For(t, WithTimeout(100*time.Millisecond))
+		GetOrCreate(t, WithTimeout(100*time.Millisecond))
 		AttachDecorator(t, key{}, func(ctx context.Context) context.Context {
 			return context.WithValue(ctx, key{}, "decorated")
 		})
-		ctx := For(t)
+		ctx := GetOrCreate(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
 		refreshed := EnsureRemaining(ctx, t, time.Second)
@@ -216,7 +216,7 @@ func TestEnsureRemaining(t *testing.T) {
 	})
 
 	t.Run("preserves test name metadata", func(t *testing.T) {
-		ctx := For(t, WithTimeout(100*time.Millisecond))
+		ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
 		refreshed := EnsureRemaining(ctx, t, time.Second)
 
 		md, ok := metadata.FromOutgoingContext(refreshed)
@@ -225,15 +225,15 @@ func TestEnsureRemaining(t *testing.T) {
 	})
 
 	t.Run("preserves original configured timeout", func(t *testing.T) {
-		ctx := For(t, WithTimeout(100*time.Millisecond))
+		ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
 		EnsureRemaining(ctx, t, time.Second)
 
-		For(t, WithTimeout(100*time.Millisecond))
+		GetOrCreate(t, WithTimeout(100*time.Millisecond))
 	})
 
 	t.Run("recognizes older context after repeated extensions", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			original := For(t, WithTimeout(5*time.Millisecond))
+			original := GetOrCreate(t, WithTimeout(5*time.Millisecond))
 
 			firstRefresh := EnsureRemaining(original, t, 10*time.Millisecond)
 			firstDeadline, ok := firstRefresh.Deadline()
@@ -251,7 +251,7 @@ func TestEnsureRemaining(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			tb := newRecordingTB()
 			tb.run(func() {
-				For(tb, WithTimeout(5*time.Millisecond))
+				GetOrCreate(tb, WithTimeout(5*time.Millisecond))
 				unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 				defer cancel()
 
@@ -269,7 +269,7 @@ func TestEnsureRemaining(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			tb := newRecordingTB()
 			tb.run(func() {
-				For(tb, WithTimeout(5*time.Millisecond))
+				GetOrCreate(tb, WithTimeout(5*time.Millisecond))
 
 				EnsureRemaining(context.Background(), tb, 10*time.Millisecond)
 			})
@@ -284,7 +284,7 @@ func TestEnsureRemaining(t *testing.T) {
 	t.Run("fails for non-positive minimum remaining", func(t *testing.T) {
 		tb := newRecordingTB()
 		tb.run(func() {
-			ctx := For(tb, WithTimeout(5*time.Millisecond))
+			ctx := GetOrCreate(tb, WithTimeout(5*time.Millisecond))
 
 			EnsureRemaining(ctx, tb, 0)
 		})
@@ -296,7 +296,7 @@ func TestEnsureRemaining(t *testing.T) {
 	})
 
 	t.Run("safe concurrent calls", func(t *testing.T) {
-		ctx := For(t, WithTimeout(100*time.Millisecond))
+		ctx := GetOrCreate(t, WithTimeout(100*time.Millisecond))
 
 		var wg sync.WaitGroup
 		for range 8 {
@@ -317,7 +317,7 @@ func TestGet(t *testing.T) {
 	})
 
 	t.Run("returns current test context", func(t *testing.T) {
-		want := For(t)
+		want := GetOrCreate(t)
 		got, ok := Get(t)
 
 		require.True(t, ok)
