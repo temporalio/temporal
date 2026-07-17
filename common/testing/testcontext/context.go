@@ -141,64 +141,6 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	})
 }
 
-type contextState struct {
-	mu  sync.Mutex
-	ctx context.Context
-	// contextHistory lets EnsureRemaining recognize stale test contexts after
-	// deadline resets and return the current replacement.
-	contextHistory []context.Context
-	// cancels tracks every replacement context so cleanup can release them all.
-	cancels           []context.CancelFunc
-	testStart         time.Time
-	configuredTimeout time.Duration
-	decorators        map[any]struct{}
-	orderedDecorators []contextDecorator
-}
-
-func newContextState(tb testing.TB, timeout time.Duration) *contextState {
-	st := &contextState{
-		testStart:         time.Now(),
-		configuredTimeout: timeout,
-		decorators:        make(map[any]struct{}),
-	}
-	st.useContext(newTestContext(tb, st.testStart.Add(timeout), st.orderedDecorators))
-	return st
-}
-
-func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
-	tb.Helper()
-
-	testContexts.Lock()
-	st, ok := testContexts.byTest[tb]
-	if !ok {
-		st = newContextState(tb, cmp.Or(cfg.timeout, DefaultTimeout()))
-		testContexts.byTest[tb] = st
-
-		tb.Cleanup(func() {
-			timedOut, timeout := st.cleanup()
-			testContexts.Lock()
-			delete(testContexts.byTest, tb)
-			testContexts.Unlock()
-			if timedOut {
-				tb.Errorf("test exceeded timeout of %v", timeout)
-			}
-		})
-	}
-	testContexts.Unlock()
-
-	// A freshly created context adopts the requested timeout, so only an
-	// existing one can conflict with an explicitly requested timeout.
-	if ok && cfg.timeout != 0 {
-		st.mu.Lock()
-		configured := st.configuredTimeout
-		st.mu.Unlock()
-		if cfg.timeout != configured {
-			tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", configured, cfg.timeout)
-		}
-	}
-	return st
-}
-
 // EnsureRemaining extends the test-scoped context so at least d remains from
 // now, if its current deadline is earlier. It is capped so the total test
 // timeout never exceeds max(maxTimeout, configuredTimeout). If tb has no
@@ -257,6 +199,64 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	ctx, cancel := context.WithDeadline(ctx, testDeadline)
 	tb.Cleanup(cancel)
 	return ctx
+}
+
+type contextState struct {
+	mu  sync.Mutex
+	ctx context.Context
+	// contextHistory lets EnsureRemaining recognize stale test contexts after
+	// deadline resets and return the current replacement.
+	contextHistory []context.Context
+	// cancels tracks every replacement context so cleanup can release them all.
+	cancels           []context.CancelFunc
+	testStart         time.Time
+	configuredTimeout time.Duration
+	decorators        map[any]struct{}
+	orderedDecorators []contextDecorator
+}
+
+func newContextState(tb testing.TB, timeout time.Duration) *contextState {
+	st := &contextState{
+		testStart:         time.Now(),
+		configuredTimeout: timeout,
+		decorators:        make(map[any]struct{}),
+	}
+	st.useContext(newTestContext(tb, st.testStart.Add(timeout), st.orderedDecorators))
+	return st
+}
+
+func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
+	tb.Helper()
+
+	testContexts.Lock()
+	st, ok := testContexts.byTest[tb]
+	if !ok {
+		st = newContextState(tb, cmp.Or(cfg.timeout, DefaultTimeout()))
+		testContexts.byTest[tb] = st
+
+		tb.Cleanup(func() {
+			timedOut, timeout := st.cleanup()
+			testContexts.Lock()
+			delete(testContexts.byTest, tb)
+			testContexts.Unlock()
+			if timedOut {
+				tb.Errorf("test exceeded timeout of %v", timeout)
+			}
+		})
+	}
+	testContexts.Unlock()
+
+	// A freshly created context adopts the requested timeout, so only an
+	// existing one can conflict with an explicitly requested timeout.
+	if ok && cfg.timeout != 0 {
+		st.mu.Lock()
+		configured := st.configuredTimeout
+		st.mu.Unlock()
+		if cfg.timeout != configured {
+			tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", configured, cfg.timeout)
+		}
+	}
+	return st
 }
 
 func (s *contextState) useContext(ctx testContext) {
