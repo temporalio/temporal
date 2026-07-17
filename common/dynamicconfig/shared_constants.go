@@ -230,11 +230,11 @@ type SimplePartitionScalerThreshold struct {
 }
 
 type TimeSkippingRunawayProtectorConfig struct {
-	// MaxBusySkip is the number of consecutive busy skips a run may perform before the protector
-	// disables time skipping for that run. <= 0 disables the protector.
+	// MaxBusySkip is the token-bucket burst: how many back-to-back skips a run may perform before the
+	// protector disables time skipping for that run. <= 0 disables the protector.
 	MaxBusySkip int
 	// WorkerMinLatency is the minimum realistic worker<->server round trip per skip cycle, added to
-	// TimerProcessorMaxTimeShift to set the interval below which a skip counts as busy.
+	// TimerProcessorMaxTimeShift to set the sustainable skip interval (the token refill period).
 	WorkerMinLatency time.Duration
 }
 

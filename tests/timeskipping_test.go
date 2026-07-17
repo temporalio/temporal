@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
 	sdktemporal "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -577,9 +579,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ActivityRetryBackoff() {
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_RunawayProtectorTripsOnBusyLoop() {
 	const maxBusySkip = 3
-	// A generous WorkerMinLatency makes every manually-driven skip count as "busy" regardless of CI
-	// poll latency, so the consecutive-busy-skip streak builds reliably. Trip needs maxBusySkip+1
-	// busy gaps (the first skip has no prior gap), so allow a few extra attempts.
+	// A large WorkerMinLatency makes the token bucket refill negligibly slowly relative to CI poll
+	// latency, so the manually-driven skips drain the burst reliably. The bucket holds maxBusySkip
+	// tokens, so trip lands on skip maxBusySkip+1; allow a few extra attempts for slack.
 	env, poller, tv, runID, tsi := s.driveTimeSkippingBusyLoopUntilDisabled(maxBusySkip, time.Minute, maxBusySkip+5)
 	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR,
 		tsi.GetDisabledReason())
@@ -704,6 +706,75 @@ func (s *TimeSkippingTestSuite) driveTimeSkippingBusyLoopUntilDisabled(
 		})
 	})
 	return env, poller, tv, runID, tsi
+}
+
+func runawayBusyLoopActivity(_ context.Context) error {
+	return errors.New("always fails")
+}
+
+func runawayBusyLoopWorkflow(ctx workflow.Context) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout:    30 * time.Second,
+		ScheduleToCloseTimeout: 1_000_000 * time.Hour,
+		RetryPolicy: &sdktemporal.RetryPolicy{
+			InitialInterval:    time.Hour,
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    0, // unlimited: the activity never stops failing
+		},
+	})
+	return workflow.ExecuteActivity(ctx, "RunawayBusyLoopAlwaysFail").Get(ctx, nil)
+}
+
+// TestTimeSkipping_RunawayProtectorTripsOnBusyLoop_RealWorker drives a genuine time-skip busy loop
+// through a real SDK worker (rather than a manual task poller): an activity that always fails with a
+// 1h retry backoff that time skipping fast-forwards to instantly. It asserts only that the protector
+// trips. The trip-and-recovery contract is covered deterministically by the manually-driven
+// TestTimeSkipping_RunawayProtectorTripsOnBusyLoop.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_RunawayProtectorTripsOnBusyLoop_RealWorker() {
+	const maxBusySkip = 3
+	// A large WorkerMinLatency makes the token bucket refill negligibly slowly relative to the
+	// natural busy-loop skip rate, so the burst drains and the protector trips.
+	env := testcore.NewEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingRunawayProtector,
+			dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: maxBusySkip, WorkerMinLatency: time.Minute}),
+	)
+	env.SdkWorker().RegisterWorkflowWithOptions(runawayBusyLoopWorkflow, workflow.RegisterOptions{Name: "RunawayBusyLoopWF"})
+	env.SdkWorker().RegisterActivityWithOptions(runawayBusyLoopActivity, activity.RegisterOptions{Name: "RunawayBusyLoopAlwaysFail"})
+
+	wfID := "busyloop-" + uuid.NewString()
+	startResp, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          wfID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "RunawayBusyLoopWF"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		WorkflowRunTimeout:  durationpb.New(1_000_000 * time.Hour),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	runID := startResp.RunId
+	exec := &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID}
+	s.T().Cleanup(func() {
+		_, _ = env.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: exec,
+			Reason:            "test cleanup",
+		})
+	})
+
+	var tsi *persistencespb.TimeSkippingInfo
+	s.AwaitTrue(func() bool {
+		tsi = s.getMutableState(env, wfID, runID).State.ExecutionInfo.GetTimeSkippingInfo()
+		return !tsi.GetConfig().GetEnabled()
+	}, 30*time.Second, 100*time.Millisecond)
+
+	s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR, tsi.GetDisabledReason(),
+		"a real busy loop must trip the runaway protector")
+	s.False(tsi.GetFastForwardInfo().GetHasReached(),
+		"a runaway-protector disable must NOT mark the fast-forward as reached")
 }
 
 func (s *TimeSkippingTestSuite) TestTimeSkipping_PendingSignalExternalBlocksSkip() {

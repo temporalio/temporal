@@ -3546,10 +3546,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		TimeSkippingRunawayProtectorConfig{MaxBusySkip: 50, WorkerMinLatency: 100 * time.Millisecond},
 		`TimeSkippingRunawayProtectorConfig detects and stops an endless instant-retry loop under time
 skipping. When something (e.g. an activity or cron) fails immediately and reschedules, time skipping
-fast-forwards straight to the next attempt, which may fail again. The protector spots this by pace: a skip that lands
-sooner than WorkerMinLatency + TimerProcessorMaxTimeShift after the previous one is faster than any
-real retry could physically complete, so it counts as a "busy" skip. After MaxBusySkip consecutive
-busy skips the protector disables time skipping for that run; a normally-spaced skip clears the
-streak. Set MaxBusySkip to 0 to disable the protector.`,
+fast-forwards straight to the next attempt, which fails again. The protector rate-limits a run's skips with a token
+bucket: tokens refill at one per WorkerMinLatency + TimerProcessorMaxTimeShift (the fastest a real
+retry can physically complete) up to a burst of MaxBusySkip, and each skip spends one. A run skipping
+faster than tokens refill drains the bucket, and once it is empty the protector disables time skipping
+for that run. Set MaxBusySkip to 0 to disable the protector.`,
 	)
 )

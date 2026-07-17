@@ -303,16 +303,17 @@ func (util *TimeSkippingInfoUtil) IsEnabled() bool {
 // =============================================================================
 // Time Skipping Runtime Methods for all executions
 // =============================================================================
-// timeSkippingRunawayProtector is the in-memory state a single run uses to detect a real-time
-// time-skipping busy loop: it counts consecutive "busy" skips (skips that land sooner than one
-// legitimately-paced skip interval after the previous one). lastSkipTime is real wall-clock time.
+// timeSkippingRunawayProtector is the in-memory token bucket a single run uses to detect a real-time
+// time-skipping busy loop. Tokens refill at one per legitimately-paced skip interval (WorkerMinLatency
+// + TimerProcessorMaxTimeShift) up to a burst of MaxBusySkip; each skip spends one. A run that skips
+// faster than tokens refill drains the bucket and trips. lastRefill is real wall-clock time.
 type timeSkippingRunawayProtector struct {
-	lastSkipTime  time.Time
-	busySkipCount int
+	tokens     float64
+	lastRefill time.Time
 }
 
 func (ms *MutableStateImpl) tryTrippingTimeSkippingRunawayProtector() (tripped bool) {
-	// todo: add to chasm executions
+	// todo: add to chasm executions & support filtering by archetypeID
 	tripped = ms.recordSkipForTimeSkippingRunawayProtector()
 	if tripped {
 		ms.tripTimeSkippingRunawayProtector()
@@ -320,31 +321,36 @@ func (ms *MutableStateImpl) tryTrippingTimeSkippingRunawayProtector() (tripped b
 	return tripped
 }
 
-// recordSkipForTimeSkippingRunawayProtector records one skip and reports whether the run has now
-// performed more than MaxBusySkip consecutive busy skips.
+// recordSkipForTimeSkippingRunawayProtector charges one skip against the run's token bucket and
+// reports whether the bucket was empty (i.e. the run is skipping faster than a real retry can pace).
 func (ms *MutableStateImpl) recordSkipForTimeSkippingRunawayProtector() (isTripped bool) {
 	// todo: may exclude certain execution types if the application layer has built enough protection
 	nsName := ms.namespaceEntry.Name().String()
 	cfg := ms.config.TimeSkippingRunawayProtector(nsName)
-	maxBusySkip := cfg.MaxBusySkip
-	if maxBusySkip <= 0 {
-		return false
-	}
+	burst := float64(cfg.MaxBusySkip)
 	// A legitimately-paced skip cycle costs at least one TimerProcessorMaxTimeShift of real time (the
-	// earliest a just-created backoff timer can fire) plus one worker<->server round trip. A skip that
-	// lands sooner than that is a "busy" skip; MaxBusySkip consecutive busy skips is a busy loop. A
-	// skip spaced at least an interval apart is legitimate and clears the streak.
-	expectedSkipInterval := cfg.WorkerMinLatency + ms.config.TimerProcessorMaxTimeShift()
+	// earliest a just-created backoff timer can fire) plus one worker<->server round trip, so a run may
+	// sustain at most one skip per that interval, bursting up to MaxBusySkip.
+	skipInterval := cfg.WorkerMinLatency + ms.config.TimerProcessorMaxTimeShift()
+	if burst <= 0 || skipInterval <= 0 {
+		return false // protector disabled
+	}
+	refillPerSecond := 1 / skipInterval.Seconds() // one token per legitimately-paced skip
 
 	realNow := ms.ToRealTime(ms.Now())
-	p := &ms.timeSkippingRunawayProtector
-	if !p.lastSkipTime.IsZero() && realNow.Sub(p.lastSkipTime) < expectedSkipInterval {
-		p.busySkipCount++
-	} else {
-		p.busySkipCount = 0
+	b := &ms.timeSkippingRunawayProtector
+	if b.lastRefill.IsZero() {
+		b.tokens = burst
+	} else if realNow.After(b.lastRefill) {
+		b.tokens = min(burst, b.tokens+realNow.Sub(b.lastRefill).Seconds()*refillPerSecond)
 	}
-	p.lastSkipTime = realNow
-	return p.busySkipCount > maxBusySkip
+	b.lastRefill = realNow
+
+	if b.tokens < 1 {
+		return true
+	}
+	b.tokens--
+	return false
 }
 
 func (ms *MutableStateImpl) tripTimeSkippingRunawayProtector() {
@@ -352,8 +358,6 @@ func (ms *MutableStateImpl) tripTimeSkippingRunawayProtector() {
 	if tsi == nil || tsi.GetConfig() == nil {
 		return
 	}
-	busySkipCount := ms.timeSkippingRunawayProtector.busySkipCount
-
 	tsi.Config.Enabled = false
 	tsi.DisabledReason = persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR
 	ms.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
@@ -366,7 +370,6 @@ func (ms *MutableStateImpl) tripTimeSkippingRunawayProtector() {
 		tag.WorkflowID(wfKey.WorkflowID),
 		tag.WorkflowRunID(wfKey.RunID),
 		tag.ArchetypeID(ms.ChasmTree().ArchetypeID()),
-		tag.NewInt("time-skipping-busy-skip-count", busySkipCount),
 	)
 }
 

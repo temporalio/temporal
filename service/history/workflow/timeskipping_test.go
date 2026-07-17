@@ -389,6 +389,8 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 		// the fast-forward records the current versioned transition
 		s.Require().True(proto.Equal(nextVT, tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()))
+		// a freshly-initialized run starts with a zero-valued runaway protector
+		s.Equal(timeSkippingRunawayProtector{}, s.mutableState.timeSkippingRunawayProtector)
 	})
 
 	s.Run("InitWithPropagation_ForExecutionsWithTSStartedByPropagation", func() {
@@ -475,6 +477,14 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
 
+		// Arm the runaway protector so the update has non-zero in-memory state to clear.
+		s.mockConfig.TimeSkippingRunawayProtector = func(string) dynamicconfig.TimeSkippingRunawayProtectorConfig {
+			return dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: 5, WorkerMinLatency: time.Hour}
+		}
+		s.mockConfig.TimerProcessorMaxTimeShift = func() time.Duration { return 0 }
+		s.False(s.mutableState.recordSkipForTimeSkippingRunawayProtector())
+		s.NotZero(s.mutableState.timeSkippingRunawayProtector.tokens)
+
 		// new config
 		newConfig := &commonpb.TimeSkippingConfig{
 			Enabled:            true,
@@ -493,6 +503,13 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.Equal(baseTime.Add(2*time.Hour).UTC(), newTSI.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.False(newTSI.GetFastForwardInfo().GetHasReached())
 		s.Equal(time.Hour, newTSI.GetAccumulatedSkippedDuration().AsDuration())
+
+		// the update re-arms (clears) the protector, and running it afterwards must not panic
+		s.Equal(timeSkippingRunawayProtector{}, s.mutableState.timeSkippingRunawayProtector,
+			"updating the config must clear the previous runaway protector state")
+		s.NotPanics(func() {
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		})
 	})
 
 	s.Run("UpdateTimeSkippingInfo_OverrideFFThenTurnOff", func() {
@@ -547,80 +564,150 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 }
 
 func (s *mutableStateSuite) TestTryTrippingTimeSkippingRunawayProtector() {
-	// A skip is "busy" when it lands sooner than WorkerMinLatency+TimerProcessorMaxTimeShift after
-	// the previous one. Here that interval is 100ms+shift; advancing the time source by more than the
-	// interval between skips makes them non-busy.
-	setProtector := func(maxBusySkip int, shift time.Duration) {
+	// Tokens refill at one per (WorkerMinLatency + TimerProcessorMaxTimeShift). setProtector pins
+	// TimerProcessorMaxTimeShift to 0 so WorkerMinLatency alone is the refill interval.
+	setProtector := func(burst int, interval time.Duration) {
 		s.mockConfig.TimeSkippingRunawayProtector = func(string) dynamicconfig.TimeSkippingRunawayProtectorConfig {
-			return dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: maxBusySkip, WorkerMinLatency: 100 * time.Millisecond}
+			return dynamicconfig.TimeSkippingRunawayProtectorConfig{MaxBusySkip: burst, WorkerMinLatency: interval}
 		}
-		s.mockConfig.TimerProcessorMaxTimeShift = func() time.Duration { return shift }
+		s.mockConfig.TimerProcessorMaxTimeShift = func() time.Duration { return 0 }
 	}
 	enabledTSI := func() *persistencespb.TimeSkippingInfo {
 		return &persistencespb.TimeSkippingInfo{Config: &commonpb.TimeSkippingConfig{Enabled: true}}
 	}
 
 	s.Run("ProtectorDisabled_NoTrip", func() {
-		setProtector(0, time.Hour) // maxBusySkip <= 0 disables the protector
+		setProtector(0, time.Second) // burst <= 0 disables the protector
 		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
 		for range 100 {
 			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
 		}
-		// the config guard returns before touching the counter
-		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount)
+		// the config guard returns before touching the bucket
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.tokens)
 	})
 
-	s.Run("SlowSkips_NoTrip", func() {
-		setProtector(2, time.Second) // busy interval = 100ms + 1s = 1.1s
-		timeSource := clock.NewEventTimeSource()
-		s.mutableState.timeSource = timeSource
-		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
-		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-		for range 10 {
-			timeSource.Advance(2 * time.Second) // each skip is spaced beyond the busy interval
-			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
-		}
-		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
-		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "well-spaced skips never count as busy")
-	})
-
-	s.Run("SlowSkipClearsStreak", func() {
-		setProtector(3, time.Second) // busy interval = 1.1s
-		timeSource := clock.NewEventTimeSource()
-		s.mutableState.timeSource = timeSource
-		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
-		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-
-		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // first skip: no prior gap
-		for range 2 {
-			timeSource.Advance(100 * time.Millisecond) // < interval -> busy
-			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
-		}
-		s.Equal(2, s.mutableState.timeSkippingRunawayProtector.busySkipCount)
-
-		// a normally-spaced skip clears the streak
-		timeSource.Advance(2 * time.Second)
-		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
-		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "a well-spaced skip resets the busy streak")
-	})
-
-	s.Run("ConsecutiveBusySkips_Trips", func() {
-		setProtector(2, time.Hour) // huge interval -> every same-instant skip is busy
+	s.Run("WithinBurst_NoTrip", func() {
+		setProtector(5, time.Hour) // huge interval -> effectively no refill during the burst
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
 		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
-		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // busySkipCount 0
-		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 1
-		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 2
+		for range 5 { // exactly the burst; the bucket starts full and drains to empty
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		}
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.tokens)
+	})
+
+	s.Run("BurstExhausted_Trips", func() {
+		setProtector(2, time.Hour)
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // tokens 2 -> 1
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 1 -> 0
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.True(s.mutableState.tryTrippingTimeSkippingRunawayProtector(), "the skip past maxBusySkip trips the protector") // 3 > 2
+		s.True(s.mutableState.tryTrippingTimeSkippingRunawayProtector(), "the skip past an empty bucket trips the protector")
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.False(tsi.GetConfig().GetEnabled(), "time skipping is disabled on trip")
 		s.Equal(persistencespb.TIME_SKIPPING_DISABLED_REASON_RUNAWAY_PROTECTOR, tsi.GetDisabledReason())
-		s.Zero(s.mutableState.timeSkippingRunawayProtector.busySkipCount, "counter is reset on trip")
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.tokens, "bucket is reset on trip")
 		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("SustainableRate_NeverTrips", func() {
+		setProtector(2, time.Second) // refill 1 token/sec
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // prime the bucket
+		for range 20 {
+			timeSource.Advance(time.Second) // one skip per refill interval -> break-even
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		}
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+	})
+
+	s.Run("FasterThanRefill_Trips", func() {
+		setProtector(2, time.Second) // refill 1 token/sec
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		// Skipping every 0.5s is twice the sustainable rate: each skip nets -0.5 tokens, so the
+		// fractional bucket drains even though no single gap is zero -- the streak model would miss it.
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // tokens 2 -> 1
+		tripped := false
+		for range 4 {
+			timeSource.Advance(500 * time.Millisecond)
+			if s.mutableState.tryTrippingTimeSkippingRunawayProtector() {
+				tripped = true
+				break
+			}
+		}
+		s.True(tripped, "a sustained above-refill skip rate eventually drains the bucket and trips")
+	})
+
+	// Regression guard for the token math: the refill rate (1/skipInterval) and the accrued tokens
+	// (elapsed*rate) must both be floating point. With a >1s skip interval the sustainable rate is
+	// below one token/second, so an integer refill rate would truncate to 0, never refill, and trip a
+	// legitimately-paced run. A 1s interval (as SustainableRate_NeverTrips uses) hides this because
+	// 1/1==1 in integer math too.
+	s.Run("SubOneTokenPerSecondRefill_SustainableNeverTrips", func() {
+		setProtector(2, 2*time.Second) // refill 0.5 token/sec; integer math would truncate this to 0
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // prime the bucket
+		for range 20 {
+			timeSource.Advance(2 * time.Second) // one skip per refill interval -> break-even
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		}
+		s.True(s.mutableState.executionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+	})
+
+	// The bucket must not accrue beyond burst: a long idle period cannot buy more than MaxBusySkip
+	// back-to-back skips, or a run could bank unlimited credit and then busy-loop undetected.
+	s.Run("RefillCapsAtBurst_NoOverflowAfterIdle", func() {
+		setProtector(2, time.Second)
+		timeSource := clock.NewEventTimeSource()
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // tokens 2 -> 1
+		timeSource.Advance(time.Hour)                                     // huge idle; refill is capped at burst (2)
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 2 -> 1
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // 1 -> 0
+		s.True(s.mutableState.tryTrippingTimeSkippingRunawayProtector(),
+			"only burst skips are recovered by an idle period, not one per elapsed second")
+	})
+
+	s.Run("ZeroSkipInterval_Disabled", func() {
+		setProtector(5, 0) // WorkerMinLatency 0 + TimerProcessorMaxTimeShift 0 -> skipInterval 0
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		for range 100 {
+			s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector())
+		}
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.tokens, "disabled protector never touches the bucket")
+	})
+
+	// Wall clock moving backwards (e.g. clock skew across hosts) must not mint tokens or panic.
+	s.Run("ClockGoesBackwards_NoPhantomRefill", func() {
+		setProtector(2, time.Second)
+		base := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+		timeSource := clock.NewEventTimeSource().Update(base)
+		s.mutableState.timeSource = timeSource
+		s.mutableState.timeSkippingRunawayProtector = timeSkippingRunawayProtector{}
+		s.mutableState.executionInfo.TimeSkippingInfo = enabledTSI()
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // tokens 2 -> 1
+		timeSource.Update(base.Add(-time.Hour))                           // clock jumps backwards
+		s.False(s.mutableState.tryTrippingTimeSkippingRunawayProtector()) // no refill added; 1 -> 0
+		s.Zero(s.mutableState.timeSkippingRunawayProtector.tokens,
+			"a backwards clock must not refill the bucket")
 	})
 }
 
