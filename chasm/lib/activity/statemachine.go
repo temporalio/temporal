@@ -322,9 +322,9 @@ var TransitionCancelRequested = chasm.NewTransition(
 )
 
 type cancelEvent struct {
-	details    *commonpb.Payloads
-	handler    metrics.Handler
-	fromStatus activitypb.ActivityExecutionStatus
+	details        *commonpb.Payloads
+	metricsHandler metrics.Handler
+	fromStatus     activitypb.ActivityExecutionStatus
 }
 
 // TransitionCanceled transitions to Canceled status.
@@ -351,7 +351,7 @@ var TransitionCanceled = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCanceledMetrics(ctx, event.handler, event.fromStatus)
+			a.emitOnCanceledMetrics(ctx, event.metricsHandler, event.fromStatus)
 
 			return nil
 		})

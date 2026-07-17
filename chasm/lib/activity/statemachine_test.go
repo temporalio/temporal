@@ -772,9 +772,9 @@ func TestTransitionCanceled(t *testing.T) {
 			metricsHandler.EXPECT().Counter(metrics.ActivityCancel.Name()).Return(counterCancel)
 
 			err := TransitionCanceled.Apply(activity, ctx, cancelEvent{
-				details:    payloads.EncodeString("Details"),
-				handler:    metricsHandler,
-				fromStatus: tc.fromStatus,
+				details:        payloads.EncodeString("Details"),
+				metricsHandler: metricsHandler,
+				fromStatus:     tc.fromStatus,
 			})
 			require.NoError(t, err)
 			require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)

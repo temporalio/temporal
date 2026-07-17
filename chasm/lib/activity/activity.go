@@ -144,6 +144,18 @@ func (a *Activity) isTerminal() bool {
 	}
 }
 
+func (a *Activity) hasAttemptInProgress() bool {
+	switch a.GetStatus() {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		return true
+	default:
+		return false
+	}
+}
+
 // LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
@@ -587,9 +599,9 @@ func (a *Activity) HandleCanceled(
 	}
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
-		details:    event.Request.GetCancelRequest().GetDetails(),
-		handler:    metricsHandler,
-		fromStatus: a.GetStatus(),
+		details:        event.Request.GetCancelRequest().GetDetails(),
+		metricsHandler: metricsHandler,
+		fromStatus:     a.GetStatus(),
 	}); err != nil {
 		return nil, err
 	}
@@ -849,31 +861,26 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
-	// SCHEDULED and PAUSED activities have no active worker token so cancel immediately.
-	// STARTED and CANCEL_REQUESTED activities wait for the worker to respond.
-	originalStatus := a.GetStatus()
-	isCancelImmediately := originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED ||
-		originalStatus == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-
+	// Always transition to CancelRequested
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
-	if isCancelImmediately {
-		details := &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{
-				payload.EncodeString(req.GetReason()),
-			},
-		}
-
+	// Transition to Canceled if no attempt in progress; otherwise wait for worker response.
+	originalStatus := a.GetStatus()
+	if !a.hasAttemptInProgress() {
 		metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 		if err != nil {
 			return nil, err
 		}
 		err = TransitionCanceled.Apply(a, ctx, cancelEvent{
-			details:    details,
-			handler:    metricsHandler,
-			fromStatus: originalStatus,
+			metricsHandler: metricsHandler,
+			fromStatus:     originalStatus,
+			details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					payload.EncodeString(req.GetReason()),
+				},
+			},
 		})
 		if err != nil {
 			return nil, err
@@ -1358,10 +1365,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 // updated) timeouts. No-op unless the activity is in a status where a worker holds the task token
 // (STARTED / CANCEL_REQUESTED / PAUSE_REQUESTED / RESET_REQUESTED).
 func (a *Activity) reissueRunningAttemptTimers(ctx chasm.MutableContext, attempt *activitypb.ActivityAttemptState) {
-	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
-		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
-		a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+	if !a.hasAttemptInProgress() {
 		return
 	}
 	if timeout := a.GetStartToCloseTimeout().AsDuration(); timeout > 0 {
@@ -1795,10 +1799,7 @@ func (a *Activity) validateActivityTaskToken(
 	token *tokenspb.Task,
 	requestNamespaceID string,
 ) error {
-	if a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED &&
-		a.Status != activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+	if !a.hasAttemptInProgress() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
