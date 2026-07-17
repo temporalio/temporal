@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -203,9 +204,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	// Preserve longer configured timeouts; otherwise bound extensions.
 	effectiveMaxTimeout := maxTimeout * debug.TimeoutMultiplier
 	maxDeadline := st.testStart.Add(max(effectiveMaxTimeout, st.configuredTimeout))
-	if maxDeadline.Before(requestedDeadline) {
-		requestedDeadline = maxDeadline
-	}
+	requestedDeadline = util.MinTime(requestedDeadline, maxDeadline)
 
 	// Context deadlines are immutable; extending the test context means
 	// replacing it and replaying metadata/decorators.
@@ -230,9 +229,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 }
 
 func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
-	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
+	if goTestDeadline, ok := tb.Context().Deadline(); ok {
 		// The Go test deadline is a hard external cap.
-		deadline = goTestDeadline
+		deadline = util.MinTime(deadline, goTestDeadline)
 	}
 
 	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
