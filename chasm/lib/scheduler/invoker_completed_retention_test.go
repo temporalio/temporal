@@ -27,7 +27,7 @@ func completedStart(base time.Time, age int) *schedulespb.BufferedStart {
 // only the newest recentActionCount, drops the oldest, and preserves all
 // non-completed starts.
 func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
-	base := time.Unix(1700000000, 0).UTC()
+	base := time.Now()
 	limit := scheduler.RecentActionCount
 	excess := 3
 
@@ -39,12 +39,18 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 		completed = append(completed, completedStart(base, age))
 	}
 
-	pending := &schedulespb.BufferedStart{RequestId: "pending"}
+	// More than `limit` pending starts, to show the retention limit applies only
+	// to completed starts and never trims non-completed ones.
+	pendingCount := limit + excess
+	var pending []*schedulespb.BufferedStart
+	for i := range pendingCount {
+		pending = append(pending, &schedulespb.BufferedStart{RequestId: fmt.Sprintf("pending-%d", i)})
+	}
 
 	invoker := &scheduler.Invoker{
 		InvokerState: &schedulerpb.InvokerState{
-			// Interleave the pending start so we also cover ordering.
-			BufferedStarts: append([]*schedulespb.BufferedStart{pending}, completed...),
+			// Interleave the pending starts so we also cover ordering.
+			BufferedStarts: append(pending, completed...),
 		},
 	}
 
@@ -59,9 +65,8 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 		}
 	}
 
-	// Non-completed starts are always retained.
-	require.Len(t, keptPending, 1)
-	require.Equal(t, "pending", keptPending[0].RequestId)
+	// Non-completed starts are always retained, regardless of the limit.
+	require.Len(t, keptPending, pendingCount)
 
 	// Only the newest `limit` completed starts survive.
 	require.Len(t, keptCompleted, limit)
@@ -81,7 +86,7 @@ func TestApplyCompletedRetention_TrimsOldestBeyondLimit(t *testing.T) {
 
 // At or below the limit, retention is a no-op: every completed start is kept.
 func TestApplyCompletedRetention_KeepsAllWithinLimit(t *testing.T) {
-	base := time.Unix(1700000000, 0).UTC()
+	base := time.Now()
 	count := scheduler.RecentActionCount // exactly at the limit
 
 	var completed []*schedulespb.BufferedStart
