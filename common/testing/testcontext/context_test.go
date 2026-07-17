@@ -176,7 +176,7 @@ func TestEnsureRemaining(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
 
-			refreshed := EnsureRemaining(t, ctx, 250*time.Millisecond)
+			refreshed := EnsureRemaining(ctx, t, 250*time.Millisecond)
 
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
@@ -192,7 +192,7 @@ func TestEnsureRemaining(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(100*time.Millisecond), originalDeadline)
 
-			refreshed := EnsureRemaining(t, ctx, 10*time.Minute)
+			refreshed := EnsureRemaining(ctx, t, 10*time.Minute)
 
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
@@ -210,14 +210,14 @@ func TestEnsureRemaining(t *testing.T) {
 		ctx := For(t)
 		require.Equal(t, "decorated", ctx.Value(key{}))
 
-		refreshed := EnsureRemaining(t, ctx, time.Second)
+		refreshed := EnsureRemaining(ctx, t, time.Second)
 
 		require.Equal(t, "decorated", refreshed.Value(key{}))
 	})
 
 	t.Run("preserves test name metadata", func(t *testing.T) {
 		ctx := For(t, WithTimeout(100*time.Millisecond))
-		refreshed := EnsureRemaining(t, ctx, time.Second)
+		refreshed := EnsureRemaining(ctx, t, time.Second)
 
 		md, ok := metadata.FromOutgoingContext(refreshed)
 		require.True(t, ok)
@@ -226,7 +226,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 	t.Run("preserves original configured timeout", func(t *testing.T) {
 		ctx := For(t, WithTimeout(100*time.Millisecond))
-		EnsureRemaining(t, ctx, time.Second)
+		EnsureRemaining(ctx, t, time.Second)
 
 		For(t, WithTimeout(100*time.Millisecond))
 	})
@@ -235,12 +235,12 @@ func TestEnsureRemaining(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			original := For(t, WithTimeout(5*time.Millisecond))
 
-			firstRefresh := EnsureRemaining(t, original, 10*time.Millisecond)
+			firstRefresh := EnsureRemaining(original, t, 10*time.Millisecond)
 			firstDeadline, ok := firstRefresh.Deadline()
 			require.True(t, ok)
 			require.Equal(t, time.Now().Add(10*time.Millisecond), firstDeadline)
 
-			refreshed := EnsureRemaining(t, original, 20*time.Millisecond)
+			refreshed := EnsureRemaining(original, t, 20*time.Millisecond)
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
 			require.Equal(t, time.Now().Add(20*time.Millisecond), refreshedDeadline)
@@ -255,7 +255,7 @@ func TestEnsureRemaining(t *testing.T) {
 				unowned, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 				defer cancel()
 
-				EnsureRemaining(tb, unowned, 10*time.Millisecond)
+				EnsureRemaining(unowned, tb, 10*time.Millisecond)
 			})
 
 			require.Equal(t,
@@ -271,7 +271,7 @@ func TestEnsureRemaining(t *testing.T) {
 			tb.run(func() {
 				For(tb, WithTimeout(5*time.Millisecond))
 
-				EnsureRemaining(tb, context.Background(), 10*time.Millisecond)
+				EnsureRemaining(context.Background(), tb, 10*time.Millisecond)
 			})
 
 			require.Equal(t,
@@ -286,7 +286,7 @@ func TestEnsureRemaining(t *testing.T) {
 		tb.run(func() {
 			ctx := For(tb, WithTimeout(5*time.Millisecond))
 
-			EnsureRemaining(tb, ctx, 0)
+			EnsureRemaining(ctx, tb, 0)
 		})
 
 		require.Equal(t,
@@ -301,10 +301,22 @@ func TestEnsureRemaining(t *testing.T) {
 		var wg sync.WaitGroup
 		for range 8 {
 			wg.Go(func() {
-				EnsureRemaining(t, ctx, 10*time.Millisecond)
+				EnsureRemaining(ctx, t, 10*time.Millisecond)
 			})
 		}
 		wg.Wait()
+	})
+}
+
+func TestCurrent(t *testing.T) {
+	t.Run("returns testing context when no test context exists", func(t *testing.T) {
+		require.True(t, Current(t) == t.Context())
+	})
+
+	t.Run("returns current test context", func(t *testing.T) {
+		ctx := For(t)
+
+		require.True(t, Current(t) == ctx)
 	})
 }
 
