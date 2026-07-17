@@ -15,8 +15,8 @@ type (
 	// Describes if the method supports long-polled requests.
 	Polling int32
 
-	// Describes whether a method is forwarded to the namespace's active cluster when cross-cluster
-	// (XDC) redirection is restricted to selected APIs.
+	// Redirection describes whether a method is forwarded to the namespace's active cluster when
+	// cross-cluster (XDC) redirection is restricted to selected APIs.
 	Redirection int32
 
 	MethodMetadata struct {
