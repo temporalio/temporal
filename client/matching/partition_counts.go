@@ -100,9 +100,8 @@ func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, erro
 	return parsePartitionCounts(vals[0])
 }
 
-// invokeWithPartitionCounts routes a matchingservice RPC to a task queue partition. For task
-// queues that don't support multiple partitions (sticky, worker-commands) it just invokes op. For
-// partition-aware task queues it additionally negotiates partition counts with the server:
+// invokeWithPartitionCounts routes a matchingservice RPC to a task queue partition. When the client
+// load-balances across partitions it additionally negotiates partition counts with the server:
 // - attaches the client's cached counts to the outgoing request (as header)
 // - updates the cache from the server's response (trailer)
 // - retries once if it receives StalePartitionCounts error
@@ -123,9 +122,12 @@ func invokeWithPartitionCounts[Req, Res any](
 		opts []grpc.CallOption,
 	) (Res, error),
 ) (Res, error) {
-	if !p.SupportsPartitions() {
-		// sticky and worker-commands queues have a single partition and don't participate in the
-		// partition-counts negotiation.
+	if !loadBalance {
+		// The partition counts only feed the load balancer's partition choice, so we only negotiate
+		// them when actually load-balancing. Everything else (sticky, worker-commands, non-root, and
+		// forwarded partitions) routes to a fixed partition and skips the header/trailer/retry
+		// machinery. Note loadBalance is only ever true for a root normal partition, so this also
+		// covers the queue kinds that don't support multiple partitions.
 		return op(ctx, p, loadBalance, PartitionCounts{}, request, opts)
 	}
 
