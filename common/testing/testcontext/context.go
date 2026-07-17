@@ -200,11 +200,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 		return st.currentContext()
 	}
 
-	// Unrelated contexts are allowed only when they are already narrower than
-	// the test context; otherwise they break the test context chain.
-	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
-		return ctx
-	}
 	tb.Fatalf("testcontext: context is not derived from this test's context; are you using context.Background()?")
 	return ctx
 }
