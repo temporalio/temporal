@@ -90,28 +90,19 @@ func run(
 		return
 	}
 
-	startedAt := time.Now()
-	awaitDeadline := startedAt.Add(cfg.totalTimeout)
-
 	// Ensure enough context time for the await itself plus post-await reserve.
-	ctx, ctxExtension := testcontext.EnsureRemaining(tb, ctx, cfg.totalTimeout+postAwaitTimeoutReserve())
+	ctx = testcontext.EnsureRemaining(tb, ctx, cfg.totalTimeout+postAwaitTimeoutReserve())
 
-	// Cap await deadline at the test context deadline.
-	if !ctxExtension.Deadline.IsZero() {
-		awaitDeadline = util.MinTime(awaitDeadline, ctxExtension.Deadline)
-	}
-	// Cap await deadline at the context's deadline.
+	awaitDeadline := time.Now().Add(cfg.totalTimeout)
 	if ctxDeadline, hasDeadline := ctx.Deadline(); hasDeadline {
+		// Cap await deadline at the ctx's deadline.
 		awaitDeadline = util.MinTime(awaitDeadline, ctxDeadline)
 	}
 
-	// Deadline capping can leave no time to run; report that as 0, not a
-	// negative duration.
-	effectiveAwaitTimeout := max(0, time.Until(awaitDeadline))
 	awaitCtx, awaitCancel := context.WithDeadline(ctx, awaitDeadline)
 	defer awaitCancel()
 
-	report := timeoutReport{effectiveTimeout: effectiveAwaitTimeout}
+	report := timeoutReport{effectiveTimeout: max(0, time.Until(awaitDeadline))}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
