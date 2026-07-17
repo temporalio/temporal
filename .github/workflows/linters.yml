@@ -102,7 +102,7 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: lint nil-safety (chasm/lib/scheduler)
+      - name: lint nil-safety
         run: make lint-nilaway
 
   fmt:
