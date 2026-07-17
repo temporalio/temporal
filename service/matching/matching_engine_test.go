@@ -2118,15 +2118,17 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAttemptStamp() {
 	testCases := []struct {
-		name         string
-		componentRef []byte
+		name                  string
+		componentRef          []byte
+		wantActivityTaskStamp int32
 	}{
 		{
 			name: "WorkflowActivity",
 		},
 		{
-			name:         "StandaloneActivity",
-			componentRef: []byte("standalone-activity-component-ref"),
+			name:                  "StandaloneActivity",
+			componentRef:          []byte("standalone-activity-component-ref"),
+			wantActivityTaskStamp: 17,
 		},
 	}
 	for _, tc := range testCases {
@@ -2173,7 +2175,7 @@ func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAt
 			s.Equal(activityType, token.GetActivityType())
 			s.Equal(attempt, token.GetAttempt())
 			s.Equal(tc.componentRef, token.GetComponentRef())
-			s.Equal(taskStamp+1, token.GetActivityAttemptStamp())
+			s.Equal(tc.wantActivityTaskStamp, token.GetActivityAttemptStamp())
 		})
 	}
 }

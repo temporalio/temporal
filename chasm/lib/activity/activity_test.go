@@ -402,7 +402,7 @@ func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *test
 		NamespaceId:          namespaceID,
 		Attempt:              attempt,
 		ComponentRef:         componentRef,
-		ActivityAttemptStamp: act.LastAttempt.Get(ctx).GetStamp() + 1,
+		ActivityAttemptStamp: act.LastAttempt.Get(ctx).GetStamp(),
 	}
 	req := &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId:      namespaceID,
@@ -424,7 +424,7 @@ func TestActivityTaskTokenAttemptStampRejectsTokenFromBeforeAttemptReset(t *test
 		NamespaceId:          namespaceID,
 		Attempt:              attempt,
 		ComponentRef:         componentRef,
-		ActivityAttemptStamp: resetAttempt.GetStamp() + 1,
+		ActivityAttemptStamp: resetAttempt.GetStamp(),
 	}
 	require.Equal(t, originalToken.GetAttempt(), resetToken.GetAttempt())
 	require.NotEqual(t, originalToken.GetActivityAttemptStamp(), resetToken.GetActivityAttemptStamp())

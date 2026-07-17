@@ -1804,8 +1804,7 @@ func (a *Activity) validateActivityTaskToken(
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	startedStamp := a.LastAttempt.Get(ctx).GetStartedStamp()
-	if token.GetActivityAttemptStamp() != 0 && startedStamp != 0 && token.GetActivityAttemptStamp() != startedStamp+1 {
+	if token.GetActivityAttemptStamp() != 0 && token.GetActivityAttemptStamp() != a.LastAttempt.Get(ctx).GetStartedStamp() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 
