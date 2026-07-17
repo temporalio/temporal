@@ -354,7 +354,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationCrossTree(chasmEn
 			s.NoError(startedHandle.Get(ctx, nil))
 
 			// Verify the operation was actually created in the tree implied by the schedule-time flag.
-			s.assertNexusOperationTree(ctx, env, run.GetID(), !tc.enableChasmAtSchedule)
+			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}, !tc.enableChasmAtSchedule)
 
 			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
 			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
@@ -455,7 +455,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationBufferedCrossTree
 	s.NoError(startedHandle.Get(ctx, nil))
 
 	// The operation was scheduled with the flag off, so it must live in the HSM tree.
-	s.assertNexusOperationTree(ctx, env, run.GetID(), true)
+	s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}, true)
 
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "cancel", nil))
 
@@ -467,17 +467,17 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancellationBufferedCrossTree
 	s.RequireNoHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED)
 }
 
-// assertNexusOperationTree asserts which tree the workflow's Nexus operation lives in, keyed by the operation's
-// scheduled event ID.
-func (s *NexusWorkflowTestSuite) assertNexusOperationTree(ctx context.Context, env *NexusTestEnv, workflowID string, expectHSM bool) {
+// assertNexusOperationTree asserts which tree the Nexus operation lives in for the given execution, keyed by
+// the operation's scheduled event ID. Leave the execution's RunId empty to target the current run.
+func (s *NexusWorkflowTestSuite) assertNexusOperationTree(ctx context.Context, env *NexusTestEnv, execution *commonpb.WorkflowExecution, expectHSM bool) {
 	s.T().Helper()
-	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID})
+	hist := env.GetHistory(env.Namespace().String(), execution)
 	scheduledEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 	opID := strconv.FormatInt(scheduledEvent.EventId, 10)
 
 	desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		Execution: execution,
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
@@ -3268,4 +3268,146 @@ func (s *NexusWorkflowTestSuite) mutateCompletionComponentRef(
 	var err error
 	token.ComponentRef, err = ref.Marshal()
 	s.NoError(err)
+}
+
+// TestNexusOperationSurvivesResetCrossTree verifies that when a workflow with a pending Nexus operation is
+// reset, the rebuild re-creates the operation on the tree implied by the current enableChasmWorkflowOperations flag
+// (HSM or CHASM), and the reset run replays without failing a workflow task. Rebuild deterministically picks the
+// framework by dynamic config, so flipping the flag before reset realigns the operation to the other tree.
+func (s *NexusWorkflowTestSuite) TestNexusOperationSurvivesResetCrossTree(chasmEnabled bool) {
+	// This test drives the creation-policy flag itself, so run it once (not per-suite-mode).
+	if chasmEnabled {
+		s.T().Skip("reset-reapply test controls the flag explicitly; run once via the HSM suite")
+	}
+
+	testCases := []struct {
+		name string
+		// enableChasmWorkflowOperations value at schedule time (true -> CHASM, false -> HSM).
+		enableChasmAtSchedule bool
+		// flip the flag before reset to exercise the realign-by-config behavior.
+		flipFlagBeforeReset bool
+	}{
+		{name: "ChasmOpStaysChasm", enableChasmAtSchedule: true, flipFlagBeforeReset: false},
+		{name: "HsmOpStaysHsm", enableChasmAtSchedule: false, flipFlagBeforeReset: false},
+		{name: "ChasmOpRealignsToHsmAfterDowngrade", enableChasmAtSchedule: true, flipFlagBeforeReset: true},
+		{name: "HsmOpRealignsToChasmAfterUpgrade", enableChasmAtSchedule: false, flipFlagBeforeReset: true},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *NexusWorkflowTestSuite) {
+			env := s.newTestEnv(true)
+			ctx := s.Context()
+			taskQueue := testcore.RandomizeStr(s.T().Name())
+			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, tc.enableChasmAtSchedule)
+
+			h := nexustest.Handler{
+				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+				},
+				OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+					return nil
+				},
+			}
+			endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+			const awaitStartedUpdate = "await-started"
+			callerWF := func(ctx workflow.Context) error {
+				started := false
+				if err := workflow.SetUpdateHandler(ctx, awaitStartedUpdate, func(ctx workflow.Context) error {
+					return workflow.Await(ctx, func() bool { return started })
+				}); err != nil {
+					return err
+				}
+				c := workflow.NewNexusClient(endpointName, "service")
+				fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+				var exec workflow.NexusOperationExecution
+				if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+					return err
+				}
+				started = true
+				workflow.GetSignalChannel(ctx, "done").Receive(ctx, nil)
+				return nil
+			}
+
+			w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+			w.RegisterWorkflow(callerWF)
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
+			s.NoError(err)
+
+			// Block until the Nexus operation has started.
+			startedHandle, err := env.SdkClient().UpdateWorkflow(ctx, client.UpdateWorkflowOptions{
+				WorkflowID:   run.GetID(),
+				RunID:        run.GetRunID(),
+				UpdateName:   awaitStartedUpdate,
+				WaitForStage: client.WorkflowUpdateStageCompleted,
+			})
+			s.NoError(err)
+			s.NoError(startedHandle.Get(ctx, nil))
+
+			// The operation is created in the tree implied by the schedule-time flag, in the original run.
+			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}, !tc.enableChasmAtSchedule)
+
+			expectHSMAfterReset := !tc.enableChasmAtSchedule
+			if tc.flipFlagBeforeReset {
+				env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
+				expectHSMAfterReset = tc.enableChasmAtSchedule
+			}
+
+			// Reset to the last completed workflow task; this rebuilds mutable state (including the Nexus op).
+			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
+			var lastWFT *historypb.HistoryEvent
+			for _, e := range hist {
+				if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+					lastWFT = e
+				}
+			}
+			s.NotNil(lastWFT)
+			resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+				Namespace:                 env.Namespace().String(),
+				WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+				Reason:                    "reset-reapply nexus operation test",
+				WorkflowTaskFinishEventId: lastWFT.GetEventId(),
+				RequestId:                 uuid.NewString(),
+			})
+			s.NoError(err)
+			newRunID := resetResp.GetRunId()
+
+			// After the rebuild the operation lives on the tree implied by the current flag, verified on the
+			// specific post-reset run.
+			s.assertNexusOperationTree(ctx, env, &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID}, expectHSMAfterReset)
+
+			// Drive the reset run to completion, then assert on its final history.
+			s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), newRunID, "done", nil))
+			s.NoError(env.SdkClient().GetWorkflow(ctx, run.GetID(), newRunID).Get(ctx, nil))
+
+			// The reset run's full history is identical regardless of which tree holds the operation: the
+			// operation is reapplied (events 6-7, NexusOperationScheduled/Started) onto the rebuilt tree, the
+			// reset boundary is the synthetic WorkflowTaskFailed (event 10, Cause 20 = RESET_WORKFLOW), and the
+			// run then replays and completes cleanly.
+			newHist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: newRunID})
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 NexusOperationScheduled
+  7 NexusOperationStarted
+  8 WorkflowTaskScheduled
+  9 WorkflowTaskStarted
+ 10 WorkflowTaskFailed {"Cause":20}
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowExecutionUpdateCompleted
+ 15 WorkflowExecutionSignaled
+ 16 WorkflowTaskScheduled
+ 17 WorkflowTaskStarted
+ 18 WorkflowTaskCompleted
+ 19 WorkflowExecutionCompleted`, newHist)
+		})
+	}
 }
