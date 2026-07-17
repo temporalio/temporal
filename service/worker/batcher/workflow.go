@@ -103,9 +103,9 @@ type (
 	task struct {
 		// the workflow execution to process
 		executionInfo *workflowpb.WorkflowExecutionInfo
-		// the activity (archetype) execution to process, set instead of
+		// the activity target execution to process, set instead of
 		// executionInfo for activity batch operations (terminate/cancel/delete activities)
-		archetypeExecution *commonpb.Execution
+		targetExecution *commonpb.Execution
 		// the number of attempts to process the workflow execution
 		attempts int
 		// reference to the page this task belongs to (for tracking page completion)
@@ -184,7 +184,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	if len(params.GetExecutions()) != 0 {
 		numTargetSelectors++
 	}
-	if len(params.GetArchetypeExecutions()) != 0 {
+	if len(params.GetTargetExecutions()) != 0 {
 		numTargetSelectors++
 	}
 
@@ -192,7 +192,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		numTargetSelectors == 0 {
-		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType,Reason,Namespace, AND one of (Query OR Executions OR ArchetypeExecutions)")
+		return serviceerror.NewInvalidArgument("must provide required parameters: BatchType,Reason,Namespace, AND one of (Query OR Executions OR TargetExecutions)")
 	}
 
 	if len(params.GetJobId()) == 0 {
@@ -202,15 +202,15 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 		return serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	}
 	if numTargetSelectors == 0 {
-		return serviceerror.NewInvalidArgument("VisibilityQuery, Executions, or ArchetypeExecutions must be set on request.")
+		return serviceerror.NewInvalidArgument("VisibilityQuery, Executions, or TargetExecutions must be set on request.")
 	}
 	if numTargetSelectors > 1 {
-		return serviceerror.NewInvalidArgument("visibility query, executions, and archetype executions are mutually exclusive")
+		return serviceerror.NewInvalidArgument("visibility query, executions, and target executions are mutually exclusive")
 	}
-	if archetypeExecutions := params.GetArchetypeExecutions(); len(archetypeExecutions) > 0 {
+	if targetExecutions := params.GetTargetExecutions(); len(targetExecutions) > 0 {
 		// TerminateActivitiesOperation/DeleteActivitiesOperation/CancelActivitiesOperation
 		// target standalone activity executions; every other operation targets workflow
-		// executions. Reject archetype executions that do not match the operation.
+		// executions. Reject target executions that do not match the operation.
 		expectedType := enumspb.EXECUTION_TYPE_WORKFLOW
 		switch params.GetOperation().(type) {
 		case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
@@ -218,10 +218,10 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 			*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
 			expectedType = enumspb.EXECUTION_TYPE_ACTIVITY
 		}
-		for i, execution := range archetypeExecutions {
+		for i, execution := range targetExecutions {
 			if execution.GetType() != expectedType {
 				return serviceerror.NewInvalidArgumentf(
-					"archetype_executions[%d] has type %v, but operation %T requires %v",
+					"target_executions[%d] has type %v, but operation %T requires %v",
 					i, execution.GetType(), params.GetOperation(), expectedType)
 			}
 		}
@@ -237,8 +237,8 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation,
 		*workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-		if len(params.GetArchetypeExecutions()) > 0 {
-			return serviceerror.NewInvalidArgument("executions cannot be used with activity batch operations; use archetype executions")
+		if len(params.GetTargetExecutions()) > 0 {
+			return serviceerror.NewInvalidArgument("executions cannot be used with activity batch operations; use target executions")
 		}
 		return nil
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:

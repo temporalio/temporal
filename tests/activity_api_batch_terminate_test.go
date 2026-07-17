@@ -106,11 +106,11 @@ func assertBatchOperationType(
 // batchTargetSelector describes a way to scope a batch operation's targets:
 // either a visibility query (which requires the target executions to be
 // indexed in visibility before the batch starts) or an explicit list of
-// archetype executions (no indexing wait needed, since the executions are
+// target executions (no indexing wait needed, since the executions are
 // named directly).
 type batchTargetSelector struct {
 	name string
-	// apply sets either VisibilityQuery or ArchetypeExecutions on req to target
+	// apply sets either VisibilityQuery or TargetExecutions on req to target
 	// the given activities.
 	apply func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest)
 }
@@ -144,7 +144,7 @@ func batchTargetSelectors() []batchTargetSelector {
 			},
 		},
 		{
-			name: "ArchetypeExecutions",
+			name: "TargetExecutions",
 			apply: func(t *testing.T, env *standaloneActivityEnv, ctx context.Context, activityType string, activities []startedActivity, req *workflowservice.StartBatchOperationRequest) {
 				executions := make([]*commonpb.Execution, 0, len(activities))
 				for _, a := range activities {
@@ -154,7 +154,7 @@ func batchTargetSelectors() []batchTargetSelector {
 						RunId:      a.runID,
 					})
 				}
-				req.ArchetypeExecutions = executions
+				req.TargetExecutions = executions
 			},
 		},
 	}
@@ -207,12 +207,12 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Su
 	}
 }
 
-// TestActivityBatchTerminate_ArchetypeExecutionTypeMismatch verifies that an
+// TestActivityBatchTerminate_TargetExecutionTypeMismatch verifies that an
 // activity-targeting batch operation (terminate activity) rejects
-// ArchetypeExecutions whose Type is EXECUTION_TYPE_WORKFLOW instead of
+// TargetExecutions whose Type is EXECUTION_TYPE_WORKFLOW instead of
 // silently misinterpreting the workflow's business_id/run_id as an activity
 // execution and no-oping.
-func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_ArchetypeExecutionTypeMismatch() {
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_TargetExecutionTypeMismatch() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	ctx := env.Context()
 
@@ -226,7 +226,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ar
 		},
 		JobId:  uuid.NewString(),
 		Reason: "test",
-		ArchetypeExecutions: []*commonpb.Execution{
+		TargetExecutions: []*commonpb.Execution{
 			{
 				Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
 				BusinessId: "some-workflow-id",
@@ -237,7 +237,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ar
 
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
 	s.Error(err)
-	s.Contains(err.Error(), "archetype_executions[0]")
+	s.Contains(err.Error(), "target_executions[0]")
 }
 
 // TestActivityBatchTerminate_ExcludesNonRunning verifies that a batch terminate

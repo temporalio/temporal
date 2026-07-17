@@ -93,10 +93,10 @@ func assertWorkflowBatchOperationType(
 
 // workflowBatchTargetSelector describes a way to scope a workflow batch
 // operation's targets: a visibility query, the deprecated Executions field, or
-// the new ArchetypeExecutions field.
+// the new TargetExecutions field.
 type workflowBatchTargetSelector struct {
 	name string
-	// apply sets one of VisibilityQuery, Executions, or ArchetypeExecutions on
+	// apply sets one of VisibilityQuery, Executions, or TargetExecutions on
 	// req to target the given executions, and returns the query/executions
 	// DescribeBatchOperation is expected to report back (see
 	// assertWorkflowBatchOperationType) — whichever of the two this selector
@@ -104,19 +104,19 @@ type workflowBatchTargetSelector struct {
 	apply func(t *testing.T, env *testcore.TestEnv, ctx context.Context, workflowType string, executions []*commonpb.WorkflowExecution, req *workflowservice.StartBatchOperationRequest) (expectedQuery string, expectedExecutions []*commonpb.Execution)
 }
 
-// toArchetypeExecutions converts workflow executions into the unified
-// Execution representation used by ArchetypeExecutions and echoed back by
+// toTargetExecutions converts workflow executions into the unified
+// Execution representation used by TargetExecutions and echoed back by
 // DescribeBatchOperation.
-func toArchetypeExecutions(executions []*commonpb.WorkflowExecution) []*commonpb.Execution {
-	archetypeExecutions := make([]*commonpb.Execution, 0, len(executions))
+func toTargetExecutions(executions []*commonpb.WorkflowExecution) []*commonpb.Execution {
+	targetExecutions := make([]*commonpb.Execution, 0, len(executions))
 	for _, e := range executions {
-		archetypeExecutions = append(archetypeExecutions, &commonpb.Execution{
+		targetExecutions = append(targetExecutions, &commonpb.Execution{
 			Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
 			BusinessId: e.GetWorkflowId(),
 			RunId:      e.GetRunId(),
 		})
 	}
-	return archetypeExecutions
+	return targetExecutions
 }
 
 // workflowBatchTargetSelectors enumerates the ways a caller can scope a
@@ -150,15 +150,15 @@ func workflowBatchTargetSelectors() []workflowBatchTargetSelector {
 			apply: func(t *testing.T, env *testcore.TestEnv, ctx context.Context, workflowType string, executions []*commonpb.WorkflowExecution, req *workflowservice.StartBatchOperationRequest) (string, []*commonpb.Execution) {
 				//nolint:staticcheck // SA1019: intentionally exercising the deprecated Executions selector
 				req.Executions = executions
-				return "", toArchetypeExecutions(executions)
+				return "", toTargetExecutions(executions)
 			},
 		},
 		{
-			name: "ArchetypeExecutions",
+			name: "TargetExecutions",
 			apply: func(t *testing.T, env *testcore.TestEnv, ctx context.Context, workflowType string, executions []*commonpb.WorkflowExecution, req *workflowservice.StartBatchOperationRequest) (string, []*commonpb.Execution) {
-				archetypeExecutions := toArchetypeExecutions(executions)
-				req.ArchetypeExecutions = archetypeExecutions
-				return "", archetypeExecutions
+				targetExecutions := toTargetExecutions(executions)
+				req.TargetExecutions = targetExecutions
+				return "", targetExecutions
 			},
 		},
 	}
@@ -223,12 +223,12 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Su
 	}
 }
 
-// TestWorkflowBatchTerminate_ArchetypeExecutionTypeMismatch verifies that a
+// TestWorkflowBatchTerminate_TargetExecutionTypeMismatch verifies that a
 // workflow-targeting batch operation (e.g. terminate workflow) rejects
-// ArchetypeExecutions whose Type is EXECUTION_TYPE_ACTIVITY instead of
+// TargetExecutions whose Type is EXECUTION_TYPE_ACTIVITY instead of
 // silently misinterpreting the activity's business_id/run_id as a workflow
 // execution and no-oping.
-func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_ArchetypeExecutionTypeMismatch() {
+func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_TargetExecutionTypeMismatch() {
 	env := newWorkflowBatchEnv(s.T())
 	ctx := env.Context()
 
@@ -241,7 +241,7 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Ar
 		},
 		JobId:  uuid.NewString(),
 		Reason: "test",
-		ArchetypeExecutions: []*commonpb.Execution{
+		TargetExecutions: []*commonpb.Execution{
 			{
 				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
 				BusinessId: "some-activity-id",
@@ -252,5 +252,5 @@ func (s *WorkflowAPIBatchTerminateClientTestSuite) TestWorkflowBatchTerminate_Ar
 
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
 	s.Error(err)
-	s.Contains(err.Error(), "archetype_executions[0]")
+	s.Contains(err.Error(), "target_executions[0]")
 }

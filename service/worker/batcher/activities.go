@@ -61,10 +61,10 @@ type batchProcessorConfig struct {
 	concurrency       int
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
-	// initialArchetypeExecutions holds an explicit list of activity (archetype)
+	// initialTargetExecutions holds an explicit list of activity target
 	// executions to process, set instead of initialExecutions when the request
 	// targets activity executions directly rather than via a visibility query.
-	initialArchetypeExecutions []*commonpb.Execution
+	initialTargetExecutions []*commonpb.Execution
 }
 
 // batchWorkerProcessor defines the interface for different worker processor types
@@ -82,16 +82,16 @@ type batchWorkerProcessor func(
 // page represents a page of workflow executions to be processed
 type page struct {
 	// executionInfos holds workflow executions for workflow batch operations;
-	// archetypeExecutionInfo holds activity executions for activity batch
+	// targetExecutionInfo holds activity executions for activity batch
 	// operations (terminate/cancel/delete activities). Exactly one is populated.
-	executionInfos         []*workflowpb.WorkflowExecutionInfo
-	archetypeExecutionInfo []*commonpb.Execution
-	submittedCount         int
-	successCount           int
-	errorCount             int
-	nextPageToken          []byte
-	pageNumber             int
-	prev, next             *page
+	executionInfos      []*workflowpb.WorkflowExecutionInfo
+	targetExecutionInfo []*commonpb.Execution
+	submittedCount      int
+	successCount        int
+	errorCount          int
+	nextPageToken       []byte
+	pageNumber          int
+	prev, next          *page
 }
 
 // hasNext returns true if there are more pages to fetch
@@ -100,12 +100,12 @@ func (p *page) hasNext() bool {
 }
 
 // length returns the number of executions in this page. For activity batch
-// operations the executions are held in archetypeExecutionInfo; for all other
+// operations the executions are held in targetExecutionInfo; for all other
 // batch types they are held in executionInfos. Only one of the two is ever
 // populated for a given page.
 func (p *page) length() int {
-	if len(p.archetypeExecutionInfo) > 0 {
-		return len(p.archetypeExecutionInfo)
+	if len(p.targetExecutionInfo) > 0 {
+		return len(p.targetExecutionInfo)
 	}
 	return len(p.executionInfos)
 }
@@ -125,8 +125,8 @@ func (p *page) nextTask() task {
 		attempts: 1,
 		page:     p,
 	}
-	if len(p.archetypeExecutionInfo) > 0 {
-		t.archetypeExecution = p.archetypeExecutionInfo[p.submittedCount]
+	if len(p.targetExecutionInfo) > 0 {
+		t.targetExecution = p.targetExecutionInfo[p.submittedCount]
 	} else {
 		t.executionInfo = p.executionInfos[p.submittedCount]
 	}
@@ -173,7 +173,7 @@ func fetchPage(
 	// Terminate/Cancel/Delete Activities batch types operate on activity executions,
 	// so they are listed via ListActivityExecutions; all other batch types list workflow executions.
 	var executionInfos []*workflowpb.WorkflowExecutionInfo
-	var archetypeExecutionInfo []*commonpb.Execution
+	var targetExecutionInfo []*commonpb.Execution
 	var nextPageToken []byte
 	if isActivityBatchType(config.batchType) {
 		resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
@@ -191,9 +191,9 @@ func fetchPage(
 			return nil, err
 		}
 
-		archetypeExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
+		targetExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
 		for _, activityExecution := range resp.GetExecutions() {
-			archetypeExecutionInfo = append(archetypeExecutionInfo, &commonpb.Execution{
+			targetExecutionInfo = append(targetExecutionInfo, &commonpb.Execution{
 				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
 				BusinessId: activityExecution.GetActivityId(),
 				RunId:      activityExecution.GetRunId(),
@@ -220,10 +220,10 @@ func fetchPage(
 	}
 
 	return &page{
-		executionInfos:         executionInfos,
-		archetypeExecutionInfo: archetypeExecutionInfo,
-		nextPageToken:          nextPageToken,
-		pageNumber:             pageNumber,
+		executionInfos:      executionInfos,
+		targetExecutionInfo: targetExecutionInfo,
+		nextPageToken:       nextPageToken,
+		pageNumber:          pageNumber,
 	}, nil
 }
 
@@ -255,19 +255,19 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 
 	// Initialize the first p from initial executions or fetch from query
 	var p *page
-	if len(config.initialArchetypeExecutions) > 0 {
+	if len(config.initialTargetExecutions) > 0 {
 		if isActivityBatchType(config.batchType) {
 			p = &page{
-				archetypeExecutionInfo: config.initialArchetypeExecutions,
-				nextPageToken:          config.initialPageToken,
-				pageNumber:             hbd.CurrentPage,
+				targetExecutionInfo: config.initialTargetExecutions,
+				nextPageToken:       config.initialPageToken,
+				pageNumber:          hbd.CurrentPage,
 			}
 		} else {
 			// Workflow batch types process tasks via executionInfo, not
-			// archetypeExecutionInfo; convert the archetype executions
+			// targetExecutionInfo; convert the target executions
 			// (business_id/run_id) into WorkflowExecutionInfo.
-			executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialArchetypeExecutions))
-			for _, exec := range config.initialArchetypeExecutions {
+			executionInfos := make([]*workflowpb.WorkflowExecutionInfo, 0, len(config.initialTargetExecutions))
+			for _, exec := range config.initialTargetExecutions {
 				executionInfos = append(executionInfos, &workflowpb.WorkflowExecutionInfo{
 					Execution: &commonpb.WorkflowExecution{
 						WorkflowId: exec.GetBusinessId(),
@@ -416,7 +416,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	// Get executions based on request type (public vs admin).
 	var visibilityQuery string
 	var executions []*commonpb.WorkflowExecution
-	var archetypeExecutions []*commonpb.Execution
+	var targetExecutions []*commonpb.Execution
 
 	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
 	rateLimiter := quotas.RequestRateLimiter(a.AdminBatcherRateLimiter)
@@ -430,14 +430,14 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		//nolint:staticcheck // SA1019: Executions is deprecated but still needed for backward compatibility
 		executions = batchParams.Request.Executions
-		archetypeExecutions = batchParams.Request.GetArchetypeExecutions()
+		targetExecutions = batchParams.Request.GetTargetExecutions()
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 			return float64(a.rps(ns))
 		}))
 	}
 
 	if startOver {
-		estimateCount := int64(len(executions) + len(archetypeExecutions)) // NOTE: only one of these will ever be > 0
+		estimateCount := int64(len(executions) + len(targetExecutions)) // NOTE: only one of these will ever be > 0
 		if len(visibilityQuery) > 0 {
 			var count int64
 			var err error
@@ -477,13 +477,13 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:                  ns,
-		adjustedQuery:              visibilityQuery,
-		batchType:                  batchParams.BatchType,
-		concurrency:                a.getOperationConcurrency(int(batchParams.Concurrency)),
-		initialPageToken:           hbd.PageToken,
-		initialExecutions:          executions,
-		initialArchetypeExecutions: archetypeExecutions,
+		namespace:               ns,
+		adjustedQuery:           visibilityQuery,
+		batchType:               batchParams.BatchType,
+		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
+		initialPageToken:        hbd.PageToken,
+		initialExecutions:       executions,
+		initialTargetExecutions: targetExecutions,
 	}
 
 	// Create a wrapper for the task processor
@@ -519,9 +519,12 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 		return query
 	}
 
+	//nolint:staticcheck // SA1019: in-flight batches may have legacy enum values
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
-		enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_SIGNAL, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_CANCEL, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
 		enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY,
 		enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
 		return fmt.Sprintf("(%s) AND (%s)", query, statusRunningQueryFilter)
@@ -575,7 +578,7 @@ func (a *activities) startTaskProcessor(
 				return
 			}
 
-			if task.executionInfo == nil && task.archetypeExecution == nil {
+			if task.executionInfo == nil && task.targetExecution == nil {
 				continue
 			}
 
@@ -622,7 +625,7 @@ func (a *activities) processSingleTask(
 
 	switch operation := batchOperation.Request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
-		err = processArchetypeTask(ctx, limiter, task,
+		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 					Namespace:  namespace,
@@ -635,7 +638,7 @@ func (a *activities) processSingleTask(
 				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation:
-		err = processArchetypeTask(ctx, limiter, task,
+		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
 					Namespace:  namespace,
@@ -645,7 +648,7 @@ func (a *activities) processSingleTask(
 				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_CancelActivitiesOperation:
-		err = processArchetypeTask(ctx, limiter, task,
+		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 					Namespace:  namespace,
@@ -834,8 +837,9 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	errMsg := err.Error()
 
 	// Operation-specific non-retryable errors
+	//nolint:staticcheck // SA1019: in-flight batches may have the legacy enum value
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS:
+	case enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS:
 		// Pinned version that is not present in a task queue error is non-retryable for workflow options updates
 		return strings.Contains(errMsg, worker_versioning.ErrPinnedVersionNotInTaskQueueSubstring)
 	default:
@@ -943,10 +947,10 @@ func processTask(
 	return nil
 }
 
-// processArchetypeTask is the activity-execution counterpart of processTask,
+// processTargetTask is the activity-execution counterpart of processTask,
 // used by the terminate/cancel/delete activity batch operations whose tasks
-// carry an activity (archetype) execution rather than a workflow execution.
-func processArchetypeTask(
+// carry an activity target execution rather than a workflow execution.
+func processTargetTask(
 	ctx context.Context,
 	limiter quotas.RequestRateLimiter,
 	task task,
@@ -957,7 +961,7 @@ func processArchetypeTask(
 		return err
 	}
 
-	err = procFn(task.archetypeExecution)
+	err = procFn(task.targetExecution)
 	if err != nil {
 		// NotFound means the activity is not running or already deleted
 		if !common.IsNotFoundError(err) {

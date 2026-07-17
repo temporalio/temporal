@@ -408,11 +408,25 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Terminate legacy workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+		},
 		{
 			name:           "Cancel workflow variant",
 			query:          "A=B",
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Cancel legacy workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL,
 		},
 		{
 			name:           "Signal workflow variant",
@@ -420,11 +434,25 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Signal legacy workflow variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_SIGNAL,
+		},
 		{
 			name:           "Update workflow execution options variant",
 			query:          "A=B",
 			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Update legacy workflow execution options variant",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
 		},
 		{
 			// Reset applies regardless of execution status (matches the legacy
@@ -434,6 +462,13 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			expectedResult: "A=B",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
 		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Reset legacy workflow variant is not filtered",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_RESET,
+		},
 		{
 			// Delete applies regardless of execution status (matches the legacy
 			// BATCH_OPERATION_TYPE_DELETE, which is also excluded), so no filter is added.
@@ -441,6 +476,13 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			query:          "A=B",
 			expectedResult: "A=B",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:           "Delete legacy workflow variant is not filtered",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE,
 		},
 		{
 			// A caller must be able to terminate/cancel only running activities via
@@ -629,6 +671,13 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			name:      "pinned version error for UPDATE_EXECUTION_OPTIONS returns true",
 			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
 			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+			want:      true,
+		},
+		//nolint:staticcheck // SA1019: verifies batches started before the enum split
+		{
+			name:      "pinned version error for legacy UPDATE_EXECUTION_OPTIONS returns true",
+			err:       errors.New("Pinned version 'deployment-foo:build-123' is not present in task queue 'my-queue' of type 'Workflow'"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
 			want:      true,
 		},
 		{
@@ -938,14 +987,14 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	mockSdk.AssertExpectations(s.T())
 }
 
-// TestProcessWorkflowsWithProactiveFetching_InitialArchetypeExecutions verifies
-// that config.initialArchetypeExecutions builds tasks with the field the batch
+// TestProcessWorkflowsWithProactiveFetching_InitialTargetExecutions verifies
+// that config.initialTargetExecutions builds tasks with the field the batch
 // type's processor actually reads: executionInfo for workflow batch types,
-// archetypeExecution for activity batch types. Regression test for a panic
-// where a workflow-targeted ArchetypeExecutions batch always populated
-// archetypeExecution (leaving executionInfo nil), causing a nil pointer
+// targetExecution for activity batch types. Regression test for a panic
+// where a workflow-targeted TargetExecutions batch always populated
+// targetExecution (leaving executionInfo nil), causing a nil pointer
 // dereference in the workflow-op processors (e.g. TerminationOperation).
-func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArchetypeExecutions() {
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialTargetExecutions() {
 	tests := []struct {
 		name              string
 		batchType         enumspb.BatchOperationType
@@ -957,18 +1006,18 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArche
 			wantExecutionInfo: true,
 		},
 		{
-			name:              "activity batch type uses archetypeExecution",
+			name:              "activity batch type uses targetExecution",
 			batchType:         enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
 			wantExecutionInfo: false,
 		},
 	}
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			archetypeExecutions := []*commonpb.Execution{
+			targetExecutions := []*commonpb.Execution{
 				{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: "wf-1", RunId: "run-1"},
 			}
 
-			var gotExecutionInfo, gotArchetypeExecution bool
+			var gotExecutionInfo, gotTargetExecution bool
 			fakeWorker := func(
 				ctx context.Context,
 				taskCh chan task,
@@ -984,11 +1033,11 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArche
 					case <-ctx.Done():
 						return
 					case t := <-taskCh:
-						if t.executionInfo == nil && t.archetypeExecution == nil {
+						if t.executionInfo == nil && t.targetExecution == nil {
 							continue
 						}
 						gotExecutionInfo = t.executionInfo != nil
-						gotArchetypeExecution = t.archetypeExecution != nil
+						gotTargetExecution = t.targetExecution != nil
 						select {
 						case respCh <- taskResponse{err: nil, page: t.page}:
 						case <-ctx.Done():
@@ -1000,9 +1049,9 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArche
 
 			a := &activities{}
 			config := batchProcessorConfig{
-				batchType:                  tt.batchType,
-				concurrency:                1,
-				initialArchetypeExecutions: archetypeExecutions,
+				batchType:               tt.batchType,
+				concurrency:             1,
+				initialTargetExecutions: targetExecutions,
 			}
 			limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
 
@@ -1021,7 +1070,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialArche
 			s.NoError(encoded.Get(&hbd))
 			s.Equal(1, hbd.SuccessCount)
 			s.Equal(tt.wantExecutionInfo, gotExecutionInfo)
-			s.Equal(!tt.wantExecutionInfo, gotArchetypeExecution)
+			s.Equal(!tt.wantExecutionInfo, gotTargetExecution)
 		})
 	}
 }

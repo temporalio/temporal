@@ -5774,6 +5774,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	}
 
 	var identity string
+	//nolint:staticcheck // SA1019: persist legacy values so a batch can resume on a pre-upgrade worker
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY
@@ -5784,19 +5785,19 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY
 		identity = op.CancelActivitiesOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
 		identity = op.TerminationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
 		identity = op.SignalOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_CANCEL
 		identity = op.CancellationOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_DELETE
 		identity = op.DeletionOperation.GetIdentity()
 	case *workflowservice.StartBatchOperationRequest_ResetOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET
 		identity = op.ResetOperation.GetIdentity()
 		for _, postOp := range op.ResetOperation.GetPostResetOperations() {
 			if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
@@ -5809,7 +5810,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			}
 		}
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
-		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS
+		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
 		if err := wh.validateTimeSkippingConfig(
 			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
@@ -5943,11 +5944,11 @@ func snakeCaseBatchType(batchType enumspb.BatchOperationType) string {
 
 // batchOperationExecutionsFromRequest normalizes the explicit target executions
 // on a batch request (if any) into the unified Execution representation used by
-// DescribeBatchOperation. It prefers ArchetypeExecutions and falls back to the
+// DescribeBatchOperation. It prefers TargetExecutions and falls back to the
 // deprecated Executions field, converting WorkflowExecution to Execution.
 func batchOperationExecutionsFromRequest(request *workflowservice.StartBatchOperationRequest) []*commonpb.Execution {
-	if archetypeExecutions := request.GetArchetypeExecutions(); len(archetypeExecutions) > 0 {
-		return archetypeExecutions
+	if targetExecutions := request.GetTargetExecutions(); len(targetExecutions) > 0 {
+		return targetExecutions
 	}
 	//nolint:staticcheck // SA1019: Executions is deprecated but still needed for backward compatibility
 	executions := request.GetExecutions()

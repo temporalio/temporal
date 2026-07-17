@@ -2589,9 +2589,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: visibilityQuery,
@@ -2654,9 +2655,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: visibilityQuery,
@@ -2720,9 +2722,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:       testNamespace.String(),
 			VisibilityQuery: visibilityQuery,
@@ -2809,9 +2812,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			},
 		},
 	}
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		Request:     request,
 	}
 	inputPayload, err := payloads.Encode(params)
@@ -2866,9 +2870,10 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
-		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET,
 		Request: &workflowservice.StartBatchOperationRequest{
 			Namespace:  testNamespace.String(),
 			JobId:      jobId,
