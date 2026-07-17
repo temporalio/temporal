@@ -193,15 +193,17 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 		testDeadline = next.deadline
 	}
 
-	// Callers holding an older test context should move to the current one.
+	// Callers holding an older [testContext] receive the current one.
 	if owned {
 		return st.currentContext()
 	}
 
+	// Unrelated contexts are allowed only when they are already narrower than
+	// the test context; otherwise they break the test context chain.
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
 	}
-	tb.Fatalf("testcontext: context is not derived from this test's context; use testcontext.For(t)")
+	tb.Fatalf("testcontext: context is not derived from this test's context; are you using context.Background()?")
 	return ctx
 }
 
