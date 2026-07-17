@@ -11,15 +11,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
-// pollBacklogWeightFloor is added to each partition's backlog size when weighting polls. It
-// compensates for the incoming task rate: a partition reading near-zero backlog right now is
-// still receiving fresh task adds, so we keep some poller presence there.
-//
-// Note: Does not account for the fact that task adds are themselves unevenly distributed based
-// on backlog count. However, doing that accounting would inevitably have some delay, so adding
-// a constant to all partitions regardless of actual add rate might actually perform better.
-const pollBacklogWeightFloor = 100
-
 type (
 	// LoadBalancer is the interface for implementers of
 	// component that distributes add/poll api calls across
@@ -139,7 +130,10 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	if partitionCount > 0 && len(pc.BacklogCount) >= partitionCount {
 		weights := make([]int64, partitionCount)
 		for i := range weights {
-			weights[i] = number.DecodeCompact8(pc.BacklogCount[i]) + pollBacklogWeightFloor
+			// Add 1 so that partitions with backlog 0 don't have a weight of 0.
+			// This allows all partitions to receive at least 1 poller before any
+			// partitions receive more than one poller.
+			weights[i] = number.DecodeCompact8(pc.BacklogCount[i]) + 1
 		}
 		return tqlb.pickReadPartitionWeighted(partitionCount, weights)
 	}
