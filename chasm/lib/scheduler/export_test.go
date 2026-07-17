@@ -44,6 +44,14 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
 
+// RecentActionCount exposes the completed-retention limit for tests.
+const RecentActionCount = recentActionCount
+
+// ApplyCompletedRetention exposes applyCompletedRetention for tests.
+func (i *Invoker) ApplyCompletedRetention() {
+	i.applyCompletedRetention()
+}
+
 // RecordExecuteResult exposes recordExecuteResult so tests can pin the
 // per-RequestId idempotency guard against concurrent ExecuteTasks.
 func (i *Invoker) RecordExecuteResult(
