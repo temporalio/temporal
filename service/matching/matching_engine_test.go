@@ -5501,6 +5501,14 @@ func (m *testTaskManager) CreateTasks(
 		return nil, &persistence.ConditionFailedError{Msg: "Fake ConditionFailedError"}
 	} else if m.fault("CreateTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailable("Fake Unavailable")
+	} else if m.fault("CreateTasks", "PersistenceLimit") {
+		return nil, persistence.ErrPersistenceNamespaceShardLimitExceeded
+	} else if m.fault("CreateTasks", "ConcurrentLimit") {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "Fake concurrent request limit exceeded",
+		}
 	}
 
 	tlm := m.getQueueData(taskQueue, namespaceID, taskType)
