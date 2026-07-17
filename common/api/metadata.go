@@ -15,6 +15,10 @@ type (
 	// Describes if the method supports long-polled requests.
 	Polling int32
 
+	// Describes whether a method is forwarded to the namespace's active cluster when cross-cluster
+	// (XDC) redirection is restricted to selected APIs.
+	Redirection int32
+
 	MethodMetadata struct {
 		// Describes the scope of a method (whole cluster or inividual namespace).
 		Scope Scope
@@ -22,6 +26,10 @@ type (
 		Access Access
 		// Describes if long polling is supported by the method.
 		Polling Polling
+		// Describes whether the method is forwarded to the namespace's active cluster under the
+		// selected-apis-forwarding redirection policy. Only meaningful for WorkflowService methods;
+		// see common/rpc/interceptor/dc_redirection_policy.go.
+		Redirection Redirection
 	}
 )
 
@@ -57,6 +65,19 @@ const (
 )
 
 const (
+	// Represents a missing Redirection value. Every WorkflowService method must declare a value
+	// other than this; TestWorkflowServiceMetadata enforces it so a newly added API cannot silently
+	// default to a redirection behavior without a deliberate choice.
+	RedirectionUnknown Redirection = iota
+	// Method is served locally on the receiving cluster; it is not forwarded to the active cluster
+	// under the selected-apis-forwarding policy.
+	RedirectionLocal
+	// Method must be forwarded to the namespace's active cluster (it mutates state owned by, or must
+	// observe, the active cluster) even when forwarding is restricted to selected APIs.
+	RedirectionForwarding
+)
+
+const (
 	WorkflowServicePrefix = "/temporal.api.workflowservice.v1.WorkflowService/"
 	OperatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
 	HistoryServicePrefix  = "/temporal.server.api.historyservice.v1.HistoryService/"
@@ -68,128 +89,132 @@ const (
 
 var (
 	workflowServiceMetadata = map[string]MethodMetadata{
-		"RegisterNamespace":                            {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
-		"DescribeNamespace":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListNamespaces":                               {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateNamespace":                              {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
-		"DeprecateNamespace":                           {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
-		"StartWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"GetWorkflowExecutionHistory":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"GetWorkflowExecutionHistoryReverse":           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"PollWorkflowTaskQueue":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways},
-		"RespondWorkflowTaskCompleted":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondWorkflowTaskFailed":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PollActivityTaskQueue":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways},
-		"RecordActivityTaskHeartbeat":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RecordActivityTaskHeartbeatById":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskCompleted":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskCompletedById":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskFailed":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskFailedById":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskCanceled":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondActivityTaskCanceledById":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"CountActivityExecutions":                      {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CountNexusOperationExecutions":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DeleteActivityExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DeleteNexusOperationExecution":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DescribeActivityExecution":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"DescribeNexusOperationExecution":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"PollActivityExecution":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
-		"PollNexusOperationExecution":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
-		"ListActivityExecutions":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListNexusOperationExecutions":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"RequestCancelActivityExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RequestCancelNexusOperationExecution":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"StartActivityExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"StartNexusOperationExecution":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"TerminateActivityExecution":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"TerminateNexusOperationExecution":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PollNexusTaskQueue":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways},
-		"RespondNexusTaskCompleted":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RespondNexusTaskFailed":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RequestCancelWorkflowExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"SignalWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"SignalWithStartWorkflowExecution":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ResetWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"TerminateWorkflowExecution":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DeleteWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListOpenWorkflowExecutions":                   {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListClosedWorkflowExecutions":                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListWorkflowExecutions":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListArchivedWorkflowExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ScanWorkflowExecutions":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CountWorkflowExecutions":                      {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"GetSearchAttributes":                          {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone},
-		"RespondQueryTaskCompleted":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ResetStickyTaskQueue":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ShutdownWorker":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ExecuteMultiOperation":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"QueryWorkflow":                                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DescribeWorkflowExecution":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DescribeTaskQueue":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"GetClusterInfo":                               {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone},
-		"GetSystemInfo":                                {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone},
-		"ListTaskQueuePartitions":                      {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CreateSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DescribeSchedule":                             {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PatchSchedule":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListScheduleMatchingTimes":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DeleteSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListSchedules":                                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CountSchedules":                               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateWorkerBuildIdCompatibility":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"GetWorkerBuildIdCompatibility":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateWorkerVersioningRules":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"GetWorkerVersioningRules":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"GetWorkerTaskReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PollWorkflowExecutionUpdate":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
-		"StartBatchOperation":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"StopBatchOperation":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DescribeBatchOperation":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"ListBatchOperations":                          {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateActivityOptions":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PauseActivity":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UnpauseActivity":                              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ResetActivity":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UpdateActivityExecutionOptions":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PauseActivityExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UnpauseActivityExecution":                     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ResetActivityExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UpdateWorkflowExecutionOptions":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DescribeDeployment":                           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
-		"ListDeployments":                              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
-		"GetDeploymentReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
-		"GetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone}, // [cleanup-wv-pre-release]
-		"SetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},    // [cleanup-wv-pre-release]
-		"DescribeWorkerDeploymentVersion":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DescribeWorkerDeployment":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"SetWorkerDeploymentCurrentVersion":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"SetWorkerDeploymentRampingVersion":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"SetWorkerDeploymentManager":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"CreateWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DeleteWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"CreateWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UpdateWorkerDeploymentVersionComputeConfig":   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DeleteWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UpdateWorkerDeploymentVersionMetadata":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListWorkerDeployments":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CreateWorkflowRule":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"DescribeWorkflowRule":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DeleteWorkflowRule":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListWorkflowRules":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"TriggerWorkflowRule":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RecordWorkerHeartbeat":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListWorkers":                                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"CountWorkers":                                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DescribeWorker":                               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateTaskQueueConfig":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"FetchWorkerConfig":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"UpdateWorkerConfig":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PauseWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"UnpauseWorkflowExecution":                     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"RegisterNamespace":                    {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeNamespace":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListNamespaces":                       {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateNamespace":                      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeprecateNamespace":                   {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone, Redirection: RedirectionLocal},
+		"StartWorkflowExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"GetWorkflowExecutionHistory":          {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable, Redirection: RedirectionLocal},
+		"GetWorkflowExecutionHistoryReverse":   {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PollWorkflowTaskQueue":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"RespondWorkflowTaskCompleted":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondWorkflowTaskFailed":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PollActivityTaskQueue":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"RecordActivityTaskHeartbeat":          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RecordActivityTaskHeartbeatById":      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskCompleted":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskCompletedById":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskFailed":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskFailedById":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskCanceled":          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondActivityTaskCanceledById":      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CountActivityExecutions":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CountNexusOperationExecutions":        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeleteActivityExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"DeleteNexusOperationExecution":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"DescribeActivityExecution":            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable, Redirection: RedirectionLocal},
+		"DescribeNexusOperationExecution":      {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable, Redirection: RedirectionLocal},
+		"PollActivityExecution":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"PollNexusOperationExecution":          {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"ListActivityExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListNexusOperationExecutions":         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RequestCancelActivityExecution":       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"RequestCancelNexusOperationExecution": {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"StartActivityExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"StartNexusOperationExecution":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"TerminateActivityExecution":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"TerminateNexusOperationExecution":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"PollNexusTaskQueue":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"RespondNexusTaskCompleted":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondNexusTaskFailed":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RequestCancelWorkflowExecution":       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"SignalWorkflowExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"SignalWithStartWorkflowExecution":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"ResetWorkflowExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"TerminateWorkflowExecution":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"DeleteWorkflowExecution":              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"ListOpenWorkflowExecutions":           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListClosedWorkflowExecutions":         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListWorkflowExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListArchivedWorkflowExecutions":       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ScanWorkflowExecutions":               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CountWorkflowExecutions":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetSearchAttributes":                  {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RespondQueryTaskCompleted":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ResetStickyTaskQueue":                 {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ShutdownWorker":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ExecuteMultiOperation":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"QueryWorkflow":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionForwarding},
+		"DescribeWorkflowExecution":            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeTaskQueue":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetClusterInfo":                       {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetSystemInfo":                        {Scope: ScopeCluster, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListTaskQueuePartitions":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		// TODO: schedule mutations (Create/Update/Patch/Delete) are backed by a workflow on the
+		// namespace's active cluster and should be RedirectionForwarding so they run there under the
+		// selected-apis-forwarding policy. Left as RedirectionLocal for now to keep this change a pure
+		// refactor; flip them (and update the whitelist golden test) in a follow-up.
+		"CreateSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeSchedule":                             {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PatchSchedule":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListScheduleMatchingTimes":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeleteSchedule":                               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListSchedules":                                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CountSchedules":                               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkerBuildIdCompatibility":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetWorkerBuildIdCompatibility":                {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkerVersioningRules":                  {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetWorkerVersioningRules":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"GetWorkerTaskReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PollWorkflowExecutionUpdate":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways, Redirection: RedirectionLocal},
+		"StartBatchOperation":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"StopBatchOperation":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeBatchOperation":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListBatchOperations":                          {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateActivityOptions":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PauseActivity":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UnpauseActivity":                              {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ResetActivity":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateActivityExecutionOptions":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PauseActivityExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UnpauseActivityExecution":                     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ResetActivityExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkflowExecutionOptions":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeDeployment":                           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal}, // [cleanup-wv-pre-release]
+		"ListDeployments":                              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal}, // [cleanup-wv-pre-release]
+		"GetDeploymentReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal}, // [cleanup-wv-pre-release]
+		"GetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal}, // [cleanup-wv-pre-release]
+		"SetCurrentDeployment":                         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},    // [cleanup-wv-pre-release]
+		"DescribeWorkerDeploymentVersion":              {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeWorkerDeployment":                     {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"SetWorkerDeploymentCurrentVersion":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"SetWorkerDeploymentRampingVersion":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"SetWorkerDeploymentManager":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CreateWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeleteWorkerDeployment":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CreateWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkerDeploymentVersionComputeConfig":   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ValidateWorkerDeploymentVersionComputeConfig": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeleteWorkerDeploymentVersion":                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkerDeploymentVersionMetadata":        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListWorkerDeployments":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CreateWorkflowRule":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeWorkflowRule":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DeleteWorkflowRule":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListWorkflowRules":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"TriggerWorkflowRule":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"RecordWorkerHeartbeat":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"ListWorkers":                                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"CountWorkers":                                 {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"DescribeWorker":                               {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateTaskQueueConfig":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"FetchWorkerConfig":                            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UpdateWorkerConfig":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"PauseWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
+		"UnpauseWorkflowExecution":                     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone, Redirection: RedirectionLocal},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
@@ -229,6 +254,21 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 	default:
 		return MethodMetadata{Scope: ScopeUnknown, Access: AccessUnknown}
 	}
+}
+
+// WorkflowServiceForwardedAPIs returns the set of WorkflowService method names (bare names, not
+// fully qualified) that must be forwarded to the namespace's active cluster under the
+// selected-apis-forwarding redirection policy, i.e. those with Redirection == RedirectionForwarding.
+// It is the single source of truth for that whitelist; the DC redirection interceptor derives its
+// whitelist from this rather than maintaining a parallel list.
+func WorkflowServiceForwardedAPIs() map[string]struct{} {
+	forwarded := make(map[string]struct{})
+	for method, md := range workflowServiceMetadata {
+		if md.Redirection == RedirectionForwarding {
+			forwarded[method] = struct{}{}
+		}
+	}
+	return forwarded
 }
 
 // MethodName returns just the method name from a fully qualified name.

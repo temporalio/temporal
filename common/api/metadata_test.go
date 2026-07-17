@@ -16,15 +16,18 @@ var publicMethodRgx = regexp.MustCompile("^[A-Z]")
 
 func TestWorkflowServiceMetadata(t *testing.T) {
 	tp := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
-	checkService(t, tp, workflowServiceMetadata)
+	// WorkflowService methods flow through the DC redirection interceptor, so each must declare a
+	// redirection classification (forwarded vs local). This is what forces a deliberate choice for
+	// every newly added API.
+	checkService(t, tp, workflowServiceMetadata, true /* requireRedirection */)
 }
 
 func TestOperatorServiceMetadata(t *testing.T) {
 	tp := reflect.TypeFor[operatorservice.OperatorServiceServer]()
-	checkService(t, tp, operatorServiceMetadata)
+	checkService(t, tp, operatorServiceMetadata, false /* requireRedirection */)
 }
 
-func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata) {
+func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata, requireRedirection bool) {
 	methods := getMethodNames(tp)
 	require.ElementsMatch(t, methods, expmaps.Keys(m),
 		"If you're adding a new method to Workflow/OperatorService, please add metadata for it in metadata.go")
@@ -66,6 +69,16 @@ func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata) {
 		case AccessReadOnly, AccessWrite, AccessAdmin:
 		default:
 			t.Error("unknown Access for", method)
+		}
+
+		if requireRedirection {
+			switch md.Redirection {
+			case RedirectionLocal, RedirectionForwarding:
+			default:
+				t.Errorf("unclassified Redirection for %s: set Redirection to RedirectionForwarding "+
+					"(if it mutates state owned by / must observe the active cluster) or RedirectionLocal "+
+					"(if it can be served locally from replicated state) in metadata.go", method)
+			}
 		}
 	}
 }

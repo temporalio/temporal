@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -55,29 +56,17 @@ type (
 	}
 )
 
-// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
-var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
-	// Workflow APIs
-	"StartWorkflowExecution":           {},
-	"SignalWithStartWorkflowExecution": {},
-	"SignalWorkflowExecution":          {},
-	"RequestCancelWorkflowExecution":   {},
-	"TerminateWorkflowExecution":       {},
-	"DeleteWorkflowExecution":          {},
-	"QueryWorkflow":                    {},
-
-	// Standalone Activity APIs
-	"StartActivityExecution":         {},
-	"RequestCancelActivityExecution": {},
-	"TerminateActivityExecution":     {},
-	"DeleteActivityExecution":        {},
-
-	// Standalone Nexus Operation APIs
-	"StartNexusOperationExecution":         {},
-	"RequestCancelNexusOperationExecution": {},
-	"TerminateNexusOperationExecution":     {},
-	"DeleteNexusOperationExecution":        {},
-}
+// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains the set of APIs that are
+// forwarded to the namespace's active cluster even when forwarding is restricted to "selected
+// APIs only" (the selected-apis-forwarding policy, or a namespace with selectedAPIsOnlyForNS
+// enabled). These are the APIs that mutate state and therefore must run on the active cluster;
+// QueryWorkflow is the one read included because it must observe active workflow state.
+//
+// The set is derived from common/api/metadata.go (Redirection == RedirectionForwarding), which is
+// the single source of truth. Every WorkflowService API must declare a redirection classification
+// there, and TestWorkflowServiceMetadata fails if a newly added API leaves it unset — so a new API
+// cannot silently fall through without a deliberate forwarding decision.
+var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = api.WorkflowServiceForwardedAPIs()
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
 func RedirectionPolicyGenerator(

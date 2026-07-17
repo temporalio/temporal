@@ -497,3 +497,37 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithO
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 }
+
+// TestSelectedAPIsForwardingWhitelistUnchanged pins the selected-apis-forwarding whitelist to its
+// exact contents on main. The whitelist is now derived from common/api/metadata.go
+// (Redirection == RedirectionForwarding) rather than a hand-maintained literal; this golden test
+// proves that refactor is behavior-preserving, and it fails if any future change adds or removes a
+// forwarded API without that change being made deliberately here.
+func TestSelectedAPIsForwardingWhitelistUnchanged(t *testing.T) {
+	expected := map[string]struct{}{
+		// Workflow APIs
+		"StartWorkflowExecution":           {},
+		"SignalWithStartWorkflowExecution": {},
+		"SignalWorkflowExecution":          {},
+		"RequestCancelWorkflowExecution":   {},
+		"TerminateWorkflowExecution":       {},
+		"DeleteWorkflowExecution":          {},
+		"QueryWorkflow":                    {},
+
+		// Standalone Activity APIs
+		"StartActivityExecution":         {},
+		"RequestCancelActivityExecution": {},
+		"TerminateActivityExecution":     {},
+		"DeleteActivityExecution":        {},
+
+		// Standalone Nexus Operation APIs
+		"StartNexusOperationExecution":         {},
+		"RequestCancelNexusOperationExecution": {},
+		"TerminateNexusOperationExecution":     {},
+		"DeleteNexusOperationExecution":        {},
+	}
+
+	require.Equal(t, expected, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs,
+		"the set of APIs forwarded under selected-apis-forwarding changed. If this is intentional, "+
+			"update the Redirection classification in common/api/metadata.go and this expected set together.")
+}
