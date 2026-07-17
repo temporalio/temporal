@@ -179,6 +179,7 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 	// Check if the current context has a deadline.
 	testDeadline, ok := st.currentContext().Deadline()
 	if !ok {
+		tb.Fatal("testcontext: current context has no deadline")
 		return ctx
 	}
 	owned := slices.Contains(st.contextStack, ctx)
