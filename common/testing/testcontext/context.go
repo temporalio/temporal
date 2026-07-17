@@ -182,7 +182,11 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 		tb.Fatal("testcontext: current context has no deadline")
 		return ctx
 	}
-	owned := slices.Contains(st.contextStack, ctx)
+	// Check if the context is derived from this test's context.
+	if !slices.Contains(st.contextStack, ctx) {
+		tb.Fatalf("testcontext: context is not derived from this test's context; are you using context.Background()?")
+		return ctx
+	}
 
 	// Cap the requested deadline to the max deadline.
 	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
@@ -192,16 +196,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Durat
 	if requestedDeadline.After(testDeadline) {
 		next := newTestContext(tb, requestedDeadline, st.decorators)
 		st.pushContext(next)
-		testDeadline = next.deadline
 	}
 
-	// Callers holding an older [testContext] receive the current one.
-	if owned {
-		return st.currentContext()
-	}
-
-	tb.Fatalf("testcontext: context is not derived from this test's context; are you using context.Background()?")
-	return ctx
+	return st.currentContext()
 }
 
 // contextState is the mutable per-test context state shared by test helpers.

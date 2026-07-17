@@ -100,8 +100,7 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
 	t.Parallel()
 
-	longCtx, cancel := context.WithTimeout(testcontext.For(t), time.Minute)
-	defer cancel()
+	longCtx := testcontext.For(t)
 	longDeadline, ok := longCtx.Deadline()
 	require.True(t, ok)
 
