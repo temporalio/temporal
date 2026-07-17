@@ -87,7 +87,25 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	tb.Helper()
 
 	st := getOrCreateContextState(tb, config{})
-	st.attachDecorator(tb, contextDecorator{
+
+	// Decorators may be registered by independent helpers, so apply each keyed
+	// decorator at most once while preserving call order.
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	if any(key) == nil {
+		tb.Fatal("testcontext: context decorator key must not be nil")
+	}
+	if decorator == nil {
+		tb.Fatal("testcontext: context decorator must not be nil")
+	}
+	if _, ok := st.decorators[key]; ok {
+		return
+	}
+	st.ctx = decorator(st.ctx)
+	st.ownedContexts = append(st.ownedContexts, st.ctx)
+	st.decorators[key] = struct{}{}
+	st.orderedDecorators = append(st.orderedDecorators, contextDecorator{
 		key:      key,
 		decorate: decorator,
 	})
@@ -209,29 +227,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	ctx, cancel := context.WithDeadline(ctx, testDeadline)
 	tb.Cleanup(cancel)
 	return ctx
-}
-
-func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator) {
-	tb.Helper()
-
-	// Decorators may be registered by independent helpers, so apply each keyed
-	// decorator at most once while preserving call order.
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if decorator.key == nil {
-		tb.Fatal("testcontext: context decorator key must not be nil")
-	}
-	if decorator.decorate == nil {
-		tb.Fatal("testcontext: context decorator must not be nil")
-	}
-	if _, ok := s.decorators[decorator.key]; ok {
-		return
-	}
-	s.ctx = decorator.decorate(s.ctx)
-	s.ownedContexts = append(s.ownedContexts, s.ctx)
-	s.decorators[decorator.key] = struct{}{}
-	s.orderedDecorators = append(s.orderedDecorators, decorator)
 }
 
 func (s *contextState) resetContextDeadline(tb testing.TB, deadline time.Time) time.Time {
