@@ -1903,11 +1903,14 @@ func (a *Activity) emitOnCanceledMetrics(
 	handler metrics.Handler,
 	fromStatus activitypb.ActivityExecutionStatus,
 ) {
-	// Only record start-to-close latency if a current attempt was running. If it in scheduled status, it means the current attempt never started.
-	if fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		startedTime := a.LastAttempt.Get(ctx).GetStartedTime().AsTime()
-		startToCloseLatency := time.Since(startedTime)
-		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
+	// Record start-to-close latency only while an attempt is running. SCHEDULED (incl. retry
+	// backoff) and PAUSED have no running attempt and a possibly-stale StartedTime.
+	attemptRunning := fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
+		fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+	if attemptRunning {
+		if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
+			metrics.ActivityStartToCloseLatency.With(handler).Record(time.Since(startedTime.AsTime()))
+		}
 	}
 
 	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
@@ -1922,11 +1925,14 @@ func (a *Activity) emitOnTimedOutMetrics(
 	timeoutType enumspb.TimeoutType,
 	fromStatus activitypb.ActivityExecutionStatus,
 ) {
-	// Only record start-to-close latency if a current attempt was running. If it in scheduled status, it means the current attempt never started.
-	if fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		startedTime := a.LastAttempt.Get(ctx).GetStartedTime().AsTime()
-		startToCloseLatency := time.Since(startedTime)
-		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
+	// Record start-to-close latency only while an attempt is running. SCHEDULED (incl. retry
+	// backoff) and PAUSED have no running attempt and a possibly-stale StartedTime.
+	attemptRunning := fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
+		fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
+	if attemptRunning {
+		if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
+			metrics.ActivityStartToCloseLatency.With(handler).Record(time.Since(startedTime.AsTime()))
+		}
 	}
 
 	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
