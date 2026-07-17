@@ -105,22 +105,31 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 	})
 	// Assert the whole response shape exhaustively: every field must be
 	// accounted for, so a new response field would force this to be revisited.
+	// The eager task is a complex nested message, so match.Custom inspects it:
+	// eager execution must be accepted and the per-namespace search attribute
+	// mapping must have been applied in the response.
 	match.StartWorkflowExecutionResponse{
-		RunId:               match.NotEmpty(),
-		Started:             true,
-		EagerWorkflowTask:   match.NotEmpty(),
+		RunId:   match.NotEmpty(),
+		Started: true,
+		EagerWorkflowTask: match.Custom(func(task *workflowservice.PollWorkflowTaskQueueResponse) error {
+			if task == nil {
+				return fmt.Errorf("expected an eager workflow task")
+			}
+			attrs := task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes()
+			if !attrs.GetEagerExecutionAccepted() {
+				return fmt.Errorf("eager execution should be accepted")
+			}
+			if got := string(attrs.GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData()); got != `"value"` {
+				return fmt.Errorf("CustomKeywordField = %s, want %q", got, `"value"`)
+			}
+			return nil
+		}),
 		Status:              match.Any(),
 		Link:                match.Any(),
 		FirstExecutionRunId: match.Any(),
 	}.Equal(s.T(), response)
 
-	task := response.GetEagerWorkflowTask()
-	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
-	startedEventAttrs := task.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
-	s.True(startedEventAttrs.GetEagerExecutionAccepted(), "Eager execution should be accepted")
-	kwData := startedEventAttrs.SearchAttributes.IndexedFields["CustomKeywordField"].Data
-	s.Equal(`"value"`, string(kwData))
-	s.respondWorkflowTaskCompleted(env, task, "ok")
+	s.respondWorkflowTaskCompleted(env, response.GetEagerWorkflowTask(), "ok")
 	// Verify workflow completes and client can get the result
 	result := s.getWorkflowStringResult(env, env.Tv().WorkflowID(), response.RunId)
 	s.Equal("ok", result)
