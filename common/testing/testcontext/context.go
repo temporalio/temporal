@@ -172,14 +172,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	if capDeadline.Before(target) {
 		target = capDeadline
 	}
-	// The Go test deadline is a hard external cap.
-	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(target) {
-		target = goTestDeadline
-	}
 	if target.After(currentDeadline) {
 		// Context deadlines are immutable; replace and replay decorators.
-		st.setDeadline(tb, target)
-		currentDeadline = target
+		currentDeadline = st.setDeadline(tb, target)
 	}
 
 	return st.contextWithDeadline(tb, ctx, currentDeadline)
@@ -196,9 +191,6 @@ func (s *contextState) contextWithDeadline(
 	}
 	if slices.Contains(s.knownContexts, ctx) {
 		return s.ctx
-	}
-	if deadline.IsZero() {
-		return ctx
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !deadline.Before(ctxDeadline) {
 		return ctx
@@ -217,7 +209,6 @@ func (s *contextState) configure(tb testing.TB, cfg config) {
 	if cfg.timeoutSet && cfg.timeout != s.configuredTimeout {
 		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.configuredTimeout, cfg.timeout)
 	}
-
 }
 
 func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator) {
@@ -255,8 +246,9 @@ func (s *contextState) err() error {
 	return s.ctx.Err()
 }
 
-func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) {
+func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) time.Time {
 	if goTestDeadline, ok := tb.Context().Deadline(); ok && goTestDeadline.Before(deadline) {
+		// The Go test deadline is a hard external cap.
 		deadline = goTestDeadline
 	}
 
@@ -271,6 +263,7 @@ func (s *contextState) setDeadline(tb testing.TB, deadline time.Time) {
 	s.ctx = ctx
 	s.knownContexts = append(s.knownContexts, ctx)
 	s.cancels = append(s.cancels, cancel)
+	return deadline
 }
 
 func (s *contextState) cancel() {
