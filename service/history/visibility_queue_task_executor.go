@@ -431,15 +431,14 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	// chasmMapper carries the archetype's search attribute registration, including which system
-	// search attributes (e.g. TaskQueue, ExecutionTime) this archetype overrides with its own value.
+	// chasmMapper holds the archetype's search attribute registration, including which system
+	// search attributes it overrides.
 	var chasmMapper *chasm.VisibilitySearchAttributesMapper
 	if rc, ok := t.shardContext.ChasmRegistry().ComponentByID(tree.ArchetypeID()); ok {
 		chasmMapper = rc.SearchAttributesMapper()
 	}
 
-	// systemOverrides holds CHASM-provided values for registered system search attribute
-	// overrides, applied to the request base below (preserving the system column name).
+	// systemOverrides holds component-provided values for registered system search attribute overrides.
 	systemOverrides := make(map[string]chasm.VisibilityValue)
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
@@ -486,10 +485,10 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
 	)
 
-	// Apply registered CHASM system search attribute overrides (e.g. TaskQueue, ExecutionTime).
-	// CHASM executions initialize these system columns from mutable state in the request base;
-	// a component may override them with its own value emitted from SearchAttributes().
-	applyChasmSystemOverrides(requestBase, systemOverrides)
+	// Apply overrides for system search attributes (e.g. TaskQueue, ExecutionTime) that are not
+	// CHASM system search attributes. The request base initializes these system columns from
+	// mutable state; a component may override them with its own value emitted from SearchAttributes().
+	applyChasmOverriddenSystemFields(requestBase, systemOverrides)
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
@@ -560,31 +559,26 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	}
 }
 
-// applyChasmSystemOverrides applies CHASM-provided values for registered system search
-// attribute overrides onto the visibility request base, preserving the system column name.
-// The set of supported fields must match sadefs.IsChasmOverridableSystem (enforced at
-// registration and by TestChasmSystemOverrideWriteBridgeCoversOverridableFields).
-func applyChasmSystemOverrides(
+// applyChasmOverriddenSystemFields applies component-provided system search attribute overrides
+// onto the visibility request base. Supported fields must match sadefs.IsChasmOverridableSystem
+// (enforced at registration and by TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields).
+func applyChasmOverriddenSystemFields(
 	requestBase *manager.VisibilityRequestBase,
 	overrides map[string]chasm.VisibilityValue,
 ) {
 	for field, value := range overrides {
 		switch v := value.Value().(type) {
 		case string:
-			applyChasmStringOverride(requestBase, field, v)
+			applyChasmOverriddenStringField(requestBase, field, v)
 		case time.Time:
-			applyChasmTimeOverride(requestBase, field, v)
+			applyChasmOverriddenTimeField(requestBase, field, v)
 		default:
 		}
 	}
 }
 
-func applyChasmStringOverride(requestBase *manager.VisibilityRequestBase, field, value string) {
+func applyChasmOverriddenStringField(requestBase *manager.VisibilityRequestBase, field, value string) {
 	switch field {
-	case sadefs.WorkflowID:
-		requestBase.Execution.WorkflowId = value
-	case sadefs.RunID:
-		requestBase.Execution.RunId = value
 	case sadefs.WorkflowType:
 		requestBase.WorkflowTypeName = value
 	case sadefs.TaskQueue:
@@ -605,10 +599,8 @@ func applyChasmStringOverride(requestBase *manager.VisibilityRequestBase, field,
 	}
 }
 
-func applyChasmTimeOverride(requestBase *manager.VisibilityRequestBase, field string, value time.Time) {
+func applyChasmOverriddenTimeField(requestBase *manager.VisibilityRequestBase, field string, value time.Time) {
 	switch field {
-	case sadefs.StartTime:
-		requestBase.StartTime = value
 	case sadefs.ExecutionTime:
 		requestBase.ExecutionTime = value
 	default:

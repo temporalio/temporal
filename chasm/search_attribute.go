@@ -61,10 +61,9 @@ var (
 	// SearchAttributeFieldText01 = newSearchAttributeFieldText(1)
 
 	// Predefined search attributes use their system field names as aliases.
-	// TaskQueue and ExecutionTime are system search attributes (outside CHASM). A component may
-	// override the value written to their system column by registering the identity-mapped search
-	// attribute below via WithSearchAttributes and emitting its own value from SearchAttributes();
-	// the underlying system column name is preserved. See sadefs.IsChasmOverridableSystem.
+	// TaskQueue and ExecutionTime are system search attributes; a component may override the value
+	// written to their system column by registering the identity-mapped attribute below and emitting
+	// its own value from SearchAttributes(). See sadefs.IsChasmOverridableSystem.
 	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
 	SearchAttributeExecutionTime                        = newSearchAttributeDateTimeByField(sadefs.ExecutionTime)
 	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)

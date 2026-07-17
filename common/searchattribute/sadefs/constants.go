@@ -211,26 +211,15 @@ var (
 		StateTransitionCount: {},
 	}
 
-	// chasmOverridableSystemSearchAttributes are system search attributes whose dedicated
-	// visibility column a CHASM component may override with its own value, by registering an
-	// identity-mapped system search attribute (alias == field) via WithSearchAttributes and
-	// emitting it from the component's SearchAttributes() method. The value is written to and
-	// read from the system column directly (the column name is preserved); querying resolves via
-	// the system column.
+	// chasmOverridableSystemSearchAttributes are system search attributes whose visibility column
+	// a CHASM component may override, by registering an identity-mapped system search attribute
+	// (alias == field) and emitting its value from SearchAttributes().
 	//
-	// This set is limited to fields present on the visibility request base
-	// (manager.VisibilityRequestBase). Fields populated only on the close path or computed
-	// (CloseTime, HistoryLength, HistorySizeBytes, StateTransitionCount, ExecutionDuration) are
-	// intentionally excluded because they are not reachable via the base write path.
-	//
-	// ExecutionStatus is intentionally excluded: CHASM archetypes model their status as a
-	// low-cardinality keyword in a reserved column, and the system Status column is an enum that
-	// does not round-trip cleanly to/from a keyword override.
+	// Excludes: CHASM system search attributes (managed by the CHASM framework), fields not on the
+	// visibility request base (e.g. ExecutionDuration), and ExecutionStatus (a reserved-column
+	// keyword for CHASM archetypes, not the system status enum).
 	chasmOverridableSystemSearchAttributes = map[string]struct{}{
-		WorkflowID:       {},
-		RunID:            {},
 		WorkflowType:     {},
-		StartTime:        {},
 		ExecutionTime:    {},
 		TaskQueue:        {},
 		ParentWorkflowID: {},

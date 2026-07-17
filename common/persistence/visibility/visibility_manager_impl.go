@@ -206,10 +206,8 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 			IndexedFields: make(map[string]*commonpb.Payload),
 		}
 	}
-	// Surface registered system search attribute overrides (e.g. TaskQueue, ExecutionTime).
-	// These values are stored in dedicated system columns (surfaced as fields on
-	// InternalExecutionInfo) rather than reserved CHASM search attribute columns, so they must
-	// be injected explicitly, keyed by the system column name.
+	// Surface registered system search attribute overrides (e.g. TaskQueue, ExecutionTime), which
+	// are stored in dedicated system columns rather than the search attribute blob.
 	for field, valueType := range mapper.OverriddenSystemFields() {
 		if value, ok := chasmSystemOverrideValue(exec, field); ok {
 			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
@@ -247,19 +245,12 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 
 // chasmSystemOverrideValue returns the value for a registered system search attribute override
 // (e.g. TaskQueue, ExecutionTime), read from the dedicated column on InternalExecutionInfo.
-// The set of supported fields must match sadefs.IsChasmOverridableSystem (enforced at
-// registration and by TestChasmSystemOverrideBridgesCoverOverridableFields). The second return
-// value is false only when the field is not a supported override.
+// Supported fields must match sadefs.IsChasmOverridableSystem (enforced at registration and by
+// TestChasmSystemOverrideReadBridgeCoversOverridableFields).
 func chasmSystemOverrideValue(exec *store.InternalExecutionInfo, field string) (any, bool) {
 	switch field {
-	case sadefs.WorkflowID:
-		return exec.WorkflowID, true
-	case sadefs.RunID:
-		return exec.RunID, true
 	case sadefs.WorkflowType:
 		return exec.TypeName, true
-	case sadefs.StartTime:
-		return exec.StartTime, true
 	case sadefs.ExecutionTime:
 		return exec.ExecutionTime, true
 	case sadefs.TaskQueue:

@@ -128,11 +128,9 @@ func TestIsChasmSystem(t *testing.T) {
 }
 
 func TestIsChasmOverridableSystem(t *testing.T) {
-	// Overridable system search attributes: present on the visibility request base.
-	require.True(t, IsChasmOverridableSystem(WorkflowID))
-	require.True(t, IsChasmOverridableSystem(RunID))
+	// Overridable: system search attributes on the visibility request base that are NOT CHASM
+	// system search attributes (i.e. not already exposed as dedicated VisibilityExecutionInfo fields).
 	require.True(t, IsChasmOverridableSystem(WorkflowType))
-	require.True(t, IsChasmOverridableSystem(StartTime))
 	require.True(t, IsChasmOverridableSystem(ExecutionTime))
 	require.True(t, IsChasmOverridableSystem(TaskQueue))
 	require.True(t, IsChasmOverridableSystem(ParentWorkflowID))
@@ -140,14 +138,17 @@ func TestIsChasmOverridableSystem(t *testing.T) {
 	require.True(t, IsChasmOverridableSystem(RootWorkflowID))
 	require.True(t, IsChasmOverridableSystem(RootRunID))
 
-	// Close-path / computed fields are not reachable via the base write path.
+	// CHASM system search attributes: already exposed as dedicated VisibilityExecutionInfo fields.
+	require.False(t, IsChasmOverridableSystem(WorkflowID))
+	require.False(t, IsChasmOverridableSystem(RunID))
+	require.False(t, IsChasmOverridableSystem(StartTime))
 	require.False(t, IsChasmOverridableSystem(CloseTime))
 	require.False(t, IsChasmOverridableSystem(HistoryLength))
 	require.False(t, IsChasmOverridableSystem(HistorySizeBytes))
 	require.False(t, IsChasmOverridableSystem(StateTransitionCount))
-	require.False(t, IsChasmOverridableSystem(ExecutionDuration))
 
-	// ExecutionStatus is intentionally excluded (reserved-column keyword vs system enum).
+	// Not on the base write path / intentionally excluded.
+	require.False(t, IsChasmOverridableSystem(ExecutionDuration))
 	require.False(t, IsChasmOverridableSystem(ExecutionStatus))
 
 	require.False(t, IsChasmOverridableSystem("NonExistent"))

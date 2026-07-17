@@ -695,7 +695,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessChasmTask_ClosedExecution(
 	s.NoError(resp.ExecutionErr)
 }
 
-func TestApplyChasmSystemOverrides(t *testing.T) {
+func TestApplyChasmOverriddenSystemFields(t *testing.T) {
 	creationTime := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 	semanticTime := creationTime.Add(90 * time.Minute)
 
@@ -709,7 +709,7 @@ func TestApplyChasmSystemOverrides(t *testing.T) {
 
 	t.Run("ExecutionTime and TaskQueue overrides applied", func(t *testing.T) {
 		requestBase := newRequestBase()
-		applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
 			sadefs.ExecutionTime: chasm.VisibilityValueTime(semanticTime),
 			sadefs.TaskQueue:     chasm.VisibilityValueKeyword("override-tq"),
 		})
@@ -719,7 +719,7 @@ func TestApplyChasmSystemOverrides(t *testing.T) {
 
 	t.Run("Parent and Root overrides create sub-executions", func(t *testing.T) {
 		requestBase := newRequestBase()
-		applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
 			sadefs.ParentWorkflowID: chasm.VisibilityValueKeyword("parent-wf"),
 			sadefs.RootRunID:        chasm.VisibilityValueKeyword("root-run"),
 		})
@@ -729,7 +729,7 @@ func TestApplyChasmSystemOverrides(t *testing.T) {
 
 	t.Run("values are applied as-is without guards", func(t *testing.T) {
 		requestBase := newRequestBase()
-		applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+		applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
 			sadefs.ExecutionTime: chasm.VisibilityValueTime(time.Time{}),
 		})
 		require.True(t, requestBase.ExecutionTime.IsZero())
@@ -738,7 +738,7 @@ func TestApplyChasmSystemOverrides(t *testing.T) {
 	t.Run("non-overridable field is ignored", func(t *testing.T) {
 		requestBase := newRequestBase()
 		require.NotPanics(t, func() {
-			applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{
+			applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{
 				sadefs.CloseTime: chasm.VisibilityValueTime(semanticTime),
 			})
 		})
@@ -746,10 +746,10 @@ func TestApplyChasmSystemOverrides(t *testing.T) {
 	})
 }
 
-// TestChasmSystemOverrideWriteBridgeCoversOverridableFields guards against drift: every
+// TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields guards against drift: every
 // overridable system field must be handled by the write bridge, otherwise a registered override
 // would silently not be applied to the request base.
-func TestChasmSystemOverrideWriteBridgeCoversOverridableFields(t *testing.T) {
+func TestChasmOverriddenSystemFieldsWriteBridgeCoversOverridableFields(t *testing.T) {
 	sentinelTime := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 	// project captures every field an override can write, avoiding proto-internal comparison.
 	project := func(rb *manager.VisibilityRequestBase) string {
@@ -772,9 +772,9 @@ func TestChasmSystemOverrideWriteBridgeCoversOverridableFields(t *testing.T) {
 			}
 			requestBase := &manager.VisibilityRequestBase{Execution: &commonpb.WorkflowExecution{}}
 			before := project(requestBase)
-			applyChasmSystemOverrides(requestBase, map[string]chasm.VisibilityValue{field: value})
+			applyChasmOverriddenSystemFields(requestBase, map[string]chasm.VisibilityValue{field: value})
 			require.NotEqual(t, before, project(requestBase),
-				"write bridge applyChasmSystemOverrides missing case for %q", field)
+				"write bridge applyChasmOverriddenSystemFields missing case for %q", field)
 		})
 	}
 }

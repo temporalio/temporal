@@ -56,11 +56,9 @@ type VisibilitySearchAttributesMapper struct {
 	// including the businessID alias configured via WithBusinessIDAlias.
 	systemAliasToField map[string]string
 
-	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime,
-	// TaskQueue) that this archetype overrides with its own component-provided value. The value
-	// is stored in the dedicated system column (preserving the column name) rather than a
-	// reserved CHASM search attribute column, so both the visibility write and read paths must
-	// treat these fields specially. The map value is the field's indexed value type.
+	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime, TaskQueue)
+	// this archetype overrides with its own value, stored in the dedicated system column. Value is
+	// the field's indexed value type.
 	overriddenSystemFields map[string]enumspb.IndexedValueType
 }
 
@@ -137,10 +135,8 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 	return v.saTypeMap
 }
 
-// IsSystemOverride returns true if the given field is a CHASM system search attribute
-// that this archetype overrides with its own component-provided value. Such fields are
-// written to their dedicated system column (the column name is preserved) rather than a
-// reserved CHASM search attribute column.
+// IsSystemOverride returns true if this archetype overrides the given system search attribute
+// field with its own value (written to the dedicated system column).
 func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
 	if v == nil {
 		return false
@@ -149,8 +145,8 @@ func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
 	return ok
 }
 
-// OverriddenSystemFields returns the set of CHASM system search attribute fields that this
-// archetype overrides, keyed by field name with the field's indexed value type as the value.
+// OverriddenSystemFields returns the system search attribute fields this archetype overrides,
+// keyed by field name with the field's indexed value type as the value.
 func (v *VisibilitySearchAttributesMapper) OverriddenSystemFields() map[string]enumspb.IndexedValueType {
 	if v == nil {
 		return nil
