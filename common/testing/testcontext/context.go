@@ -146,21 +146,21 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	st.decorators = append(st.decorators, next)
 }
 
-// EnsureRemaining extends the test-scoped context so at least d remains from
-// now, if its current deadline is earlier. It is capped so the total test
-// timeout never exceeds max(maxTimeout, timeout). If tb has no
+// EnsureRemaining extends the test-scoped context so at least minRemaining
+// remains from now, if its current deadline is earlier. It is capped so the
+// total test timeout never exceeds max(maxTimeout, timeout). If tb has no
 // test context created by this package, EnsureRemaining is a no-op.
 //
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
 // test-scoped context. Otherwise, it caps ctx at the test-scoped context
 // deadline when needed.
-func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) context.Context {
+func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Duration) context.Context {
 	tb.Helper()
 	if ctx == nil {
 		tb.Fatal("testcontext: nil context")
 		return nil
 	}
-	if d <= 0 {
+	if minRemaining <= 0 {
 		return ctx
 	}
 
@@ -182,9 +182,9 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	}
 	owned := slices.Contains(st.contextStack, ctx)
 
-	// Preserve longer configured timeouts; otherwise bound extensions.
+	// Cap the requested deadline to the max deadline.
 	maxDeadline := st.createdAt.Add(max(effectiveTimeout(maxTimeout), st.timeout))
-	requestedDeadline := util.MinTime(time.Now().Add(d), maxDeadline)
+	requestedDeadline := util.MinTime(time.Now().Add(minRemaining), maxDeadline)
 
 	// Extend the test context if the requested deadline is after the current deadline.
 	if requestedDeadline.After(testDeadline) {
