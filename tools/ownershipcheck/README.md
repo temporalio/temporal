@@ -139,7 +139,8 @@ from being noisy:
   not a hazard leaf.
 - **Replace-only slices** — a borrowed slice field is silent when all visible writes
   replace the field with fresh slices and no in-place mutation or unknown callee is
-  observed. In-place writes and unknown calls remain conservative findings.
+  observed. Fresh backing storage is inferred through same-package and cross-package
+  helper results. In-place writes and unknown calls remain conservative findings.
 - **Input sets** — a helper that returns one of several inputs (e.g. `min(a, b)`)
   resolves to *owned* when its actual arguments are owned, instead of collapsing to
   borrowed and reporting a false positive.
