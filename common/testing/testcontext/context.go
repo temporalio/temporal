@@ -59,8 +59,7 @@ func For(tb testing.TB, opts ...Option) context.Context {
 		opt(&cfg)
 	}
 
-	st := getContextState(tb, cfg.timeout)
-	st.configure(tb, cfg)
+	st := getContextState(tb, cfg)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.ctx
@@ -87,7 +86,7 @@ func WithTimeout(timeout time.Duration) Option {
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
 	tb.Helper()
 
-	st := getContextState(tb, DefaultTimeout())
+	st := getContextState(tb, config{timeout: DefaultTimeout()})
 	st.attachDecorator(tb, contextDecorator{
 		key:      key,
 		decorate: decorator,
@@ -105,33 +104,42 @@ type contextState struct {
 	orderedDecorators []contextDecorator
 }
 
-func getContextState(tb testing.TB, timeout time.Duration) *contextState {
+func getContextState(tb testing.TB, cfg config) *contextState {
 	tb.Helper()
 
 	testContexts.Lock()
-	defer testContexts.Unlock()
-
-	if st, ok := testContexts.byTest[tb]; ok {
-		return st
-	}
-
-	st := &contextState{
-		testStart:         time.Now(),
-		configuredTimeout: timeout,
-		decorators:        make(map[any]struct{}),
-	}
-	st.resetContextDeadline(tb, st.testStart.Add(timeout))
-	testContexts.byTest[tb] = st
-
-	tb.Cleanup(func() {
-		timedOut, timeout := st.cleanup()
-		testContexts.Lock()
-		delete(testContexts.byTest, tb)
-		testContexts.Unlock()
-		if timedOut {
-			tb.Errorf("test exceeded timeout of %v", timeout)
+	st, ok := testContexts.byTest[tb]
+	if !ok {
+		st = &contextState{
+			testStart:         time.Now(),
+			configuredTimeout: cfg.timeout,
+			decorators:        make(map[any]struct{}),
 		}
-	})
+		st.resetContextDeadline(tb, st.testStart.Add(cfg.timeout))
+		testContexts.byTest[tb] = st
+
+		tb.Cleanup(func() {
+			timedOut, timeout := st.cleanup()
+			testContexts.Lock()
+			delete(testContexts.byTest, tb)
+			testContexts.Unlock()
+			if timedOut {
+				tb.Errorf("test exceeded timeout of %v", timeout)
+			}
+		})
+	}
+	testContexts.Unlock()
+
+	// A freshly created context adopts cfg.timeout, so only an existing one can
+	// conflict with an explicitly requested timeout.
+	if ok && cfg.timeoutSet {
+		st.mu.Lock()
+		configured := st.configuredTimeout
+		st.mu.Unlock()
+		if cfg.timeout != configured {
+			tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", configured, cfg.timeout)
+		}
+	}
 	return st
 }
 
@@ -189,17 +197,6 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	ctx, cancel := context.WithDeadline(ctx, testDeadline)
 	tb.Cleanup(cancel)
 	return ctx
-}
-
-func (s *contextState) configure(tb testing.TB, cfg config) {
-	tb.Helper()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if cfg.timeoutSet && cfg.timeout != s.configuredTimeout {
-		tb.Fatalf("testcontext: test context already exists with timeout %v; cannot change it to %v", s.configuredTimeout, cfg.timeout)
-	}
 }
 
 func (s *contextState) attachDecorator(tb testing.TB, decorator contextDecorator) {
