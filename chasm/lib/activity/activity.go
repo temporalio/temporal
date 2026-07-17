@@ -861,14 +861,18 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 		return &activitypb.RequestCancelActivityExecutionResponse{}, nil
 	}
 
+	hasAttemptInProgress := a.hasAttemptInProgress()
+
 	// Always transition to CancelRequested
+	// TODO: this is questionable, since CancelRequested is otherwise a state that implies an attempt
+	// is in progress.
 	if err := TransitionCancelRequested.Apply(a, ctx, req); err != nil {
 		return nil, err
 	}
 
 	// Transition to Canceled if no attempt in progress; otherwise wait for worker response.
 	originalStatus := a.GetStatus()
-	if !a.hasAttemptInProgress() {
+	if !hasAttemptInProgress {
 		metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 		if err != nil {
 			return nil, err
