@@ -60,7 +60,7 @@ func For(tb testing.TB, opts ...Option) context.Context {
 		opt(&cfg)
 	}
 
-	st := getContextState(tb, cfg)
+	st := getOrCreateContextState(tb, cfg)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.ctx
@@ -86,7 +86,7 @@ func WithTimeout(timeout time.Duration) Option {
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
 	tb.Helper()
 
-	st := getContextState(tb, config{})
+	st := getOrCreateContextState(tb, config{})
 	st.attachDecorator(tb, contextDecorator{
 		key:      key,
 		decorate: decorator,
@@ -94,9 +94,12 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 }
 
 type contextState struct {
-	mu                sync.Mutex
-	ctx               context.Context
-	ownedContexts     []context.Context
+	mu  sync.Mutex
+	ctx context.Context
+	// ownedContexts lets EnsureRemaining recognize stale test contexts after
+	// deadline resets and return the current replacement.
+	ownedContexts []context.Context
+	// cancels tracks every replacement context so cleanup can release them all.
 	cancels           []context.CancelFunc
 	testStart         time.Time
 	configuredTimeout time.Duration
@@ -104,19 +107,23 @@ type contextState struct {
 	orderedDecorators []contextDecorator
 }
 
-func getContextState(tb testing.TB, cfg config) *contextState {
+func newContextState(tb testing.TB, timeout time.Duration) *contextState {
+	st := &contextState{
+		testStart:         time.Now(),
+		configuredTimeout: timeout,
+		decorators:        make(map[any]struct{}),
+	}
+	st.resetContextDeadline(tb, st.testStart.Add(timeout))
+	return st
+}
+
+func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 	tb.Helper()
 
 	testContexts.Lock()
 	st, ok := testContexts.byTest[tb]
 	if !ok {
-		timeout := cmp.Or(cfg.timeout, DefaultTimeout())
-		st = &contextState{
-			testStart:         time.Now(),
-			configuredTimeout: timeout,
-			decorators:        make(map[any]struct{}),
-		}
-		st.resetContextDeadline(tb, st.testStart.Add(timeout))
+		st = newContextState(tb, cmp.Or(cfg.timeout, DefaultTimeout()))
 		testContexts.byTest[tb] = st
 
 		tb.Cleanup(func() {
@@ -181,20 +188,24 @@ func EnsureRemaining(tb testing.TB, ctx context.Context, d time.Duration) contex
 	if maxDeadline.Before(requestedDeadline) {
 		requestedDeadline = maxDeadline
 	}
+
+	// Context deadlines are immutable; extending the test context means
+	// replacing it and replaying metadata/decorators.
 	if requestedDeadline.After(testDeadline) {
-		// Context deadlines are immutable; replace and replay decorators.
 		testDeadline = st.resetContextDeadline(tb, requestedDeadline)
 	}
 
 	if ctx == nil {
 		return ctx
 	}
+	// Callers holding an older test context should move to the current one.
 	if slices.Contains(st.ownedContexts, ctx) {
 		return st.ctx
 	}
 	if ctxDeadline, ok := ctx.Deadline(); ok && !testDeadline.Before(ctxDeadline) {
 		return ctx
 	}
+	// Preserve unrelated caller values/cancellation while enforcing the test cap.
 	ctx, cancel := context.WithDeadline(ctx, testDeadline)
 	tb.Cleanup(cancel)
 	return ctx
@@ -253,6 +264,7 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	if deadline, ok := s.ctx.Deadline(); ok {
 		timeout = deadline.Sub(s.testStart)
 	}
+	// Match testing cleanup semantics: release the newest context first.
 	for _, cancel := range slices.Backward(s.cancels) {
 		cancel()
 	}
