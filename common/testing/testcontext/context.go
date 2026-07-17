@@ -80,13 +80,13 @@ func DefaultTimeout() time.Duration {
 	return effectiveTimeout(0)
 }
 
-// For returns the [testContext] for tb. The context is canceled
+// GetOrCreate returns the [testContext] for tb. The context is canceled
 // when the test ends or when the configured test timeout expires.
 //
 // The first call creates the [testContext] and fixes its timeout. Later calls
 // return the same context, but an explicit different timeout fails instead of
 // being silently ignored.
-func For(tb testing.TB, opts ...Option) context.Context {
+func GetOrCreate(tb testing.TB, opts ...Option) context.Context {
 	tb.Helper()
 
 	var cfg config
@@ -116,7 +116,7 @@ func Get(tb testing.TB) (context.Context, bool) {
 	return st.currentContext(), true
 }
 
-// Option configures the [testContext] returned by [For].
+// Option configures the [testContext] returned by [GetOrCreate].
 type Option func(*config)
 
 // WithTimeout sets a custom timeout for the [testContext].
@@ -131,7 +131,7 @@ func WithTimeout(timeout time.Duration) Option {
 
 // AttachDecorator applies decorator to the [testContext] once for key.
 // Reusing the same key is a no-op. If the [testContext] does not exist yet,
-// AttachDecorator creates it with the default timeout. Call [For] with [WithTimeout]
+// AttachDecorator creates it with the default timeout. Call [GetOrCreate] with [WithTimeout]
 // first when using a custom timeout.
 func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.Context) context.Context) {
 	tb.Helper()

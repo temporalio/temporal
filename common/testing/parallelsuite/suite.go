@@ -88,7 +88,7 @@ func (s *Suite[T]) T() *testing.T {
 func (s *Suite[T]) Context() context.Context {
 	s.ctxOnce.Do(func() {
 		if s.ctx == nil {
-			s.ctx = testcontext.For(s.T())
+			s.ctx = testcontext.GetOrCreate(s.T())
 		}
 	})
 	return s.ctx
