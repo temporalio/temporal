@@ -33,7 +33,7 @@ var testContexts = contextStore{
 	byTest: make(map[testing.TB]*contextState),
 }
 
-// config records options for creating or validating a test-scoped context.
+// config records options for creating a test-scoped context.
 type config struct {
 	// timeout is the explicitly requested timeout, or zero to use the default.
 	timeout time.Duration
