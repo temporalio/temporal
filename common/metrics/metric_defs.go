@@ -1399,7 +1399,6 @@ var (
 	ScheduleInvariantsScannerStuckOpenCount                   = NewCounterDef("schedule_invariants_scanner_stuck_open")
 	ScheduleInvariantsScannerUnknownStateCount                = NewCounterDef("schedule_invariants_scanner_unknown_state")
 	ScheduleInvariantsScannerErrorCount                       = NewCounterDef("schedule_invariants_scanner_errors")
-	ScheduleInvariantsScannerInternalErrorCount               = NewCounterDef("schedule_invariants_scanner_internal_errors")
 	ExecutionsOutstandingCount                                = NewGaugeDef("executions_outstanding")
 	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
 	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")

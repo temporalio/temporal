@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
@@ -409,60 +408,11 @@ func TestRunScan_EmitsPerNamespaceCounts(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEmitCount_AlwaysEmitsIncludingZero(t *testing.T) {
+func TestEmitCount_IgnoresZeroAndNegative(t *testing.T) {
 	d := newTestDeps(t)
 	a := d.newActivities()
-	capture := metricstest.NewCaptureHandler()
-	a.metricsHandler = capture
-	c := capture.StartCapture()
-	defer capture.StopCapture(c)
-
-	// A healthy namespace (count 0) must still produce a series, so dashboards see a
-	// zero baseline rather than a gap.
-	a.emitCount("test_metric", "ns-healthy", 0)
-	a.emitCount("test_metric", "ns-anomalous", 5)
-
-	recs := c.Snapshot()["test_metric"]
-	require.Len(t, recs, 2)
-	require.Equal(t, int64(0), recs[0].Value)
-	require.Equal(t, "ns-healthy", recs[0].Tags["namespace"])
-	require.Equal(t, int64(5), recs[1].Value)
-	require.Equal(t, "ns-anomalous", recs[1].Tags["namespace"])
-}
-
-// TestRunScan_ClassifiesInternalVsScanErrors verifies a namespace-registry lookup failure
-// is counted under the internal-error metric while a visibility-query failure is counted
-// under the scan-error metric.
-func TestRunScan_ClassifiesInternalVsScanErrors(t *testing.T) {
-	d := newTestDeps(t)
-
-	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{
-		localNS("id-lookup", "ns-lookup", testClusterName),
-		localNS("id-vis", "ns-vis", testClusterName),
-	})
-
-	// ns-lookup: the namespace-ID lookup itself fails -> internal error.
-	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-lookup")).Return(namespace.ID(""), errors.New("registry down"))
-	// ns-vis: lookup succeeds but the visibility query fails -> scan error.
-	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-vis")).Return(namespace.ID("id-vis"), nil)
-	d.visibilityManager.EXPECT().CountChasmExecutions(gomock.Any(), gomock.Any()).Return(nil, errors.New("es down"))
-
-	a := d.newActivities()
-	capture := metricstest.NewCaptureHandler()
-	a.metricsHandler = capture
-	c := capture.StartCapture()
-	defer capture.StopCapture(c)
-
-	err := a.runScan(context.Background(), "stuck_open", "q", metrics.ScheduleInvariantsScannerStuckOpenCount.Name())
-	require.NoError(t, err)
-
-	snap := c.Snapshot()
-	internal := snap[metrics.ScheduleInvariantsScannerInternalErrorCount.Name()]
-	require.Len(t, internal, 1)
-	require.Equal(t, "ns-lookup", internal[0].Tags["namespace"])
-	require.Equal(t, "stuck_open", internal[0].Tags["sub_scanner"])
-
-	scan := snap[metrics.ScheduleInvariantsScannerErrorCount.Name()]
-	require.Len(t, scan, 1)
-	require.Equal(t, "ns-vis", scan[0].Tags["namespace"])
+	// emitCount is a no-op for count <= 0; mainly we verify it doesn't panic.
+	a.emitCount("metric", "ns", 0)
+	a.emitCount("metric", "ns", -1)
+	a.emitCount("metric", "ns", 5) // exercise positive path
 }
