@@ -100,7 +100,9 @@ func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, erro
 	return parsePartitionCounts(vals[0])
 }
 
-// invokeWithPartitionCounts wraps a partition-aware matchingservice RPC call:
+// invokeWithPartitionCounts routes a matchingservice RPC to a task queue partition. For task
+// queues that don't support multiple partitions (sticky, worker-commands) it just invokes op. For
+// partition-aware task queues it additionally negotiates partition counts with the server:
 // - attaches the client's cached counts to the outgoing request (as header)
 // - updates the cache from the server's response (trailer)
 // - retries once if it receives StalePartitionCounts error
@@ -108,20 +110,27 @@ func invokeWithPartitionCounts[Req, Res any](
 	ctx context.Context,
 	logger log.Logger,
 	cache *partitionCache,
-	pkey string,
 	p tqid.Partition,
-	tq *tqid.TaskQueue,
+	loadBalance bool,
 	request Req,
 	opts []grpc.CallOption,
 	op func(
 		ctx context.Context,
 		p tqid.Partition,
-		tq *tqid.TaskQueue,
+		loadBalance bool,
 		pc PartitionCounts,
 		request Req,
 		opts []grpc.CallOption,
 	) (Res, error),
 ) (Res, error) {
+	if !p.SupportsPartitions() {
+		// sticky and worker-commands queues have a single partition and don't participate in the
+		// partition-counts negotiation.
+		return op(ctx, p, loadBalance, PartitionCounts{}, request, opts)
+	}
+
+	pkey := cache.makeKey(p.NamespaceId(), p.TaskQueue().Name(), p.TaskType())
+
 	// capture trailer
 	var trailer metadata.MD
 	opts = append(slices.Clone(opts), grpc.Trailer(&trailer))
@@ -131,7 +140,7 @@ func invokeWithPartitionCounts[Req, Res any](
 	pc := cache.lookup(pkey)
 
 	for attempt := 0; ; attempt++ {
-		res, err := op(pc.appendToOutgoingContext(ctx), p, tq, pc, request, opts)
+		res, err := op(pc.appendToOutgoingContext(ctx), p, loadBalance, pc, request, opts)
 
 		// update cache on trailer on both success and error. if the trailer has no data,
 		// this removes the key from the cache.
