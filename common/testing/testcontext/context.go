@@ -282,7 +282,7 @@ func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
 	if deadline, ok := s.currentContext().Deadline(); ok {
 		timeout = deadline.Sub(s.createdAt)
 	}
-	// Match testing cleanup semantics: release the newest context first.
+
 	for _, cancel := range slices.Backward(s.cancelStack) {
 		cancel()
 	}
