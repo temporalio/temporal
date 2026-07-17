@@ -399,11 +399,10 @@ func (c *clientImpl) pollNexusTaskQueue(
 	return client.PollNexusTaskQueue(ctx, request, opts...)
 }
 
-// resolvePartition parses the input task queue partition once and decides how it should be routed.
-// It returns the parsed partition and whether the load balancer should choose the final partition
-// among the task queue's partitions (true only for a non-forwarded root normal partition; otherwise
-// the returned partition is routed to directly). The result is threaded down to
-// pickClientFor{Write,Read} so the proto is only parsed once per RPC.
+// resolvePartition parses the input task queue partition and decides how it should be routed.
+// It returns the parsed partition and whether the load balancer should choose the final
+// partition among the task queue's partitions (true only for a non-forwarded root normal
+// partition; otherwise the returned partition is routed to directly).
 func (c *clientImpl) resolvePartition(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, bool) {
 	partition, err := tqid.PartitionFromProto(proto, nsid, taskType)
 	if err != nil {
@@ -419,8 +418,6 @@ func (c *clientImpl) resolvePartition(proto *taskqueuepb.TaskQueue, nsid string,
 }
 
 // pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
-// When loadBalance is true the load balancer picks the final partition among p.TaskQueue()'s
-// partitions; otherwise p is used directly.
 func (c *clientImpl) pickClientForWrite(
 	proto *taskqueuepb.TaskQueue,
 	p tqid.Partition,
@@ -435,8 +432,6 @@ func (c *clientImpl) pickClientForWrite(
 }
 
 // pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.
-// When loadBalance is true the load balancer picks the final partition among p.TaskQueue()'s
-// partitions; otherwise p is used directly.
 func (c *clientImpl) pickClientForRead(
 	proto *taskqueuepb.TaskQueue,
 	p tqid.Partition,

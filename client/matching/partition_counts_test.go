@@ -27,8 +27,9 @@ func setTrailerInOpts(opts []grpc.CallOption, pc PartitionCounts) {
 	}
 }
 
-type hpcReq struct{}
-type hpcRes struct{ value string }
+// request/response types for test
+type iwpcReq struct{}
+type iwpcRes struct{ value string }
 
 func newTestCache(t *testing.T) *partitionCache {
 	cache := newPartitionCache(metrics.NoopMetricsHandler)
@@ -51,14 +52,14 @@ func TestInvokeWithPartitionCounts_CacheMissSuccess(t *testing.T) {
 	serverPC := PartitionCounts{Read: 4, Write: 4}
 
 	calls := 0
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		calls++
 		require.Equal(t, PartitionCounts{}, pc) // cache miss
 		setTrailerInOpts(opts, serverPC)
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 	require.Equal(t, "ok", res.value)
 	require.Equal(t, 1, calls)
@@ -75,14 +76,14 @@ func TestInvokeWithPartitionCounts_CacheHitSuccess(t *testing.T) {
 	cachedPC := PartitionCounts{Read: 4, Write: 4}
 	cache.put(pkey, cachedPC)
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		require.Equal(t, cachedPC, pc)
 		// server confirms same counts
 		setTrailerInOpts(opts, cachedPC)
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 	require.Equal(t, "ok", res.value)
 	require.Equal(t, cachedPC, cache.lookup(pkey))
@@ -96,13 +97,13 @@ func TestInvokeWithPartitionCounts_ServerUpdatesCount(t *testing.T) {
 	cache.put(pkey, PartitionCounts{Read: 4, Write: 4})
 	newPC := PartitionCounts{Read: 8, Write: 8}
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		// server returns different counts
 		setTrailerInOpts(opts, newPC)
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache should be updated
@@ -117,7 +118,7 @@ func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 	serverPC := PartitionCounts{Read: 8, Write: 8}
 
 	calls := 0
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		calls++
 		setTrailerInOpts(opts, serverPC)
 		if calls == 1 {
@@ -125,10 +126,10 @@ func TestInvokeWithPartitionCounts_StaleRetry_Succeeds(t *testing.T) {
 			return nil, serviceerrors.NewStalePartitionCounts("stale")
 		}
 		require.Equal(t, serverPC, pc) // retry with updated counts
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 	require.Equal(t, "ok", res.value)
 	require.Equal(t, 2, calls)
@@ -142,7 +143,7 @@ func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
 	serverPC := PartitionCounts{Read: 8, Write: 8}
 
 	calls := 0
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		calls++
 		setTrailerInOpts(opts, serverPC)
 		if calls == 1 {
@@ -152,7 +153,7 @@ func TestInvokeWithPartitionCounts_StaleRetry_Fails(t *testing.T) {
 		return nil, errors.New("error")
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.Error(t, err)
 	require.Equal(t, 2, calls)
 }
@@ -165,14 +166,14 @@ func TestInvokeWithPartitionCounts_OtherErrorNoRetry(t *testing.T) {
 	serverPC := PartitionCounts{Read: 4, Write: 4}
 
 	calls := 0
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		calls++
 		// even on error, server sends trailer
 		setTrailerInOpts(opts, serverPC)
 		return nil, errors.New("error")
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.Error(t, err)
 	require.Equal(t, 1, calls) // no retry
 
@@ -187,13 +188,13 @@ func TestInvokeWithPartitionCounts_ZeroTrailerRemovesCache(t *testing.T) {
 	pkey := cache.makeKey(testNsID, "my-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	cache.put(pkey, PartitionCounts{Read: 4, Write: 4})
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		// server signals "dynamic partitioning off"
 		setTrailerInOpts(opts, PartitionCounts{Read: 0, Write: 0})
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
@@ -208,12 +209,12 @@ func TestInvokeWithPartitionCounts_NoTrailerRemovesCache(t *testing.T) {
 	originalPC := PartitionCounts{Read: 4, Write: 4}
 	cache.put(pkey, originalPC)
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		// no trailer set
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
@@ -228,16 +229,16 @@ func TestInvokeWithPartitionCounts_ParseErrorRemovesCache(t *testing.T) {
 	originalPC := PartitionCounts{Read: 4, Write: 4}
 	cache.put(pkey, originalPC)
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, pc PartitionCounts, req *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		for _, opt := range opts {
 			if t, ok := opt.(grpc.TrailerCallOption); ok {
 				*t.TrailerAddr = metadata.Pairs(partitionCountsTrailerName, "this is an invalid proto message")
 			}
 		}
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 
 	// cache entry should be removed
@@ -252,7 +253,7 @@ func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 	cachedPC := PartitionCounts{Read: 6, Write: 4}
 	cache.put(pkey, cachedPC)
 
-	op := func(ctx context.Context, _ tqid.Partition, _ bool, _ PartitionCounts, _ *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, _ bool, _ PartitionCounts, _ *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		// verify the outgoing context has the partition counts header
 		md, ok := metadata.FromOutgoingContext(ctx)
 		require.True(t, ok)
@@ -263,10 +264,10 @@ func TestInvokeWithPartitionCounts_OutgoingContextHasHeader(t *testing.T) {
 		require.Equal(t, cachedPC, parsed)
 
 		setTrailerInOpts(opts, cachedPC)
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
-	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &hpcReq{}, nil, op)
+	_, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), true, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 }
 
@@ -280,7 +281,7 @@ func TestInvokeWithPartitionCounts_NoLoadBalanceSkipsNegotiation(t *testing.T) {
 	cache.put(pkey, cachedPC)
 
 	calls := 0
-	op := func(ctx context.Context, _ tqid.Partition, loadBalance bool, pc PartitionCounts, _ *hpcReq, opts []grpc.CallOption) (*hpcRes, error) {
+	op := func(ctx context.Context, _ tqid.Partition, loadBalance bool, pc PartitionCounts, _ *iwpcReq, opts []grpc.CallOption) (*iwpcRes, error) {
 		calls++
 		require.False(t, loadBalance)
 		require.Equal(t, PartitionCounts{}, pc) // no cached counts consulted
@@ -289,12 +290,12 @@ func TestInvokeWithPartitionCounts_NoLoadBalanceSkipsNegotiation(t *testing.T) {
 		require.False(t, ok && len(md.Get(partitionCountsHeaderName)) > 0)
 		// even if the server sends a trailer, it must be ignored
 		setTrailerInOpts(opts, PartitionCounts{Read: 8, Write: 8})
-		return &hpcRes{value: "ok"}, nil
+		return &iwpcRes{value: "ok"}, nil
 	}
 
 	// note the trailer capture opt is never added, so setTrailerInOpts above is a no-op; the point
 	// is that the cache is left untouched.
-	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), false, &hpcReq{}, nil, op)
+	res, err := invokeWithPartitionCounts(context.Background(), log.NewNoopLogger(), cache, testPartition(), false, &iwpcReq{}, nil, op)
 	require.NoError(t, err)
 	require.Equal(t, "ok", res.value)
 	require.Equal(t, 1, calls)

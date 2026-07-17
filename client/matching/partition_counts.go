@@ -10,8 +10,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/number"
-	"go.temporal.io/server/common/tqid"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -100,8 +100,9 @@ func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, erro
 	return parsePartitionCounts(vals[0])
 }
 
-// invokeWithPartitionCounts routes a matchingservice RPC to a task queue partition. When the client
-// load-balances across partitions it additionally negotiates partition counts with the server:
+// invokeWithPartitionCounts wraps a partition-aware matchingservice RPC call:
+// - if not load-balancing, does the call directly
+// - constructs the cache key
 // - attaches the client's cached counts to the outgoing request (as header)
 // - updates the cache from the server's response (trailer)
 // - retries once if it receives StalePartitionCounts error
@@ -123,11 +124,9 @@ func invokeWithPartitionCounts[Req, Res any](
 	) (Res, error),
 ) (Res, error) {
 	if !loadBalance {
-		// The partition counts only feed the load balancer's partition choice, so we only negotiate
-		// them when actually load-balancing. Everything else (sticky, worker-commands, non-root, and
-		// forwarded partitions) routes to a fixed partition and skips the header/trailer/retry
-		// machinery. Note loadBalance is only ever true for a root normal partition, so this also
-		// covers the queue kinds that don't support multiple partitions.
+		// If we're not load balancing then we're directed to a specific partition and we can
+		// just do the call directly. Note that any non-partition-aware kind will always end up
+		// with loadBalance == false here.
 		return op(ctx, p, loadBalance, PartitionCounts{}, request, opts)
 	}
 
