@@ -301,8 +301,8 @@ snapshot() {
   # Write the snapshot only at new memory highs so the final artifact represents
   # the worst observed point without emitting one file per sample.
   if [[ "$is_new_high" == "true" ]] || [[ ! -e "$SNAPSHOT_FILE" ]]; then
-    write_system_diagnostics
     write_snapshot_report "$memory_pct" "$HEAP_PROFILE_SECTION"
+    write_system_diagnostics
     MEMORY_HIGH_WATER_MARK="$memory_pct"
   fi
 
