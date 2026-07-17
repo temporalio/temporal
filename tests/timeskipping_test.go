@@ -11,6 +11,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -91,6 +92,35 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
+}
+
+// TestTimeSkipping_StartWorkflow_FastForwardDuration verifies StartWorkflowExecution rejects a
+// FastForward that is non-positive or exceeds the configured maximum, and accepts one at the max.
+func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_FastForwardDuration() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingMaxFastForward, 24*time.Hour)
+	tv := testvars.New(s.T())
+
+	start := func(ff *durationpb.Duration) error {
+		_, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           env.Namespace().String(),
+			WorkflowId:          "ff-" + uuid.NewString(),
+			WorkflowType:        tv.WorkflowType(),
+			TaskQueue:           tv.TaskQueue(),
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, FastForward: ff},
+		})
+		return err
+	}
+
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(start(durationpb.New(48*time.Hour)), &invalidArg, "fast_forward above the max is rejected")
+	s.ErrorAs(start(durationpb.New(-time.Hour)), &invalidArg, "negative fast_forward is rejected")
+	s.ErrorAs(start(durationpb.New(0)), &invalidArg, "zero fast_forward is rejected")
+	s.NoError(start(durationpb.New(24*time.Hour)), "fast_forward at the max is accepted")
 }
 
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution

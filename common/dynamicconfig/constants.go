@@ -3552,4 +3552,10 @@ complete has time skipping disabled. This limit is per run by design; cross-run 
 continue-as-new, workflow retry) under time skipping should instead be bounded by setting a reasonable
 FastForward value on the run. Set MaxBusySkip to 0 to disable the protector.`,
 	)
+	TimeSkippingMaxFastForward = NewNamespaceDurationSetting(
+		"frontend.timeSkippingMaxFastForward",
+		365*24*time.Hour,
+		`TimeSkippingMaxFastForward is the largest FastForward budget a workflow may request when starting
+with time skipping enabled. Requests with a larger FastForward are rejected.`,
+	)
 )

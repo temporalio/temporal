@@ -723,8 +723,13 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		}
 		return nil
 	}
-	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
-		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
+	if ff := tsc.GetFastForward(); ff != nil {
+		if ff.AsDuration() <= 0 {
+			return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
+		}
+		if maxFF := wh.config.TimeSkippingMaxFastForward(ns.String()); ff.AsDuration() > maxFF {
+			return serviceerror.NewInvalidArgumentf("time_skipping_config: fast_forward must not exceed %s", maxFF)
+		}
 	}
 
 	// A run that can chain into an unbounded number of successor runs (cron, or a retry policy with

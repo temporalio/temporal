@@ -3571,6 +3571,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.TimeSkippingMaxFastForward = dc.GetDurationPropertyFnFilteredByNamespace(24 * time.Hour)
 	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace, "", nil))
 
 	// config with enabled=true and dynamic config enabled is valid
@@ -3579,8 +3580,17 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace, "", nil), &invalidArgumentErr)
 
+	// fast_forward must be positive: negative and zero are rejected.
 	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace, "", nil), &invalidArgumentErr)
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(0)}, s.testNamespace, "", nil), &invalidArgumentErr)
+
+	// fast_forward must not exceed the configured max; at or below the max is accepted.
+	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(48 * time.Hour)}, s.testNamespace, "", nil), &invalidArgumentErr)
+	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(24 * time.Hour)}, s.testNamespace, "", nil))
 
 	// A run that can chain into an unbounded number of successor runs (cron, or a retry policy with
 	// unlimited attempts) must carry a FastForward budget; the per-run protector cannot bound the chain.

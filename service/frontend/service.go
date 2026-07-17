@@ -238,6 +238,7 @@ type Config struct {
 	PollerAutoscalingAutoEnroll             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	TimeSkippingEnabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxFastForward              dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -414,6 +415,7 @@ func NewConfig(
 		PollerAutoscalingAutoEnroll:             dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
 		WorkflowPauseEnabled:                    dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		TimeSkippingEnabled:                     dynamicconfig.TimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxFastForward:              dynamicconfig.TimeSkippingMaxFastForward.Get(dc),
 		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
 		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
 
