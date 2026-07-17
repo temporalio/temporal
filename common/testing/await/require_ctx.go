@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/util"
 )
 
 const requireMisuseHint = "use the *await.T passed to the callback, not s.T() or suite assertion methods"
@@ -89,31 +90,32 @@ func run(
 		return
 	}
 
-	start := time.Now()
-	deadline := start.Add(cfg.totalTimeout)
+	startedAt := time.Now()
+	awaitDeadline := startedAt.Add(cfg.totalTimeout)
 
-	// Ensure enough test-context time for the await itself plus post-await reserve.
-	ctx, extension := testcontext.EnsureRemaining(tb, ctx, cfg.totalTimeout+postAwaitTimeoutReserve())
-	if !extension.Deadline.IsZero() && extension.Deadline.Before(deadline) {
-		deadline = extension.Deadline
+	// Ensure enough context time for the await itself plus post-await reserve.
+	ctx, ctxExtension := testcontext.EnsureRemaining(tb, ctx, cfg.totalTimeout+postAwaitTimeoutReserve())
+
+	// Cap await deadline at the test context deadline.
+	if !ctxExtension.Deadline.IsZero() {
+		awaitDeadline = util.MinTime(awaitDeadline, ctxExtension.Deadline)
 	}
-
-	// Cap at the context's deadline if it's earlier than our timeout.
-	if ctxDeadline, hasDeadline := ctx.Deadline(); hasDeadline && ctxDeadline.Before(deadline) {
-		deadline = ctxDeadline
+	// Cap await deadline at the context's deadline.
+	if ctxDeadline, hasDeadline := ctx.Deadline(); hasDeadline {
+		awaitDeadline = util.MinTime(awaitDeadline, ctxDeadline)
 	}
 
 	// Deadline capping can leave no time to run; report that as 0, not a
 	// negative duration.
-	effectiveTimeout := max(0, time.Until(deadline))
-	awaitCtx, awaitCancel := context.WithDeadline(ctx, deadline)
+	effectiveAwaitTimeout := max(0, time.Until(awaitDeadline))
+	awaitCtx, awaitCancel := context.WithDeadline(ctx, awaitDeadline)
 	defer awaitCancel()
 
-	report := timeoutReport{effectiveTimeout: effectiveTimeout}
+	report := timeoutReport{effectiveTimeout: effectiveAwaitTimeout}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
+		if err := awaitCtx.Err(); err != nil && !deadlineReached(awaitDeadline) {
 			report.reportAttemptErrors(tb)
 			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
 			return
@@ -148,8 +150,8 @@ func run(
 		// Attempt-timeout expiry: attemptCtx is done but awaitCtx is not.
 		// An attempt timeout is retryable while the await is still active. Track
 		// it separately so the final report identifies the responsible timeout.
-		attemptHitOwnTimeout := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
-		if attemptHitOwnTimeout {
+		attemptTimedOut := attemptCtx.Err() == context.DeadlineExceeded && awaitCtx.Err() == nil
+		if attemptTimedOut {
 			report.recordAttemptTimeout()
 		}
 
@@ -160,25 +162,25 @@ func run(
 		}
 
 		// Parent context was canceled during the attempt (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
+		if err := awaitCtx.Err(); err != nil && !deadlineReached(awaitDeadline) {
 			report.reportAttemptErrors(tb)
 			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
 			return
 		}
 
 		// Our deadline expired.
-		if deadlineReached(deadline) {
+		if deadlineReached(awaitDeadline) {
 			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
 			return
 		}
 
 		// Success: attempt completed without failures.
-		if !res.stopped && !t.Failed() && !attemptHitOwnTimeout {
+		if !res.stopped && !t.Failed() && !attemptTimedOut {
 			return
 		}
 
 		// Wait for pollInterval, or context is canceled or deadline is reached.
-		sleep(awaitCtx, deadline, cfg.pollInterval)
+		sleep(awaitCtx, awaitDeadline, cfg.pollInterval)
 	}
 }
 
@@ -268,8 +270,8 @@ func runAttempt(
 	}
 }
 
-func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) {
-	remaining := time.Until(deadline)
+func sleep(ctx context.Context, awaitDeadline time.Time, pollInterval time.Duration) {
+	remaining := time.Until(awaitDeadline)
 	if remaining < pollInterval {
 		pollInterval = remaining
 	}
@@ -283,6 +285,6 @@ func sleep(ctx context.Context, deadline time.Time, pollInterval time.Duration) 
 	}
 }
 
-func deadlineReached(deadline time.Time) bool {
-	return !time.Now().Before(deadline)
+func deadlineReached(awaitDeadline time.Time) bool {
+	return !time.Now().Before(awaitDeadline)
 }
