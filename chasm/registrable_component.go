@@ -82,15 +82,7 @@ func WithBusinessIDAlias(
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string),
-				fieldToAlias:       make(map[string]string),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType),
-				systemAliasToField: make(map[string]string),
-			}
-		}
-		if rc.searchAttributesMapper.systemAliasToField == nil {
-			rc.searchAttributesMapper.systemAliasToField = make(map[string]string)
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 		if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 			//nolint:forbidigo
@@ -115,16 +107,7 @@ func WithSearchAttributes(
 		}
 
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:           make(map[string]string, len(searchAttributes)),
-				fieldToAlias:           make(map[string]string, len(searchAttributes)),
-				saTypeMap:              make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
-				systemAliasToField:     make(map[string]string),
-				overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
-			}
-		}
-		if rc.searchAttributesMapper.overriddenSystemFields == nil {
-			rc.searchAttributesMapper.overriddenSystemFields = make(map[string]enumspb.IndexedValueType)
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 
 		for _, sa := range searchAttributes {
@@ -132,13 +115,23 @@ func WithSearchAttributes(
 			field := sa.definition().field
 			valueType := sa.definition().valueType
 
-			// An identity-mapped CHASM system search attribute (alias == field, e.g. ExecutionTime)
-			// is a deliberate override: the component provides its own value for a system search
-			// attribute, and the value is stored in the dedicated system column (the column name is
-			// preserved) instead of a reserved CHASM search attribute column.
-			isSystemOverride := field == alias && sadefs.IsChasmSystem(field)
+			// An identity-mapped system search attribute (alias == field, e.g. TaskQueue,
+			// ExecutionTime) overrides that system column directly, so it is recorded only in
+			// overriddenSystemFields; queries resolve via the system column.
+			if field == alias && sadefs.IsSystem(field) {
+				if !sadefs.IsChasmOverridableSystem(field) {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute %q cannot be overridden by a CHASM component", field))
+				}
+				if _, ok := rc.searchAttributesMapper.overriddenSystemFields[field]; ok {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute override %q is already defined", field))
+				}
+				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
+				continue
+			}
 
-			if sadefs.IsChasmSystem(alias) && !isSystemOverride {
+			if sadefs.IsChasmSystem(alias) {
 				//nolint:forbidigo
 				panic(fmt.Sprintf("registrable component validation error: CHASM search attribute alias %q is a CHASM system search attribute", alias))
 			}
@@ -163,10 +156,6 @@ func WithSearchAttributes(
 			rc.searchAttributesMapper.aliasToField[alias] = field
 			rc.searchAttributesMapper.fieldToAlias[field] = alias
 			rc.searchAttributesMapper.saTypeMap[field] = valueType
-
-			if isSystemOverride {
-				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
-			}
 		}
 	}
 }

@@ -340,27 +340,27 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		)
 	})
 
-	s.Run("identity-mapped CHASM system search attribute is registered as override", func() {
+	s.Run("identity-mapped system search attributes are registered as overrides", func() {
 		var rc *chasm.RegistrableComponent
 		s.Require().NotPanics(func() {
 			rc = chasm.NewRegistrableComponent[*chasm.MockComponent](
 				"Component1",
 				chasm.WithSearchAttributes(
 					chasm.SearchAttributeExecutionTime,
+					chasm.SearchAttributeTaskQueue,
 				),
 			)
 		})
 		mapper := rc.SearchAttributesMapper()
 		s.Require().True(mapper.IsSystemOverride(sadefs.ExecutionTime))
-		s.Require().Contains(mapper.OverriddenSystemFields(), sadefs.ExecutionTime)
+		s.Require().True(mapper.IsSystemOverride(sadefs.TaskQueue))
+		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, mapper.OverriddenSystemFields()[sadefs.ExecutionTime])
+		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, mapper.OverriddenSystemFields()[sadefs.TaskQueue])
 
-		// The override resolves to its own system column name (identity mapping).
-		field, err := mapper.Field(sadefs.ExecutionTime)
-		s.Require().NoError(err)
-		s.Require().Equal(sadefs.ExecutionTime, field)
-		typ, err := mapper.ValueType(sadefs.ExecutionTime)
-		s.Require().NoError(err)
-		s.Require().Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, typ)
+		// Overrides are recorded only in overriddenSystemFields, not the alias/field maps; the
+		// query path resolves them via the system column instead.
+		_, err := mapper.Field(sadefs.ExecutionTime)
+		s.Require().Error(err)
 	})
 
 	s.Run("component with Visibility field must have businessID alias", func() {

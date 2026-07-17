@@ -431,29 +431,23 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
-	// chasmMapper carries the archetype's search attribute registration, including which CHASM
-	// system search attributes (e.g. ExecutionTime) this archetype overrides with its own value.
+	// chasmMapper carries the archetype's search attribute registration, including which system
+	// search attributes (e.g. TaskQueue, ExecutionTime) this archetype overrides with its own value.
 	var chasmMapper *chasm.VisibilitySearchAttributesMapper
 	if rc, ok := t.shardContext.ChasmRegistry().ComponentByID(tree.ArchetypeID()); ok {
 		chasmMapper = rc.SearchAttributesMapper()
 	}
 
-	var chasmTaskQueue string
 	// systemOverrides holds CHASM-provided values for registered system search attribute
 	// overrides, applied to the request base below (preserving the system column name).
 	systemOverrides := make(map[string]chasm.VisibilityValue)
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
-			switch {
-			case chasmSA.Field == sadefs.TaskQueue:
-				if strVal, ok := chasmSA.Value.Value().(string); ok {
-					chasmTaskQueue = strVal
-				}
-			case chasmMapper.IsSystemOverride(chasmSA.Field):
+			if chasmMapper.IsSystemOverride(chasmSA.Field) {
 				systemOverrides[chasmSA.Field] = chasmSA.Value
-			default:
-				searchAttributes[chasmSA.Field] = chasmSA.Value.MustEncode()
+				continue
 			}
+			searchAttributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
@@ -492,13 +486,9 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(strconv.FormatUint(uint64(tree.ArchetypeID()), 10)),
 	)
 
-	// Override TaskQueue if provided by CHASM search attributes.
-	if chasmTaskQueue != "" {
-		requestBase.TaskQueue = chasmTaskQueue
-	}
-	// Apply registered CHASM system search attribute overrides (e.g. ExecutionTime). CHASM
-	// executions initialize these system columns to a default (e.g. creation time) in the
-	// request base; a component may override them with its own semantic value.
+	// Apply registered CHASM system search attribute overrides (e.g. TaskQueue, ExecutionTime).
+	// CHASM executions initialize these system columns from mutable state in the request base;
+	// a component may override them with its own value emitted from SearchAttributes().
 	applyChasmSystemOverrides(requestBase, systemOverrides)
 
 	if mutableState.IsWorkflowExecutionRunning() {
@@ -572,20 +562,64 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 
 // applyChasmSystemOverrides applies CHASM-provided values for registered system search
 // attribute overrides onto the visibility request base, preserving the system column name.
-// Only fields with a dedicated column on VisibilityRequestBase are supported.
+// The set of supported fields must match sadefs.IsChasmOverridableSystem (enforced at
+// registration and by TestChasmSystemOverrideWriteBridgeCoversOverridableFields).
 func applyChasmSystemOverrides(
 	requestBase *manager.VisibilityRequestBase,
 	overrides map[string]chasm.VisibilityValue,
 ) {
 	for field, value := range overrides {
-		switch field {
-		case sadefs.ExecutionTime:
-			if timeVal, ok := value.Value().(time.Time); ok && !timeVal.IsZero() {
-				requestBase.ExecutionTime = timeVal
-			}
+		switch v := value.Value().(type) {
+		case string:
+			applyChasmStringOverride(requestBase, field, v)
+		case time.Time:
+			applyChasmTimeOverride(requestBase, field, v)
 		default:
 		}
 	}
+}
+
+func applyChasmStringOverride(requestBase *manager.VisibilityRequestBase, field, value string) {
+	switch field {
+	case sadefs.WorkflowID:
+		requestBase.Execution.WorkflowId = value
+	case sadefs.RunID:
+		requestBase.Execution.RunId = value
+	case sadefs.WorkflowType:
+		requestBase.WorkflowTypeName = value
+	case sadefs.TaskQueue:
+		requestBase.TaskQueue = value
+	case sadefs.ParentWorkflowID:
+		requestBase.ParentExecution = ensureExecution(requestBase.ParentExecution)
+		requestBase.ParentExecution.WorkflowId = value
+	case sadefs.ParentRunID:
+		requestBase.ParentExecution = ensureExecution(requestBase.ParentExecution)
+		requestBase.ParentExecution.RunId = value
+	case sadefs.RootWorkflowID:
+		requestBase.RootExecution = ensureExecution(requestBase.RootExecution)
+		requestBase.RootExecution.WorkflowId = value
+	case sadefs.RootRunID:
+		requestBase.RootExecution = ensureExecution(requestBase.RootExecution)
+		requestBase.RootExecution.RunId = value
+	default:
+	}
+}
+
+func applyChasmTimeOverride(requestBase *manager.VisibilityRequestBase, field string, value time.Time) {
+	switch field {
+	case sadefs.StartTime:
+		requestBase.StartTime = value
+	case sadefs.ExecutionTime:
+		requestBase.ExecutionTime = value
+	default:
+	}
+}
+
+func ensureExecution(execution *commonpb.WorkflowExecution) *commonpb.WorkflowExecution {
+	if execution == nil {
+		return &commonpb.WorkflowExecution{}
+	}
+	return execution
 }
 
 func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(

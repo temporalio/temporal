@@ -51,15 +51,28 @@ type VisibilitySearchAttributesMapper struct {
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
 
-	// map from system search attribute aliases to field names.
+	// systemAliasToField maps a CHASM search attribute alias to a system field
+	// (e.g. "ScheduleId" -> "WorkflowId"). Used to resolve system search attribute aliases,
+	// including the businessID alias configured via WithBusinessIDAlias.
 	systemAliasToField map[string]string
 
-	// overriddenSystemFields records CHASM system search attribute fields (e.g. ExecutionTime)
-	// that this archetype overrides with its own component-provided value. The value is stored
-	// in the dedicated system column (preserving the column name) rather than a reserved CHASM
-	// search attribute column, so both the visibility write and read paths must treat these
-	// fields specially. The map value is the field's indexed value type.
+	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime,
+	// TaskQueue) that this archetype overrides with its own component-provided value. The value
+	// is stored in the dedicated system column (preserving the column name) rather than a
+	// reserved CHASM search attribute column, so both the visibility write and read paths must
+	// treat these fields specially. The map value is the field's indexed value type.
 	overriddenSystemFields map[string]enumspb.IndexedValueType
+}
+
+// newVisibilitySearchAttributesMapper returns a mapper with all maps initialized.
+func newVisibilitySearchAttributesMapper() *VisibilitySearchAttributesMapper {
+	return &VisibilitySearchAttributesMapper{
+		aliasToField:           make(map[string]string),
+		fieldToAlias:           make(map[string]string),
+		saTypeMap:              make(map[string]enumspb.IndexedValueType),
+		systemAliasToField:     make(map[string]string),
+		overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
+	}
 }
 
 // Alias returns the alias for a given field.

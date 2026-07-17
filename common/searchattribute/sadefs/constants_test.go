@@ -111,11 +111,13 @@ func TestIsChasmSystem(t *testing.T) {
 	require.True(t, IsChasmSystem(RunID))
 	require.True(t, IsChasmSystem(StartTime))
 	require.True(t, IsChasmSystem(CloseTime))
-	require.True(t, IsChasmSystem(ExecutionTime))
 	require.True(t, IsChasmSystem(HistoryLength))
 	require.True(t, IsChasmSystem(HistorySizeBytes))
 	require.True(t, IsChasmSystem(StateTransitionCount))
 
+	// ExecutionTime is a plain system search attribute, not a CHASM system search attribute:
+	// it is not defined in the CHASM execution and may be overridden by a CHASM component.
+	require.False(t, IsChasmSystem(ExecutionTime))
 	require.False(t, IsChasmSystem(ExecutionStatus))
 	require.False(t, IsChasmSystem(TaskQueue))
 
@@ -123,4 +125,30 @@ func TestIsChasmSystem(t *testing.T) {
 	require.False(t, IsChasmSystem(BinaryChecksums))
 
 	require.False(t, IsChasmSystem("NonExistent"))
+}
+
+func TestIsChasmOverridableSystem(t *testing.T) {
+	// Overridable system search attributes: present on the visibility request base.
+	require.True(t, IsChasmOverridableSystem(WorkflowID))
+	require.True(t, IsChasmOverridableSystem(RunID))
+	require.True(t, IsChasmOverridableSystem(WorkflowType))
+	require.True(t, IsChasmOverridableSystem(StartTime))
+	require.True(t, IsChasmOverridableSystem(ExecutionTime))
+	require.True(t, IsChasmOverridableSystem(TaskQueue))
+	require.True(t, IsChasmOverridableSystem(ParentWorkflowID))
+	require.True(t, IsChasmOverridableSystem(ParentRunID))
+	require.True(t, IsChasmOverridableSystem(RootWorkflowID))
+	require.True(t, IsChasmOverridableSystem(RootRunID))
+
+	// Close-path / computed fields are not reachable via the base write path.
+	require.False(t, IsChasmOverridableSystem(CloseTime))
+	require.False(t, IsChasmOverridableSystem(HistoryLength))
+	require.False(t, IsChasmOverridableSystem(HistorySizeBytes))
+	require.False(t, IsChasmOverridableSystem(StateTransitionCount))
+	require.False(t, IsChasmOverridableSystem(ExecutionDuration))
+
+	// ExecutionStatus is intentionally excluded (reserved-column keyword vs system enum).
+	require.False(t, IsChasmOverridableSystem(ExecutionStatus))
+
+	require.False(t, IsChasmOverridableSystem("NonExistent"))
 }

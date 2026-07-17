@@ -56,51 +56,62 @@ func (testChasmComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// TestConvertToChasmExecutionInfoExecutionTime verifies that a CHASM system search attribute
-// override (ExecutionTime) is surfaced from its dedicated column only when the archetype
-// registered the override.
-func TestConvertToChasmExecutionInfoExecutionTime(t *testing.T) {
+// TestConvertToChasmExecutionInfoSystemOverrides verifies that registered system search
+// attribute overrides (e.g. ExecutionTime, TaskQueue) are surfaced from their dedicated columns
+// only when the archetype registered the override.
+func TestConvertToChasmExecutionInfoSystemOverrides(t *testing.T) {
 	executionTime := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 
-	// A mapper for an archetype that registers ExecutionTime as a system search attribute override.
+	// A mapper for an archetype that registers ExecutionTime + TaskQueue as system overrides.
 	overrideMapper := chasm.NewRegistrableComponent[*testChasmComponent](
 		"test_component",
-		chasm.WithSearchAttributes(chasm.SearchAttributeExecutionTime),
+		chasm.WithSearchAttributes(chasm.SearchAttributeExecutionTime, chasm.SearchAttributeTaskQueue),
 	).SearchAttributesMapper()
-
-	testCases := []struct {
-		name          string
-		executionTime time.Time
-		mapper        *chasm.VisibilitySearchAttributesMapper
-		wantPresent   bool
-	}{
-		{name: "override registered, nonzero", executionTime: executionTime, mapper: overrideMapper, wantPresent: true},
-		{name: "override registered, zero", mapper: overrideMapper, wantPresent: false},
-		// Without registration the archetype keeps the default base ExecutionTime; it is not
-		// surfaced as a CHASM search attribute.
-		{name: "no override registered, nonzero", executionTime: executionTime, mapper: nil, wantPresent: false},
-	}
 
 	visibilityManager := &visibilityManagerImpl{
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			info, err := visibilityManager.convertToChasmExecutionInfo(&store.InternalExecutionInfo{
-				StartTime:        executionTime.Add(-time.Minute),
-				ExecutionTime:    tc.executionTime,
-				SearchAttributes: &commonpb.SearchAttributes{},
-			}, tc.mapper, testNamespace)
-			require.NoError(t, err)
+	convert := func(mapper *chasm.VisibilitySearchAttributesMapper, exec *store.InternalExecutionInfo) map[string]*commonpb.Payload {
+		exec.SearchAttributes = &commonpb.SearchAttributes{}
+		info, err := visibilityManager.convertToChasmExecutionInfo(exec, mapper, testNamespace)
+		require.NoError(t, err)
+		return info.GetChasmSearchAttributes().GetIndexedFields()
+	}
 
-			payload, ok := info.GetChasmSearchAttributes().GetIndexedFields()[sadefs.ExecutionTime]
-			require.Equal(t, tc.wantPresent, ok)
-			if tc.wantPresent {
-				value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_DATETIME, false)
-				require.NoError(t, err)
-				require.Equal(t, tc.executionTime, value)
-			}
-		})
+	t.Run("registered ExecutionTime override is surfaced", func(t *testing.T) {
+		fields := convert(overrideMapper, &store.InternalExecutionInfo{ExecutionTime: executionTime})
+		payload, ok := fields[sadefs.ExecutionTime]
+		require.True(t, ok)
+		value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_DATETIME, false)
+		require.NoError(t, err)
+		require.Equal(t, executionTime, value)
+	})
+
+	t.Run("registered TaskQueue override is surfaced", func(t *testing.T) {
+		fields := convert(overrideMapper, &store.InternalExecutionInfo{TaskQueue: "my-task-queue"})
+		payload, ok := fields[sadefs.TaskQueue]
+		require.True(t, ok)
+		value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		require.NoError(t, err)
+		require.Equal(t, "my-task-queue", value)
+	})
+
+	t.Run("without registration nothing is surfaced", func(t *testing.T) {
+		fields := convert(nil, &store.InternalExecutionInfo{ExecutionTime: executionTime, TaskQueue: "my-task-queue"})
+		_, hasET := fields[sadefs.ExecutionTime]
+		_, hasTQ := fields[sadefs.TaskQueue]
+		require.False(t, hasET)
+		require.False(t, hasTQ)
+	})
+}
+
+// TestChasmSystemOverrideReadBridgeCoversOverridableFields guards against drift: every
+// overridable system field must have a case in the read bridge, otherwise a registered override
+// would silently not be surfaced.
+func TestChasmSystemOverrideReadBridgeCoversOverridableFields(t *testing.T) {
+	for field := range sadefs.ChasmOverridableSystem() {
+		_, ok := chasmSystemOverrideValue(&store.InternalExecutionInfo{}, field)
+		require.True(t, ok, "read bridge chasmSystemOverrideValue missing case for %q", field)
 	}
 }
 

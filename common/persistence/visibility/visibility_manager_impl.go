@@ -206,16 +206,10 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 			IndexedFields: make(map[string]*commonpb.Payload),
 		}
 	}
-	if exec.TaskQueue != "" {
-		chasmAliasedSAs.IndexedFields[sadefs.TaskQueue] = sadefs.MustEncodeValue(
-			exec.TaskQueue,
-			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		)
-	}
-	// Surface registered CHASM system search attribute overrides (e.g. ExecutionTime).
+	// Surface registered system search attribute overrides (e.g. TaskQueue, ExecutionTime).
 	// These values are stored in dedicated system columns (surfaced as fields on
-	// InternalExecutionInfo) rather than reserved CHASM search attribute columns, so they
-	// must be injected explicitly, keyed by the system column name.
+	// InternalExecutionInfo) rather than reserved CHASM search attribute columns, so they must
+	// be injected explicitly, keyed by the system column name.
 	for field, valueType := range mapper.OverriddenSystemFields() {
 		if value, ok := chasmSystemOverrideValue(exec, field); ok {
 			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
@@ -251,18 +245,36 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 	}, nil
 }
 
-// chasmSystemOverrideValue returns the value for a registered CHASM system search attribute
-// override (e.g. ExecutionTime), read from the dedicated column on InternalExecutionInfo.
-// The second return value is false when the field is unsupported or the value is unset.
+// chasmSystemOverrideValue returns the value for a registered system search attribute override
+// (e.g. TaskQueue, ExecutionTime), read from the dedicated column on InternalExecutionInfo.
+// The set of supported fields must match sadefs.IsChasmOverridableSystem (enforced at
+// registration and by TestChasmSystemOverrideBridgesCoverOverridableFields). The second return
+// value is false only when the field is not a supported override.
 func chasmSystemOverrideValue(exec *store.InternalExecutionInfo, field string) (any, bool) {
 	switch field {
+	case sadefs.WorkflowID:
+		return exec.WorkflowID, true
+	case sadefs.RunID:
+		return exec.RunID, true
+	case sadefs.WorkflowType:
+		return exec.TypeName, true
+	case sadefs.StartTime:
+		return exec.StartTime, true
 	case sadefs.ExecutionTime:
-		if !exec.ExecutionTime.IsZero() {
-			return exec.ExecutionTime, true
-		}
+		return exec.ExecutionTime, true
+	case sadefs.TaskQueue:
+		return exec.TaskQueue, true
+	case sadefs.ParentWorkflowID:
+		return exec.ParentWorkflowID, true
+	case sadefs.ParentRunID:
+		return exec.ParentRunID, true
+	case sadefs.RootWorkflowID:
+		return exec.RootWorkflowID, true
+	case sadefs.RootRunID:
+		return exec.RootRunID, true
 	default:
+		return nil, false
 	}
-	return nil, false
 }
 
 // splitSearchAttributes splits decoded search attributes into CHASM and custom attributes.

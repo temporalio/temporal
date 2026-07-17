@@ -250,44 +250,40 @@ func TestResolveSearchAttributeAlias_ChasmPriority(t *testing.T) {
 	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_KEYWORD, fieldType2)
 }
 
-func TestResolveSearchAttributeAlias_ChasmOverridesSystemSearchAttribute(t *testing.T) {
+func TestResolveSearchAttributeAlias_OverridableSystemResolvesViaSystemColumn(t *testing.T) {
 	ns := namespace.Name("test-namespace")
 	mapper := customMapper{
 		fieldToAlias: map[string]string{},
 		aliasToField: map[string]string{},
 	}
 
-	// An archetype that registers ExecutionTime as a system search attribute override exposes
-	// it via its CHASM mapper as an identity mapping (alias == field == system column name).
+	// System search attribute overrides are recorded only in the mapper's overriddenSystemFields
+	// and are NOT added to the CHASM alias/field maps. On the query path they resolve via the
+	// system type map (which always includes system search attributes), preserving the column name.
 	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
-		map[string]string{
-			sadefs.ExecutionTime: sadefs.ExecutionTime,
-		},
-		map[string]enumspb.IndexedValueType{
-			sadefs.ExecutionTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		},
+		map[string]string{},
+		map[string]enumspb.IndexedValueType{},
 	)
-
-	// With the override registered, ExecutionTime resolves via the CHASM mapper (preserving the
-	// system column name) even when the system type map does not contain it.
-	saTypeMapWithoutExecutionTime := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
-		"ExecutionStatus": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	})
-	fieldName, fieldType, err := ResolveSearchAttributeAlias(
-		sadefs.ExecutionTime, ns, mapper, saTypeMapWithoutExecutionTime, chasmMapper)
-	require.NoError(t, err)
-	require.Equal(t, sadefs.ExecutionTime, fieldName)
-	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_DATETIME, fieldType)
-
-	// Without the override registered, ExecutionTime falls through to plain system resolution.
-	saTypeMapWithExecutionTime := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
+	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
 		sadefs.ExecutionTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		sadefs.TaskQueue:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
-	fieldName, fieldType, err = ResolveSearchAttributeAlias(
-		sadefs.ExecutionTime, ns, mapper, saTypeMapWithExecutionTime, nil)
-	require.NoError(t, err)
-	require.Equal(t, sadefs.ExecutionTime, fieldName)
-	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_DATETIME, fieldType)
+
+	cases := []struct {
+		name string
+		typ  enumspb.IndexedValueType
+	}{
+		{sadefs.ExecutionTime, enumspb.INDEXED_VALUE_TYPE_DATETIME},
+		{sadefs.TaskQueue, enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fieldName, fieldType, err := ResolveSearchAttributeAlias(tc.name, ns, mapper, saTypeMap, chasmMapper)
+			require.NoError(t, err)
+			require.Equal(t, tc.name, fieldName)
+			require.Equal(t, tc.typ, fieldType)
+		})
+	}
 }
 
 func TestResolveSearchAttributeAlias_ChasmMissingType(t *testing.T) {
