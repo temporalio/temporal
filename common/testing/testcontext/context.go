@@ -33,7 +33,7 @@ var testContexts = contextStore{
 	byTest: make(map[testing.TB]*contextState),
 }
 
-// config records options for creating a test-scoped context.
+// config records options for creating a [testContext].
 type config struct {
 	// timeout is the explicitly requested timeout, or zero to use the default.
 	timeout time.Duration
@@ -75,12 +75,12 @@ func newTestContext(tb testing.TB, deadline time.Time, decorators []contextDecor
 	}
 }
 
-// DefaultTimeout returns the effective default timeout for test-scoped contexts.
+// DefaultTimeout returns the effective default timeout for [testContext]s.
 func DefaultTimeout() time.Duration {
 	return effectiveTimeout(0)
 }
 
-// For returns the test-scoped context for tb. The context is canceled
+// For returns the [testContext] for tb. The context is canceled
 // when the test ends or when the configured test timeout expires.
 //
 // The first call creates the per-test context and fixes its timeout. Later calls
@@ -100,7 +100,7 @@ func For(tb testing.TB, opts ...Option) context.Context {
 	return st.currentContext()
 }
 
-// Current returns the current test-scoped context if one exists, or tb.Context otherwise.
+// Current returns the current [testContext] if one exists, or tb.Context otherwise.
 func Current(tb testing.TB) context.Context {
 	tb.Helper()
 
@@ -116,10 +116,10 @@ func Current(tb testing.TB) context.Context {
 	return st.currentContext()
 }
 
-// Option configures the test-scoped context returned by [For].
+// Option configures the [testContext] returned by [For].
 type Option func(*config)
 
-// WithTimeout sets a custom timeout for the test-scoped context.
+// WithTimeout sets a custom timeout for the [testContext].
 func WithTimeout(timeout time.Duration) Option {
 	return func(cfg *config) {
 		if timeout <= 0 {
@@ -129,7 +129,7 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// AttachDecorator applies decorator to the test-scoped context once for key.
+// AttachDecorator applies decorator to the [testContext] once for key.
 // Reusing the same key is a no-op. If the test context does not exist yet,
 // AttachDecorator creates it with the default timeout. Call [For] with [WithTimeout]
 // first when using a custom timeout.
@@ -162,11 +162,11 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	st.decorators = append(st.decorators, next)
 }
 
-// EnsureRemaining extends the test-scoped context so at least minRemaining
+// EnsureRemaining extends the [testContext] so at least minRemaining
 // remains from now. Capped at [maxTimeout].
 //
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
-// test-scoped context. Otherwise, it fails because ctx is not derived from the
+// [testContext]. Otherwise, it fails because ctx is not derived from the
 // test context chain.
 func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Duration) context.Context {
 	tb.Helper()
