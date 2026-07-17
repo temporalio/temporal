@@ -400,6 +400,29 @@ func (f StartWorkflowExecutionResponseFieldsT) All() []protofield.Field[*workflo
 	}
 }
 
+// WorkflowTypeFieldsT holds a typed handle for every field of *commonpb.WorkflowType.
+type WorkflowTypeFieldsT struct {
+	Name protofield.Scalar[*commonpb.WorkflowType, string]
+}
+
+// WorkflowType exposes the field handles of *commonpb.WorkflowType.
+var WorkflowType = WorkflowTypeFieldsT{
+	Name: protofield.NewScalar(
+		"name", "Name",
+		protofield.KindScalar,
+		func(m *commonpb.WorkflowType) bool { return m.Name != "" },
+		func(m *commonpb.WorkflowType) string { return m.Name },
+		func(m *commonpb.WorkflowType, v string) { m.Name = v },
+	),
+}
+
+// All returns every field handle of *commonpb.WorkflowType, for exhaustive iteration.
+func (f WorkflowTypeFieldsT) All() []protofield.Field[*commonpb.WorkflowType] {
+	return []protofield.Field[*commonpb.WorkflowType]{
+		f.Name,
+	}
+}
+
 // MemoFieldsT holds a typed handle for every field of *commonpb.Memo.
 type MemoFieldsT struct {
 	Fields protofield.Map[*commonpb.Memo, string, *commonpb.Payload]

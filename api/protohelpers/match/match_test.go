@@ -132,6 +132,39 @@ func TestMatch_Partial(t *testing.T) {
 	require.Contains(t, r3.msg, "redundant in EqualPartial")
 }
 
+func TestMatch_Nested(t *testing.T) {
+	actual := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    "ns",
+		WorkflowType: &commonpb.WorkflowType{Name: "MyWorkflow"},
+	}
+
+	// Match the nested WorkflowType's fields with predicates, ignoring the rest
+	// of the request via partial mode.
+	r := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		Namespace:    "ns",
+		WorkflowType: match.Nested(match.WorkflowType{Name: match.NotEmpty()}),
+	}.EqualPartial(r, actual)
+	require.False(t, r.failed, r.msg)
+
+	// A nested field mismatch is reported.
+	r2 := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		WorkflowType: match.Nested(match.WorkflowType{Name: match.Eq("Other")}),
+	}.EqualPartial(r2, actual)
+	require.True(t, r2.failed)
+	require.Contains(t, r2.msg, "workflow_type")
+	require.Contains(t, r2.msg, "nested mismatch")
+
+	// A nil nested message fails.
+	r3 := &recorder{}
+	match.StartWorkflowExecutionRequest{
+		WorkflowType: match.Nested(match.WorkflowType{Name: match.Any()}),
+	}.EqualPartial(r3, &workflowservice.StartWorkflowExecutionRequest{})
+	require.True(t, r3.failed)
+	require.Contains(t, r3.msg, "expected a non-nil message")
+}
+
 func TestMatch_Map(t *testing.T) {
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"k": {}}}
 

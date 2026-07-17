@@ -72,16 +72,42 @@ func coerce(want any) Matcher {
 	return Eq(want)
 }
 
+// nested is implemented by every generated matcher, letting one be embedded in
+// another via Nested/NestedPartial. checkAny runs the matcher against got (the
+// sub-message, type-asserted internally) and returns its field failures.
+type nested interface {
+	checkAny(got any, exhaustive bool) []string
+}
+
+// Nested adapts a generated matcher into a Matcher that matches a message-typed
+// field exhaustively (every sub-field must be specified). The field must be a
+// non-nil message.
+func Nested(m nested) Matcher { return nestedMatcher(m, true) }
+
+// NestedPartial is like Nested but matches only the sub-fields that are set.
+func NestedPartial(m nested) Matcher { return nestedMatcher(m, false) }
+
+func nestedMatcher(m nested, exhaustive bool) Matcher {
+	return predicate.Func(func(got any) predicate.Result {
+		if predicate.Empty(got) {
+			return predicate.Result{Reason: "expected a non-nil message"}
+		}
+		if fs := m.checkAny(got, exhaustive); len(fs) > 0 {
+			return predicate.Result{Reason: "nested mismatch: " + strings.Join(fs, "; ")}
+		}
+		return predicate.Result{OK: true}
+	})
+}
+
 // eval accumulates per-field match failures for a single message. Generated
-// Test methods drive it: one field call per proto field, then report.
+// check methods drive it: one field call per proto field.
 type eval struct {
-	typeName   string
 	exhaustive bool
 	failures   []string
 }
 
-func newEval(typeName string, exhaustive bool) *eval {
-	return &eval{typeName: typeName, exhaustive: exhaustive}
+func newEval(exhaustive bool) *eval {
+	return &eval{exhaustive: exhaustive}
 }
 
 // field checks got against want (a Matcher or a bare literal). A nil want means
@@ -105,12 +131,14 @@ func (e *eval) field(name string, want any, got any) {
 	}
 }
 
-func (e *eval) report(t require.TestingT) {
+// reportFailures fails t (via require) with all field failures, or does nothing
+// if there are none.
+func reportFailures(t require.TestingT, typeName string, failures []string) {
 	if h, ok := t.(interface{ Helper() }); ok {
 		h.Helper()
 	}
-	if len(e.failures) == 0 {
+	if len(failures) == 0 {
 		return
 	}
-	require.Fail(t, fmt.Sprintf("%s did not match", e.typeName), strings.Join(e.failures, "\n"))
+	require.Fail(t, fmt.Sprintf("%s did not match", typeName), strings.Join(failures, "\n"))
 }

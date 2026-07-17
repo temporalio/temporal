@@ -32,6 +32,9 @@ import (
 var targets = []proto.Message{
 	&workflowservice.StartWorkflowExecutionRequest{},
 	&workflowservice.StartWorkflowExecutionResponse{},
+	// WorkflowType is a nested message of StartWorkflowExecutionRequest, used to
+	// exercise match.Nested.
+	&commonpb.WorkflowType{},
 	// Memo exercises the map-field code path.
 	&commonpb.Memo{},
 	// Command exercises the oneof code path (the "attributes" oneof).
@@ -388,23 +391,28 @@ func renderMatch(pkg string, msgs []*messageModel) []byte {
 		fmt.Fprintf(&b, "\n// Equal asserts that actual matches m exhaustively: every field must be\n")
 		fmt.Fprintln(&b, "// assigned a matcher or literal (use match.Any() to ignore one).")
 		fmt.Fprintf(&b, "func (m %s) Equal(t require.TestingT, actual %s) {\n", m.GoName, typeExpr)
-		fmt.Fprintf(&b, "\tif h, ok := t.(interface{ Helper() }); ok {\n\t\th.Helper()\n\t}\n")
-		fmt.Fprintf(&b, "\tm.eval(t, actual, true)\n")
+		fmt.Fprintf(&b, "\treportFailures(t, %q, m.check(actual, true))\n", m.GoName)
 		fmt.Fprintln(&b, "}")
 
 		fmt.Fprintf(&b, "\n// EqualPartial asserts that actual matches the fields set on m; unset\n")
 		fmt.Fprintln(&b, "// (nil) fields are ignored.")
 		fmt.Fprintf(&b, "func (m %s) EqualPartial(t require.TestingT, actual %s) {\n", m.GoName, typeExpr)
-		fmt.Fprintf(&b, "\tif h, ok := t.(interface{ Helper() }); ok {\n\t\th.Helper()\n\t}\n")
-		fmt.Fprintf(&b, "\tm.eval(t, actual, false)\n")
+		fmt.Fprintf(&b, "\treportFailures(t, %q, m.check(actual, false))\n", m.GoName)
 		fmt.Fprintln(&b, "}")
 
-		fmt.Fprintf(&b, "\nfunc (m %s) eval(t require.TestingT, actual %s, exhaustive bool) {\n", m.GoName, typeExpr)
-		fmt.Fprintf(&b, "\te := newEval(%q, exhaustive)\n", m.GoName)
+		// checkAny lets this matcher be nested inside another via match.Nested.
+		fmt.Fprintf(&b, "\nfunc (m %s) checkAny(got any, exhaustive bool) []string {\n", m.GoName)
+		fmt.Fprintf(&b, "\tactual, ok := got.(%s)\n", typeExpr)
+		fmt.Fprintf(&b, "\tif !ok {\n\t\treturn []string{\"value is not a %s\"}\n\t}\n", m.GoName)
+		fmt.Fprintln(&b, "\treturn m.check(actual, exhaustive)")
+		fmt.Fprintln(&b, "}")
+
+		fmt.Fprintf(&b, "\nfunc (m %s) check(actual %s, exhaustive bool) []string {\n", m.GoName, typeExpr)
+		fmt.Fprintf(&b, "\te := newEval(exhaustive)\n")
 		for _, f := range m.Fields {
 			fmt.Fprintf(&b, "\te.field(%q, m.%s, actual.Get%s())\n", f.ProtoName, f.GoName, f.GoName)
 		}
-		fmt.Fprintln(&b, "\te.report(t)")
+		fmt.Fprintln(&b, "\treturn e.failures")
 		fmt.Fprintln(&b, "}")
 	}
 	return b.Bytes()

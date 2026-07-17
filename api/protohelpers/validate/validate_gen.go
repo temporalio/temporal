@@ -188,6 +188,26 @@ func (v StartWorkflowExecutionResponseFieldValidators) RegisterValidator(registr
 	return validation.RegisterValidator[workflowservicepb.StartWorkflowExecutionResponse](registry, v)
 }
 
+// WorkflowTypeFieldValidators validates every field of *commonpb.WorkflowType. Fill each
+// field with a validation.FieldValidator (e.g. via validation.Field); the
+// exhaustive struct forces a decision for every proto field.
+type WorkflowTypeFieldValidators struct {
+	Name validation.FieldValidator[commonpb.WorkflowType, string]
+}
+
+// ValidateAndNormalize runs every field validator on req in order.
+func (v WorkflowTypeFieldValidators) ValidateAndNormalize(req *commonpb.WorkflowType) error {
+	if err := v.Name(req, "name", req.GetName()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RegisterValidator adds v to registry for type-based dispatch.
+func (v WorkflowTypeFieldValidators) RegisterValidator(registry *validation.ValidatorRegistry) error {
+	return validation.RegisterValidator[commonpb.WorkflowType](registry, v)
+}
+
 // MemoFieldValidators validates every field of *commonpb.Memo. Fill each
 // field with a validation.FieldValidator (e.g. via validation.Field); the
 // exhaustive struct forces a decision for every proto field.

@@ -46,23 +46,25 @@ type StartWorkflowExecutionRequest struct {
 // Equal asserts that actual matches m exhaustively: every field must be
 // assigned a matcher or literal (use match.Any() to ignore one).
 func (m StartWorkflowExecutionRequest) Equal(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, true)
+	reportFailures(t, "StartWorkflowExecutionRequest", m.check(actual, true))
 }
 
 // EqualPartial asserts that actual matches the fields set on m; unset
 // (nil) fields are ignored.
 func (m StartWorkflowExecutionRequest) EqualPartial(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, false)
+	reportFailures(t, "StartWorkflowExecutionRequest", m.check(actual, false))
 }
 
-func (m StartWorkflowExecutionRequest) eval(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionRequest, exhaustive bool) {
-	e := newEval("StartWorkflowExecutionRequest", exhaustive)
+func (m StartWorkflowExecutionRequest) checkAny(got any, exhaustive bool) []string {
+	actual, ok := got.(*workflowservicepb.StartWorkflowExecutionRequest)
+	if !ok {
+		return []string{"value is not a StartWorkflowExecutionRequest"}
+	}
+	return m.check(actual, exhaustive)
+}
+
+func (m StartWorkflowExecutionRequest) check(actual *workflowservicepb.StartWorkflowExecutionRequest, exhaustive bool) []string {
+	e := newEval(exhaustive)
 	e.field("namespace", m.Namespace, actual.GetNamespace())
 	e.field("workflow_id", m.WorkflowId, actual.GetWorkflowId())
 	e.field("workflow_type", m.WorkflowType, actual.GetWorkflowType())
@@ -92,7 +94,7 @@ func (m StartWorkflowExecutionRequest) eval(t require.TestingT, actual *workflow
 	e.field("priority", m.Priority, actual.GetPriority())
 	e.field("eager_worker_deployment_options", m.EagerWorkerDeploymentOptions, actual.GetEagerWorkerDeploymentOptions())
 	e.field("time_skipping_config", m.TimeSkippingConfig, actual.GetTimeSkippingConfig())
-	e.report(t)
+	return e.failures
 }
 
 // StartWorkflowExecutionResponse matches *workflowservicepb.StartWorkflowExecutionResponse field by field. Assign each field a
@@ -109,30 +111,64 @@ type StartWorkflowExecutionResponse struct {
 // Equal asserts that actual matches m exhaustively: every field must be
 // assigned a matcher or literal (use match.Any() to ignore one).
 func (m StartWorkflowExecutionResponse) Equal(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, true)
+	reportFailures(t, "StartWorkflowExecutionResponse", m.check(actual, true))
 }
 
 // EqualPartial asserts that actual matches the fields set on m; unset
 // (nil) fields are ignored.
 func (m StartWorkflowExecutionResponse) EqualPartial(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, false)
+	reportFailures(t, "StartWorkflowExecutionResponse", m.check(actual, false))
 }
 
-func (m StartWorkflowExecutionResponse) eval(t require.TestingT, actual *workflowservicepb.StartWorkflowExecutionResponse, exhaustive bool) {
-	e := newEval("StartWorkflowExecutionResponse", exhaustive)
+func (m StartWorkflowExecutionResponse) checkAny(got any, exhaustive bool) []string {
+	actual, ok := got.(*workflowservicepb.StartWorkflowExecutionResponse)
+	if !ok {
+		return []string{"value is not a StartWorkflowExecutionResponse"}
+	}
+	return m.check(actual, exhaustive)
+}
+
+func (m StartWorkflowExecutionResponse) check(actual *workflowservicepb.StartWorkflowExecutionResponse, exhaustive bool) []string {
+	e := newEval(exhaustive)
 	e.field("run_id", m.RunId, actual.GetRunId())
 	e.field("first_execution_run_id", m.FirstExecutionRunId, actual.GetFirstExecutionRunId())
 	e.field("started", m.Started, actual.GetStarted())
 	e.field("status", m.Status, actual.GetStatus())
 	e.field("eager_workflow_task", m.EagerWorkflowTask, actual.GetEagerWorkflowTask())
 	e.field("link", m.Link, actual.GetLink())
-	e.report(t)
+	return e.failures
+}
+
+// WorkflowType matches *commonpb.WorkflowType field by field. Assign each field a
+// match.Matcher or a bare literal (compared with Eq).
+type WorkflowType struct {
+	Name any
+}
+
+// Equal asserts that actual matches m exhaustively: every field must be
+// assigned a matcher or literal (use match.Any() to ignore one).
+func (m WorkflowType) Equal(t require.TestingT, actual *commonpb.WorkflowType) {
+	reportFailures(t, "WorkflowType", m.check(actual, true))
+}
+
+// EqualPartial asserts that actual matches the fields set on m; unset
+// (nil) fields are ignored.
+func (m WorkflowType) EqualPartial(t require.TestingT, actual *commonpb.WorkflowType) {
+	reportFailures(t, "WorkflowType", m.check(actual, false))
+}
+
+func (m WorkflowType) checkAny(got any, exhaustive bool) []string {
+	actual, ok := got.(*commonpb.WorkflowType)
+	if !ok {
+		return []string{"value is not a WorkflowType"}
+	}
+	return m.check(actual, exhaustive)
+}
+
+func (m WorkflowType) check(actual *commonpb.WorkflowType, exhaustive bool) []string {
+	e := newEval(exhaustive)
+	e.field("name", m.Name, actual.GetName())
+	return e.failures
 }
 
 // Memo matches *commonpb.Memo field by field. Assign each field a
@@ -144,25 +180,27 @@ type Memo struct {
 // Equal asserts that actual matches m exhaustively: every field must be
 // assigned a matcher or literal (use match.Any() to ignore one).
 func (m Memo) Equal(t require.TestingT, actual *commonpb.Memo) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, true)
+	reportFailures(t, "Memo", m.check(actual, true))
 }
 
 // EqualPartial asserts that actual matches the fields set on m; unset
 // (nil) fields are ignored.
 func (m Memo) EqualPartial(t require.TestingT, actual *commonpb.Memo) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, false)
+	reportFailures(t, "Memo", m.check(actual, false))
 }
 
-func (m Memo) eval(t require.TestingT, actual *commonpb.Memo, exhaustive bool) {
-	e := newEval("Memo", exhaustive)
+func (m Memo) checkAny(got any, exhaustive bool) []string {
+	actual, ok := got.(*commonpb.Memo)
+	if !ok {
+		return []string{"value is not a Memo"}
+	}
+	return m.check(actual, exhaustive)
+}
+
+func (m Memo) check(actual *commonpb.Memo, exhaustive bool) []string {
+	e := newEval(exhaustive)
 	e.field("fields", m.Fields, actual.GetFields())
-	e.report(t)
+	return e.failures
 }
 
 // Command matches *commandpb.Command field by field. Assign each field a
@@ -177,26 +215,28 @@ type Command struct {
 // Equal asserts that actual matches m exhaustively: every field must be
 // assigned a matcher or literal (use match.Any() to ignore one).
 func (m Command) Equal(t require.TestingT, actual *commandpb.Command) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, true)
+	reportFailures(t, "Command", m.check(actual, true))
 }
 
 // EqualPartial asserts that actual matches the fields set on m; unset
 // (nil) fields are ignored.
 func (m Command) EqualPartial(t require.TestingT, actual *commandpb.Command) {
-	if h, ok := t.(interface{ Helper() }); ok {
-		h.Helper()
-	}
-	m.eval(t, actual, false)
+	reportFailures(t, "Command", m.check(actual, false))
 }
 
-func (m Command) eval(t require.TestingT, actual *commandpb.Command, exhaustive bool) {
-	e := newEval("Command", exhaustive)
+func (m Command) checkAny(got any, exhaustive bool) []string {
+	actual, ok := got.(*commandpb.Command)
+	if !ok {
+		return []string{"value is not a Command"}
+	}
+	return m.check(actual, exhaustive)
+}
+
+func (m Command) check(actual *commandpb.Command, exhaustive bool) []string {
+	e := newEval(exhaustive)
 	e.field("command_type", m.CommandType, actual.GetCommandType())
 	e.field("user_metadata", m.UserMetadata, actual.GetUserMetadata())
 	e.field("event_group_markers", m.EventGroupMarkers, actual.GetEventGroupMarkers())
 	e.field("attributes", m.Attributes, actual.GetAttributes())
-	e.report(t)
+	return e.failures
 }
