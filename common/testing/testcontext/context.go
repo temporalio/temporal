@@ -100,6 +100,22 @@ func For(tb testing.TB, opts ...Option) context.Context {
 	return st.currentContext()
 }
 
+// Current returns the current test-scoped context if one exists, or tb.Context otherwise.
+func Current(tb testing.TB) context.Context {
+	tb.Helper()
+
+	testContexts.Lock()
+	st, ok := testContexts.byTest[tb]
+	testContexts.Unlock()
+	if !ok {
+		return tb.Context()
+	}
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.currentContext()
+}
+
 // Option configures the test-scoped context returned by [For].
 type Option func(*config)
 
@@ -152,7 +168,7 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 // If ctx is one of this test's contexts, EnsureRemaining returns the current
 // test-scoped context. Otherwise, it fails because ctx is not derived from the
 // test context chain.
-func EnsureRemaining(tb testing.TB, ctx context.Context, minRemaining time.Duration) context.Context {
+func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Duration) context.Context {
 	tb.Helper()
 	if ctx == nil {
 		tb.Fatal("testcontext: nil context")
