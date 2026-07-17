@@ -36,8 +36,7 @@ func TestHistoryNodeCleanupSuite(t *testing.T) {
 // TestDeletionOfSingleWorkflow runs a single workflow, force-deletes it via the
 // admin API, then asserts that all history_tree and history_node rows are removed.
 func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	ctx := env.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(
@@ -90,8 +89,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 // run, force-deletes both runs via the admin API, then asserts that no
 // history_node rows remain for either branch.
 func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	ctx := env.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(

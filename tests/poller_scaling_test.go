@@ -35,7 +35,7 @@ func TestPollerScalingFunctionalSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &PollerScalingIntegSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
-func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	opts = append([]testcore.TestOption{
 		// Force one partition so we can reliably see the backlog
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
@@ -52,7 +52,7 @@ func (s *PollerScalingIntegSuite) setupEnv(opts ...testcore.TestOption) *testcor
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 
 	tq := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
@@ -160,7 +160,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 // that SDKs have information to work with. Benchmark style testing that exists on the SDK side is better at ensuring
 // that the desired outcomes actually happen.
 func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistically() {
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 5),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 5),
 	)
@@ -241,9 +241,8 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	// 2. Set the current/ramping version for a worker-deployment (depending on the test case)
 	// 3. Verify that the poller scaling decision reports a 1 since the deployment version (current/ramping) absorbs the unversioned backlog.
 
-	env := s.setupEnv()
+	env, tv := s.setupEnv()
 	tq := testcore.RandomizeStr("test-poller-scaling-tq")
-	tv := env.Tv()
 
 	// Queueing up unversioned workflows
 	for range 5 {

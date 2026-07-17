@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -40,7 +39,7 @@ func TestQueryWorkflowSuite(t *testing.T) {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -86,7 +85,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 
 //nolint:forbidigo
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -141,8 +140,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowFn := func(ctx workflow.Context) error {
 		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (string, error) {
 			return tv.Any().String(), nil
@@ -206,7 +204,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// stop the worker, so the workflow won't be started before query
 	env.SdkWorker().Stop()
 
@@ -270,7 +268,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	var failures int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
@@ -315,7 +313,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", errors.New("workflow should never execute") //nolint:err113
@@ -350,7 +348,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 // produces a multi-page history response with a non-empty NextPageToken. 14 is large
 // enough that activity-phase WFTs (≤14 blobs) don't need extra pagination roundtrips.
 func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 14),
 		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 14),
 	)
@@ -443,7 +441,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 

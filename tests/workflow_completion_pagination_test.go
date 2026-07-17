@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -44,7 +45,7 @@ const (
 // history count error limits, so those need no overrides. We only force a small
 // per-batch size so a merged completion spans multiple history batches, and raise
 // the pagination buffer limit enough to hold the largest test completion.
-func (s *WorkflowCompletionPaginationTestSuite) newPaginationEnv() *testcore.TestEnv {
+func (s *WorkflowCompletionPaginationTestSuite) newPaginationEnv() (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.MaximumEventBatchSizeInBytes, 1024*1024),
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
@@ -144,7 +145,7 @@ func (s *WorkflowCompletionPaginationTestSuite) sendIntermediatePages(
 // TestLargeMergedCompletion sends a ~12 MB RespondWorkflowTaskCompleted request
 // split into several pages
 func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedCompletion() {
-	env := s.newPaginationEnv()
+	env, _ := s.newPaginationEnv()
 
 	const totalMarkers = 24
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
@@ -189,7 +190,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedCompletion() {
 // transaction that flushes the merged buffer, so it exercises a different buffer
 // clearing path.
 func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedContinueAsNew() {
-	env := s.newPaginationEnv()
+	env, _ := s.newPaginationEnv()
 
 	we, taskQueue, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
@@ -229,7 +230,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedContinueAsNew() {
 // error is retryable, no WorkflowTaskFailed event is written, so the worker can
 // just resend from page 0.
 func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
-	env := s.newPaginationEnv()
+	env, _ := s.newPaginationEnv()
 
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
@@ -273,7 +274,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 // TestPaginationDisabledRejected verifies that a paginated request is rejected with
 // FailedPrecondition when the feature is disabled for the namespace.
 func (s *WorkflowCompletionPaginationTestSuite) TestPaginationDisabledRejected() {
-	env := testcore.NewEnv(s.T()) // pagination disabled by default
+	env, _ := testcore.NewEnv(s.T()) // pagination disabled by default
 	_, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -292,7 +293,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestPaginationDisabledRejected()
 // TestBufferOverflowFailsWorkflowTask verifies that exceeding the per-workflow
 // buffer limit fails the workflow task.
 func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowTask() {
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferSizeLimit, markerPayloadSize),
 	)
@@ -317,7 +318,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowT
 // TestOutOfOrderPagesReassemble verifies that pages buffered out of arrival order
 // are merged by page number, so the resulting commands are correctly ordered.
 func (s *WorkflowCompletionPaginationTestSuite) TestOutOfOrderPagesReassemble() {
-	env := s.newPaginationEnv()
+	env, _ := s.newPaginationEnv()
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	markers := makeMarkerCommands(3)
@@ -362,7 +363,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestOutOfOrderPagesReassemble() 
 // TestResendAfterBufferLost verifies that after a buffer-lost error the worker can
 // resend from page 0 and complete the workflow.
 func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
-	env := s.newPaginationEnv()
+	env, _ := s.newPaginationEnv()
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	bufferPage0 := func() {

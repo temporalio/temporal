@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -79,14 +80,14 @@ func (w *internalWFTProblemsTestWorkflow) WorkflowWithActivity(ctx workflow.Cont
 	return "done!", nil
 }
 
-func (s *WFTFailureReportedProblemsTestSuite) newWFTProblemsEnv() *testcore.TestEnv {
+func (s *WFTFailureReportedProblemsTestSuite) newWFTProblemsEnv() (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 2),
 	)
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear() {
-	env := s.newWFTProblemsEnv()
+	env, _ := s.newWFTProblemsEnv()
 
 	tw := newInternalWFTProblemsTestWorkflow(env)
 	tw.shouldFail.Store(true)
@@ -130,7 +131,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_NotClearedBySignals() {
-	env := s.newWFTProblemsEnv()
+	env, _ := s.newWFTProblemsEnv()
 
 	tw := newInternalWFTProblemsTestWorkflow(env)
 
@@ -196,7 +197,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Not
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_SetAndClear_FailAfterActivity() {
-	env := s.newWFTProblemsEnv()
+	env, _ := s.newWFTProblemsEnv()
 
 	tw := newInternalWFTProblemsTestWorkflow(env)
 	tw.shouldFail.Store(true)
@@ -238,7 +239,7 @@ func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_Set
 }
 
 func (s *WFTFailureReportedProblemsTestSuite) TestWFTFailureReportedProblems_DynamicConfigChanges() {
-	env := s.newWFTProblemsEnv()
+	env, _ := s.newWFTProblemsEnv()
 
 	cleanup := env.OverrideDynamicConfig(dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute, 0)
 	defer cleanup()

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -98,9 +99,10 @@ type standaloneActivityEnv struct {
 	*testcore.TestEnv
 }
 
-func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *standaloneActivityEnv {
+func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) (*standaloneActivityEnv, *testvars.TestVars) {
+	testEnv, tv := testcore.NewEnv(s.T(), opts...)
 	env := &standaloneActivityEnv{
-		TestEnv: testcore.NewEnv(s.T(), opts...),
+		TestEnv: testEnv,
 	}
 	nsValues := func(value any) []dynamicconfig.ConstrainedValue {
 		return []dynamicconfig.ConstrainedValue{
@@ -113,20 +115,20 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.StartDelayEnabled, nsValues(true))
-	return env
+	return env, tv
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("RejectDuplicate", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
@@ -136,13 +138,13 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 		})
 		require.NoError(t, err)
 
-		env.validateCompletion(s.Context(), t, activityID, runID, "new-worker")
+		env.validateCompletion(tv, s.Context(), t, activityID, runID, "new-worker")
 
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
@@ -157,10 +159,10 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: env.Namespace().String(),
@@ -170,13 +172,13 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 		})
 		require.NoError(t, err)
 
-		env.validateFailure(s.Context(), t, activityID, runID, nil, "new-worker")
+		env.validateFailure(tv, s.Context(), t, activityID, runID, nil, "new-worker")
 
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
@@ -189,21 +191,21 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 }
 
 func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 	ctx := s.Context()
 
 	t.Run("Fail", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		firstStartResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		firstStartResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 
 		startWithFail := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
 			return env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
 				ActivityId:   activityID,
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: taskQueue,
@@ -217,12 +219,12 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			_, err := startWithFail("different-request-id")
 			var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
 			require.ErrorAs(t, err, &alreadyStartedErr)
-			require.Equal(t, env.Tv().RequestID(), alreadyStartedErr.StartRequestId)
+			require.Equal(t, tv.RequestID(), alreadyStartedErr.StartRequestId)
 			require.Equal(t, firstStartResp.GetRunId(), alreadyStartedErr.RunId)
 		})
 
 		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
-			resp, err := startWithFail(env.Tv().RequestID())
+			resp, err := startWithFail(tv.RequestID())
 			require.NoError(t, err)
 			require.Equal(t, firstStartResp.RunId, resp.RunId)
 			require.False(t, resp.GetStarted())
@@ -232,14 +234,14 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	t.Run("UseExisting", func(t *testing.T) {
 		originalActivityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		firstStartResp := env.startAndValidateActivity(s.Context(), t, originalActivityID, taskQueue)
+		firstStartResp := env.startAndValidateActivity(tv, s.Context(), t, originalActivityID, taskQueue)
 
 		startWithUseExisting := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
 			return env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
 				ActivityId:   originalActivityID,
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: taskQueue,
@@ -264,7 +266,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			require.Equal(t, firstStartResp.RunId, link.RunId)
 		})
 		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
-			resp, err := startWithUseExisting(env.Tv().RequestID())
+			resp, err := startWithUseExisting(tv.RequestID())
 			require.NoError(t, err)
 			require.Equal(t, firstStartResp.RunId, resp.RunId)
 			require.False(t, resp.GetStarted())
@@ -289,15 +291,15 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
 					ActivityId:   newActivityID,
-					ActivityType: env.Tv().ActivityType(),
-					Identity:     env.Tv().WorkerIdentity(),
+					ActivityType: tv.ActivityType(),
+					Identity:     tv.WorkerIdentity(),
 					Input:        defaultInput,
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: newTaskQueue,
 					},
 					StartToCloseTimeout: durationpb.New(1 * time.Minute),
 					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-					RequestId:           env.Tv().Any().String(),
+					RequestId:           tv.Any().String(),
 					CompletionCallbacks: []*commonpb.Callback{
 						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/new-activity-cb"}}},
 					},
@@ -320,15 +322,15 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
 					ActivityId:   originalActivityID,
-					ActivityType: env.Tv().ActivityType(),
-					Identity:     env.Tv().WorkerIdentity(),
+					ActivityType: tv.ActivityType(),
+					Identity:     tv.WorkerIdentity(),
 					Input:        defaultInput,
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: taskQueue,
 					},
 					StartToCloseTimeout: durationpb.New(1 * time.Minute),
 					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-					RequestId:           env.Tv().Any().String(),
+					RequestId:           tv.Any().String(),
 					CompletionCallbacks: []*commonpb.Callback{
 						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/existing-activity-cb"}}},
 					},
@@ -351,7 +353,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			t.Run("AttachesCallbacksAndLinksTogether", func(t *testing.T) {
 				bothActivityID := testcore.RandomizeStr(t.Name())
 				bothTaskQueue := testcore.RandomizeStr(t.Name())
-				bothStartResp := env.startAndValidateActivity(ctx, t, bothActivityID, bothTaskQueue)
+				bothStartResp := env.startAndValidateActivity(tv, ctx, t, bothActivityID, bothTaskQueue)
 
 				attachedLinks := []*commonpb.Link{
 					{
@@ -374,15 +376,15 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				resp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
 					ActivityId:   bothActivityID,
-					ActivityType: env.Tv().ActivityType(),
-					Identity:     env.Tv().WorkerIdentity(),
+					ActivityType: tv.ActivityType(),
+					Identity:     tv.WorkerIdentity(),
 					Input:        defaultInput,
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: bothTaskQueue,
 					},
 					StartToCloseTimeout: durationpb.New(1 * time.Minute),
 					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-					RequestId:           env.Tv().Any().String(),
+					RequestId:           tv.Any().String(),
 					CompletionCallbacks: []*commonpb.Callback{
 						{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/both-cb"}}},
 					},
@@ -407,14 +409,14 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			t.Run("IdempotentWithSameRequestId", func(t *testing.T) {
 				idempotentActivityID := testcore.RandomizeStr(t.Name())
 				idempotentTaskQueue := testcore.RandomizeStr(t.Name())
-				idempotentStartResp := env.startAndValidateActivity(s.Context(), t, idempotentActivityID, idempotentTaskQueue)
+				idempotentStartResp := env.startAndValidateActivity(tv, s.Context(), t, idempotentActivityID, idempotentTaskQueue)
 
-				requestID := env.Tv().Any().String()
+				requestID := tv.Any().String()
 				startReq := &workflowservice.StartActivityExecutionRequest{
 					Namespace:    env.Namespace().String(),
 					ActivityId:   idempotentActivityID,
-					ActivityType: env.Tv().ActivityType(),
-					Identity:     env.Tv().WorkerIdentity(),
+					ActivityType: tv.ActivityType(),
+					Identity:     tv.WorkerIdentity(),
 					Input:        defaultInput,
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: idempotentTaskQueue,
@@ -451,7 +453,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		})
 
 		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
-			pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, originalActivityID, taskQueue, firstStartResp.RunId)
+			pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, originalActivityID, taskQueue, firstStartResp.RunId)
 			_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 				Namespace: env.Namespace().String(),
 				TaskToken: pollTaskResp.TaskToken,
@@ -471,7 +473,7 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("FirstAttempt", func(t *testing.T) {
@@ -489,8 +491,8 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    namespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
@@ -498,7 +500,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 			StartToCloseTimeout:    startToCloseTimeout,
 			ScheduleToCloseTimeout: scheduleToCloseTimeout,
 			HeartbeatTimeout:       heartbeatTimeout,
-			RequestId:              env.Tv().RequestID(),
+			RequestId:              tv.RequestID(),
 			Priority:               priority,
 			Header:                 defaultHeader,
 		})
@@ -510,12 +512,12 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 		require.Equal(t, activityID, pollTaskResp.GetActivityId())
 		require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
-		protorequire.ProtoEqual(t, env.Tv().ActivityType(), pollTaskResp.GetActivityType())
+		protorequire.ProtoEqual(t, tv.ActivityType(), pollTaskResp.GetActivityType())
 		require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
 		protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
 		require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
@@ -545,8 +547,8 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    namespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
@@ -554,7 +556,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 			StartToCloseTimeout:    startToCloseTimeout,
 			ScheduleToCloseTimeout: scheduleToCloseTimeout,
 			HeartbeatTimeout:       heartbeatTimeout,
-			RequestId:              env.Tv().RequestID(),
+			RequestId:              tv.RequestID(),
 			Priority:               priority,
 			Header:                 defaultHeader,
 		})
@@ -566,7 +568,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -597,12 +599,12 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 		require.Equal(t, activityID, pollTaskResp.GetActivityId())
 		require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
-		protorequire.ProtoEqual(t, env.Tv().ActivityType(), pollTaskResp.GetActivityType())
+		protorequire.ProtoEqual(t, tv.ActivityType(), pollTaskResp.GetActivityType())
 		require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
 		protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
 		require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
@@ -622,7 +624,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 }
 
 func (s *standaloneActivityTestSuite) TestStart() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 	ctx := s.Context()
 
@@ -630,12 +632,12 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		t.Run("RequestIDTooLong", func(t *testing.T) {
 			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
-				ActivityId:   env.Tv().ActivityID(),
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityId:   tv.ActivityID(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: env.Tv().TaskQueue().GetName(),
+					Name: tv.TaskQueue().GetName(),
 				},
 				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 				RequestId:           string(make([]byte, defaultMaxIDLengthLimit+1)),
@@ -650,15 +652,15 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		t.Run("IdentityTooLong", func(t *testing.T) {
 			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
-				ActivityId:   env.Tv().ActivityID(),
-				ActivityType: env.Tv().ActivityType(),
+				ActivityId:   tv.ActivityID(),
+				ActivityType: tv.ActivityType(),
 				Identity:     string(make([]byte, defaultMaxIDLengthLimit+1)),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: env.Tv().TaskQueue().GetName(),
+					Name: tv.TaskQueue().GetName(),
 				},
 				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-				RequestId:           env.Tv().RequestID(),
+				RequestId:           tv.RequestID(),
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -679,15 +681,15 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
-				ActivityId:   env.Tv().ActivityID(),
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityId:   tv.ActivityID(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        input,
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: env.Tv().TaskQueue().GetName(),
+					Name: tv.TaskQueue().GetName(),
 				},
 				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-				RequestId:           env.Tv().RequestID(),
+				RequestId:           tv.RequestID(),
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
@@ -704,15 +706,15 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:    env.Namespace().String(),
-				ActivityId:   env.Tv().ActivityID(),
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityId:   tv.ActivityID(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: env.Tv().TaskQueue().GetName(),
+					Name: tv.TaskQueue().GetName(),
 				},
 				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-				RequestId:           env.Tv().RequestID(),
+				RequestId:           tv.RequestID(),
 				SearchAttributes:    invalidSearchAttributes,
 			})
 
@@ -728,14 +730,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -784,14 +786,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		resp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			Links:               requestLinks,
 		})
 		require.NoError(t, err)
@@ -842,14 +844,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               firstLinks,
 		})
@@ -859,14 +861,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               secondLinks,
 			OnConflictOptions: &commonpb.OnConflictOptions{
@@ -914,14 +916,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               startLinks,
 		})
@@ -934,14 +936,14 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		_, err = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               append(startLinks, startLinks...),
 			OnConflictOptions: &commonpb.OnConflictOptions{
@@ -991,12 +993,12 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          testcore.RandomizeStr(t.Name()),
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			Links:               links,
 		})
 		require.Error(t, err)
@@ -1042,12 +1044,12 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		firstResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               firstLinks,
 		})
@@ -1058,12 +1060,12 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		secondResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			Links:               links,
 			// attach_links intentionally omitted — the Links field should be silently dropped.
@@ -1075,17 +1077,17 @@ func (s *standaloneActivityTestSuite) TestStart() {
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("ByToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
@@ -1095,55 +1097,55 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		})
 		require.NoError(t, err)
 
-		env.validateCompletion(s.Context(), t, activityID, runID, "new-worker")
+		env.validateCompletion(tv, s.Context(), t, activityID, runID, "new-worker")
 	})
 
 	t.Run("ByIDWithRunID", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace:  env.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Result:     defaultResult,
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
-		env.validateCompletion(s.Context(), t, activityID, runID, env.Tv().WorkerIdentity())
+		env.validateCompletion(tv, s.Context(), t, activityID, runID, tv.WorkerIdentity())
 	})
 
 	t.Run("ByIDWithoutRunID", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskCompletedById(s.Context(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace:  env.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Result:     defaultResult,
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
-		env.validateCompletion(s.Context(), t, activityID, runID, env.Tv().WorkerIdentity())
+		env.validateCompletion(tv, s.Context(), t, activityID, runID, tv.WorkerIdentity())
 	})
 
 	t.Run("StaleToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1180,7 +1182,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
 			RetryPolicy: &commonpb.RetryPolicy{
@@ -1249,7 +1251,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                  defaultInput,
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
@@ -1294,7 +1296,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 			RunId:      attempt2Resp.ActivityRunId,
 			ActivityId: activityID,
 			Result:     defaultResult,
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 	})
@@ -1303,7 +1305,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1317,14 +1319,14 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -1347,7 +1349,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		existingNamespace := env.Namespace().String()
 
 		// Start activity in namespace A and get its task token
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1362,14 +1364,14 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -1406,17 +1408,17 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 }
 
 func (s *standaloneActivityTestSuite) TestFail() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("ByToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: env.Namespace().String(),
@@ -1426,75 +1428,75 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		})
 		require.NoError(t, err)
 
-		env.validateFailure(s.Context(), t, activityID, runID, nil, "new-worker")
+		env.validateFailure(tv, s.Context(), t, activityID, runID, nil, "new-worker")
 	})
 
 	t.Run("WithHeartbeatDetails", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace:            env.Namespace().String(),
 			TaskToken:            pollTaskResp.TaskToken,
 			Failure:              defaultFailure,
 			LastHeartbeatDetails: defaultHeartbeatDetails,
-			Identity:             env.Tv().WorkerIdentity(),
+			Identity:             tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
-		env.validateFailure(s.Context(), t, activityID, runID, defaultHeartbeatDetails, env.Tv().WorkerIdentity())
+		env.validateFailure(tv, s.Context(), t, activityID, runID, defaultHeartbeatDetails, tv.WorkerIdentity())
 	})
 
 	t.Run("ByIDWithRunID", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskFailedById(s.Context(), &workflowservice.RespondActivityTaskFailedByIdRequest{
 			Namespace:  env.Namespace().String(),
 			RunId:      runID,
 			ActivityId: activityID,
 			Failure:    defaultFailure,
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
-		env.validateFailure(s.Context(), t, activityID, runID, nil, env.Tv().WorkerIdentity())
+		env.validateFailure(tv, s.Context(), t, activityID, runID, nil, tv.WorkerIdentity())
 	})
 
 	t.Run("ByIDWithoutRunID", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskFailedById(s.Context(), &workflowservice.RespondActivityTaskFailedByIdRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			Failure:    defaultFailure,
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
-		env.validateFailure(s.Context(), t, activityID, runID, nil, env.Tv().WorkerIdentity())
+		env.validateFailure(tv, s.Context(), t, activityID, runID, nil, tv.WorkerIdentity())
 	})
 
 	t.Run("StaleToken", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1531,7 +1533,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
 			RetryPolicy: &commonpb.RetryPolicy{
@@ -1598,7 +1600,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                  defaultInput,
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
@@ -1648,7 +1650,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 					NonRetryable: true,
 				}},
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 	})
@@ -1657,7 +1659,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1671,14 +1673,14 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -1707,7 +1709,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		existingNamespace := env.Namespace().String()
 
 		// Start activity in namespace A and get its task token
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -1722,14 +1724,14 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -1766,7 +1768,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 }
 
 func (s *standaloneActivityTestSuite) TestRequestCancel() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("ByToken", func(t *testing.T) {
@@ -1775,17 +1777,17 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 		identity := "client-that-requested-cancellation"
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   identity,
-			RequestId:  env.Tv().RequestID(),
+			RequestId:  tv.RequestID(),
 			Reason:     "Test Cancellation",
 		})
 		require.NoError(t, err)
@@ -1852,17 +1854,17 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			taskQueue := testcore.RandomizeStr(tc.name)
 			identity := "client-that-requested-cancellation"
 
-			startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+			startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 			runID := startResp.RunId
 
-			env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+			env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 			_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 				Identity:   identity,
-				RequestId:  env.Tv().RequestID(),
+				RequestId:  tv.RequestID(),
 				Reason:     "Test Cancellation",
 			})
 			require.NoError(t, err)
@@ -1923,7 +1925,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                  defaultInput,
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
@@ -1967,8 +1969,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      attempt2Resp.ActivityRunId,
-			Identity:   env.Tv().WorkerIdentity(),
-			RequestId:  env.Tv().Any().String(),
+			Identity:   tv.WorkerIdentity(),
+			RequestId:  tv.Any().String(),
 			Reason:     "Test Cancellation",
 		})
 		require.NoError(t, err)
@@ -1983,7 +1985,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 					payload.EncodeString("Canceled Details"),
 				},
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 	})
@@ -1993,10 +1995,10 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		details := &commonpb.Payloads{
 			Payloads: []*commonpb.Payload{
@@ -2019,10 +2021,10 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		for range 2 {
 			_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
@@ -2068,10 +2070,10 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 		identity := "client-that-requested-cancellation"
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -2148,17 +2150,17 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			activityID := testcore.RandomizeStr(t.Name())
 			taskQueue := testcore.RandomizeStr(t.Name())
 
-			startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+			startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 			runID := startResp.RunId
 
-			pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+			pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 			_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
 				Namespace:  env.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 				Identity:   "client-that-requested-cancellation",
-				RequestId:  env.Tv().RequestID(),
+				RequestId:  tv.RequestID(),
 				Reason:     "Test Cancellation",
 			})
 			require.NoError(t, err)
@@ -2187,7 +2189,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 				Namespace:              env.Namespace().String(),
 				ActivityId:             activityID,
-				ActivityType:           env.Tv().ActivityType(),
+				ActivityType:           tv.ActivityType(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 				ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
 				RetryPolicy: &commonpb.RetryPolicy{
@@ -2211,7 +2213,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 					ActivityId: activityID,
 					RunId:      runID,
 					Identity:   "test",
-					RequestId:  env.Tv().RequestID(),
+					RequestId:  tv.RequestID(),
 				})
 				require.NoError(t, err)
 			}
@@ -2353,7 +2355,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
 		_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
@@ -2361,7 +2363,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   "client-that-requested-cancellation",
-			RequestId:  env.Tv().RequestID(),
+			RequestId:  tv.RequestID(),
 			Reason:     "Test Cancellation",
 		})
 		require.NoError(t, err)
@@ -2383,7 +2385,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -2420,7 +2422,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
 			RetryPolicy: &commonpb.RetryPolicy{
@@ -2463,7 +2465,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
-			RequestId:  env.Tv().RequestID(),
+			RequestId:  tv.RequestID(),
 			Reason:     "Test Cancellation",
 		})
 		require.NoError(t, err)
@@ -2499,7 +2501,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -2513,14 +2515,14 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -2543,7 +2545,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		existingNamespace := env.Namespace().String()
 
 		// Start activity in namespace A and get its task token
-		_, err := env.startActivity(s.Context(), activityID, taskQueue)
+		_, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
@@ -2558,14 +2560,14 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		_, err = env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -2617,17 +2619,17 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 }
 
 func (s *standaloneActivityTestSuite) TestTerminate() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("TerminatedSuccessfully", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		identity := "terminator"
 		_, err := env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
@@ -2650,7 +2652,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		info := activityResp.GetInfo()
 
 		require.NoError(t, err)
-		env.validateBaseActivityResponse(t, activityID, runID, activityResp)
+		env.validateBaseActivityResponse(tv, t, activityID, runID, activityResp)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, info.GetStatus(),
 			"expected Terminated but is %s", info.GetStatus())
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
@@ -2658,7 +2660,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.EqualValues(t, 1, info.GetAttempt())
 		require.Greater(t, info.GetExecutionDuration().AsDuration(), time.Duration(0)) // Terminated doesn't set attempt completion, thus expect 0 here
 		require.NotNil(t, info.GetCloseTime())
-		require.Equal(t, env.Tv().WorkerIdentity(), info.GetLastWorkerIdentity())
+		require.Equal(t, tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 		require.NotNil(t, info.GetLastStartedTime())
 		require.Nil(t, info.GetLastFailure())
 
@@ -2677,10 +2679,10 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
@@ -2705,10 +2707,10 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -2735,10 +2737,10 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -2907,7 +2909,7 @@ func (env *standaloneActivityEnv) eventuallyDeleted(ctx context.Context, t *test
 }
 
 func (s *standaloneActivityTestSuite) TestDelete() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("DeleteScheduledActivity", func(t *testing.T) {
@@ -2915,7 +2917,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
 		_, err := env.FrontendClient().DeleteActivityExecution(s.Context(), &workflowservice.DeleteActivityExecutionRequest{
@@ -2933,10 +2935,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().DeleteActivityExecution(s.Context(), &workflowservice.DeleteActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -2953,10 +2955,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollTaskResp.TaskToken,
@@ -2980,10 +2982,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		_ = env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		_ = env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 		_, err := env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			Identity:   defaultIdentity,
@@ -3008,17 +3010,17 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		_ = env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		_ = env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 
 		_, err := env.FrontendClient().RequestCancelActivityExecution(s.Context(), &workflowservice.RequestCancelActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
 			Identity:   defaultIdentity,
-			RequestId:  env.Tv().RequestID(),
+			RequestId:  tv.RequestID(),
 		})
 		require.NoError(t, err)
 
@@ -3037,10 +3039,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollTaskResp.TaskToken,
@@ -3069,7 +3071,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		startResp, err := env.FrontendClient().StartActivityExecution(timedOutCtx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
+			ActivityType: tv.ActivityType(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
@@ -3078,7 +3080,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 			RetryPolicy: &commonpb.RetryPolicy{
 				MaximumAttempts: 1,
 			},
-			RequestId: env.Tv().RequestID(),
+			RequestId: tv.RequestID(),
 		})
 		require.NoError(t, err)
 		runID := startResp.RunId
@@ -3089,7 +3091,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			Identity: env.Tv().WorkerIdentity(),
+			Identity: tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -3110,7 +3112,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
 		_, err := env.FrontendClient().DeleteActivityExecution(s.Context(), &workflowservice.DeleteActivityExecutionRequest{
@@ -3137,10 +3139,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
-		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+		startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 		runID := startResp.RunId
 
-		pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, runID)
+		pollTaskResp := env.pollActivityTaskAndValidate(tv, s.Context(), t, activityID, taskQueue, runID)
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: pollTaskResp.TaskToken,
@@ -3213,7 +3215,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 }
 
 func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	t := s.T()
 
 	activityID := testcore.RandomizeStr(t.Name())
@@ -3262,7 +3264,7 @@ func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 }
 
 func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	t := s.T()
 
 	activityID := testcore.RandomizeStr(t.Name())
@@ -3328,11 +3330,11 @@ func (s *standaloneActivityTestSuite) Test_ScheduleToCloseTimeout_WithRetry() {
 // started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
 // state change caused by execution of a timer task.
 func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
-	activityID := env.Tv().ActivityID()
-	taskQueue := env.Tv().TaskQueue()
+	activityID := tv.ActivityID()
+	taskQueue := tv.TaskQueue()
 
 	startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 		Namespace:  env.Namespace().String(),
@@ -3373,7 +3375,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue.Name,
 		},
-		Identity: env.Tv().WorkerIdentity(),
+		Identity: tv.WorkerIdentity(),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, pollTaskResp)
@@ -3433,7 +3435,7 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout() {
 // TestStartToCloseTimeout_WhileCancelRequested verifies that an activity
 // times out due to start-to-close timeout, after a cancellation request has been accepted.
 func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequested() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	t := s.T()
 
 	activityID := testcore.RandomizeStr(t.Name())
@@ -3483,11 +3485,11 @@ func (s *standaloneActivityTestSuite) TestStartToCloseTimeout_WhileCancelRequest
 // created but never started. It also verifies that DescribeActivityExecution can be used to long-poll for a TimedOut
 // state change caused by execution of a timer task.
 func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
-	activityID := env.Tv().ActivityID()
-	taskQueue := env.Tv().TaskQueue()
+	activityID := tv.ActivityID()
+	taskQueue := tv.TaskQueue()
 
 	startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 		Namespace:  env.Namespace().String(),
@@ -3533,23 +3535,23 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	s.Run("NoWait", func(s *standaloneActivityTestSuite) {
 		t := s.T()
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 
-		activityID := env.Tv().ActivityID()
-		taskQueue := env.Tv().TaskQueue()
+		activityID := tv.ActivityID()
+		taskQueue := tv.TaskQueue()
 
 		startReq := &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			Header:                 defaultHeader,
 			HeartbeatTimeout:       durationpb.New(45 * time.Second),
-			Identity:               env.Tv().WorkerIdentity(),
+			Identity:               tv.WorkerIdentity(),
 			Input:                  defaultInput,
 			ScheduleToStartTimeout: durationpb.New(30 * time.Second),
 			ScheduleToCloseTimeout: durationpb.New(3 * time.Minute),
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
-			RequestId:              env.Tv().RequestID(),
+			RequestId:              tv.RequestID(),
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval:    durationpb.New(2 * time.Second),
 				BackoffCoefficient: 1.5,
@@ -3604,7 +3606,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 			expected := &activitypb.ActivityExecutionInfo{
 				ActivityId:             activityID,
-				ActivityType:           env.Tv().ActivityType(),
+				ActivityType:           tv.ActivityType(),
 				Attempt:                1,
 				ExpirationTime:         expectedExpirationTime,
 				Header:                 defaultHeader,
@@ -3647,22 +3649,22 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 	s.Run("StartDelay", func(s *standaloneActivityTestSuite) {
 		t := s.T()
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 
-		activityID := env.Tv().ActivityID()
-		taskQueue := env.Tv().TaskQueue()
+		activityID := tv.ActivityID()
+		taskQueue := tv.TaskQueue()
 		startDelay := durationpb.New(300 * time.Second)
 
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue.GetName()},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			StartDelay:          startDelay,
-			RequestId:           env.Tv().RequestID(),
+			RequestId:           tv.RequestID(),
 		})
 		require.NoError(t, err)
 
@@ -3678,12 +3680,12 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	s.Run("WaitAnyStateChange", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 
-		activityID := env.Tv().ActivityID()
-		taskQueue := env.Tv().TaskQueue()
+		activityID := tv.ActivityID()
+		taskQueue := tv.TaskQueue()
 
-		startResp, err := env.startActivity(s.Context(), activityID, taskQueue.Name)
+		startResp, err := env.startActivity(s.Context(), tv, activityID, taskQueue.Name)
 		require.NoError(t, err)
 
 		// First poll lacks token and therefore responds immediately, returning a token
@@ -3700,7 +3702,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 		expected := &activitypb.ActivityExecutionInfo{
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			Attempt:                1,
 			HeartbeatTimeout:       durationpb.New(0),
 			RetryPolicy:            defaultRetryPolicy,
@@ -3758,7 +3760,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 			expected := &activitypb.ActivityExecutionInfo{
 				ActivityId:             activityID,
-				ActivityType:           env.Tv().ActivityType(),
+				ActivityType:           tv.ActivityType(),
 				Attempt:                1,
 				HeartbeatTimeout:       durationpb.New(0),
 				LastWorkerIdentity:     defaultIdentity,
@@ -3797,14 +3799,14 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 	s.Run("ExposesSDKMetadata", func(s *standaloneActivityTestSuite) {
 		t := s.T()
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 
 		t.Run("Populated", func(t *testing.T) {
 
 			activityID := testcore.RandomizeStr(t.Name())
 			taskQueue := testcore.RandomizeStr(t.Name())
 
-			startResp, err := env.startActivity(s.Context(), activityID, taskQueue)
+			startResp, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 			require.NoError(t, err)
 
 			pollCtx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
@@ -3836,7 +3838,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			activityID := testcore.RandomizeStr(t.Name())
 			taskQueue := testcore.RandomizeStr(t.Name())
 
-			startResp, err := env.startActivity(s.Context(), activityID, taskQueue)
+			startResp, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 			require.NoError(t, err)
 
 			pollCtx := metadata.NewOutgoingContext(s.Context(), metadata.MD{})
@@ -3942,7 +3944,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	})
 
 	s.Run("Completed", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 		testCases := []struct {
 			name             string
 			expectedStatus   enumspb.ActivityExecutionStatus
@@ -4007,19 +4009,19 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			s.Run(tc.name, func(s *standaloneActivityTestSuite) {
 				t := s.T()
 
-				activityID := env.Tv().Any().String()
+				activityID := tv.Any().String()
 				taskQueue := &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())}
 
 				startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 					Namespace:           env.Namespace().String(),
 					ActivityId:          activityID,
-					ActivityType:        env.Tv().ActivityType(),
+					ActivityType:        tv.ActivityType(),
 					Header:              defaultHeader,
 					HeartbeatTimeout:    durationpb.New(45 * time.Second),
-					Identity:            env.Tv().WorkerIdentity(),
+					Identity:            tv.WorkerIdentity(),
 					Input:               defaultInput,
 					StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-					RequestId:           env.Tv().RequestID(),
+					RequestId:           tv.RequestID(),
 					RetryPolicy:         defaultRetryPolicy,
 					Priority:            &commonpb.Priority{FairnessKey: "test-key"},
 					SearchAttributes:    defaultSearchAttributes,
@@ -4049,7 +4051,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 				require.NotNil(t, info)
 				require.Equal(t, activityID, info.GetActivityId())
 				require.Equal(t, startResp.RunId, info.GetRunId())
-				protorequire.ProtoEqual(t, env.Tv().ActivityType(), info.GetActivityType())
+				protorequire.ProtoEqual(t, tv.ActivityType(), info.GetActivityType())
 				require.Equal(t, tc.expectedStatus, info.GetStatus())
 				require.Equal(t, taskQueue.Name, info.GetTaskQueue())
 				require.Equal(t, int32(1), info.GetAttempt())
@@ -4078,14 +4080,14 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	})
 
 	s.Run("DeadlineExceeded", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 		t := s.T()
 		ctx := testcore.NewContext()
 
 		// Start an activity and get initial long-poll state token
-		activityID := env.Tv().ActivityID()
-		taskQueue := env.Tv().TaskQueue()
-		startResp, err := env.startActivity(ctx, activityID, taskQueue.Name)
+		activityID := tv.ActivityID()
+		taskQueue := tv.TaskQueue()
+		startResp, err := env.startActivity(ctx, tv, activityID, taskQueue.Name)
 		require.NoError(t, err)
 		describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
@@ -4155,13 +4157,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	})
 
 	s.Run("NotFound", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 		t := s.T()
 		ctx := testcore.NewContext()
 
-		existingActivityID := env.Tv().ActivityID()
-		tq := env.Tv().TaskQueue()
-		startResp, err := env.startActivity(ctx, existingActivityID, tq.Name)
+		existingActivityID := tv.ActivityID()
+		tq := tv.TaskQueue()
+		startResp, err := env.startActivity(ctx, tv, existingActivityID, tq.Name)
 		require.NoError(t, err)
 		existingRunID := startResp.RunId
 		require.NotEmpty(t, existingRunID)
@@ -4239,13 +4241,13 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 	})
 
 	s.Run("InvalidArgument", func(s *standaloneActivityTestSuite) {
-		env := s.newTestEnv()
+		env, tv := s.newTestEnv()
 		t := s.T()
 		ctx := testcore.NewContext()
 
-		existingActivityID := env.Tv().ActivityID()
-		tq := env.Tv().TaskQueue()
-		startResp, err := env.startActivity(ctx, existingActivityID, tq.Name)
+		existingActivityID := tv.ActivityID()
+		tq := tv.TaskQueue()
+		startResp, err := env.startActivity(ctx, tv, existingActivityID, tq.Name)
 		require.NoError(t, err)
 		existingRunID := startResp.RunId
 		require.NotEmpty(t, existingRunID)
@@ -4357,8 +4359,8 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 			require.NoError(t, err)
 			require.NotEmpty(t, validPollResp.LongPollToken)
 
-			activityID2 := env.Tv().Any().String()
-			startResp2, err := env.startActivity(ctx, activityID2, tq.Name)
+			activityID2 := tv.Any().String()
+			startResp2, err := env.startActivity(ctx, tv, activityID2, tq.Name)
 			require.NoError(t, err)
 			require.NotEmpty(t, startResp2.GetRunId())
 
@@ -4385,18 +4387,18 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 
 			// Start an activity in a different namespace
 			externalNamespace := env.ExternalNamespace().String()
-			externalActivityID := env.Tv().Any().String()
+			externalActivityID := tv.Any().String()
 			externalStartResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 				Namespace:    externalNamespace,
 				ActivityId:   externalActivityID,
-				ActivityType: env.Tv().ActivityType(),
-				Identity:     env.Tv().WorkerIdentity(),
+				ActivityType: tv.ActivityType(),
+				Identity:     tv.WorkerIdentity(),
 				Input:        defaultInput,
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: tq.Name,
 				},
 				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-				RequestId:           env.Tv().Any().String(),
+				RequestId:           tv.Any().String(),
 			})
 			require.NoError(t, err)
 			require.NotEmpty(t, externalStartResp.GetRunId())
@@ -4416,7 +4418,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	testCases := []struct {
 		name                   string
 		taskCompletionFn       func(ctx context.Context, taskToken []byte, activityID, runID string) error
@@ -4494,10 +4496,10 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
 			t := s.T()
 
-			activityID := env.Tv().Any().String()
+			activityID := tv.Any().String()
 			taskQueue := testcore.RandomizeStr(t.Name())
 
-			startResp, err := env.startActivity(s.Context(), activityID, taskQueue)
+			startResp, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 			require.NoError(t, err)
 			pollTaskResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
 			require.NoError(t, err)
@@ -4517,13 +4519,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
-	activityID := env.Tv().Any().String()
-	taskQueue := env.Tv().TaskQueue().String()
+	activityID := tv.Any().String()
+	taskQueue := tv.TaskQueue().String()
 
-	startResp, err := env.startActivity(s.Context(), activityID, taskQueue)
+	startResp, err := env.startActivity(s.Context(), tv, activityID, taskQueue)
 	require.NoError(t, err)
 
 	pollTaskResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
@@ -4548,13 +4550,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 	ctx := testcore.NewContext()
 
-	existingActivityID := env.Tv().ActivityID()
-	tq := env.Tv().TaskQueue()
-	startResp, err := env.startActivity(ctx, existingActivityID, tq.Name)
+	existingActivityID := tv.ActivityID()
+	tq := tv.TaskQueue()
+	startResp, err := env.startActivity(ctx, tv, existingActivityID, tq.Name)
 	require.NoError(t, err)
 	existingRunID := startResp.RunId
 	require.NotEmpty(t, existingRunID)
@@ -4611,7 +4613,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -4674,13 +4676,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument(
 // TODO(dan): add tests that DescribeActivityExecution can wait for deletion, termination, cancellation etc
 
 func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
-	activityID := env.Tv().ActivityID()
-	activityType := env.Tv().ActivityType().GetName()
-	taskQueue := env.Tv().TaskQueue().GetName()
-	startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+	activityID := tv.ActivityID()
+	activityType := tv.ActivityType().GetName()
+	taskQueue := tv.TaskQueue().GetName()
+	startResp := env.startAndValidateActivity(tv, s.Context(), t, activityID, taskQueue)
 	runID := startResp.RunId
 
 	verifyListQuery := func(t *testing.T, query string, pageSize int32) {
@@ -4743,11 +4745,11 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			Namespace:           env.Namespace().String(),
 			ActivityId:          customSAActivityID,
 			ActivityType:        &commonpb.ActivityType{Name: "custom-sa-activity-type"},
-			Identity:            env.Tv().WorkerIdentity(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().GetName()},
+			TaskQueue:           tv.TaskQueue(),
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-			RequestId:           env.Tv().RequestID(),
+			RequestId:           tv.RequestID(),
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					customSAName: sadefs.MustEncodeValue(customSAValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -4828,12 +4830,12 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 				Namespace:           env.Namespace().String(),
 				ActivityId:          testcore.RandomizeStr(t.Name()),
 				ActivityType:        &commonpb.ActivityType{Name: testActivityType},
-				Identity:            env.Tv().WorkerIdentity(),
+				Identity:            tv.WorkerIdentity(),
 				StartToCloseTimeout: durationpb.New(10 * time.Second),
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: taskQueue,
 				},
-				RequestId: env.Tv().RequestID(),
+				RequestId: tv.RequestID(),
 			})
 			require.NoError(t, err)
 		}
@@ -4886,12 +4888,12 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 }
 
 func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
-	activityID := env.Tv().ActivityID()
-	activityType := env.Tv().ActivityType().GetName()
-	env.startAndValidateActivity(s.Context(), t, activityID, env.Tv().TaskQueue().GetName())
+	activityID := tv.ActivityID()
+	activityType := tv.ActivityType().GetName()
+	env.startAndValidateActivity(tv, s.Context(), t, activityID, tv.TaskQueue().GetName())
 
 	verifyCountQuery := func(t *testing.T, query string, expectedCount int) {
 		t.Helper()
@@ -4921,16 +4923,16 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 	})
 
 	t.Run("CountByTaskQueue", func(t *testing.T) {
-		verifyCountQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", env.Tv().TaskQueue().GetName(), activityType), 1)
+		verifyCountQuery(t, fmt.Sprintf("TaskQueue = '%s' AND ActivityType = '%s'", tv.TaskQueue().GetName(), activityType), 1)
 	})
 
 	t.Run("GroupByExecutionStatus", func(t *testing.T) {
 		groupByType := &commonpb.ActivityType{Name: "count-groupby-test-type"}
-		taskQueue := env.Tv().TaskQueue().GetName()
+		taskQueue := tv.TaskQueue().GetName()
 
 		for i := range 3 {
 			id := fmt.Sprintf("%s-%d", groupByType.Name, i)
-			resp, err := env.startActivityWithType(s.Context(), id, taskQueue, groupByType)
+			resp, err := env.startActivityWithType(s.Context(), tv, id, taskQueue, groupByType)
 			require.NoError(t, err)
 			require.NotEmpty(t, resp.GetRunId())
 		}
@@ -4985,11 +4987,11 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 				Namespace:           env.Namespace().String(),
 				ActivityId:          fmt.Sprintf("count-custom-sa-%d", i),
 				ActivityType:        &commonpb.ActivityType{Name: "count-custom-sa-type"},
-				Identity:            env.Tv().WorkerIdentity(),
+				Identity:            tv.WorkerIdentity(),
 				Input:               defaultInput,
-				TaskQueue:           &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().GetName()},
+				TaskQueue:           tv.TaskQueue(),
 				StartToCloseTimeout: durationpb.New(1 * time.Minute),
-				RequestId:           env.Tv().RequestID(),
+				RequestId:           tv.RequestID(),
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
 						customSAName: sadefs.MustEncodeValue(customSAValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -5047,7 +5049,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 }
 
 func (s *standaloneActivityTestSuite) TestHeartbeat() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 	ctx := testcore.NewContext()
 	heartbeatDetails := payloads.EncodeString("Heartbeat Details")
@@ -5090,7 +5092,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		// Start an activity and get a valid task token, then complete it
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
-		_, err := env.startActivity(ctx, activityID, taskQueue)
+		_, err := env.startActivity(ctx, tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -5127,7 +5129,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
 			RetryPolicy: &commonpb.RetryPolicy{
@@ -5194,7 +5196,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                  defaultInput,
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Minute),
@@ -5248,7 +5250,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		existingNamespace := env.Namespace().String()
-		_, err := env.startActivity(ctx, activityID, taskQueue)
+		_, err := env.startActivity(ctx, tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -5262,14 +5264,14 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -5292,7 +5294,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		existingNamespace := env.Namespace().String()
 
 		// Start activity in namespace A and get its task token
-		_, err := env.startActivity(ctx, activityID, taskQueue)
+		_, err := env.startActivity(ctx, tv, activityID, taskQueue)
 		require.NoError(t, err)
 
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
@@ -5307,14 +5309,14 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err = env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:    externalNamespace,
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 		})
 		require.NoError(t, err)
 
@@ -5358,7 +5360,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		})
@@ -5386,7 +5388,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      runID,
-			RequestId:  env.Tv().RequestID(),
+			RequestId:  tv.RequestID(),
 			Reason:     "test cancellation",
 		})
 		require.NoError(t, err)
@@ -5411,7 +5413,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
@@ -5491,7 +5493,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
@@ -5590,7 +5592,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		_, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
+			ActivityType:           tv.ActivityType(),
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
@@ -5630,7 +5632,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
@@ -5698,7 +5700,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			// No HeartbeatTimeout set.
@@ -5767,7 +5769,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 			HeartbeatTimeout:    durationpb.New(1 * time.Second),
@@ -5823,7 +5825,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
+			ActivityType:        tv.ActivityType(),
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		})
@@ -5856,7 +5858,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 }
 
 func (s *standaloneActivityTestSuite) TestStartDelay() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	t.Run("Dispatch", func(t *testing.T) {
@@ -5869,8 +5871,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
@@ -5913,8 +5915,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
@@ -5958,8 +5960,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
-			Identity:               env.Tv().WorkerIdentity(),
+			ActivityType:           tv.ActivityType(),
+			Identity:               tv.WorkerIdentity(),
 			Input:                  defaultInput,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout:    durationpb.New(30 * time.Second),
@@ -6003,8 +6005,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
-			Identity:               env.Tv().WorkerIdentity(),
+			ActivityType:           tv.ActivityType(),
+			Identity:               tv.WorkerIdentity(),
 			Input:                  defaultInput,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
@@ -6056,8 +6058,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
@@ -6098,8 +6100,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
@@ -6144,8 +6146,8 @@ func (s *standaloneActivityTestSuite) TestStartDelay() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:              env.Namespace().String(),
 			ActivityId:             activityID,
-			ActivityType:           env.Tv().ActivityType(),
-			Identity:               env.Tv().WorkerIdentity(),
+			ActivityType:           tv.ActivityType(),
+			Identity:               tv.WorkerIdentity(),
 			Input:                  defaultInput,
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
@@ -6220,12 +6222,13 @@ func (env *standaloneActivityEnv) pollActivityTaskQueue(ctx context.Context, tas
 }
 
 func (env *standaloneActivityEnv) startAndValidateActivity(
+	tv *testvars.TestVars,
 	ctx context.Context,
 	t *testing.T,
 	activityID string,
 	taskQueue string,
 ) *workflowservice.StartActivityExecutionResponse {
-	startResponse, err := env.startActivity(ctx, activityID, taskQueue)
+	startResponse, err := env.startActivity(ctx, tv, activityID, taskQueue)
 
 	require.NoError(t, err)
 	require.NotNil(t, startResponse.GetRunId())
@@ -6242,7 +6245,7 @@ func (env *standaloneActivityEnv) startAndValidateActivity(
 	info := activityResp.GetInfo()
 
 	require.NoError(t, err)
-	env.validateBaseActivityResponse(t, activityID, startResponse.RunId, activityResp)
+	env.validateBaseActivityResponse(tv, t, activityID, startResponse.RunId, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
 		"expected Running but is %s", info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState(),
@@ -6257,6 +6260,7 @@ func (env *standaloneActivityEnv) startAndValidateActivity(
 }
 
 func (env *standaloneActivityEnv) pollActivityTaskAndValidate(
+	tv *testvars.TestVars,
 	ctx context.Context,
 	t *testing.T,
 	activityID string,
@@ -6269,11 +6273,11 @@ func (env *standaloneActivityEnv) pollActivityTaskAndValidate(
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		Identity: env.Tv().WorkerIdentity(),
+		Identity: tv.WorkerIdentity(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
-	protorequire.ProtoEqual(t, env.Tv().ActivityType(), pollTaskResp.GetActivityType())
+	protorequire.ProtoEqual(t, tv.ActivityType(), pollTaskResp.GetActivityType())
 	require.EqualValues(t, 1, pollTaskResp.Attempt)
 
 	activityResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -6287,13 +6291,13 @@ func (env *standaloneActivityEnv) pollActivityTaskAndValidate(
 	info := activityResp.GetInfo()
 
 	require.NoError(t, err)
-	env.validateBaseActivityResponse(t, activityID, runID, activityResp)
+	env.validateBaseActivityResponse(tv, t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, info.GetStatus(),
 		"expected Running but is %s", info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState(),
 		"expected Started but is %s", info.GetRunState())
 	require.EqualValues(t, 1, info.GetAttempt())
-	require.Equal(t, env.Tv().WorkerIdentity(), info.GetLastWorkerIdentity())
+	require.Equal(t, tv.WorkerIdentity(), info.GetLastWorkerIdentity())
 	require.NotNil(t, info.GetLastStartedTime())
 	require.Nil(t, activityResp.Outcome)
 	require.Nil(t, info.GetLastFailure())
@@ -6304,6 +6308,7 @@ func (env *standaloneActivityEnv) pollActivityTaskAndValidate(
 }
 
 func (env *standaloneActivityEnv) validateCompletion(
+	tv *testvars.TestVars,
 	ctx context.Context,
 	t *testing.T,
 	activityID string,
@@ -6321,7 +6326,7 @@ func (env *standaloneActivityEnv) validateCompletion(
 	info := activityResp.GetInfo()
 
 	require.NoError(t, err)
-	env.validateBaseActivityResponse(t, activityID, runID, activityResp)
+	env.validateBaseActivityResponse(tv, t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus(),
 		"expected Completed but is %s", info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
@@ -6338,6 +6343,7 @@ func (env *standaloneActivityEnv) validateCompletion(
 }
 
 func (env *standaloneActivityEnv) validateFailure(
+	tv *testvars.TestVars,
 	ctx context.Context,
 	t *testing.T,
 	activityID string,
@@ -6356,7 +6362,7 @@ func (env *standaloneActivityEnv) validateFailure(
 	info := activityResp.GetInfo()
 
 	require.NoError(t, err)
-	env.validateBaseActivityResponse(t, activityID, runID, activityResp)
+	env.validateBaseActivityResponse(tv, t, activityID, runID, activityResp)
 	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus(),
 		"expected Failed but is %s", info.GetStatus())
 	require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, info.GetRunState(),
@@ -6375,6 +6381,7 @@ func (env *standaloneActivityEnv) validateFailure(
 }
 
 func (env *standaloneActivityEnv) validateBaseActivityResponse(
+	tv *testvars.TestVars,
 	t *testing.T,
 	activityID string,
 	expectedRunID string,
@@ -6382,28 +6389,28 @@ func (env *standaloneActivityEnv) validateBaseActivityResponse(
 ) {
 	require.NotNil(t, response.LongPollToken)
 	require.Equal(t, activityID, response.GetInfo().GetActivityId())
-	require.Equal(t, env.Tv().ActivityType(), response.GetInfo().GetActivityType())
+	require.Equal(t, tv.ActivityType(), response.GetInfo().GetActivityType())
 	require.Equal(t, expectedRunID, response.RunId)
 	require.NotNil(t, response.GetInfo().GetScheduleTime())
 	protorequire.ProtoEqual(t, defaultInput, response.GetInput())
 }
 
-func (env *standaloneActivityEnv) startActivity(ctx context.Context, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
-	return env.startActivityWithType(ctx, activityID, taskQueue, env.Tv().ActivityType())
+func (env *standaloneActivityEnv) startActivity(ctx context.Context, tv *testvars.TestVars, activityID string, taskQueue string) (*workflowservice.StartActivityExecutionResponse, error) {
+	return env.startActivityWithType(ctx, tv, activityID, taskQueue, tv.ActivityType())
 }
 
-func (env *standaloneActivityEnv) startActivityWithType(ctx context.Context, activityID string, taskQueue string, activityType *commonpb.ActivityType) (*workflowservice.StartActivityExecutionResponse, error) {
+func (env *standaloneActivityEnv) startActivityWithType(ctx context.Context, tv *testvars.TestVars, activityID string, taskQueue string, activityType *commonpb.ActivityType) (*workflowservice.StartActivityExecutionResponse, error) {
 	return env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 		Namespace:    env.Namespace().String(),
 		ActivityId:   activityID,
 		ActivityType: activityType,
-		Identity:     env.Tv().WorkerIdentity(),
+		Identity:     tv.WorkerIdentity(),
 		Input:        defaultInput,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 		},
 		StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-		RequestId:           env.Tv().RequestID(),
+		RequestId:           tv.RequestID(),
 	})
 }
 
@@ -6417,7 +6424,7 @@ func (env *standaloneActivityEnv) runNexusCompletionHTTPServer(t *testing.T, h *
 }
 
 func (s *standaloneActivityTestSuite) TestCallbacks() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	env.OverrideDynamicConfig(
@@ -6432,14 +6439,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{
 					Nexus: &commonpb.Callback_Nexus{
@@ -6460,14 +6467,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{
 				{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback1"}}},
 				{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback2"}}},
@@ -6486,14 +6493,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{
 				{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}}},
 			},
@@ -6528,14 +6535,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			// Two callbacks when overridden max dynamic config is 1, so should error.
 			CompletionCallbacks: []*commonpb.Callback{
 				{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback1"}}},
@@ -6563,14 +6570,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
 			}},
@@ -6580,7 +6587,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  env.Tv().WorkerIdentity(),
+			Identity:  tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -6634,14 +6641,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
 			}},
@@ -6651,7 +6658,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  env.Tv().WorkerIdentity(),
+			Identity:  tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -6708,14 +6715,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
 			}},
@@ -6726,7 +6733,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err = env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  env.Tv().WorkerIdentity(),
+			Identity:  tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -6783,14 +6790,14 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
 			}},
@@ -6800,7 +6807,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  env.Tv().WorkerIdentity(),
+			Identity:  tv.WorkerIdentity(),
 		})
 		require.NoError(t, err)
 
@@ -6808,7 +6815,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			Identity:   "cancelling-worker",
-			RequestId:  env.Tv().Any().String(),
+			RequestId:  tv.Any().String(),
 			Reason:     "Test Cancellation",
 		})
 		require.NoError(t, err)
@@ -6865,15 +6872,15 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:    env.Namespace().String(),
 			ActivityId:   activityID,
-			ActivityType: env.Tv().ActivityType(),
-			Identity:     env.Tv().WorkerIdentity(),
+			ActivityType: tv.ActivityType(),
+			Identity:     tv.WorkerIdentity(),
 			Input:        defaultInput,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
 			StartToCloseTimeout:    durationpb.New(1 * time.Minute),
 			ScheduleToStartTimeout: durationpb.New(1 * time.Second),
-			RequestId:              env.Tv().Any().String(),
+			RequestId:              tv.Any().String(),
 			CompletionCallbacks: []*commonpb.Callback{{
 				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
 			}},
@@ -6911,7 +6918,7 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 }
 
 func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 	t := s.T()
 
 	// Override EnableCallbacks back to false to simulate a namespace where the feature is off.
@@ -6928,12 +6935,12 @@ func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          testcore.RandomizeStr(t.Name()),
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
 			StartToCloseTimeout: durationpb.New(time.Minute),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: cb,
 		})
 		require.ErrorContains(t, err, "completion callbacks are not enabled for this namespace")
@@ -6943,12 +6950,12 @@ func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
 		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
 			ActivityId:          testcore.RandomizeStr(t.Name()),
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            env.Tv().WorkerIdentity(),
+			ActivityType:        tv.ActivityType(),
+			Identity:            tv.WorkerIdentity(),
 			Input:               defaultInput,
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(t.Name())},
 			StartToCloseTimeout: durationpb.New(time.Minute),
-			RequestId:           env.Tv().Any().String(),
+			RequestId:           tv.Any().String(),
 			CompletionCallbacks: cb,
 			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 			OnConflictOptions:   &commonpb.OnConflictOptions{AttachCompletionCallbacks: true},

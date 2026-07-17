@@ -26,7 +26,7 @@ func TestWorkflowTaskTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -181,7 +181,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-workflow-task-heartbeating-local-activities"
 	tl := id
@@ -329,7 +329,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesR
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkflowTaskStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -410,7 +410,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeRegularWorkfl
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -491,7 +491,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflowTaskStartedAndFailWorkflowTask() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -590,7 +590,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterRegularWorkflo
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWorkflowTaskStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -714,7 +714,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -833,7 +833,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 }
 
 func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkflowTaskStartedAndFailWorkflowTask() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-transient-workflow-task-test-type"
 	tl := id
@@ -977,7 +977,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 // Note: SendRawHistoryBetweenInternalServices is enabled by default in functional tests
 // (see tests/testcore/dynamic_config_overrides.go)
 func (s *WorkflowTaskTestSuite) TestRawHistoryFlowWithSearchAttributes() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := uuid.NewString()
 	wt := "functional-workflow-raw-history-search-attributes"
 	tl := id

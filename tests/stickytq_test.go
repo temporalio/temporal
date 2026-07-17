@@ -27,7 +27,7 @@ func TestStickyTqTestSuite(t *testing.T) {
 }
 
 func (s *StickyTqTestSuite) TestStickyTimeoutNonTransientWorkflowTask() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-sticky-timeout-non-transient-workflow-task"
 	wt := "functional-sticky-timeout-non-transient-command-type"
 	tl := "functional-sticky-timeout-non-transient-workflow-taskqueue"
@@ -224,7 +224,7 @@ WaitForStickyTimeoutLoop:
 }
 
 func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-reset-sticky-fire-schedule-to-start-timeout"
 	wt := "functional-reset-sticky-fire-schedule-to-start-timeout-type"
 	tl := "functional-reset-sticky-fire-schedule-to-start-timeout-taskqueue"

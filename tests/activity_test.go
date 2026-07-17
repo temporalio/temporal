@@ -54,7 +54,7 @@ func TestActivityClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens during that backoff timer.
 	// activity will be scheduled twice. After second failure (that should happen at ~4.2 sec) next retry will not
@@ -113,7 +113,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 }
 
 func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens while activity is running.
 	// activity will be scheduled twice.
@@ -185,7 +185,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 }
 
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
 		if strings.HasPrefix(info.ActivityID, "Heartbeat") {
@@ -372,7 +372,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-test"
 	wt := "functional-heartbeat-test-type"
 	tl := "functional-heartbeat-test-taskqueue"
@@ -504,8 +504,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 }
 
 func (s *ActivityTestSuite) TestActivityRetry() {
-	env := testcore.NewEnv(s.T())
-	tv := env.Tv()
+	env, tv := testcore.NewEnv(s.T())
 
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
@@ -699,7 +698,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 }
 
 func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -803,7 +802,7 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-timeout-test"
 	wt := "functional-heartbeat-timeout-test-type"
 	tl := "functional-heartbeat-timeout-test-taskqueue"
@@ -906,7 +905,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 }
 
 func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
@@ -1056,7 +1055,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 }
 
 func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-activity-notstarted-cancellation-test"
 	wt := "functional-activity-notstarted-cancellation-test-type"
 	tl := "functional-activity-notstarted-cancellation-test-taskqueue"
@@ -1178,7 +1177,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 }
 
 func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
 	// 1. Start workflow with single activity
 	// 2. First invocation of activity sets heartbeat details and times out.
@@ -1291,7 +1290,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 // is recorded in pending activity info and returned in describe workflow API response. This happens
 // only when the worker identity is not sent when a poller picks the task.
 func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-identity-record"
 	workerIdentity := "70df788a-b0b2-4113-a0d5-130f13889e35"
 	activityName := "activity_timer"
@@ -1424,7 +1423,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, env.SdkClient(), taskQueue)
@@ -1456,7 +1455,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 }
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	activityInfo := make(chan activity.Info, 1)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	w, wf := s.mockWorkflowWithErrorActivity(activityInfo, env.SdkClient(), taskQueue)
@@ -1517,7 +1516,7 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 }
 
 func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	activityFunction := func(ctx context.Context) error {
 		return errors.New("non-retryable-error") //nolint:err113
 	}

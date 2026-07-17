@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -65,7 +66,7 @@ func TestSignalWithStartFromWorkflowTestSuite(t *testing.T) {
 // SignalWithStartWorkflowExecution from a workflow. Both settings are
 // namespace-scoped, so they apply to the test's own namespace on the shared
 // cluster. Additional per-test options may be passed in opts.
-func (s *SignalWithStartFromWorkflowTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *SignalWithStartFromWorkflowTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableSignalWithStartFromWorkflow, true),
@@ -186,7 +187,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) startAndCompleteWorkflow(
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
 // __temporal_system endpoint.
 func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -331,7 +332,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestHappyPath() {
 // TestSignalExistingWorkflow verifies that SWS called from a workflow signals an already-running
 // target workflow without starting a new one (Started=false, RunId unchanged).
 func (s *SignalWithStartFromWorkflowTestSuite) TestSignalExistingWorkflow() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -367,7 +368,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalExistingWorkflow() {
 // TestStartNewWorkflow verifies that SWS called from a workflow starts a new execution when no
 // workflow with the given ID exists (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestStartNewWorkflow() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -391,7 +392,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestStartNewWorkflow() {
 // TestSignalTerminatedWorkflow verifies that SWS starts a fresh run when the target workflow
 // has been terminated (Started=true, new RunId).
 func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -426,7 +427,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestSignalTerminatedWorkflow() {
 // TestIDReusePolicy_RejectDuplicate verifies that SWS fails with WorkflowExecutionAlreadyStarted
 // when the target workflow has completed and the reuse policy is REJECT_DUPLICATE.
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_RejectDuplicate() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	env, _ := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
@@ -448,7 +449,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_RejectDuplicate
 // TestIDReusePolicy_AllowDuplicate verifies that SWS starts a new run when the target has
 // completed and the reuse policy is ALLOW_DUPLICATE (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	env, _ := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -476,7 +477,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicate(
 //  1. Target completed successfully → SWS fails (already started error).
 //  2. Target was terminated → SWS starts a new run (Started=true).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateFailedOnly() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	env, _ := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 	ctx := s.Context()
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())
@@ -531,7 +532,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDReusePolicy_AllowDuplicateF
 // starts a new one when the conflict policy is TERMINATE_EXISTING (Started=true, new RunId,
 // original run terminated).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExisting() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -575,7 +576,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_TerminateExi
 // returns its RunId without starting a new one (Started=false) when the conflict policy is
 // USE_EXISTING.
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -615,7 +616,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_UseExisting(
 // is not a supported operation. The validation error surfaces here as a workflow task failure
 // on the ScheduleNexusOperation command (BadScheduleNexusOperationAttributes).
 func (s *SignalWithStartFromWorkflowTestSuite) TestIDConflictPolicy_Fail() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -683,7 +684,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 	// driving the workflow task manually, so coverage is not lost in the meantime.
 	s.T().Skip("requires SDK release that lifts the __temporal_ endpoint prefix check")
 
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
@@ -782,7 +783,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 // verifies that the server accepts and correctly processes such requests — matching what
 // the Python SDK (and other SDKs that prefer proto binary) sends.
 func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSFromWorkflowProtoBinary() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	ctx := s.Context()
 
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
@@ -889,7 +890,7 @@ func (s *SignalWithStartFromWorkflowTestSuite) TestBothWorkflowsVisibleAfterSWSF
 // TestStartDelay verifies that SWS with WorkflowStartDelay completes successfully from a
 // workflow (Started=true) and that the target workflow eventually becomes running.
 func (s *SignalWithStartFromWorkflowTestSuite) TestStartDelay() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	callerTaskQueue := testcore.RandomizeStr(s.T().Name())
 	targetTaskQueue := testcore.RandomizeStr(s.T().Name() + "-target")
 	targetWorkflowID := testcore.RandomizeStr(s.T().Name())

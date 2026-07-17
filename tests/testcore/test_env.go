@@ -70,11 +70,9 @@ type TestEnv struct {
 	Logger log.Logger
 
 	cluster        *TestCluster
-	nsName         namespace.Name
-	nsID           namespace.ID
+	testVars       *testvars.TestVars
 	taskPoller     *taskpoller.TaskPoller
 	t              *testing.T
-	tv             *testvars.TestVars
 	ctx            context.Context
 	dedicatedGuard *dedicatedClusterGuard
 
@@ -82,7 +80,6 @@ type TestEnv struct {
 	sdkClient     sdkclient.Client
 	sdkWorkerOnce sync.Once
 	sdkWorker     sdkworker.Worker
-	sdkWorkerTQ   string
 }
 
 type TestOption func(*testOptions)
@@ -239,7 +236,7 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 }
 
 // NewEnv creates a new test environment with access to a Temporal cluster.
-func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
+func NewEnv(t *testing.T, opts ...TestOption) (*TestEnv, *testvars.TestVars) {
 	t.Helper()
 
 	// Check test sharding early, before any expensive operations.
@@ -278,9 +275,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create a dedicated namespace for the test to help with test isolation.
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
-	ns := namespace.Name(RandomizeStr(baseName))
-	nsID, err := base.RegisterNamespace(
-		ns,
+	tv := testvars.New(t).WithNamespaceName(namespace.Name(RandomizeStr(baseName)))
+	if options.testVars != nil {
+		tv = options.testVars(tv)
+	}
+	registeredNamespaceID, err := base.RegisterNamespace(
+		tv.NamespaceName(),
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
 		"",
@@ -289,11 +289,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	if err != nil {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
-
-	tv := testvars.New(t)
-	if options.testVars != nil {
-		tv = options.testVars(tv)
-	}
+	tv = tv.WithNamespaceID(registeredNamespaceID)
 
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
@@ -302,14 +298,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
 		cluster:            cluster,
-		nsName:             ns,
-		nsID:               nsID,
+		testVars:           tv,
 		Logger:             base.Logger,
-		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
+		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), tv.NamespaceName().String()),
 		t:                  t,
-		tv:                 tv,
 		ctx:                testcontext.For(t),
-		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
@@ -339,16 +332,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		require.NotNil(t, recorder)
 	}
 
-	return env
+	return env, tv
 }
 
 // Use test env-specific namespace here for test isolation.
 func (e *TestEnv) Namespace() namespace.Name {
-	return e.nsName
+	return e.testVars.NamespaceName()
 }
 
 func (e *TestEnv) NamespaceID() namespace.ID {
-	return e.nsID
+	return e.testVars.NamespaceID()
 }
 
 // InjectHook sets a test hook inside the cluster.
@@ -360,7 +353,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
-		scope = e.nsID
+		scope = e.testVars.NamespaceID()
 	case testhooks.ScopeGlobal:
 		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
@@ -434,10 +427,6 @@ func (e *TestEnv) T() *testing.T {
 	return e.t
 }
 
-func (e *TestEnv) Tv() *testvars.TestVars {
-	return e.tv
-}
-
 // Context returns the test-level timeout context with RPC version headers already included.
 // This context will be canceled when the test timeout occurs. Use this directly for all RPC
 // operations - no need to wrap with NewContext or add headers manually.
@@ -477,7 +466,7 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 	e.sdkClientOnce.Do(func() {
 		clientOptions := sdkclient.Options{
 			HostPort:  e.FrontendGRPCAddress(),
-			Namespace: e.nsName.String(),
+			Namespace: e.testVars.NamespaceName().String(),
 			Logger:    log.NewSdkLogger(e.Logger),
 		}
 
@@ -502,7 +491,7 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
 	e.sdkWorkerOnce.Do(func() {
 		client := e.SdkClient() // Ensure client is initialized
-		worker := sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
+		worker := sdkworker.New(client, e.testVars.TaskQueue().Name, sdkworker.Options{})
 		if err := worker.Start(); err != nil {
 			e.t.Fatalf("Failed to start SDK worker: %v", err)
 		}
@@ -517,7 +506,7 @@ func (e *TestEnv) SdkWorker() sdkworker.Worker {
 
 // WorkerTaskQueue returns the task queue name used by the SDK Worker.
 func (e *TestEnv) WorkerTaskQueue() string {
-	return e.sdkWorkerTQ
+	return e.testVars.TaskQueue().Name
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
@@ -530,7 +519,7 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		}
 
 		// Wrap value with namespace constraint for test isolation on shared clusters.
-		ns := e.nsName.String()
+		ns := e.testVars.NamespaceName().String()
 		if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
 			result := make([]dynamicconfig.ConstrainedValue, len(cvs))
 			for i, cv := range cvs {

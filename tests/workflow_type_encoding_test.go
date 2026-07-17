@@ -53,7 +53,7 @@ func (s *WorkflowTypeEncodingSuite) runWithWorkflowType(env *testcore.TestEnv, w
 
 func (s *WorkflowTypeEncodingSuite) TestPlainASCII() {
 	s.Run("Succeeds", func(s *WorkflowTypeEncodingSuite) {
-		env := testcore.NewEnv(s.T())
+		env, _ := testcore.NewEnv(s.T())
 		s.NoError(s.runWithWorkflowType(env, "PlainAsciiWorkflowType"))
 	})
 }
@@ -74,7 +74,7 @@ func (s *WorkflowTypeEncodingSuite) TestControlCharsInWorkflowType() {
 	}
 	for _, tc := range cases {
 		s.Run(fmt.Sprintf("control char %s succeeds", tc.label), func(s *WorkflowTypeEncodingSuite) {
-			env := testcore.NewEnv(s.T())
+			env, _ := testcore.NewEnv(s.T())
 			s.NoError(s.runWithWorkflowType(env, "Foo"+tc.char+"Bar"))
 		})
 	}
@@ -82,14 +82,14 @@ func (s *WorkflowTypeEncodingSuite) TestControlCharsInWorkflowType() {
 
 func (s *WorkflowTypeEncodingSuite) TestAllControlCharsWorkflowType() {
 	s.Run("only control chars succeeds", func(s *WorkflowTypeEncodingSuite) {
-		env := testcore.NewEnv(s.T())
+		env, _ := testcore.NewEnv(s.T())
 		s.NoError(s.runWithWorkflowType(env, "\n\x00\r"))
 	})
 }
 
 func (s *WorkflowTypeEncodingSuite) TestLongWorkflowType() {
 	s.Run("succeeds", func(s *WorkflowTypeEncodingSuite) {
-		env := testcore.NewEnv(s.T())
+		env, _ := testcore.NewEnv(s.T())
 		longName := strings.Repeat("a", 999)
 		s.NoError(s.runWithWorkflowType(env, longName))
 	})
@@ -97,7 +97,7 @@ func (s *WorkflowTypeEncodingSuite) TestLongWorkflowType() {
 
 func (s *WorkflowTypeEncodingSuite) TestWorkflowTypeEndingInBin() {
 	s.Run("succeeds", func(s *WorkflowTypeEncodingSuite) {
-		env := testcore.NewEnv(s.T())
+		env, _ := testcore.NewEnv(s.T())
 		s.NoError(s.runWithWorkflowType(env, "my-workflow-bin"))
 	})
 }
@@ -114,7 +114,7 @@ func (s *WorkflowTypeEncodingSuite) TestUTF8WorkflowType() {
 	}
 	for _, tc := range cases {
 		s.Run(fmt.Sprintf("UTF-8 %s succeeds", tc.label), func(s *WorkflowTypeEncodingSuite) {
-			env := testcore.NewEnv(s.T())
+			env, _ := testcore.NewEnv(s.T())
 			s.NoError(s.runWithWorkflowType(env, tc.workflowType))
 		})
 	}

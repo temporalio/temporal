@@ -74,7 +74,7 @@ func newTaskQueueStatsContext(
 	}
 	opts = append(opts, behavior.Options()...)
 	opts = append(opts, extraOpts...)
-	env := newVersioningTestEnv(t, opts...)
+	env, _ := newVersioningTestEnv(t, opts...)
 	behavior.InjectHooks(env)
 	return &taskQueueStatsContext{
 		VersioningTestEnv: env,

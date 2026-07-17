@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -66,13 +67,13 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(t *testing.T, h *completio
 	return srv.URL
 }
 
-func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	env := testcore.NewEnv(s.T(), opts...)
+func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
+	env, tv := testcore.NewEnv(s.T(), opts...)
 	env.OverrideDynamicConfig(
 		callback.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
-	return env
+	return env, tv
 }
 
 func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
@@ -86,7 +87,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, false),
 	)
-	env := newScheduleEnv(s.T(), testOpts...)
+	env, _ := newScheduleEnv(s.T(), testOpts...)
 
 	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-token-migration")
@@ -226,7 +227,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 
 	for _, tc := range cases {
 		s.Run(tc.name, func(s *CallbacksSuite) {
-			env := testcore.NewEnv(s.T(), opts...)
+			env, _ := testcore.NewEnv(s.T(), opts...)
 			env.OverrideDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50)
 			env.OverrideDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6)
 			env.OverrideDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 2)
@@ -314,13 +315,13 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 
 	for _, tc := range cases {
 		s.Run(tc.name, func(s *CallbacksSuite) {
-			env := s.newTestEnv(opts...)
+			env, tv := s.newTestEnv(opts...)
 
 			ctx := s.Context()
 			sdkClient := env.SdkClient()
 
 			workflowType := "test"
-			workflowID := env.Tv().WorkflowID()
+			workflowID := tv.WorkflowID()
 
 			ch := &completionHandler{
 				requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
@@ -515,13 +516,13 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback(opts []testcore.TestOption) {
-	env := s.newTestEnv(opts...)
+	env, tv := s.newTestEnv(opts...)
 
 	ctx := s.Context()
 	sdkClient := env.SdkClient()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workflowID := env.Tv().WorkflowID()
+	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 2),
@@ -693,7 +694,7 @@ func blockingWorkflow(ctx workflow.Context) error {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(opts []testcore.TestOption) {
-	env := s.newTestEnv(opts...)
+	env, tv := s.newTestEnv(opts...)
 
 	/*
 	 * 1. Start WF w/ no callbacks and immediately terminate
@@ -705,7 +706,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 	ctx := s.Context()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workflowID := env.Tv().WorkflowID()
+	workflowID := tv.WorkflowID()
 
 	ch := &completionHandler{
 		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
@@ -752,7 +753,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		Reason:            s.T().Name(),
-		Identity:          env.Tv().WorkerIdentity(),
+		Identity:          tv.WorkerIdentity(),
 	})
 	s.NoError(err)
 
@@ -794,7 +795,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback_ResetToNotBaseRun(op
 			WorkflowId: workflowID,
 		},
 		Reason:   s.T().Name(),
-		Identity: env.Tv().WorkerIdentity(),
+		Identity: tv.WorkerIdentity(),
 	})
 	s.NoError(err)
 }

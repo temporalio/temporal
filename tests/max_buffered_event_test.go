@@ -39,7 +39,7 @@ func (s *MaxBufferedEventSuite) opts() []testcore.TestOption {
 }
 
 func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
-	env := testcore.NewEnv(s.T(), s.opts()...)
+	env, _ := testcore.NewEnv(s.T(), s.opts()...)
 
 	/*
 		This test starts a workflow, and block its workflow task, then sending
@@ -131,7 +131,7 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
-	env := testcore.NewEnv(s.T(), s.opts()...)
+	env, _ := testcore.NewEnv(s.T(), s.opts()...)
 
 	/*
 		This test starts a workflow, and blocks its workflow task, then sends

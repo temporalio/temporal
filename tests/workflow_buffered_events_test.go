@@ -32,7 +32,7 @@ func TestWorkflowBufferedEventsTestSuite(t *testing.T) {
 }
 
 func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-rate-limit-buffered-events-test"
 	wt := "functional-rate-limit-buffered-events-test-type"
@@ -131,7 +131,7 @@ func (s *WorkflowBufferedEventsSuite) TestRateLimitBufferedEvents() {
 }
 
 func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-buffered-events-test"
 	wt := "functional-buffered-events-test-type"
@@ -370,7 +370,7 @@ func (s *WorkflowBufferedEventsSuite) TestBufferedEvents() {
 }
 
 func (s *WorkflowBufferedEventsSuite) TestBufferedEventsOutOfOrder() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	id := "functional-buffered-events-out-of-order-test"
 	wt := "functional-buffered-events-out-of-order-test-type"

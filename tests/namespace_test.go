@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
@@ -34,7 +35,7 @@ func TestNamespaceSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &namespaceTestSuite{}) //nolint:staticcheck // SA1019: namespace deletion tests use dedicated worker-service clusters.
 }
 
-func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	baseOpts := []testcore.TestOption{
 		testcore.WithWorkerService("namespace deletion tests require the system worker service"),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
@@ -44,7 +45,7 @@ func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.T
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -87,7 +88,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour))
+	env, _ := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour))
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -131,7 +132,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -174,7 +175,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -200,7 +201,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -282,7 +283,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	retention := 24 * time.Hour
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
@@ -380,8 +381,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_CrossNamespaceChild() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
-	tv := testvars.New(s.T())
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.ProtectedNamespaces, []string{tv.NamespaceName().String()}))
+	protectedNamespace := namespace.Name(testcore.RandomizeStr(s.T().Name()))
+	env, tv := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.ProtectedNamespaces, []string{protectedNamespace.String()}))
+	tv = tv.WithNamespaceName(protectedNamespace)
 
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        tv.NamespaceName().String(),
@@ -404,7 +406,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 }
 
 func (s *namespaceTestSuite) Test_DescribeNamespace_WeakConsistency() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	nsName := "ns_weak_" + uuid.NewString()
 	_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{

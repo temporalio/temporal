@@ -29,7 +29,7 @@ func TestActivityAPIPauseClientTestSuite(t *testing.T) {
 }
 
 func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env, _ := testcore.NewEnv(s.T(), testcore.WithSdkWorker()) //nolint:staticcheck // SA1019: retained until WithSdkWorker callers are removed
 
 	initialRetryInterval := 1 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute
@@ -174,7 +174,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsO
 	 * 4. Validate activity failed
 	 * 5. Validate number of activity attempts increased
 	 */
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env, _ := testcore.NewEnv(s.T(), testcore.WithSdkWorker()) //nolint:staticcheck // SA1019: retained until WithSdkWorker callers are removed
 
 	initialRetryInterval := 1 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute
@@ -312,7 +312,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	// In this case, pause happens when activity is in retry state.
 	// Make sure that activity is paused and then unpaused.
 	// Also check that activity will not be retried while unpaused.
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env, _ := testcore.NewEnv(s.T(), testcore.WithSdkWorker()) //nolint:staticcheck // SA1019: retained until WithSdkWorker callers are removed
 
 	initialRetryInterval := 1 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute
@@ -427,7 +427,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	// In this case, pause can happen when activity is in retry state.
 	// Make sure that activity is paused and then unpaused.
 	// Also tests noWait flag.
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env, _ := testcore.NewEnv(s.T(), testcore.WithSdkWorker()) //nolint:staticcheck // SA1019: retained until WithSdkWorker callers are removed
 
 	initialRetryInterval := 30 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute
@@ -522,7 +522,7 @@ func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 
 func (s *ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	// pause/unpause the activity with reset option and noWait flag
-	env := testcore.NewEnv(s.T(), testcore.WithSdkWorker())
+	env, _ := testcore.NewEnv(s.T(), testcore.WithSdkWorker()) //nolint:staticcheck // SA1019: retained until WithSdkWorker callers are removed
 
 	initialRetryInterval := 1 * time.Second
 	scheduleToCloseTimeout := 30 * time.Minute

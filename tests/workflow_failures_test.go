@@ -35,7 +35,7 @@ func TestWorkflowFailuresTestSuite(t *testing.T) {
 }
 
 func (suite *WorkflowFailuresSuite) TestWorkflowTimeout() {
-	s := testcore.NewEnv(suite.T())
+	s, _ := testcore.NewEnv(suite.T())
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -113,7 +113,7 @@ ListClosedLoop:
 }
 
 func (suite *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
-	s := testcore.NewEnv(suite.T())
+	s, _ := testcore.NewEnv(suite.T())
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -321,7 +321,7 @@ func (suite *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
 }
 
 func (suite *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
-	s := testcore.NewEnv(suite.T())
+	s, _ := testcore.NewEnv(suite.T())
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"

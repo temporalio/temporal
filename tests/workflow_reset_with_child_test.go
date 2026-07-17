@@ -11,6 +11,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -46,14 +47,14 @@ func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &WorkflowResetWithChildSuite{})
 }
 
-func (s *WorkflowResetWithChildSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
-	env := testcore.NewEnv(s.T(), opts...)
+func (s *WorkflowResetWithChildSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
+	env, tv := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowWithChildren)
 	env.SdkWorker().RegisterWorkflow(s.workflowWithWaitingChild)
 	env.SdkWorker().RegisterWorkflow(s.child)
 	env.SdkWorker().RegisterWorkflow(s.waitingChild)
 	env.SdkWorker().RegisterActivity(s.simpleActivity)
-	return env
+	return env, tv
 }
 
 // Case 1.a Reset point is before the child init and child is not running (i.e. child already completed), with random ChildIDs
@@ -61,10 +62,10 @@ func (s *WorkflowResetWithChildSuite) newTestEnv(opts ...testcore.TestOption) *t
 func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// Start a workflow with 3 children.
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithChildren, false, false)
 	s.NoError(err)
 	var originalResult string
@@ -72,7 +73,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	s.NoError(err)
 
 	// save child init childIDs for later comparison.
-	childIDs := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), run.GetRunID())
+	childIDs := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), run.GetRunID())
 	s.Len(childIDs, 3)
 	child1IDBeforeReset := childIDs[0]
 	child2IDBeforeReset := childIDs[1]
@@ -81,7 +82,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      run.GetRunID(),
 		},
 		Reason: "integration test",
@@ -94,11 +95,11 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset1)
 
-	childIDsAfterReset1 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsAfterReset1 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsAfterReset1, 3)
 	// All 3 child workflow IDs should be different after reset.
 	s.NotEqual(child1IDBeforeReset, childIDsAfterReset1[0])
@@ -108,17 +109,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	// (reset #2) - resetting the new workflow execution after child-1 but before child-2
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childIDsAfterReset1[0].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childIDsAfterReset1[0].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset2 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset2)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset2)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset2)
 
-	childIDsAfterReset2 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsAfterReset2 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsAfterReset2, 3)
 	s.Equal(childIDsAfterReset1[0], childIDsAfterReset2[0])    // child-1 should be the same as before reset.
 	s.NotEqual(childIDsAfterReset1[1], childIDsAfterReset2[1]) // child-2 should be different after reset.
@@ -127,17 +128,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	// (reset #3) - resetting the new workflow execution after child-2 but before child-3
 	resetRequest.RequestId = "reset-request-3"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childIDsAfterReset2[1].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childIDsAfterReset2[1].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset3 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset3)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset3)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset3)
 
-	childIDsAfterReset3 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsAfterReset3 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsAfterReset3, 3)
 	// child-1 & child-2 workflow IDs should be the same as before reset. Child-3 should be different.
 	s.Equal(childIDsAfterReset2[0], childIDsAfterReset3[0])
@@ -148,10 +149,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 	// This should successfully replay all child events and not change the child workflow IDs from previous run.
 	resetRequest.RequestId = "reset-request-4"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childIDsAfterReset3[2].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childIDsAfterReset3[2].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
-	childIDsFinal := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsFinal := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsFinal, 3)
 	s.Equal(childIDsAfterReset3[0], childIDsFinal[0])
 	s.Equal(childIDsAfterReset3[1], childIDsFinal[1])
@@ -163,10 +164,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// Start a workflow with 3 children.
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	// Executing WorkflowWithChildren with true for input fixedWID, and false for input rejectDuplicate.
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithChildren, true, false)
 	s.NoError(err)
@@ -175,13 +176,13 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
-	initialChildExecutions := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), run.GetRunID())
+	initialChildExecutions := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), run.GetRunID())
 	s.Len(initialChildExecutions, 3)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      run.GetRunID(),
 		},
 		Reason: "integration test",
@@ -193,11 +194,11 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	s.NoError(err)
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset1)
 
-	childExecutionsAfterReset1 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childExecutionsAfterReset1 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childExecutionsAfterReset1, 3)
 	// All 3 child workflow IDs should be same after reset.
 	s.Equal(initialChildExecutions[0].WorkflowId, childExecutionsAfterReset1[0].WorkflowId)
@@ -212,17 +213,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	// (reset #2) - resetting the new workflow execution after child-1 but before child-2
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childExecutionsAfterReset1[0].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childExecutionsAfterReset1[0].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset2 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset2)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset2)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset2)
 
-	childExecutionsAfterReset2 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childExecutionsAfterReset2 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childExecutionsAfterReset2, 3)
 	// All 3 child workflow IDs should be same after reset.
 	s.Equal(childExecutionsAfterReset1[0].WorkflowId, childExecutionsAfterReset2[0].WorkflowId)
@@ -237,16 +238,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	// (reset #3) - resetting the new workflow execution after child-2 but before child-3
 	resetRequest.RequestId = "reset-request-3"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childExecutionsAfterReset2[1].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childExecutionsAfterReset2[1].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 	// Wait for the new run to complete.
 	var resultAfterReset3 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset3)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset3)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset3)
 
-	childExecutionsAfterReset3 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childExecutionsAfterReset3 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childExecutionsAfterReset3, 3)
 	// All 3 child workflow IDs should be same after reset.
 	s.Equal(childExecutionsAfterReset2[0].WorkflowId, childExecutionsAfterReset3[0].WorkflowId)
@@ -262,17 +263,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 	// This should successfully replay all child events and not change the child workflow IDs from previous run.
 	resetRequest.RequestId = "reset-request-4"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), childExecutionsAfterReset3[2].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), childExecutionsAfterReset3[2].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset4 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset4)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset4)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset4)
 
-	childIDsFinal := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsFinal := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsFinal, 3)
 	s.Equal(childExecutionsAfterReset3[0].WorkflowId, childIDsFinal[0].WorkflowId)
 	s.Equal(childExecutionsAfterReset3[1].WorkflowId, childIDsFinal[1].WorkflowId)
@@ -289,10 +290,10 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectDuplicate() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	// Start a workflow with 3 children.
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	// Executing WorkflowWithChildren with true for input fixedWID, and rejectDuplicate.
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithChildren, true, true)
 	s.NoError(err)
@@ -300,16 +301,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectD
 	err = run.Get(s.Context(), &originalResult)
 	s.NoError(err)
 
-	s.verifyReusePolicyIsSetForAllChild(env, env.Tv().WorkflowID(), run.GetRunID(), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
+	s.verifyReusePolicyIsSetForAllChild(env, tv.WorkflowID(), run.GetRunID(), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
 
 	// save child init initialChildExecutions for later comparison.
-	initialChildExecutions := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), run.GetRunID())
+	initialChildExecutions := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), run.GetRunID())
 	s.Len(initialChildExecutions, 3)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      run.GetRunID(),
 		},
 		Reason: "integration test",
@@ -321,11 +322,11 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectD
 	s.NoError(err)
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset1)
 
-	childExecutionsAfterReset1 := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childExecutionsAfterReset1 := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childExecutionsAfterReset1, 3)
 	// All 3 child workflow IDs should be same after reset.
 	s.Equal(initialChildExecutions[0].WorkflowId, childExecutionsAfterReset1[0].WorkflowId)
@@ -341,17 +342,17 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectD
 	// This should successfully replay all child events and not change the child workflow IDs from previous run.
 	resetRequest.RequestId = "reset-request-4"
 	resetRequest.WorkflowExecution.RunId = resp.GetRunId()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), resp.GetRunId(), initialChildExecutions[2].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), resp.GetRunId(), initialChildExecutions[2].WorkflowId)
 	resp, err = env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset4 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset4)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset4)
 	s.NoError(err)
 	s.Equal(originalResult, resultAfterReset4)
 
-	childIDsFinal := s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+	childIDsFinal := s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 	s.Len(childIDsFinal, 3)
 	s.Equal(childExecutionsAfterReset1[0].WorkflowId, childIDsFinal[0].WorkflowId)
 	s.Equal(childExecutionsAfterReset1[1].WorkflowId, childIDsFinal[1].WorkflowId)
@@ -367,16 +368,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectD
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, false, false)
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		return len(initialChildExecutions) == 1
 
 	}, 5*time.Second, 100*time.Millisecond)
@@ -384,7 +385,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -397,7 +398,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 		return len(childExecutionsAfterReset1) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -407,7 +408,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 
 	s.NotEqual(initialChildExecutions[0].WorkflowId, childExecutionsAfterReset1[0].WorkflowId)
@@ -432,16 +433,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, true, false)
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		return len(initialChildExecutions) == 1
 
 	}, 5*time.Second, 100*time.Millisecond)
@@ -449,7 +450,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -463,7 +464,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 		return len(childExecutionsAfterReset1) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -472,7 +473,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 
 	s.Equal(initialChildExecutions[0].WorkflowId, childExecutionsAfterReset1[0].WorkflowId)
@@ -489,26 +490,26 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_WithRejectDuplicate() {
 	// TODO: Enable this test when reset phase 2 is enabled.
 	s.T().Skip("Skipping until reset phase 2 is enabled")
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, true, true)
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		return len(initialChildExecutions) == 1
 
 	}, 5*time.Second, 100*time.Millisecond)
 
-	s.verifyReusePolicyIsSetForAllChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
+	s.verifyReusePolicyIsSetForAllChild(env, tv.WorkflowID(), firstRun.GetRunID(), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -522,7 +523,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 	// Let the second child finish
 	var childExecutionsAfterReset1 []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), resp.GetRunId())
+		childExecutionsAfterReset1 = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), resp.GetRunId())
 		return len(childExecutionsAfterReset1) == 1
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -531,7 +532,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 
 	s.Equal(initialChildExecutions[0].WorkflowId, childExecutionsAfterReset1[0].WorkflowId)
@@ -546,16 +547,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 
 // 3.a Reset point is after the child init and the child is running at the time of reset. Child started but not completed.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, false, false)
 	s.NoError(err)
 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -564,11 +565,11 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		if len(initialChildExecutions) == 0 {
 			return false
 		}
-		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChildInit(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+		resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChildInit(env, tv.WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
 		return resetRequest.WorkflowTaskFinishEventId != 0
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -584,7 +585,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 
 	// verify that the child completed.
@@ -596,16 +597,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 
 // 3.b Reset point is after the child init and the child finished at the time of reset.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, false, false)
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		return len(initialChildExecutions) == 1
 
 	}, 5*time.Second, 100*time.Millisecond)
@@ -613,7 +614,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -625,34 +626,34 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 
 	// Wait for the child to complete.
 	s.Eventually(func() bool {
-		return s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId) != 0
+		return s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId) != 0
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
-	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChildInit(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIDAfterChildInit(env, tv.WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
 	resp, err := env.SdkClient().ResetWorkflowExecution(s.Context(), resetRequest)
 	s.NoError(err)
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.NoError(err)
 }
 
 // 3.c Reset point is after the child init and the child terminated at the time of reset.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	options := s.startWorkflowOptions(env)
+	options := s.startWorkflowOptions(env, tv)
 	firstRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), options, s.workflowWithWaitingChild, false, false)
 	s.NoError(err)
 
 	// save child init initialChildExecutions for later comparison.
 	var initialChildExecutions []*commonpb.WorkflowExecution
 	s.Eventually(func() bool {
-		initialChildExecutions = s.getChildWFIDsFromHistory(env, env.Tv().WorkflowID(), firstRun.GetRunID())
+		initialChildExecutions = s.getChildWFIDsFromHistory(env, tv.WorkflowID(), firstRun.GetRunID())
 		return len(initialChildExecutions) == 1
 
 	}, 5*time.Second, 100*time.Millisecond)
@@ -660,7 +661,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: env.Tv().WorkflowID(),
+			WorkflowId: tv.WorkflowID(),
 			RunId:      firstRun.GetRunID(),
 		},
 		Reason: "integration test",
@@ -673,7 +674,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	// Wait until the parent has recorded the child's terminated event and a subsequent WFT completed.
 	var wftAfterChildTerminated int64
 	s.Eventually(func() bool {
-		wftAfterChildTerminated = s.getWorkflowTaskFinishEventIDAfterChild(env, env.Tv().WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
+		wftAfterChildTerminated = s.getWorkflowTaskFinishEventIDAfterChild(env, tv.WorkflowID(), firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
 		return wftAfterChildTerminated != 0
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -686,7 +687,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 
 	// Wait for the new run to complete.
 	var resultAfterReset1 string
-	err = env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
+	err = env.SdkClient().GetWorkflow(s.Context(), tv.WorkflowID(), resp.GetRunId()).Get(s.Context(), &resultAfterReset1)
 	s.ErrorContains(err, "child workflow execution error")
 	s.ErrorContains(err, "terminated")
 
@@ -697,9 +698,9 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 		"Child workflow should have status TERMINATED")
 }
 
-func (s *WorkflowResetWithChildSuite) startWorkflowOptions(env *testcore.TestEnv) sdkclient.StartWorkflowOptions {
+func (s *WorkflowResetWithChildSuite) startWorkflowOptions(env *testcore.TestEnv, tv *testvars.TestVars) sdkclient.StartWorkflowOptions {
 	var wfOptions = sdkclient.StartWorkflowOptions{
-		ID:                       env.Tv().WorkflowID(),
+		ID:                       tv.WorkflowID(),
 		TaskQueue:                env.WorkerTaskQueue(),
 		WorkflowExecutionTimeout: 15 * time.Second,
 		WorkflowTaskTimeout:      time.Second,

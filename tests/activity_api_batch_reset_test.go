@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -32,7 +33,7 @@ func TestActivityAPIBatchResetClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityAPIBatchResetClientTestSuite{})
 }
 
-func newBatchResetEnv(t *testing.T) *testcore.TestEnv {
+func newBatchResetEnv(t *testing.T) (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(
 		t,
 		testcore.WithWorkerService("batch operations"),
@@ -55,7 +56,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) createBatchResetWorkflow(env *tes
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success() {
-	env := newBatchResetEnv(s.T())
+	env, _ := newBatchResetEnv(s.T())
 
 	internalWorkflow := newInternalWorkflow()
 
@@ -182,7 +183,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success() 
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Protobuf() {
-	env := newBatchResetEnv(s.T())
+	env, _ := newBatchResetEnv(s.T())
 
 	internalWorkflow := newInternalWorkflow()
 
@@ -309,7 +310,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWorkflowsResetAttempts() {
-	env := newBatchResetEnv(s.T())
+	env, _ := newBatchResetEnv(s.T())
 	ctx := env.Context()
 
 	const workflowCount = 10
@@ -403,7 +404,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_DontResetAttempts() {
-	env := newBatchResetEnv(s.T())
+	env, _ := newBatchResetEnv(s.T())
 
 	internalWorkflow := newInternalWorkflow()
 
@@ -529,7 +530,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_DontResetA
 }
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Failed() {
-	env := newBatchResetEnv(s.T())
+	env, _ := newBatchResetEnv(s.T())
 
 	// neither activity type not "match all" is provided
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(env.Context(), &workflowservice.StartBatchOperationRequest{

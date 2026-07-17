@@ -31,7 +31,7 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &WorkflowAliasSearchAttributeTestSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
-func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	opts = append([]testcore.TestOption{
 		// Keep deployment versions short because worker-deployment system workflow IDs must fit into 255 characters.
 		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
@@ -39,9 +39,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) newTestEnv(opts ...testcore.Test
 		}),
 	}, opts...)
 
-	env := testcore.NewEnv(s.T(), opts...)
+	env, tv := testcore.NewEnv(s.T(), opts...)
 	env.SdkWorker().RegisterWorkflow(s.workflowFunc)
-	return env
+	return env, tv
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
@@ -126,9 +126,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) terminateWorkflow(
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
-	_, err := s.createWorkflow(env, env.Tv(), nil)
+	_, err := s.createWorkflow(env, tv, nil)
 	s.NoError(err)
 
 	s.EventuallyWithT(
@@ -167,7 +167,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute_CustomSearchAttributeOverride() {
-	env := s.newTestEnv()
+	env, tv := s.newTestEnv()
 
 	_, err := env.SdkClient().OperatorService().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
 		Namespace: env.Namespace().String(),
@@ -183,7 +183,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 		},
 	}
 
-	_, err = s.createWorkflow(env, env.Tv(), sa)
+	_, err = s.createWorkflow(env, tv, sa)
 	s.NoError(err)
 
 	s.EventuallyWithT(

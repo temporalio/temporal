@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -117,7 +118,7 @@ func TestArchivalSuite(t *testing.T) {
 	parallelsuite.Run(t, &ArchivalSuite{})
 }
 
-func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
+func (s *ArchivalSuite) newTestEnv() (*archivalTestEnv, *testvars.TestVars) {
 	cfg := &config.FilestoreArchiver{FileMode: "0666", DirMode: "0766"}
 	historyProvider := &config.HistoryArchiverProvider{Filestore: cfg}
 	visibilityProvider := &config.VisibilityArchiverProvider{Filestore: cfg}
@@ -154,7 +155,8 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		},
 	)
 
-	ae.TestEnv = testcore.NewEnv(s.T(),
+	var tv *testvars.TestVars
+	ae.TestEnv, tv = testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.ArchivalProcessorArchiveDelay, time.Duration(0)),
 		testcore.WithArchival(),
 		testcore.WithCustomArchivers(customHistoryArchiverFactory, customVisibilityArchiverFactory),
@@ -195,11 +197,11 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 	)
 	s.NoError(err)
 
-	return ae
+	return ae, tv
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
@@ -214,7 +216,7 @@ func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
@@ -233,7 +235,7 @@ func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 	// s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
@@ -247,7 +249,7 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
@@ -295,7 +297,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 }
 
 func (s *ArchivalSuite) TestCustomArchiver() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	workflowID := "custom-history-archiver-workflow-id"
 	workflowType := "custom-history-archiver-type"

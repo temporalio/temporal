@@ -25,7 +25,7 @@ func TestRelayTaskTestSuite(t *testing.T) {
 }
 
 func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-relay-workflow-task-timeout-test"
 	wt := "functional-relay-workflow-task-timeout-test-type"
 	tl := "functional-relay-workflow-task-timeout-test-taskqueue"

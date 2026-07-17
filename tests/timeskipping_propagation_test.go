@@ -99,9 +99,8 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //     (the pre-apply snapshots; the wire form the transfer task consumes).
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	parentWFType := tv.WorkflowType()
@@ -231,9 +230,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 //   - Only after BOTH c1 and c2 complete does parent become idle on t2 → skips 1h → t2 fires.
 //   - Parent completes.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	parentWFType := tv.WorkflowType()
@@ -363,9 +361,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 //
 // Final state: C.accum == 4h (3h inherited + 1h own); P.accum == 4h; G.accum == 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	gWFType := &commonpb.WorkflowType{Name: tv.WorkflowType().Name + "-g"}
@@ -532,12 +529,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 // workflow that "should" run for 2h of virtual wall time still runs for 2h of real
 // wall time, not less.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsShifted() {
-	env := testcore.NewEnv(
+	env, tv := testcore.NewEnv(
 		s.T(),
 		testcore.WithHistoryTaskRecorder(),
 		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
 	)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	parentWFType := tv.WorkflowType()
@@ -960,9 +956,8 @@ func (s *TimeSkippingPropagationTestSuite) firstWorkflowTaskCompletedEventID(
 // ResetReapplyExcludeType value that can suppress it. The test pins this
 // behavior so a future change would surface it.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	wfID := tv.WorkflowID()
@@ -1104,9 +1099,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 //     (history observability — the event is created before applyTimeSkippingConfig runs).
 //   - Wall-clock elapsed is nowhere near 3h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	wfType := tv.WorkflowType()
@@ -1223,9 +1217,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 //     FastForward=4h) with InitialSkippedDuration≈1h and references attempt 1 as
 //     ContinuedExecutionRunId.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	wfType := tv.WorkflowType()
@@ -1357,9 +1350,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 //   - Run 2's WorkflowExecutionStarted carries the current TSC snapshot with
 //     InitialSkippedDuration ≈ 50min, initiator=CRON_SCHEDULE.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	wfType := tv.WorkflowType()
@@ -1491,9 +1483,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 //   - run2: Config.Enabled=false, FastForward.HasReached=true, Accum ≈ 3h.
 //   - run2 history has exactly one transition, carrying DisabledAfterFastForward=true.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	wfType := tv.WorkflowType()
@@ -1617,9 +1608,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 //   - The parent's StartChildWorkflowExecutionInitiated event carries no TimeSkippingConfig
 //     but InitialSkippedDuration == 1h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_PropagationDisabled() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
-	tv := testvars.New(s.T())
 	ctx := testcore.NewContext()
 
 	parentWFType := tv.WorkflowType()

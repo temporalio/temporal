@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -29,7 +30,7 @@ func TestNexusMatchingTestSuite(t *testing.T) {
 }
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
-	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, b testcore.MatchingBehavior) {
+	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, _ *testvars.TestVars, b testcore.MatchingBehavior) {
 		dispatchAndCompleteNexusTask(s.T(), env, b.ForceTaskForward, b.ForcePollForward)
 	})
 }
@@ -37,7 +38,7 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwarding() {
 	// Both poll and task go to partition 1 with no forwarding. This verifies that
 	// non-root partitions work correctly even when no forwarding is involved.
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -19,10 +20,11 @@ type VersioningTestEnv struct {
 	*testcore.TestEnv
 }
 
-func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) *VersioningTestEnv {
+func newVersioningTestEnv(t *testing.T, opts ...testcore.TestOption) (*VersioningTestEnv, *testvars.TestVars) {
+	testEnv, tv := testcore.NewEnv(t, opts...)
 	return &VersioningTestEnv{
-		TestEnv: testcore.NewEnv(t, opts...),
-	}
+		TestEnv: testEnv,
+	}, tv
 }
 
 func (env *VersioningTestEnv) waitForTaskQueueVersioningInfo(

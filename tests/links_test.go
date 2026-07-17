@@ -71,7 +71,7 @@ func (s *LinksSuite) getWorkflowRunRequestInfo(
 }
 
 func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := env.SdkClient().ExecuteWorkflow(
@@ -101,7 +101,7 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 }
 
 func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	run, err := env.SdkClient().ExecuteWorkflow(
@@ -139,7 +139,7 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 }
 
 func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
-	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+	env, _ := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -210,7 +210,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 	// Body of the test. We run it twice, where the workflow targeted by SignalWithStart
 	// is or is-not running.
 	testImpl := func(ls *LinksSuite, signalExistingWorkflow bool) {
-		env := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
+		env, _ := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
 		ctx := ls.Context()
 
 		signalTest := newSignalWorkflowTest(env, ls)
@@ -284,7 +284,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToEvent()
 // This exercises the rebuild/replay path through ApplyWorkflowExecutionSignaled, which uses
 // the event's real event ID (not common.BufferedEventID) when writing to the CHASM tree.
 func (s *LinksSuite) TestSignalWorkflowExecution_BacklinkSurvivesReset() {
-	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+	env, _ := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -368,7 +368,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 	// Body of the test. We run it twice, where the workflow targeted by SignalWithStart
 	// is or is-not running.
 	testImpl := func(ls *LinksSuite, signalExistingWorkflow bool) {
-		env := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
+		env, _ := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
@@ -486,7 +486,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BacklinkSurvivesReset(
 // Once the workflow task completes and the signal is flushed to history, the backlink must
 // reflect a real (non-buffered) event ID.
 func (s *LinksSuite) TestSignalWorkflowExecution_BufferedDuringWorkflowTask() {
-	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+	env, _ := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx := s.Context()
 
 	signalTest := newSignalWorkflowTest(env, s)
@@ -537,7 +537,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BufferedDuringWorkflow
 	// Body of the test. We run it twice, where the workflow targeted by SignalWithStart
 	// is or is-not running.
 	testImpl := func(ls *LinksSuite, signalExistingWorkflow bool) {
-		env := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
+		env, _ := testcore.NewEnv(ls.T(), enableSignalBacklinkOpts()...)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
@@ -625,7 +625,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_BufferedDuringWorkflow
 }
 
 func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevantEvents() {
-	env := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
+	env, _ := testcore.NewEnv(s.T(), enableSignalBacklinkOpts()...)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

@@ -47,8 +47,7 @@ func TestWorkflowTestSuite(t *testing.T) {
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 	s.Run("start", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		workflowID := testcore.RandomizeStr(s.T().Name())
 		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
@@ -88,8 +87,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 	})
 
 	s.Run("start twice - same request", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -141,8 +139,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 	})
 
 	s.Run("fail when already started", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -168,8 +165,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
 		Namespace:          env.Namespace().String(),
@@ -294,9 +290,8 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 					tc.MaxCallbacksPerWorkflow,
 				))
 			}
-			env := testcore.NewEnv(s.T(), opts...)
+			env, tv := testcore.NewEnv(s.T(), opts...)
 
-			tv := testvars.New(s.T())
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.NewString(),
 				Namespace:           env.Namespace().String(),
@@ -471,8 +466,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
 		Namespace:          env.Namespace().String(),
@@ -602,8 +596,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
 		Namespace:          env.Namespace().String(),
@@ -735,8 +728,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *WorkflowTestSuite) {
 			// setting this to 0 to be sure we are terminating old workflow
-			env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
-			tv := testvars.New(s.T())
+			env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.NewString(),
 				Namespace:          env.Namespace().String(),
@@ -816,9 +808,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_HistorySizeNotDoubleCount
 	// increment into the retry, so the reused-ID run double-counted its first event batch in
 	// ExecutionStats.HistorySize. A reused-ID run has byte-identical history to a fresh run, so
 	// its reported HistorySizeBytes must match a fresh control run.
-	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
-
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
 
 	startRun := func(wfID string) string {
 		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -887,8 +877,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_HistorySizeNotDoubleCount
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	startDelay := 3 * time.Second
 	reqStartTime := time.Now()
 	we0, startErr := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -956,8 +945,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 }
 
 func (s *WorkflowTestSuite) TestTerminateWorkflow() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -1095,8 +1083,7 @@ StartNewExecutionLoop:
 }
 
 func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	testContext := s.Context()
 
 	// start workflow execution
@@ -1159,8 +1146,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflowOnMessageTooLargeFailure() {
 }
 
 func (s *WorkflowTestSuite) TestSequentialWorkflow() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -1255,8 +1241,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 }
 
 func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -1319,8 +1304,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
@@ -1461,8 +1445,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowRetry() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	initialInterval := 1 * time.Second
 	backoffCoefficient := 1.5
 	maximumAttempts := 5
@@ -1615,8 +1598,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowImpl := func(attempts int, errorReason string, nonRetryable bool, executions *[]*commonpb.WorkflowExecution) testcore.WorkflowTaskHandler {
 		attemptCount := 1
 
@@ -1782,8 +1764,8 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 	}
 
 	s.Run(sadefs.TemporalWorkerDeploymentVersion, func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		request := makeRequest(env, testvars.New(s.T()), s.T(), sadefs.TemporalWorkerDeploymentVersion)
+		env, tv := testcore.NewEnv(s.T())
+		request := makeRequest(env, tv, s.T(), sadefs.TemporalWorkerDeploymentVersion)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1791,8 +1773,8 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 	})
 
 	s.Run(sadefs.TemporalWorkerDeployment, func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		request := makeRequest(env, testvars.New(s.T()), s.T(), sadefs.TemporalWorkerDeployment)
+		env, tv := testcore.NewEnv(s.T())
+		request := makeRequest(env, tv, s.T(), sadefs.TemporalWorkerDeployment)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1800,8 +1782,8 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 	})
 
 	s.Run(sadefs.TemporalWorkflowVersioningBehavior, func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		request := makeRequest(env, testvars.New(s.T()), s.T(), sadefs.TemporalWorkflowVersioningBehavior)
+		env, tv := testcore.NewEnv(s.T())
+		request := makeRequest(env, tv, s.T(), sadefs.TemporalWorkflowVersioningBehavior)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -1811,15 +1793,15 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 	// These are currently allowed since they are in the predefinedWhiteList. Once it's confirmed that they are not being used,
 	// we can remove them from the predefinedWhiteList.
 	s.Run(sadefs.BatcherUser, func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		request := makeRequest(env, testvars.New(s.T()), s.T(), sadefs.BatcherUser)
+		env, tv := testcore.NewEnv(s.T())
+		request := makeRequest(env, tv, s.T(), sadefs.BatcherUser)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.NoError(err)
 	})
 
 	s.Run(sadefs.BatcherNamespace, func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		request := makeRequest(env, testvars.New(s.T()), s.T(), sadefs.BatcherNamespace)
+		env, tv := testcore.NewEnv(s.T())
+		request := makeRequest(env, tv, s.T(), sadefs.BatcherNamespace)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 		s.NoError(err)
 	})
@@ -1831,8 +1813,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 
 	// Test StartWorkflowExecution with internal task queue
 	s.Run("StartWorkflowExecution_PerNSWorkerTaskQueue", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
 		_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
@@ -1852,8 +1833,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 
 	// Test SignalWithStartWorkflowExecution with internal task queue
 	s.Run("SignalWithStartWorkflowExecution_PerNSWorkerTaskQueue", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
@@ -1875,8 +1855,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 
 	// Test ExecuteMultiOperation with internal task queue
 	s.Run("multiOp", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
 		workflowID := testcore.RandomizeStr(s.T().Name())
 		request := &workflowservice.ExecuteMultiOperationRequest{
@@ -1933,8 +1912,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 // as new, this should equal the current run id; the chained case is covered in continue_as_new_test.go.
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
 	s.Run("brand new start", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		req := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -1951,8 +1929,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
 	})
 
 	s.Run("use existing dedup", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		req := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -1975,8 +1952,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
 	})
 
 	s.Run("fail policy error carries first execution run id", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		req := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -1999,8 +1975,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
 	})
 
 	s.Run("retried request dedup", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		req := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -2026,8 +2001,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId() {
 // the FAIL conflict policy fails with WorkflowExecutionAlreadyStarted, and that error reports the
 // original (first attempt) run id in FirstExecutionRunId — not the retry's run id.
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_AfterRetry() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := testcore.RandomizeStr(s.T().Name())
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -2096,8 +2070,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_After
 // reset, a StartWorkflowExecution against the reset workflow (with FAIL or USE_EXISTING) reports
 // the original run id as FirstExecutionRunId — not the reset's new run id.
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_AfterReset() {
-	env := testcore.NewEnv(s.T())
-	tv := testvars.New(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := testcore.RandomizeStr(s.T().Name())
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -2178,8 +2151,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_FirstExecutionRunId_After
 // FirstExecutionRunId of the head-of-chain run, matching the contract from StartWorkflowExecution.
 func (s *WorkflowTestSuite) TestSignalWithStartWorkflowExecution_FirstExecutionRunId() {
 	s.Run("brand new start via SignalWithStart", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			RequestId:          uuid.NewString(),
 			Namespace:          env.Namespace().String(),
@@ -2198,8 +2170,7 @@ func (s *WorkflowTestSuite) TestSignalWithStartWorkflowExecution_FirstExecutionR
 	})
 
 	s.Run("signal existing workflow returns first execution run id", func(s *WorkflowTestSuite) {
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		workflowID := testcore.RandomizeStr(s.T().Name())
 
 		startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -2235,8 +2206,7 @@ func (s *WorkflowTestSuite) TestSignalWithStartWorkflowExecution_FirstExecutionR
 	s.Run("reject duplicate on completed workflow carries first execution run id", func(s *WorkflowTestSuite) {
 		// SignalWithStart does not accept WORKFLOW_ID_CONFLICT_POLICY_FAIL, so the AlreadyStarted
 		// error path is reached via WorkflowIdReusePolicy REJECT_DUPLICATE against a completed run.
-		env := testcore.NewEnv(s.T())
-		tv := testvars.New(s.T())
+		env, tv := testcore.NewEnv(s.T())
 		workflowID := testcore.RandomizeStr(s.T().Name())
 
 		startReq := &workflowservice.StartWorkflowExecutionRequest{

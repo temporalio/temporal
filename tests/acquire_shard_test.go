@@ -83,7 +83,7 @@ func (s *AcquireShardSuite) newEnv(fi *config.FaultInjection) chan logRecord {
 	// listen on the log channel until afterward. So the buffer needs to be big
 	// enough to hold all server-startup logs, which are currently about 190 lines.
 	logs := make(chan logRecord, 2000)
-	testcore.NewEnv(
+	_, _ = testcore.NewEnv(
 		s.T(),
 		testcore.WithLogger(newLogRecorder(logs)),
 		testcore.WithHistoryShardCount(1),

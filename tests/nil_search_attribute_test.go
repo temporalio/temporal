@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -25,10 +24,9 @@ func TestNilSearchAttributeSuite(t *testing.T) {
 }
 
 func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -46,7 +44,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered(
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",
@@ -85,10 +83,9 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered(
 }
 
 func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilSearchAttributesFiltered() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-all-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -105,7 +102,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilSearchAttributesFilter
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",
@@ -139,10 +136,9 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilSearchAttributesFilter
 }
 
 func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilSearchAttributesNotVisible() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-describe-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -160,7 +156,7 @@ func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilSearchAttributesNotVis
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",
@@ -196,10 +192,9 @@ func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilSearchAttributesNotVis
 }
 
 func (s *NilSearchAttributeSuite) TestWorkflowStart_NilMemoFiltered() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -217,7 +212,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilMemoFiltered() {
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",
@@ -253,10 +248,9 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_NilMemoFiltered() {
 }
 
 func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilMemoFiltered() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-all-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -273,7 +267,7 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilMemoFiltered() {
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",
@@ -301,10 +295,9 @@ func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilMemoFiltered() {
 }
 
 func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilMemoNotVisible() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-describe-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
 	s.NoError(err)
@@ -322,7 +315,7 @@ func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilMemoNotVisible() {
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(10 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            "test-identity",

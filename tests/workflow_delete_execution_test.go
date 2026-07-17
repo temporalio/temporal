@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -38,12 +37,10 @@ func TestWorkflowDeleteExecutionSuite(t *testing.T) {
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkflow() {
-	env := testcore.NewEnv(s.T(),
+	env, tv := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	)
-
-	tv := testvars.New(s.T())
 
 	const numExecutions = 5
 
@@ -187,12 +184,10 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflow() {
-	env := testcore.NewEnv(s.T(),
+	env, tv := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	)
-
-	tv := testvars.New(s.T())
 
 	const numExecutions = 5
 
@@ -307,12 +302,10 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminatedWorkflow() {
-	env := testcore.NewEnv(s.T(),
+	env, tv := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second),
 	)
-
-	tv := testvars.New(s.T())
 
 	const numExecutions = 3
 

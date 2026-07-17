@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -51,7 +52,7 @@ func TestHttpApiTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &HttpApiTestSuite{})
 }
 
-func (s *HttpApiTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *HttpApiTestSuite) newTestEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	return testcore.NewEnv(s.T(), opts...)
 }
 
@@ -172,7 +173,7 @@ func (s *HttpApiTestSuite) TestHTTPAPIBasics_ShorthandPretty() {
 }
 
 func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pretty bool) {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	// These are callbacks because the worker needs to be initialized so we can get the task queue
 	reqBody := func() string {
 		requestBody, err := protojson.Marshal(&workflowservice.StartWorkflowExecutionRequest{
@@ -235,7 +236,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pretty bool) {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 
 	reqBody := func() string {
 		return `{
@@ -287,7 +288,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) TestHTTPHostValidation() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"}))
+	env, _ := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"}))
 	{
 		req, err := http.NewRequestWithContext(s.Context(), "GET", "/system-info", nil)
 		s.NoError(err)
@@ -307,7 +308,7 @@ func (s *HttpApiTestSuite) TestHTTPHostValidation() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
-	env := s.newTestEnv(testcore.WithDedicatedCluster())
+	env, _ := s.newTestEnv(testcore.WithDedicatedCluster())
 	// Make a claim mapper and authorizer that capture info
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
@@ -362,7 +363,7 @@ func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIPretty() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	// Make a call to system info normal, confirm no newline, then ask for pretty
 	// and confirm newlines
 	_, b := s.httpGet(env, http.StatusOK, "/system-info", "application/json")
@@ -404,7 +405,7 @@ func (s *HttpApiTestSuite) httpRequest(env *testcore.TestEnv, expectedStatus int
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	_, respBody := s.httpGet(
 		env,
 		http.StatusOK,
@@ -426,7 +427,7 @@ func (s *HttpApiTestSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	_, respBody := s.httpGet(
 		env,
 		http.StatusOK,
@@ -439,7 +440,7 @@ func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv3_Docs() {
-	env := s.newTestEnv()
+	env, _ := s.newTestEnv()
 	_, respBody := s.httpGet(
 		env,
 		http.StatusOK,

@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -39,7 +38,7 @@ func TestChildWorkflowSuite(t *testing.T) {
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-child-workflow-test-parent"
 	childID := "functional-child-workflow-test-child"
@@ -359,7 +358,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 }
 
 func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-cron-child-workflow-test-parent"
 	childID := "functional-cron-child-workflow-test-child"
@@ -570,7 +569,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 }
 
 func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-retry-child-workflow-test-parent"
 	childID := "functional-retry-child-workflow-test-child"
@@ -789,7 +788,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 }
 
 func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 
 	parentID := "functional-retry-fail-child-workflow-test-parent"
 	childID := "functional-retry-fail-child-workflow-test-child"
@@ -959,9 +958,9 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFailedEvent() {
-	env := testcore.NewEnv(s.T())
-	tvParent := env.Tv().Sub("parent")
-	tvChild := env.Tv().Sub("child")
+	env, tv := testcore.NewEnv(s.T())
+	tvParent := tv.Sub("parent")
+	tvChild := tv.Sub("child")
 
 	// Start a child workflow directly and leave it running so the parent's child-start transfer task
 	// hits a running workflow ID conflict with the default child conflict policy.
@@ -1046,9 +1045,9 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_RecordsFa
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_TerminateIfRunningStartsNewChild() {
-	env := testcore.NewEnv(s.T())
-	tvParent := env.Tv().Sub("parent")
-	tvChild := env.Tv().Sub("child")
+	env, tv := testcore.NewEnv(s.T())
+	tvParent := tv.Sub("parent")
+	tvChild := tv.Sub("child")
 
 	// Pre-create the child workflow ID so the parent's StartChild transfer task has to resolve
 	// a duplicate child ID through the history StartWorkflowExecution path.
@@ -1165,7 +1164,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution_AlreadyRunning_Terminate
 }
 
 func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {
-	env := testcore.NewEnv(s.T())
+	env, tv := testcore.NewEnv(s.T())
 
 	parentID := testcore.RandomizeStr(s.T().Name())
 	childID := testcore.RandomizeStr(s.T().Name())
@@ -1195,7 +1194,7 @@ func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	// Parent workflow logic: try to start child workflow on internal task queue
-	tv := testvars.New(s.T()).WithTaskQueue(tlParent)
+	tv = tv.WithTaskQueue(tlParent)
 	childExecutionStarted := false
 	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		env.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))

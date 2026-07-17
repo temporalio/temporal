@@ -32,7 +32,7 @@ func TestDescribeTestSuite(t *testing.T) {
 }
 
 func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-describe-wfe-test"
 	wt := "functional-describe-wfe-test-type"
 	tq := "functional-describe-wfe-test-taskqueue"
@@ -190,7 +190,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 }
 
 func (s *DescribeTestSuite) TestDescribeTaskQueue() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	workflowID := "functional-get-poller-history"
 	wt := "functional-get-poller-history-type"
 	tl := "functional-get-poller-history-taskqueue"

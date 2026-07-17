@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
@@ -55,7 +56,7 @@ func TestVersioningFunctionalSuite(t *testing.T) {
 	parallelsuite.Run(t, &VersioningIntegSuite{})
 }
 
-func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *VersioningIntegSuite) setupEnv(opts ...testcore.TestOption) (*testcore.TestEnv, *testvars.TestVars) {
 	opts = append([]testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeployments, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, true),
@@ -106,7 +107,7 @@ func (s *VersioningIntegSuite) reachabilityCacheTTLOptions() []testcore.TestOpti
 func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcore.TestEnv, *VersioningIntegSuite)) {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.Run(behavior.Name(), func(s *VersioningIntegSuite) {
-			env := s.setupEnv(behavior.Options()...)
+			env, _ := s.setupEnv(behavior.Options()...)
 			behavior.InjectHooks(env)
 			subtest(env, s)
 		})
@@ -114,7 +115,7 @@ func (s *VersioningIntegSuite) runTestWithMatchingBehavior(subtest func(*testcor
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-conflict-token"
 
 	// nil token --> fail
@@ -155,7 +156,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 
 func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-build-id-validation"
 
 	// get initial conflict token
@@ -170,7 +171,7 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-assignment-rule-insert"
 
 	// get initial conflict token
@@ -192,7 +193,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-assignment-rule-replace"
 
 	// get initial conflict token + do initial inserts
@@ -216,7 +217,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-assignment-rule-delete"
 
 	// get initial conflict token + do initial inserts
@@ -244,7 +245,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-redirect-rule-insert"
 
 	// get initial conflict token
@@ -267,7 +268,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-redirect-rule-replace"
 
 	// get initial conflict token + do initial insert
@@ -291,7 +292,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-redirect-rule-delete"
 
 	// get initial conflict token + do initial inserts
@@ -314,7 +315,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 
 func (s *VersioningIntegSuite) TestCommitBuildID() {
 	// setup
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "test-commit-build-id"
 
 	// get initial conflict token
@@ -359,7 +360,7 @@ func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildI
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "functional-versioning-basic"
 
 	foo := s.prefixed("foo")
@@ -375,7 +376,7 @@ func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
 }
 
 func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "functional-versioning-series"
 
 	for i := range 10 {
@@ -395,7 +396,7 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 }
 
 func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "functional-versioning-compat-not-found"
 
 	res, err := env.FrontendClient().UpdateWorkerBuildIdCompatibility(s.Context(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -414,7 +415,7 @@ func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 }
 
 func (s *VersioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := "functional-versioning-persists"
 
 	s.addNewDefaultBuildID(env, tq, s.prefixed("foo"))
@@ -436,7 +437,7 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 
 	// ensure at least two hops
 	const partCount = 1 + partitionTreeDegree + partitionTreeDegree*partitionTreeDegree
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partCount),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partCount),
 	)
@@ -448,7 +449,7 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 }
 
 func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	buildID := fmt.Sprintf("b-%s", s.T().Name())
 	// Map a 3 task queues to this build ID and verify success
 	for i := 1; i <= 3; i++ {
@@ -528,7 +529,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1948,7 +1949,7 @@ func (s *VersioningIntegSuite) dispatchActivity(
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	// Testing:
 	// - redirecting dependent activity redirects wf
 	//   - this also implicitly verifies that sticky queue is cleared after redirecting activity task
@@ -2092,7 +2093,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 
 func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second),
 	)
 	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
@@ -2392,7 +2393,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible(env *testcore.TestEnv)
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 
 	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
@@ -2461,7 +2462,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -2804,7 +2805,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -3639,7 +3640,7 @@ func (s *VersioningIntegSuite) dispatchCron(
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -3696,12 +3697,12 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_CaN_Inherit() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	s.resetWorkflowAssignsToCorrectBuildIDCan(env, true)
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_CaN_NoInherit() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	s.resetWorkflowAssignsToCorrectBuildIDCan(env, false)
 }
 
@@ -3786,12 +3787,12 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIDCan(
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_ChildWF_Inherit() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	s.resetWorkflowAssignsToCorrectBuildIDChildWf(env, true)
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_ChildWF_NoInherit() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	s.resetWorkflowAssignsToCorrectBuildIDChildWf(env, false)
 }
 
@@ -3956,7 +3957,7 @@ func (s *VersioningIntegSuite) validateBuildIDAfterReset(
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_ReachabilityCache() {
-	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
+	env, _ := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	// 1. Add assignment rule A and start workflow with build id A
@@ -4014,7 +4015,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
-	env := s.setupEnv(s.reachabilityCacheTTLOptions()...)
+	env, _ := s.setupEnv(s.reachabilityCacheTTLOptions()...)
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	s.getBuildIDReachability(env, tq, nil, map[string]enumspb.BuildIdTaskReachability{
@@ -4084,7 +4085,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
 
@@ -4139,7 +4140,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
 
@@ -4222,7 +4223,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
-	env := s.setupEnv()
+	env, _ := s.setupEnv()
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	buildIDs := []string{"A", "B", "C", "D", "E"}
@@ -4254,7 +4255,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	// force one partition since DescribeTaskQueue only goes to the root
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -4321,7 +4322,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
-	env := s.setupEnv(
+	env, _ := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
 	)

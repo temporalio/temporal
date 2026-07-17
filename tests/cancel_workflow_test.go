@@ -31,7 +31,7 @@ func TestCancelWorkflowSuite(t *testing.T) {
 }
 
 func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-request-cancel-workflow-test"
 	wt := "functional-request-cancel-workflow-test-type"
 	tl := "functional-request-cancel-workflow-test-taskqueue"
@@ -126,7 +126,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
 	// Explicitly enable cross namespace commands for this test,
 	// need a dedicated cluster to enable cross namespace commands.
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
@@ -267,7 +267,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFinished() {
 	// Explicitly enable cross namespace commands for this test,
 	// need a dedicated cluster to enable cross namespace commands.
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
@@ -404,7 +404,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFound() {
 	// Explicitly enable cross namespace commands for this test,
 	// need a dedicated cluster to enable cross namespace commands.
-	env := testcore.NewEnv(s.T(),
+	env, _ := testcore.NewEnv(s.T(),
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCrossNamespaceCommands, true),
 	)
@@ -487,7 +487,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 }
 
 func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
-	env := testcore.NewEnv(s.T())
+	env, _ := testcore.NewEnv(s.T())
 	id := "functional-immediate-child-cancellation-workflow-task-failed-test"
 	wt := "functional-immediate-child-cancellation-workflow-task-failed-test-type"
 	tl := "functional-immediate-child-cancellation-workflow-task-failed-test-taskqueue"
