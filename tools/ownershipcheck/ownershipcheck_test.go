@@ -132,6 +132,9 @@ func TestByteSlice(t *testing.T) {
 func TestSliceMutability(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), ownershipcheck.Analyzer,
 		"replaceonlyslice",
+		"freshslicehelper",
+		"freshslicelib",
+		"crosspackagefreshslice",
 		"mutableslice",
 		"slicealiasmutation",
 		"unknownslicemutation",
