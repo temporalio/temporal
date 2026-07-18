@@ -113,3 +113,29 @@ func TestCheckInvariants_DetectsHwmRegression(t *testing.T) {
 	require.NotEmpty(t, violations)
 	require.Equal(t, "hwm-monotonic-generator", violations[0].Name)
 }
+
+// TestCheckInvariants_DetectsBufferOverrun confirms the buffer-bound invariant
+// fires when buffered starts exceed MaxBufferSize, and that being exactly at the
+// cap is allowed.
+func TestCheckInvariants_DetectsBufferOverrun(t *testing.T) {
+	over := schedulertest.Snapshot{HasPendingTask: true, MaxBufferSize: 1000, BufferedStartsCount: 1001}
+	violations := schedulertest.CheckInvariants(nil, over)
+	require.NotEmpty(t, violations, "buffer overrun must be flagged")
+	require.Equal(t, "buffer-bound", violations[0].Name)
+
+	atCap := schedulertest.Snapshot{HasPendingTask: true, MaxBufferSize: 1000, BufferedStartsCount: 1000}
+	require.Empty(t, schedulertest.CheckInvariants(nil, atCap), "exactly at the cap is allowed")
+}
+
+// TestCheckInvariants_DetectsBudgetOverrun confirms the action-budget invariant
+// fires when a single ExecuteTask takes more actions than MaxActionsPerExecution
+// (the double-spend bug class), and that being exactly at the cap is allowed.
+func TestCheckInvariants_DetectsBudgetOverrun(t *testing.T) {
+	over := schedulertest.Snapshot{HasPendingTask: true, MaxActionsPerExecution: 5, MaxActionsObserved: 6}
+	violations := schedulertest.CheckInvariants(nil, over)
+	require.NotEmpty(t, violations, "budget overrun must be flagged")
+	require.Equal(t, "action-budget", violations[0].Name)
+
+	atCap := schedulertest.Snapshot{HasPendingTask: true, MaxActionsPerExecution: 5, MaxActionsObserved: 5}
+	require.Empty(t, schedulertest.CheckInvariants(nil, atCap), "exactly at the cap is allowed")
+}

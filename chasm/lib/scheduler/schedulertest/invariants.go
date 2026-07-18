@@ -48,6 +48,27 @@ func CheckInvariants(prev *Snapshot, cur Snapshot) []Violation {
 			cur.Paused, cur.BackfillerCount, cur.IdleCloseTime.Format("2006-01-02T15:04:05"))
 	}
 
+	// (2a) Buffer bound: the total buffered starts must never exceed MaxBufferSize.
+	// The generator sizes each fill against this cap (remaining = MaxBufferSize -
+	// len(buffered)); exceeding it means the limit was not enforced and CHASM state
+	// can grow without bound (oversized state, persistence failures, OOM).
+	if cur.MaxBufferSize > 0 && cur.BufferedStartsCount > cur.MaxBufferSize {
+		add("buffer-bound",
+			"buffered starts = %d, exceeding MaxBufferSize=%d",
+			cur.BufferedStartsCount, cur.MaxBufferSize)
+	}
+
+	// (2b) Action budget: a single InvokerExecuteTask must not take more actions
+	// (start + terminate + cancel RPCs) than MaxActionsPerExecution. Exceeding it
+	// means the per-execution rate protection was bypassed — e.g. the action budget
+	// reset across the terminate/cancel/start phases, letting one execution take up
+	// to a multiple of the configured maximum.
+	if cur.MaxActionsPerExecution > 0 && cur.MaxActionsObserved > cur.MaxActionsPerExecution {
+		add("action-budget",
+			"a single ExecuteTask took %d actions, exceeding MaxActionsPerExecution=%d",
+			cur.MaxActionsObserved, cur.MaxActionsPerExecution)
+	}
+
 	if prev != nil {
 		// (3) Closed is terminal: a closed schedule must never reopen.
 		if prev.Closed && !cur.Closed {

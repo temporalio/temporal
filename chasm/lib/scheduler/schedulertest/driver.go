@@ -56,12 +56,26 @@ type Driver struct {
 	Frontend *workflowservicemock.MockWorkflowServiceClient
 	History  *historyservicemock.MockHistoryServiceClient
 
+	// Config is the scheduler config the library was wired with. Snapshot reads
+	// Tweakables (MaxBufferSize, MaxActionsPerExecution) from it so the
+	// buffer-bound and action-budget invariants can be evaluated.
+	Config *scheduler.Config
+
 	ref     chasm.ComponentRef
 	execKey chasm.ExecutionKey
 
 	// dispatchedSideEffects tracks physical side-effect tasks already executed,
 	// keyed by pointer identity, since MockNodeBackend accumulates tasks append-only.
 	dispatchedSideEffects map[*tasks.ChasmTask]struct{}
+
+	// actionRPCs points at the running count of action RPCs (StartWorkflowExecution
+	// + TerminateWorkflowExecution + RequestCancelWorkflowExecution) made through
+	// the mock clients. It is allocated before the clients so the stub closures can
+	// increment it. maxActionsObserved is the high-water mark of action RPCs made by
+	// any single side-effect task dispatch (one InvokerExecuteTask), which backs the
+	// action-budget invariant.
+	actionRPCs         *int
+	maxActionsObserved int
 
 	// AfterStep, if set, is called after every step's CloseTransaction with the
 	// driver, so invariant checks can observe each settled state.
@@ -72,6 +86,7 @@ type driverConfig struct {
 	schedule  *schedulepb.Schedule
 	startTime time.Time
 	afterStep func(d *Driver)
+	config    *scheduler.Config
 }
 
 // DriverOption configures a Driver at construction.
@@ -90,6 +105,13 @@ func WithStartTime(t time.Time) DriverOption {
 // WithAfterStep installs a hook called after every step.
 func WithAfterStep(fn func(d *Driver)) DriverOption {
 	return func(c *driverConfig) { c.afterStep = fn }
+}
+
+// WithConfig overrides the scheduler config (default: DefaultConfig). Use it to
+// set small Tweakables — e.g. MaxBufferSize or MaxActionsPerExecution — so the
+// buffer-bound and action-budget invariants are meaningfully exercised.
+func WithConfig(cfg *scheduler.Config) DriverOption {
+	return func(c *driverConfig) { c.config = cfg }
 }
 
 // NewDriver constructs a Driver and starts a scheduler execution via the
@@ -134,6 +156,7 @@ func newDriverScaffold(t *testing.T, opts ...DriverOption) (*Driver, *driverConf
 	cfg := &driverConfig{
 		schedule:  DefaultSchedule(),
 		startTime: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		config:    DefaultConfig(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -147,9 +170,29 @@ func newDriverScaffold(t *testing.T, opts ...DriverOption) (*Driver, *driverConf
 
 	frontend := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
 	history := historyservicemock.NewMockHistoryServiceClient(ctrl)
+
+	// actionRPCs counts every action RPC (start/terminate/cancel) the invoker
+	// makes through the mock clients, so Step can measure how many actions a single
+	// ExecuteTask takes (the action-budget invariant).
+	actionRPCs := new(int)
+	countAction := func() { *actionRPCs++ }
+
 	// Default happy-path stubs; tests can layer more specific expectations.
 	frontend.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil).AnyTimes()
+		DoAndReturn(func(context.Context, *workflowservice.StartWorkflowExecutionRequest, ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			countAction()
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		}).AnyTimes()
+	history.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *historyservice.TerminateWorkflowExecutionRequest, ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+			countAction()
+			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+		}).AnyTimes()
+	history.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *historyservice.RequestCancelWorkflowExecutionRequest, ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
+			countAction()
+			return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
+		}).AnyTimes()
 	// The callbacks task (used for migrated running workflows) describes each
 	// running workflow; report it completed so watchers resolve deterministically.
 	history.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -168,7 +211,7 @@ func newDriverScaffold(t *testing.T, opts ...DriverOption) (*Driver, *driverConf
 	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
 		t.Fatalf("failed to register core library: %v", err)
 	}
-	if err := registry.Register(NewTestLibrary(DefaultConfig(), logger, specProcessor, frontend, history)); err != nil {
+	if err := registry.Register(NewTestLibrary(cfg.config, logger, specProcessor, frontend, history)); err != nil {
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}
 
@@ -196,7 +239,9 @@ func newDriverScaffold(t *testing.T, opts ...DriverOption) (*Driver, *driverConf
 		Logger:                logger,
 		Frontend:              frontend,
 		History:               history,
+		Config:                cfg.config,
 		dispatchedSideEffects: make(map[*tasks.ChasmTask]struct{}),
+		actionRPCs:            actionRPCs,
 		AfterStep:             cfg.afterStep,
 	}
 	return d, cfg
@@ -352,6 +397,7 @@ func (d *Driver) Step() bool {
 			continue
 		}
 		d.dispatchedSideEffects[ct] = struct{}{}
+		actionsBefore := *d.actionRPCs
 		execErr := node.ExecuteSideEffectTask(
 			engineCtx,
 			d.execKey,
@@ -367,6 +413,11 @@ func (d *Driver) Step() bool {
 				continue
 			}
 			d.T.Fatalf("ExecuteSideEffectTask failed: %v", execErr)
+		}
+		// Track the most actions any single side-effect task (i.e. one
+		// InvokerExecuteTask) took, for the action-budget invariant.
+		if taken := *d.actionRPCs - actionsBefore; taken > d.maxActionsObserved {
+			d.maxActionsObserved = taken
 		}
 	}
 	if _, err := node.CloseTransaction(); err != nil {
@@ -489,14 +540,31 @@ type Snapshot struct {
 	// GeneratorLPT / InvokerLPT are the generator and invoker high-water marks.
 	GeneratorLPT time.Time
 	InvokerLPT   time.Time
+
+	// BufferedStartsCount is len(invoker.GetBufferedStarts()) — the total buffered
+	// starts (pending + retained). MaxBufferSize is the configured cap; the
+	// buffer-bound invariant requires BufferedStartsCount <= MaxBufferSize.
+	BufferedStartsCount int
+	MaxBufferSize       int
+
+	// MaxActionsObserved is the high-water mark of action RPCs (start + terminate +
+	// cancel) taken by any single InvokerExecuteTask so far. MaxActionsPerExecution
+	// is the configured per-execution cap; the action-budget invariant requires
+	// MaxActionsObserved <= MaxActionsPerExecution.
+	MaxActionsObserved     int
+	MaxActionsPerExecution int
 }
 
 // Snapshot reads current scheduler state into a Snapshot.
 func (d *Driver) Snapshot() Snapshot {
 	d.T.Helper()
+	tweakables := d.Config.Tweakables(Namespace)
 	snap := Snapshot{
-		Now:            d.Now(),
-		HasPendingTask: d.HasPendingTask(),
+		Now:                    d.Now(),
+		HasPendingTask:         d.HasPendingTask(),
+		MaxBufferSize:          tweakables.MaxBufferSize,
+		MaxActionsObserved:     d.maxActionsObserved,
+		MaxActionsPerExecution: tweakables.MaxActionsPerExecution,
 	}
 	d.ReadScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) {
 		snap.Closed = s.Closed
@@ -513,8 +581,11 @@ func (d *Driver) Snapshot() Snapshot {
 			if g := s.Generator.Get(ctx); g != nil && g.LastProcessedTime != nil {
 				snap.GeneratorLPT = g.LastProcessedTime.AsTime()
 			}
-			if inv := s.Invoker.Get(ctx); inv != nil && inv.LastProcessedTime != nil {
-				snap.InvokerLPT = inv.LastProcessedTime.AsTime()
+			if inv := s.Invoker.Get(ctx); inv != nil {
+				snap.BufferedStartsCount = len(inv.GetBufferedStarts())
+				if inv.LastProcessedTime != nil {
+					snap.InvokerLPT = inv.LastProcessedTime.AsTime()
+				}
 			}
 		}
 	})
