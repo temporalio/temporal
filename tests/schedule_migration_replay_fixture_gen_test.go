@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -87,7 +88,7 @@ func TestGenerateMigrationReplayFixture(t *testing.T) {
 	require.NoError(t, err)
 
 	// Let it become an established, actively-firing V1 schedule.
-	require.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		descResp, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace: nsName, ScheduleId: sid,
 		})
@@ -101,7 +102,7 @@ func TestGenerateMigrationReplayFixture(t *testing.T) {
 
 	// The V1 scheduler workflow completes only when migration succeeds.
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(ctx,
 			&historyservice.DescribeWorkflowExecutionRequest{
 				NamespaceId: env.NamespaceID().String(),

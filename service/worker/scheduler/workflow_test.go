@@ -2379,7 +2379,7 @@ func (s *workflowSuite) TestAutoMigrateReconcilesRunningWorkflowBeforeCheck() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError(), "schedule should migrate (complete), not defer/CAN")
+	s.Require().NoError(s.env.GetWorkflowError(), "schedule should migrate (complete), not defer/CAN")
 	s.True(migrated, "MigrateScheduleToChasm should have been called via auto-eligibility")
 	s.True(migratedAt.Before(baseStartTime.Add(time.Hour)),
 		"migration should occur in the idle window before the first action fires, at %s", migratedAt)
