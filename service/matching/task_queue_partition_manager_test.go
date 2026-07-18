@@ -214,12 +214,27 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 		}
 	}
 
-	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// Fresh migrating queues briefly expose a draining backlog in their internal
+	// status; only the active (non-draining) backlog is relevant here.
+	status1 := activeInternalStatus(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status1))
 	s.ProtoEqual(status0, status1[0])
-	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+// activeInternalStatus filters out any draining backlog entries, leaving only
+// the active backlog(s). Migrating queues transiently report a draining backlog
+// alongside the active one.
+func activeInternalStatus(status []*taskqueuespb.InternalTaskQueueStatus) []*taskqueuespb.InternalTaskQueueStatus {
+	active := make([]*taskqueuespb.InternalTaskQueueStatus, 0, len(status))
+	for _, st := range status {
+		if !st.Draining {
+			active = append(active, st)
+		}
+	}
+	return active
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {

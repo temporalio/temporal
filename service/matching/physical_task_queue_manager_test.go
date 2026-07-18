@@ -381,7 +381,15 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
 	tm := s.getTaskManager()
-	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
+
+	// Fresh fair/new-matcher queues drain the other backlog on startup. This
+	// completes immediately (nothing to drain) and persists otherHasTasks=false.
+	// Wait for it to settle so it doesn't race with the assertions below, then
+	// capture the resulting write count as our baseline.
+	s.Eventually(func() bool {
+		return s.tqMgr.getDrainBacklogMgr() == nil
+	}, 5*time.Second, 20*time.Millisecond)
+	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
 
 	// simulate stolen lock
 	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
@@ -397,8 +405,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 		return s.tqMgr.tqCtx.Err() != nil
 	}, 5*time.Second, 20*time.Millisecond)
 
-	// no additional updates (the failed periodic update counts as "1")
-	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))
+	// no additional updates beyond the failed periodic write (which counts as "1");
+	// in particular, no final update is done during shutdown after losing ownership.
+	s.Equal(baseline+1, tm.getUpdateCount(s.physicalTaskQueueKey))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
