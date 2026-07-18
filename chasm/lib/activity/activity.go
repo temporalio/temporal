@@ -564,11 +564,11 @@ func (a *Activity) HandleFailed(
 		!appFailure.GetNonRetryable() &&
 		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
 
-	rescheduled, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
+	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
 	if err != nil {
 		return nil, err
 	}
-	if rescheduled {
+	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, metricsHandler)
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
@@ -1205,11 +1205,15 @@ func (a *Activity) resetImmediately(
 	return &activitypb.ResetActivityExecutionResponse{}, nil
 }
 
-// recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeouts. Such timeouts are not retried so we
-// set the outcome failure directly and leave the attempt failure as is.
-func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
+// recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeout outcomes. Such
+// timeouts are not retried, so we set the outcome failure directly and leave the attempt failure as is.
+func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
+	ctx chasm.MutableContext,
+	timeoutType enumspb.TimeoutType,
+	message string,
+) error {
 	failure := &failurepb.Failure{
-		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+		Message: message,
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType:          timeoutType,
@@ -1264,21 +1268,24 @@ func (a *Activity) recordFailedAttempt(
 	return nil
 }
 
-// tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
-// if retry is not possible. It handles the cases of pause and reset requests that were received
-// while the last attempt was in progress. failureRetryable reports whether the failure itself
-// permits a retry (timeouts always do; RespondActivityTaskFailed depends on the failure).
+// tryReschedule attempts to reschedule the activity for retry. It handles the cases of pause and
+// reset requests that were received while the last attempt was in progress. failureRetryable
+// reports whether the failure itself permits a retry (timeouts always do; RespondActivityTaskFailed
+// depends on the failure).
 func (a *Activity) tryReschedule(
 	ctx chasm.MutableContext,
 	failureRetryable bool,
 	overridingRetryInterval time.Duration,
 	failure *failurepb.Failure,
-) (bool, error) {
-	shouldRetry, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
+) (enumspb.RetryState, error) {
+	retryState, retryInterval := a.shouldRetry(ctx, overridingRetryInterval)
+	if !failureRetryable {
+		retryState = enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
+	}
 	resetRequested := a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED
 	// A pending reset request is always honored, regardless of retryability or the should retry result.
-	if !resetRequested && !(failureRetryable && shouldRetry) { //nolint:staticcheck // QF1001: DeMorgan rearrangement would not be an improvement
-		return false, nil
+	if !resetRequested && retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		return retryState, nil
 	}
 	retryIntervalSource := activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
 	if overridingRetryInterval > 0 {
@@ -1287,30 +1294,35 @@ func (a *Activity) tryReschedule(
 	event := rescheduleEvent{retryInterval: retryInterval, retryIntervalSource: retryIntervalSource, failure: failure}
 	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
-		return true, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionAttemptFailedWhilePauseRequested.Apply(a, ctx, event)
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		if a.ResetKeepPaused {
-			return true, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
+			return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToPaused.Apply(a, ctx, event)
 		}
-		return true, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionResetAttemptFailedToScheduled.Apply(a, ctx, event)
 	default:
-		return true, TransitionRescheduled.Apply(a, ctx, event)
+		return enumspb.RETRY_STATE_IN_PROGRESS, TransitionRescheduled.Apply(a, ctx, event)
 	}
 }
 
-func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
+func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (enumspb.RetryState, time.Duration) {
 	if !TransitionRescheduled.Possible(a) &&
 		!TransitionAttemptFailedWhilePauseRequested.Possible(a) &&
 		!TransitionResetAttemptFailedToScheduled.Possible(a) &&
 		!TransitionResetAttemptFailedToPaused.Possible(a) {
-		return false, 0
+		return enumspb.RETRY_STATE_UNSPECIFIED, 0
 	}
 	attempt := a.LastAttempt.Get(ctx)
 	retryPolicy := a.RetryPolicy
-
-	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
 	enoughTime, retryInterval := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
-	return enoughAttempts && enoughTime, retryInterval
+
+	if retryPolicy.GetMaximumAttempts() > 0 && attempt.GetCount() >= retryPolicy.GetMaximumAttempts() {
+		return enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, retryInterval
+	}
+	if !enoughTime {
+		return enumspb.RETRY_STATE_TIMEOUT, retryInterval
+	}
+	return enumspb.RETRY_STATE_IN_PROGRESS, retryInterval
 }
 
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time

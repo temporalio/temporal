@@ -5739,6 +5739,56 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 			"expected timeout type=Heartbeat but is %s", pollResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 
+	// The 30-second retry delay cannot fit before the 10-second ScheduleToClose deadline, so the
+	// activity completes as ScheduleToClose as soon as the one-second Heartbeat timeout fires.
+	// Describe still preserves Heartbeat as the last attempt failure.
+	t.Run("HeartbeatTimeoutReportsScheduleToCloseWhenRetryCannotFit", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout:    durationpb.New(time.Minute),
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			HeartbeatTimeout:       durationpb.New(time.Second),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(30 * time.Second),
+				BackoffCoefficient: 1,
+				MaximumAttempts:    2,
+			},
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		failure := pollResp.GetOutcome().GetFailure()
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, failure.GetTimeoutFailureInfo().GetTimeoutType())
+		require.Equal(t, common.FailureReasonActivityRetryScheduleToCloseTimeout, failure.GetMessage())
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:          env.Namespace().String(),
+			ActivityId:         activityID,
+			RunId:              startResp.RunId,
+			IncludeLastFailure: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, describeResp.GetInfo().GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	})
+
 	t.Run("HeartbeatDetailsSurfacedOnTimeout", func(t *testing.T) {
 		// Start activity (no retries), worker accepts task and records a heartbeat with details,
 		// then stops heartbeating so the heartbeat timeout fires.
