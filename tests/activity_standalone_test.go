@@ -1798,10 +1798,10 @@ func (s *standaloneActivityTestSuite) TestFail() {
 					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}
 			},
 		})
-		st, err := a.observed()
+		desc, err := a.describe()
 		require.NoError(t, err)
-		require.Equalf(t, model.TimedOut, st.Status,
-			"a StartToClose timeout marked non-retryable must fail the activity, not retry it (got %s)", st.Status)
+		require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus(),
+			"a StartToClose timeout marked non-retryable must fail the activity, not retry it (got %s)", desc.GetInfo().GetStatus())
 	})
 
 	// Heartbeat timeout can be marked non-retryable.
@@ -1817,10 +1817,10 @@ func (s *standaloneActivityTestSuite) TestFail() {
 					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}
 			},
 		})
-		st, err := a.observed()
+		desc, err := a.describe()
 		require.NoError(t, err)
-		require.Equalf(t, model.TimedOut, st.Status,
-			"a Heartbeat timeout marked non-retryable must fail the activity, not retry it (got %s)", st.Status)
+		require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus(),
+			"a Heartbeat timeout marked non-retryable must fail the activity, not retry it (got %s)", desc.GetInfo().GetStatus())
 	})
 }
 
@@ -14524,10 +14524,8 @@ func saaTraceBudget() time.Duration {
 // will add model-derived assertions during the drive itself.
 func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
 	ctx := testcontext.For(t)
-	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
-	require.NoError(t, err)
 	h := &saaHarness{
-		env: env, ctx: ctx, chasmCtx: chasmCtx, nsID: env.NamespaceID().String(),
+		env: env, ctx: ctx,
 		idBase:     testcore.RandomizeStr(t.Name()),
 		cfg:        tr.config(),
 		startDelay: tr.startDelay(), retryInterval: tr.retryInterval, nextRetryDelay: tr.nextRetryDelay,

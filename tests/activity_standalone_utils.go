@@ -2,10 +2,10 @@ package tests
 
 // Driver for standalone-activity (SAA) tests: a small engine that starts an activity on a real onebox
 // server and drives it through a scripted sequence of events (an event DSL), realizing each event as
-// the corresponding frontend RPC / poll / wall-clock wait, and reading internal state back via
-// ReadComponent. It asserts nothing about intended behavior — a caller drives to a state, then makes
-// ordinary assertions. The event DSL and the observable-state projection come from the archetype
-// model package (chasm/lib/activity/model); this file is the SAA adapter that realizes them.
+// the corresponding frontend RPC / poll / wall-clock wait. It asserts nothing about intended behavior —
+// a caller drives to a state, then makes ordinary assertions against the returned handle (e.g. via
+// describe). The event DSL comes from the archetype model package (chasm/lib/activity/model); this
+// file is the SAA adapter that realizes it.
 
 import (
 	"context"
@@ -20,8 +20,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -31,13 +29,11 @@ import (
 // --- driver --------------------------------------------------------------------------------
 
 type saaHarness struct {
-	env      *standaloneActivityEnv
-	ctx      context.Context
-	chasmCtx context.Context
-	nsID     string
-	cfg      model.Config
-	cfgIdx   int
-	counter  int
+	env     *standaloneActivityEnv
+	ctx     context.Context
+	cfg     model.Config
+	cfgIdx  int
+	counter int
 	// idBase, when set, is the activity-id prefix — a unique namespace per driven trace so subtests
 	// don't collide. Empty falls back to a cfgIdx-based prefix.
 	idBase string
@@ -174,13 +170,14 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 	return req
 }
 
-// observed reads the activity's internal state back via ReadComponent, as the model's AbstractState.
-func (a *saaHandle) observed() (model.AbstractState, error) {
-	o, err := saaReadObserved(a.h.chasmCtx, a.h.nsID, a.activityID, a.runID)
-	if err != nil {
-		return model.AbstractState{}, err
-	}
-	return model.Abstract(o), nil
+// describe returns the activity's public DescribeActivityExecution response — the surface a functional
+// test asserts on (status, attempt, retry interval, outcome).
+func (a *saaHandle) describe() (*workflowservice.DescribeActivityExecutionResponse, error) {
+	return a.h.env.FrontendClient().DescribeActivityExecution(a.h.ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  a.h.env.Namespace().String(),
+		ActivityId: a.activityID,
+		RunId:      a.runID,
+	})
 }
 
 // rpc performs the RPC for a non-Poll, non-wall-clock event and returns its error.
@@ -325,25 +322,6 @@ func (h *saaHarness) dispatchDelay(d model.Dispatchability) time.Duration {
 	default:
 		return 0
 	}
-}
-
-func saaReadObserved(chasmCtx context.Context, nsID, activityID, runID string) (model.Observed, error) {
-	ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
-		NamespaceID: nsID, BusinessID: activityID, RunID: runID,
-	})
-	return chasm.ReadComponent(chasmCtx, ref, func(act *activity.Activity, cctx chasm.Context, _ struct{}) (model.Observed, error) {
-		attempt := act.LastAttempt.Get(cctx)
-		return model.Observed{
-			Status:               act.GetStatus(),
-			Count:                attempt.GetCount(),
-			Stamp:                attempt.GetStamp(),
-			ScheduleToCloseStamp: act.GetScheduleToCloseStamp(),
-			ResetKeepPaused:      act.GetResetKeepPaused(),
-			ResetRestoreOptions:  act.GetResetRestoreOptions(),
-			FirstAttemptStarted:  act.GetFirstAttemptStartedTime() != nil,
-			DispatchTimeSet:      attempt.GetDispatchTime() != nil,
-		}, nil
-	}, struct{}{})
 }
 
 // saaIsWallClock reports whether an event fires on wall-clock time — the four timeouts and the two
