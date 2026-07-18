@@ -1767,6 +1767,61 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
+
+	t.Run("WorkerMustSendApplicationFailure", func(t *testing.T) {
+		env := s.newTestEnv()
+		// Make an SAA with an attempt in progress
+		a := s.runTrace(t, env, saaTrace{trace: []model.Event{saaPoll}, maxAttempts: 3})
+		// Worker sends an invalid failure
+		_, err := env.FrontendClient().RespondActivityTaskFailed(testcontext.For(t), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: a.token,
+			Identity:  "worker",
+			Failure: &failurepb.Failure{
+				Message:     "server failure",
+				FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: false}},
+			},
+		})
+		require.ErrorContains(t, err, "Failure must have ApplicationFailureInfo")
+	})
+
+	// StartToClose timeout can be marked non-retryable.
+	t.Run("StartToCloseTimeoutCanBeMarkedNonRetryable", func(t *testing.T) {
+		env := s.newTestEnv()
+
+		// Start attempt, then fail non-retryably
+		a := s.runTrace(t, env, saaTrace{
+			trace:       []model.Event{saaPoll, {Kind: model.StartToCloseElapses}},
+			maxAttempts: 3,
+			customizeStart: func(req *workflowservice.StartActivityExecutionRequest) {
+				req.RetryPolicy.NonRetryableErrorTypes = []string{
+					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}
+			},
+		})
+		st, err := a.observed()
+		require.NoError(t, err)
+		require.Equalf(t, model.TimedOut, st.Status,
+			"a StartToClose timeout marked non-retryable must fail the activity, not retry it (got %s)", st.Status)
+	})
+
+	// Heartbeat timeout can be marked non-retryable.
+	t.Run("HeartbeatTimeoutCanBeMarkedNonRetryable", func(t *testing.T) {
+		env := s.newTestEnv()
+
+		// Start attempt, then fail non-retryably
+		a := s.runTrace(t, env, saaTrace{
+			trace:       []model.Event{saaPoll, {Kind: model.HeartbeatElapses}},
+			maxAttempts: 3,
+			customizeStart: func(req *workflowservice.StartActivityExecutionRequest) {
+				req.RetryPolicy.NonRetryableErrorTypes = []string{
+					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}
+			},
+		})
+		st, err := a.observed()
+		require.NoError(t, err)
+		require.Equalf(t, model.TimedOut, st.Status,
+			"a Heartbeat timeout marked non-retryable must fail the activity, not retry it (got %s)", st.Status)
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestRequestCancel() {
@@ -14263,6 +14318,7 @@ func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActi
 		// "Dispatchable" must mean "dispatches promptly", so bound the positive poll below the delay
 		// window — that is how a reset that discards a backoff (immediate) is told from still-delayed.
 		positivePollTimeout: saaNegativePollTimeout,
+		customizeStart:      tr.customizeStart,
 	}
 	return h.driveTrace(t, tr.trace)
 }
