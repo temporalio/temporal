@@ -49,6 +49,8 @@ func TestSchedulerProperties(t *testing.T) {
 				_ = d.Unpause()
 			case "trigger":
 				_ = d.TriggerImmediately()
+			default:
+				rt.Fatalf("unhandled op %q", op)
 			}
 		}
 	})
