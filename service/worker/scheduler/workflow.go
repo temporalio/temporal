@@ -219,7 +219,16 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           RefreshBeforeMigrationCheck,
+		// TODO: bump to RefreshBeforeMigrationCheck in a follow-up deploy, once
+		// this release is baked in cloud and is the version a rollback would land
+		// on. Activating a new version in the same deploy that introduces it is
+		// unsafe: workflows would record the new version in their history, and a
+		// rollback to the prior release -- which has no knowledge of it -- could
+		// not deterministically replay those histories, wedging the scheduler
+		// workflows ("locked out" of processing those schedules). This release
+		// only needs to *understand* the new version (constant + gated branch
+		// below) so it is a safe rollback target for the deploy that activates it.
+		Version: TriggerImmediatelyTimestamp,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -338,18 +347,6 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		// Reconcile running-workflow status before evaluating migration
-		// eligibility. processTimeRange (above) sets NeedRefresh when it buffers a
-		// new action, but the refresh itself only runs inside processBuffer, which
-		// is after this check and also starts the replacement action. Without this,
-		// an actively-firing schedule's RunningWorkflows is stale-non-empty here
-		// every iteration (the just-completed action is never pruned in time), so
-		// len(RunningWorkflows)==0 is never observed and, with the default
-		// MigrateWithRunningWorkflows=false guard, migration is deferred forever.
-		// Refreshing here lets the check see the genuine post-completion window and
-		// migrate before the next action is started. Version-gated because
-		// refreshWorkflows issues (recorded) local activities: reordering it would
-		// otherwise break replay of pre-existing histories.
 		if s.hasMinVersion(RefreshBeforeMigrationCheck) &&
 			s.tweakables.EnableCHASMMigration && !s.State.PendingMigration &&
 			s.State.NeedRefresh {

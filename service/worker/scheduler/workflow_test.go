@@ -2306,24 +2306,16 @@ func (s *workflowSuite) TestMigrateSuccess() {
 	s.NoError(s.env.GetWorkflowError())
 }
 
-// TestAutoMigrateReconcilesRunningWorkflowBeforeCheck is a regression test for
-// the read-ordering bug fixed by the RefreshBeforeMigrationCheck version. An
-// actively-firing V1 schedule tracks a workflow in RunningWorkflows that has
-// actually already completed; NeedRefresh is set (as processTimeRange does when
-// it buffers a new action). Automatic migration is enabled with the default
-// MigrateWithRunningWorkflows=false guard, and -- unlike the other TestMigrate*
-// tests -- NO migrate-to-chasm signal is sent, so migration relies solely on
-// the automatic-eligibility check.
-//
-// Before the fix, that check read RunningWorkflows before processBuffer's
-// refresh, so the already-completed workflow was still counted as running and
-// migration was deferred. The fix reconciles workflow status before the check,
-// so the stale entry is pruned and migration proceeds within the same idle
-// iteration -- before the schedule's next action is even due. We assert
-// migration happened before the first scheduled action time to pin that down.
-// (The full continuously-firing reproduction lives in the integration test
-// TestScheduleMigrationV1ToV2_AutomaticMigrationForActiveSchedule.)
 func (s *workflowSuite) TestAutoMigrateReconcilesRunningWorkflowBeforeCheck() {
+	// The early-refresh behavior is gated on RefreshBeforeMigrationCheck, which is
+	// intentionally NOT yet the shipped CurrentTweakablePolicies.Version (it is
+	// activated in a follow-up deploy for rollback safety -- see the TODO on
+	// CurrentTweakablePolicies in workflow.go). Force the version here so this
+	// guard exercises the branch regardless of the current rollout state.
+	prevVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = RefreshBeforeMigrationCheck
+	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
+
 	staleWID := "myid-2022-06-01T00:00:00Z"
 
 	// The refresh watcher reports the stale workflow as already completed.
@@ -2379,7 +2371,7 @@ func (s *workflowSuite) TestAutoMigrateReconcilesRunningWorkflowBeforeCheck() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError(), "schedule should migrate (complete), not defer/CAN")
+	s.Require().NoError(s.env.GetWorkflowError(), "schedule should migrate (complete), not defer/CAN")
 	s.True(migrated, "MigrateScheduleToChasm should have been called via auto-eligibility")
 	s.True(migratedAt.Before(baseStartTime.Add(time.Hour)),
 		"migration should occur in the idle window before the first action fires, at %s", migratedAt)
