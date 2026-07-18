@@ -1313,6 +1313,16 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 	return enoughAttempts && enoughTime, retryInterval
 }
 
+// timeoutRetryable reports whether a StartToClose or Heartbeat timeout may be retried under the retry
+// policy. Mirrors the workflow-activity rule (service/history/workflow/retry.go isRetryable): such a
+// timeout is retryable unless its TemporalTimeout: type is listed in NonRetryableErrorTypes.
+func (a *Activity) timeoutRetryable(timeoutType enumspb.TimeoutType) bool {
+	return !slices.Contains(
+		a.GetRetryPolicy().GetNonRetryableErrorTypes(),
+		retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
+	)
+}
+
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
 // remains, it will also return a valid retry interval.
 func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
