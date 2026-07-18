@@ -1822,6 +1822,47 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus(),
 			"a Heartbeat timeout marked non-retryable must fail the activity, not retry it (got %s)", desc.GetInfo().GetStatus())
 	})
+
+	// A terminal timeout must chain the underlying application failure that caused the retries as its
+	// Cause, matching workflow activities (mutable_state_impl.go AddActivityTaskTimedOutEvent, which
+	// sets timeoutFailure.Cause so SDKs can surface the real failure — see temporalio/temporal#3667).
+	t.Run("StartToCloseTimeoutPreservesUnderlyingFailureCause", func(t *testing.T) {
+		env := s.newTestEnv()
+
+		// Attempt 1 fails with a retryable application error; attempt 2 hangs into a StartToClose
+		// timeout, exhausting retries. The terminal failure is the timeout; its Cause must be the app error.
+		a := s.runTrace(t, env, saaTrace{
+			trace:       []model.Event{saaPoll, saaFailRetryably, saaPoll, {Kind: model.StartToCloseElapses}},
+			maxAttempts: 2,
+		})
+		desc, err := a.describe()
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus())
+		failure := desc.GetOutcome().GetFailure()
+		require.NotNil(t, failure.GetTimeoutFailureInfo(), "terminal failure should be a timeout")
+		require.NotNil(t, failure.GetCause().GetApplicationFailureInfo(),
+			"the terminal timeout must chain the underlying application failure as its Cause")
+	})
+
+	// The same cause-preservation applies when a schedule-to-close deadline is the final closer: it
+	// takes a different code path (recordScheduleToStartOrCloseTimeoutFailure) that must also chain the
+	// underlying application failure.
+	t.Run("ScheduleToCloseTimeoutPreservesUnderlyingFailureCause", func(t *testing.T) {
+		env := s.newTestEnv()
+
+		// Attempt 1 fails with a retryable application error; while it waits to retry, the
+		// schedule-to-close deadline elapses and closes the activity.
+		a := s.runTrace(t, env, saaTrace{
+			trace: []model.Event{saaPoll, saaFailRetryably, {Kind: model.ScheduleToCloseElapses}},
+		})
+		desc, err := a.describe()
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus())
+		failure := desc.GetOutcome().GetFailure()
+		require.NotNil(t, failure.GetTimeoutFailureInfo(), "terminal failure should be a timeout")
+		require.NotNil(t, failure.GetCause().GetApplicationFailureInfo(),
+			"the terminal timeout must chain the underlying application failure as its Cause")
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestRequestCancel() {

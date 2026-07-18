@@ -178,12 +178,15 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 }
 
 // describe returns the activity's public DescribeActivityExecution response — the surface a functional
-// test asserts on (status, attempt, retry interval, outcome).
+// test asserts on (status, attempt, retry interval, outcome). The optional details (outcome, last
+// failure) are requested so a caller can assert on a closed activity's result or failure.
 func (a *saaHandle) describe() (*workflowservice.DescribeActivityExecutionResponse, error) {
 	return a.h.env.FrontendClient().DescribeActivityExecution(a.h.ctx, &workflowservice.DescribeActivityExecutionRequest{
-		Namespace:  a.h.env.Namespace().String(),
-		ActivityId: a.activityID,
-		RunId:      a.runID,
+		Namespace:          a.h.env.Namespace().String(),
+		ActivityId:         a.activityID,
+		RunId:              a.runID,
+		IncludeOutcome:     true,
+		IncludeLastFailure: true,
 	})
 }
 
