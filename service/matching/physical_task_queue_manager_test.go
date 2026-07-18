@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -386,7 +387,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	// completes immediately (nothing to drain) and persists otherHasTasks=false.
 	// Wait for it to settle so it doesn't race with the assertions below, then
 	// capture the resulting write count as our baseline.
-	s.Eventually(func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		return s.tqMgr.getDrainBacklogMgr() == nil
 	}, 5*time.Second, 20*time.Millisecond)
 	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
