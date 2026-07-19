@@ -117,6 +117,11 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
+	// The RPC graph traversal and random walk (TestSpec) replay hundreds of activities, each on its
+	// own task queue; with the default 4 partitions the burst of task-queue creation trips matching's
+	// rate/persistence limiters. Collapse each task queue to a single partition.
+	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, nsValues(1))
+	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, nsValues(1))
 	return env
 }
 
@@ -14678,8 +14683,10 @@ func saaTraceBudget() time.Duration {
 // will add model-derived assertions during the drive itself.
 func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
 	ctx := testcontext.For(t)
+	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
+	require.NoError(t, err)
 	h := &saaHarness{
-		env: env, ctx: ctx,
+		env: env, ctx: ctx, chasmCtx: chasmCtx, nsID: env.NamespaceID().String(),
 		idBase:     testcore.RandomizeStr(t.Name()),
 		cfg:        tr.config(),
 		startDelay: tr.startDelay(), retryInterval: tr.retryInterval, nextRetryDelay: tr.nextRetryDelay,
@@ -14690,7 +14697,12 @@ func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActi
 		positivePollTimeout: saaNegativePollTimeout,
 		customizeStart:      tr.customizeStart,
 	}
-	return h.driveTrace(t, tr.trace)
+	// A customizeStart hook injects start-time config the model cannot see, so conformance checking
+	// would diverge; drive model-free and leave assertions to the caller. Otherwise check every step.
+	if tr.customizeStart != nil {
+		return h.driveTrace(t, tr.trace)
+	}
+	return h.driveTraceWithModelConformanceChecking(t, tr.trace)
 }
 
 // TestStartDelay_Declarative drives the start-delay scenarios, each an explicitly named subtest with

@@ -10,6 +10,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,8 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -29,11 +32,13 @@ import (
 // --- driver --------------------------------------------------------------------------------
 
 type saaHarness struct {
-	env     *standaloneActivityEnv
-	ctx     context.Context
-	cfg     model.Config
-	cfgIdx  int
-	counter int
+	env      *standaloneActivityEnv
+	ctx      context.Context
+	chasmCtx context.Context // for ReadComponent, used by the model oracle (observed)
+	nsID     string
+	cfg      model.Config
+	cfgIdx   int
+	counter  int
 	// idBase, when set, is the activity-id prefix — a unique namespace per driven trace so subtests
 	// don't collide. Empty falls back to a cfgIdx-based prefix.
 	idBase string
@@ -69,11 +74,26 @@ const saaNegativePollTimeout = common.MinLongPollTimeout + time.Second
 // needed to address it, so a caller that has driven it to a state can issue further RPCs and read
 // its state back.
 type saaHandle struct {
-	h          *saaHarness
-	activityID string
-	taskQueue  string
-	runID      string
-	token      []byte
+	h             *saaHarness
+	activityID    string
+	taskQueue     string
+	runID         string
+	token         []byte
+	lastHeartbeat *workflowservice.RecordActivityTaskHeartbeatResponse
+	// establishedReqID[kind] is the request id that established the current idempotent state for an
+	// operator command (RequestCancel/Terminate/Pause); a SameRequestID event reuses it so the server's
+	// request-id idempotency check sees the establishing id, not merely the last id used for that
+	// operation. lastReqID is the id used by the most recent operator RPC, promoted into
+	// establishedReqID when that RPC changes state (see apply, in the spec harness).
+	establishedReqID map[model.EventKind]string
+	lastReqID        string
+	path             []model.Event // events driven to reach the edge under test, for failure reports
+
+	// Raw stamps read across the edge under test. observed() shifts cur->prev on each read, so after
+	// driving edge N, cur is the post-N value and prev the post-(N-1) value: their inequality is the
+	// stamp bump across edge N, compared to the model's Outcome bools (see checkTaskInvalidation).
+	prevStamp, curStamp       int32
+	prevSTCStamp, curSTCStamp int32
 }
 
 // driveTrace runs a trace on a fresh activity, realizing each event against the server, and returns
@@ -110,6 +130,28 @@ func (a *saaHandle) applyEvent(t require.TestingT, e model.Event) {
 	}
 }
 
+// driveTraceWithModelConformanceChecking drives a trace like driveTrace but checks conformance to the model at
+// every step: after Start it asserts the observed state equals model.Initial(cfg), then for each event
+// it predicts the outcome with model.Transition and verifies the server against it via apply (see the
+// spec harness). The model is the test oracle; a divergence fails the trace. Use this — not driveTrace
+// — whenever the config is fully modeled (no customizeStart escape hatch the model cannot see).
+func (h *saaHarness) driveTraceWithModelConformanceChecking(t *testing.T, trace []model.Event) *saaHandle {
+	a := h.start(t)
+	a.path = trace
+	cur := model.Initial(h.cfg)
+	obs, err := a.observed()
+	require.NoError(t, err)
+	if !cur.SameObserved(obs) {
+		t.Fatalf("after Start, state disagrees with Initial(cfg).\n%s", saaStateDiff(obs, cur))
+	}
+	for _, e := range trace {
+		out := model.Transition(h.cfg, cur, e)
+		a.apply(t, e, cur, out, true)
+		cur = out.Next
+	}
+	return a
+}
+
 func (h *saaHarness) start(t require.TestingT) *saaHandle {
 	// cfg.HasStartDelay tells the model to predict StartDelayPending; the server only enters that state
 	// if a real start_delay is configured. Guard against the decoupling so a misconfigured harness fails
@@ -125,7 +167,7 @@ func (h *saaHarness) start(t require.TestingT) *saaHandle {
 	id := fmt.Sprintf("%s-%d", base, h.counter)
 	resp, err := h.env.FrontendClient().StartActivityExecution(h.ctx, h.startRequest(id, id))
 	require.NoError(t, err)
-	return &saaHandle{h: h, activityID: id, taskQueue: id, runID: resp.RunId}
+	return &saaHandle{h: h, activityID: id, taskQueue: id, runID: resp.RunId, establishedReqID: map[model.EventKind]string{}}
 }
 
 func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice.StartActivityExecutionRequest {
@@ -190,16 +232,30 @@ func (a *saaHandle) describe() (*workflowservice.DescribeActivityExecutionRespon
 	})
 }
 
+// observed reads the activity's internal state back via ReadComponent, as the model's AbstractState.
+// It shifts cur->prev for the raw stamps so callers can compare the stamp change across the edge just
+// driven (see checkTaskInvalidation in the spec harness).
+func (a *saaHandle) observed() (model.AbstractState, error) {
+	o, err := saaReadObserved(a.h.chasmCtx, a.h.nsID, a.activityID, a.runID)
+	if err != nil {
+		return model.AbstractState{}, err
+	}
+	a.prevStamp, a.curStamp = a.curStamp, o.Stamp
+	a.prevSTCStamp, a.curSTCStamp = a.curSTCStamp, o.ScheduleToCloseStamp
+	return model.Abstract(o), nil
+}
+
 // rpc performs the RPC for a non-Poll, non-wall-clock event and returns its error.
 func (a *saaHandle) rpc(e model.Event) error {
 	fc := a.h.env.FrontendClient()
 	ns := a.h.env.Namespace().String()
 	switch e.Kind {
 	case model.Heartbeat:
-		_, err := fc.RecordActivityTaskHeartbeat(a.h.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		resp, err := fc.RecordActivityTaskHeartbeat(a.h.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: ns,
 			TaskToken: a.token,
 		})
+		a.lastHeartbeat = resp
 		return err
 	case model.RespondCompleted:
 		_, err := fc.RespondActivityTaskCompleted(a.h.ctx, &workflowservice.RespondActivityTaskCompletedRequest{
@@ -218,17 +274,17 @@ func (a *saaHandle) rpc(e model.Event) error {
 		return err
 	case model.RequestCancel:
 		_, err := fc.RequestCancelActivityExecution(a.h.ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: uuid.NewString(),
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: a.reqID(e),
 		})
 		return err
 	case model.Terminate:
 		_, err := fc.TerminateActivityExecution(a.h.ctx, &workflowservice.TerminateActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: uuid.NewString(),
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: a.reqID(e),
 		})
 		return err
 	case model.Pause:
 		_, err := fc.PauseActivityExecution(a.h.ctx, &workflowservice.PauseActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: uuid.NewString(),
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: a.reqID(e),
 		})
 		return err
 	case model.Unpause:
@@ -267,6 +323,21 @@ func (a *saaHandle) updateOptions(e model.Event) error {
 	}
 	_, err := a.h.env.FrontendClient().UpdateActivityExecutionOptions(a.h.ctx, req)
 	return err
+}
+
+// reqID returns the request id to use for an operator command. A SameRequestID event reuses the id
+// that established the current state for that command kind (so the server's idempotency check sees the
+// establishing id, not merely the last id used); otherwise it is a fresh id. The chosen id is recorded
+// as lastReqID and promoted to establishedReqID by apply when the RPC changes state.
+func (a *saaHandle) reqID(e model.Event) string {
+	id := uuid.NewString()
+	if e.SameRequestID {
+		if est, ok := a.establishedReqID[e.Kind]; ok {
+			id = est
+		}
+	}
+	a.lastReqID = id
+	return id
 }
 
 func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
@@ -332,6 +403,25 @@ func (h *saaHarness) dispatchDelay(d model.Dispatchability) time.Duration {
 	default:
 		return 0
 	}
+}
+
+func saaReadObserved(chasmCtx context.Context, nsID, activityID, runID string) (model.Observed, error) {
+	ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+		NamespaceID: nsID, BusinessID: activityID, RunID: runID,
+	})
+	return chasm.ReadComponent(chasmCtx, ref, func(act *activity.Activity, cctx chasm.Context, _ struct{}) (model.Observed, error) {
+		attempt := act.LastAttempt.Get(cctx)
+		return model.Observed{
+			Status:               act.GetStatus(),
+			Count:                attempt.GetCount(),
+			Stamp:                attempt.GetStamp(),
+			ScheduleToCloseStamp: act.GetScheduleToCloseStamp(),
+			ResetKeepPaused:      act.GetResetKeepPaused(),
+			ResetRestoreOptions:  act.GetResetRestoreOptions(),
+			FirstAttemptStarted:  act.GetFirstAttemptStartedTime() != nil,
+			DispatchTimeSet:      attempt.GetDispatchTime() != nil,
+		}, nil
+	}, struct{}{})
 }
 
 // saaIsWallClock reports whether an event fires on wall-clock time — the four timeouts and the two
