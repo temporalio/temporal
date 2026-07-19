@@ -5633,9 +5633,10 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 
 		// The details are also surfaced via DescribeActivityExecution.
 		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  env.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      startResp.RunId,
+			Namespace:               env.Namespace().String(),
+			ActivityId:              activityID,
+			RunId:                   startResp.RunId,
+			IncludeHeartbeatDetails: true,
 		})
 		require.NoError(t, err)
 		protorequire.ProtoEqual(t, heartbeatDetails, desc.GetInfo().GetHeartbeatDetails())
