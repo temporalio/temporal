@@ -368,7 +368,15 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		failure, err := commonnexus.NexusFailureToTemporalFailure(*req.Error.OriginalFailure)
+		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause,
+		// marked with the "unwrap-error" metadata. Unwrap it so the caller sees the handler's original
+		// error (message, type, details, and canceled/terminated info) rather than the generic wrapper,
+		// mirroring the HSM path's handleOperationError.
+		nexusFailure := req.Error.OriginalFailure
+		if nexusFailure.Metadata["unwrap-error"] == "true" && nexusFailure.Cause != nil {
+			nexusFailure = nexusFailure.Cause
+		}
+		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")

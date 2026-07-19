@@ -2394,9 +2394,6 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEna
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("CHASM async Nexus completion does not rehydrate a failed handler's application error: the caller receives a generic \"nexus operation completed unsuccessfully\" instead of the handler's original error message, type, and details")
-	}
 	type testcase struct {
 		outcome, action    string
 		checkWorkflowError func(s *NexusWorkflowTestSuite, wfErr error)
