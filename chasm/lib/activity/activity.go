@@ -2,19 +2,36 @@
 //
 // We name 3 times in the lifecycle of an activity attempt:
 //
-// schedule time - the time at which the activity entered SCHEDULED state
-// dispatch time - the time at which the activity task will be dispatched to Matching (AddActivityTask)
-// start time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
+// schedule_time - the time at which the activity entered SCHEDULED state
+// dispatch_time - the time at which the activity task is due to be dispatched to Matching (AddActivityTask)
+// start_time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
 //
-// They are always ordered as: (schedule time) <= (dispatch time) < (start time).
+// They are always ordered as: (schedule_time) <= (dispatch_time) < (start_time).
 //
 // A ScheduleToStart timeout applies to the time between dispatch and start. If there is a delay
 // before dispatch (i.e. a start delay on the first attempt, or a backoff interval / next retry
-// delay on a second or subsequent attempt) then schedule time < dispatch time. Otherwise, they are
+// delay on a second or subsequent attempt) then schedule_time < dispatch_time. Otherwise, they are
 // equal.
 //
 // The main Activity struct has a.ScheduleTime which is the schedule time of the first
 // attempt; i.e. the time at which the activity was created. This is never changed.
+//
+
+// The naming situation is not perfectly clean:
+//
+// next_attempt_schedule_time
+// --------------------------
+
+// WFA pending activity has always returned a field named next_attempt_schedule_time, and SAA does
+// also. In this field, "schedule_time" actually refers to dispatch_time. Specifically,
+// next_attempt_schedule_time is the dispatch_time of the attempt that is currently being waited
+// for. It is null when paused or when an attempt is in progress, since in those states the dispatch
+// time of a future attempt is unknown: we do not even know if there will be a next attempt.
+//
+// For WFA, next_attempt_schedule_time is null prior to the first attempt since start delay is not
+// supported, hence the activity is due to be dispatched to Matching as soon as the activity is
+// created. But for SAA, if there's a start delay, then next_attempt_schedule_time is the
+// dispatch_time (non-null).
 
 package activity
 
