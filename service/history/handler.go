@@ -2202,19 +2202,28 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// Access the component with progress intent so that the framework blocks access to a
 	// completion targeting an operation under a closed workflow and surfaces it as a
 	// NotFound. That NotFound is the signal to fall back to the current run below.
-	ctx = chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
+	progressCtx := chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
 
 	// First try the component as of its creation transition. This tolerates refs
 	// from before a reset while still ensuring the loaded state has the operation.
-	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
+	handlerInvoked, err := h.applyChasmNexusCompletion(progressCtx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
 	if shouldFallBackToCurrentRun(handlerInvoked, err, completion) {
 		// If reset moved the operation to the current run, retry without the ref's
 		// run ID or transition tokens. Non-workflow refs cannot use this lookup.
-		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
+		if _, fbErr := h.applyChasmNexusCompletion(progressCtx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
 			err = fbErr
 		}
 	}
 	if err != nil {
+		// The completion could not be applied. It may be that the operation is genuinely missing
+		// (e.g. a reset/rebuild moved it to the other framework, which the frontend handles by
+		// falling back), or that the caller workflow has already closed, in which case the operation
+		// is gone for good. Distinguish the two by the current run's close state: when closed, surface
+		// the same terminal error HSM returns so the completion callback fails instead of retrying (and
+		// so the frontend skips a pointless cross-framework fallback).
+		if _, isNotFound := errors.AsType[*serviceerror.NotFound](err); isNotFound && h.chasmExecutionClosed(ctx, componentRefBytes) {
+			return nil, consts.ErrWorkflowCompleted
+		}
 		return nil, h.convertError(err)
 	}
 
@@ -2235,6 +2244,37 @@ func shouldFallBackToCurrentRun(
 	return !handlerInvoked &&
 		isNotFound &&
 		completion.GetRequestId() != ""
+}
+
+// chasmExecutionClosed reports whether the workflow that currently owns the operation has closed,
+// meaning the completion can never be applied. It reads the operation component on the CURRENT run,
+// using a ref with the run ID and versioned transitions cleared (the shape RefConsistencyLevelCurrentRun
+// produces): chasm.ReadComponent ignores the consistency option, so reading the original ref would
+// instead consult its own run, which may be a since-reset, closed run and give a false positive. A
+// missing component (e.g. a reset/rebuild rebuilt the operation into the other framework on a still-
+// running run) or any read error is treated as "not closed", so the caller keeps its original error
+// and the frontend can fall back to the other framework.
+func (h *Handler) chasmExecutionClosed(ctx context.Context, componentRefBytes []byte) bool {
+	var pRef persistencespb.ChasmComponentRef
+	if err := pRef.Unmarshal(componentRefBytes); err != nil {
+		return false
+	}
+	currentRunRef := chasm.ProtoRefToComponentRef(&persistencespb.ChasmComponentRef{
+		NamespaceId:   pRef.NamespaceId,
+		BusinessId:    pRef.BusinessId,
+		ArchetypeId:   pRef.ArchetypeId,
+		ComponentPath: pRef.ComponentPath,
+	})
+	var closed bool
+	_, err := chasm.ReadComponent(
+		ctx,
+		currentRunRef,
+		func(_ chasm.NexusCompletionHandler, chasmCtx chasm.Context, _ any) (chasm.NoValue, error) {
+			closed = !chasmCtx.ExecutionInfo().CloseTime.IsZero()
+			return nil, nil
+		},
+		nil)
+	return err == nil && closed
 }
 
 // applyChasmNexusCompletion applies a Nexus completion using the requested ref

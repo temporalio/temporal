@@ -2556,9 +2556,6 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("CHASM does not fail the completion callback when the caller workflow has already closed: instead of CALLBACK_STATE_FAILED with \"workflow execution already completed\", the completion returns a \"stale reference: state machine not found\" error and the callback keeps retrying")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
