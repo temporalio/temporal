@@ -4,9 +4,35 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
+enum DispatchReason {
+  DISPATCH_REASON_UNSPECIFIED = 0;
+  DISPATCH_REASON_IMMEDIATE = 1;
+  DISPATCH_REASON_START_DELAY = 2;
+  DISPATCH_REASON_RETRY = 3;
+}
+
+enum StartDelayBucket {
+  START_DELAY_BUCKET_UNSPECIFIED = 0;
+  START_DELAY_BUCKET_NONE = 1;
+  START_DELAY_BUCKET_LT_1M = 2;
+  START_DELAY_BUCKET_1M_10M = 3;
+  START_DELAY_BUCKET_10M_1H = 4;
+  START_DELAY_BUCKET_1H_6H = 5;
+  START_DELAY_BUCKET_6H_1D = 6;
+  START_DELAY_BUCKET_1D_7D = 7;
+  START_DELAY_BUCKET_7D_30D = 8;
+  START_DELAY_BUCKET_GT_30D = 9;
+}
+
 message ActivityDispatchTask {
   // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
   int32 stamp = 1;
+
+  // Dispatch category based on attempt history and the configured start delay.
+  DispatchReason dispatch_reason = 2;
+
+  // Bucket for the configured start delay, independent of actual dispatch time.
+  StartDelayBucket start_delay_bucket = 3;
 }
 
 message ScheduleToStartTimeoutTask {
