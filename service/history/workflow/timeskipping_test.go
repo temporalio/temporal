@@ -138,10 +138,54 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun_FastForwardInfo()
 		s.Nil(stateProp, "no accumulated time and no active fast-forward means nothing to propagate")
 	})
 
-	s.Run("NilTimeSkippingInfoPropagatesNothing", func() {
-		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{})
+	s.Run("NilAndEmptySourcePropagateNothing", func() {
+		for _, src := range []*persistencespb.WorkflowExecutionInfo{nil, {}} {
+			tsc, stateProp := propagateTimeSkippingToNextRun(src)
+			s.Nil(tsc)
+			s.Nil(stateProp)
+		}
+	})
+
+	// A skip count with no accumulated duration and no fast-forward still forces a state
+	// propagation to be created so the count survives.
+	s.Run("SkipCountAloneStillPropagates", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:           &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 50},
+				SessionSkipCount: 2,
+			},
+		})
+		s.Require().NotNil(tsc)
+		s.Require().NotNil(stateProp)
+		s.Nil(stateProp.GetInitialSkippedDuration())
+		s.Equal(int32(2), stateProp.GetInitialSkipCount())
+	})
+
+	s.Run("enabled carries budget and running count", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 50},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				SessionSkipCount:           3,
+			},
+		})
+		s.Require().NotNil(tsc)
+		s.Equal(int32(50), tsc.GetMaxSkipPerSession())
+		s.Require().NotNil(stateProp)
+		s.Equal(int32(3), stateProp.GetInitialSkipCount())
+	})
+
+	s.Run("disabled does not continue the session", func() {
+		tsc, stateProp := propagateTimeSkippingToNextRun(&persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: false, MaxSkipPerSession: 50},
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+				SessionSkipCount:           3,
+			},
+		})
 		s.Nil(tsc)
-		s.Nil(stateProp)
+		s.Require().NotNil(stateProp)
+		s.Equal(int32(0), stateProp.GetInitialSkipCount())
 	})
 }
 
@@ -163,12 +207,33 @@ func (s *mutableStateSuite) TestSnapshotTimeSkippingInfo_ForChildWorkflows() {
 		}
 	}
 
+	s.Run("NilAndEmptySourcePropagateNothing", func() {
+		for _, src := range []*persistencespb.WorkflowExecutionInfo{nil, {}} {
+			tsc, propagatedState := propagateTimeSkippingToChild(src)
+			s.Nil(tsc)
+			s.Nil(propagatedState)
+		}
+	})
+
 	s.Run("child workflows have no fast-forward", func() {
 		tsc, propagatedState := propagateTimeSkippingToChild(newSource())
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
 		s.Nil(tsc.GetFastForward())
 		s.Equal(time.Hour, propagatedState.GetInitialSkippedDuration().AsDuration())
+	})
+
+	// The per-session skip budget is scoped to a single run and starts a fresh session in the
+	// child: neither the budget (MaxSkipPerSession) nor the running count is inherited.
+	s.Run("child does not inherit the per-session skip budget", func() {
+		src := newSource()
+		src.TimeSkippingInfo.Config.MaxSkipPerSession = 50
+		src.TimeSkippingInfo.SessionSkipCount = 3
+		tsc, propagatedState := propagateTimeSkippingToChild(src)
+		s.Require().NotNil(tsc)
+		s.True(tsc.GetEnabled())
+		s.Equal(int32(0), tsc.GetMaxSkipPerSession())
+		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
 	})
 
 	s.Run("child workflow propagation can be turned off", func() {
@@ -360,7 +425,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		baseTime := s.mutableState.timeSource.Now()
 		s.NotPanics(func() {
-			s.Require().NoError(s.mutableState.initTimeSkippingInfo(nil, nil))
+			s.mutableState.initTimeSkippingInfo(nil, nil)
 		})
 		s.Nil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.Equal(baseTime, s.mutableState.Now())
@@ -376,7 +441,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 			Enabled:     true,
 			FastForward: durationpb.New(3 * time.Hour)}
 
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, nil))
+		s.mutableState.initTimeSkippingInfo(cfg, nil)
 		s.Equal(baseTime, s.mutableState.Now())
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -409,7 +474,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 			InitialSkippedDuration: durationpb.New(hasSkipped),
 			FastForwardTargetTime:  timestamppb.New(targetTime),
 		}
-		s.Require().NoError(s.mutableState.initTimeSkippingInfo(cfg, propagation))
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
 
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
@@ -418,20 +483,44 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Equal(targetTime.UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 	})
+
+	s.Run("SessionSkipCountSeededFromPropagation", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+		propagation := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 4}
+
+		s.mutableState.initTimeSkippingInfo(cfg, propagation)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(4), tsi.GetSessionSkipCount())
+	})
+
+	s.Run("SessionSkipCountDefaultsToZeroWithoutPropagation", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		cfg := &commonpb.TimeSkippingConfig{Enabled: true}
+
+		s.mutableState.initTimeSkippingInfo(cfg, nil)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(0), tsi.GetSessionSkipCount())
+	})
 }
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
 	// update assumes the TS info was already initialized; updating a workflow that never
-	// started time skipping is an internal error and must not initialize it as a side effect.
-	s.Run("ErrorWhenTimeSkippingInfoNil", func() {
+	// started time skipping is a no-op and must not initialize it as a side effect.
+	s.Run("NoopWhenTimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
 		s.mutableState.timeSkippingInfoUpdated = false
 
-		err := s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true})
-		s.Error(err)
+		s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true})
 		s.Nil(s.mutableState.executionInfo.GetTimeSkippingInfo(), "must not initialize TS info on update")
-		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated on a failed update")
+		s.False(s.mutableState.timeSkippingInfoUpdated, "must not mark updated when there is nothing to update")
 	})
 
 	s.Run("UpdateTimeSkippingInfo_UpdateWithNil", func() {
@@ -451,7 +540,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = currentTSI
 		s.mutableState.timeSkippingInfoUpdated = false
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(nil))
+		s.mutableState.updateTimeSkippingInfo(nil)
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(newTSI)
 		s.Nil(newTSI.GetConfig())
@@ -480,7 +569,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			FastForward:        durationpb.New(2 * time.Hour),
 			DisablePropagation: true,
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(newConfig))
+		s.mutableState.updateTimeSkippingInfo(newConfig)
 		newTSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(newTSI)
@@ -519,7 +608,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 			Enabled:     true,
 			FastForward: durationpb.New(2 * time.Hour),
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc2))
+		s.mutableState.updateTimeSkippingInfo(tsc2)
 		tsc2TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 
 		s.Require().NotNil(tsc2TSI)
@@ -535,13 +624,34 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		tsc3 := &commonpb.TimeSkippingConfig{
 			Enabled: false,
 		}
-		s.Require().NoError(s.mutableState.updateTimeSkippingInfo(tsc3))
+		s.mutableState.updateTimeSkippingInfo(tsc3)
 		tsc3TSI := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsc3TSI)
 		s.True(proto.Equal(tsc3, tsc3TSI.GetConfig()))
 		s.Nil(tsc3TSI.GetFastForwardInfo())
 		s.Equal(time.Hour, tsc3TSI.GetAccumulatedSkippedDuration().AsDuration())
 
+	})
+
+	// Updating the config restarts the skip session: the per-session skip counter and any
+	// server-set disable reason from the previous session must be cleared.
+	s.Run("ClearsSessionSkipCountAndDisableReason", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           false,
+				MaxSkipPerSession: 10,
+			},
+			SessionSkipCount: 7,
+			DisableReason:    persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_MAX_SKIP_PER_SESSION,
+		}
+
+		s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 10})
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Equal(int32(0), tsi.GetSessionSkipCount())
+		s.Equal(persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_UNSPECIFIED, tsi.GetDisableReason())
 	})
 }
 
@@ -1245,6 +1355,100 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		accumulated := s.mutableState.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().Equal(2*time.Hour, accumulated.AsDuration())
 	})
+
+	// Regression: a fast-forward-completion transition must both disable the config and record
+	// the FAST_FORWARD_COMPLETION disable reason (and mark the fast-forward as reached). A
+	// previous bug left Enabled unchanged on this path.
+	s.Run("FastForwardCompletionDisablesWithReason", func() {
+		targetTime := baseTime.Add(2 * time.Hour)
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:     true,
+				FastForward: durationpb.New(2 * time.Hour),
+			},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(targetTime),
+				HasReached: false,
+			},
+		}
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, true),
+		)
+		s.Require().NoError(err)
+
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().True(tsi.GetFastForwardInfo().GetHasReached())
+		s.Require().Equal(
+			persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_FAST_FORWARD_COMPLETION,
+			tsi.GetDisableReason(),
+		)
+	})
+
+	// Every applied transition increments SessionSkipCount by one, and once the count reaches
+	// the per-session cap the config is disabled with the MAX_SKIP_PER_SESSION reason.
+	s.Run("SessionSkipCountIncrementsUntilCapDisables", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:           true,
+				MaxSkipPerSession: 2,
+			},
+		}
+		targetTime := baseTime.Add(time.Hour)
+
+		// first skip: count 1, below cap, stays enabled
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
+		s.Require().True(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(
+			persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_UNSPECIFIED,
+			tsi.GetDisableReason(),
+		)
+
+		// second skip: count reaches the cap of 2, disables with MAX_SKIP_PER_SESSION
+		err = s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+		s.Require().Equal(int32(2), tsi.GetSessionSkipCount())
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(
+			persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_MAX_SKIP_PER_SESSION,
+			tsi.GetDisableReason(),
+		)
+	})
+
+	// A MaxSkipPerSession of 0 caps on the very first skip (1 >= 0), disabling immediately.
+	// The frontend guarantees a populated config carries at least 1, so a 0 reaching the
+	// runtime (e.g. a config that never had the cap populated) kills skipping right away.
+	s.Run("SessionSkipCountCapsImmediatelyWhenMaxUnset", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		targetTime := baseTime.Add(time.Hour)
+
+		err := s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
+			context.Background(),
+			makeEvent(baseTime, &targetTime, false),
+		)
+		s.Require().NoError(err)
+
+		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
+		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
+		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(
+			persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_MAX_SKIP_PER_SESSION,
+			tsi.GetDisableReason(),
+		)
+	})
 }
 
 func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
@@ -1338,12 +1542,36 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.False(util.IsEnabled())
 	})
 
+	s.Run("NilReceiverSafe", func() {
+		var util *TimeSkippingInfoUtil
+		s.False(util.IsEnabled())
+		s.False(util.HasPendingFastForward())
+		s.Zero(util.GetAccumulatedSkippedDuration())
+		s.Nil(util.ToDescribeInfo(time.Now()))
+	})
+
 	s.Run("NilFFISafe", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
 			FastForwardInfo: nil,
 		}
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
+		s.False(util.HasPendingFastForward())
+	})
+
+	s.Run("NoPendingFastForwardWhenTargetTimeNil", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{HasReached: false, TargetTime: nil},
+		})
+		s.False(util.HasPendingFastForward())
+	})
+
+	s.Run("NoPendingFastForwardWhenTargetTimeZero", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:          &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{HasReached: false, TargetTime: timestamppb.New(time.Time{})},
+		})
 		s.False(util.HasPendingFastForward())
 	})
 
@@ -1401,6 +1629,20 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		}
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.True(util.IsEnabled())
+	})
+
+	s.Run("IsEnabledNilConfig", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{Config: nil})
+		s.False(util.IsEnabled())
+	})
+
+	s.Run("GetAccumulatedSkippedDuration", func() {
+		s.Zero(NewTimeSkippingInfoUtil(nil).GetAccumulatedSkippedDuration(), "nil info")
+		s.Zero(NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{}).GetAccumulatedSkippedDuration(), "unset duration")
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(90 * time.Minute),
+		})
+		s.Equal(90*time.Minute, util.GetAccumulatedSkippedDuration())
 	})
 
 	s.Run("ToDescribeInfoNilTSI", func() {

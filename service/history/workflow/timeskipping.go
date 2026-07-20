@@ -129,26 +129,36 @@ func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationp
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	previousTSC := source.GetTimeSkippingInfo().GetConfig()
+
+	tsi := source.GetTimeSkippingInfo()
+	util := NewTimeSkippingInfoUtil(tsi)
 
 	// if disabled, we just return nil for the new TSC
 	var newTSC *commonpb.TimeSkippingConfig
-	if previousTSC.GetEnabled() {
-		newTSC = common.CloneProto(previousTSC)
+	if util.IsEnabled() {
+		newTSC = common.CloneProto(tsi.GetConfig())
 	}
 
+	// state propagation (virtual time, fast forward, skip count)
 	var stateProp *commonpb.TimeSkippingStatePropagation
-	if accum := accumulatedSkippedDuration(source); accum > 0 {
+	if accum := util.GetAccumulatedSkippedDuration(); accum > 0 {
 		stateProp = &commonpb.TimeSkippingStatePropagation{
 			InitialSkippedDuration: durationpb.New(accum),
 		}
 	}
-
-	if ff := source.GetTimeSkippingInfo().GetFastForwardInfo(); ff != nil && !ff.GetHasReached() {
+	if util.HasPendingFastForward() {
 		if stateProp == nil {
 			stateProp = &commonpb.TimeSkippingStatePropagation{}
 		}
-		stateProp.FastForwardTargetTime = ff.GetTargetTime()
+		stateProp.FastForwardTargetTime = tsi.GetFastForwardInfo().GetTargetTime()
+	}
+	// The skip count is scoped to a session; once time skipping is disabled the session has
+	// ended, so the count does not carry to the next run.
+	if skipCount := tsi.GetSessionSkipCount(); skipCount > 0 && util.IsEnabled() {
+		if stateProp == nil {
+			stateProp = &commonpb.TimeSkippingStatePropagation{}
+		}
+		stateProp.InitialSkipCount = skipCount
 	}
 	return newTSC, stateProp
 }
@@ -159,7 +169,8 @@ func propagateTimeSkippingToNextRun(
 func propagateTimeSkippingToChild(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	accum := accumulatedSkippedDuration(source)
+	util := NewTimeSkippingInfoUtil(source.GetTimeSkippingInfo())
+	accum := util.GetAccumulatedSkippedDuration()
 	var stateProp *commonpb.TimeSkippingStatePropagation
 	if accum > 0 {
 		stateProp = &commonpb.TimeSkippingStatePropagation{
@@ -167,19 +178,15 @@ func propagateTimeSkippingToChild(
 		}
 	}
 
-	enabled := source.GetTimeSkippingInfo().GetConfig().GetEnabled()
-	disablePropagation := source.GetTimeSkippingInfo().GetConfig().GetDisablePropagation()
-	if !enabled || disablePropagation {
+	configEnabled := util.IsEnabled()
+	disableConfigProp := source.GetTimeSkippingInfo().GetConfig().GetDisablePropagation()
+	if !configEnabled || disableConfigProp {
 		return nil, stateProp
 	}
 
 	return &commonpb.TimeSkippingConfig{
-		Enabled: enabled,
+		Enabled: configEnabled,
 	}, stateProp
-}
-
-func accumulatedSkippedDuration(source *persistencespb.WorkflowExecutionInfo) time.Duration {
-	return source.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // =============================================================================
@@ -199,7 +206,7 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 }
 
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	return accumulatedSkippedDuration(ms.executionInfo)
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration()
 }
 
 // =============================================================================
@@ -261,14 +268,21 @@ func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwar
 // Time Skipping Utility Functions
 // =============================================================================
 
+func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
+	return &TimeSkippingInfoUtil{tsi: tsi}
+}
+
 // TimeSkippingInfoUtil provides read-only helpers over a TimeSkippingInfo, guarding against nil
 // info/config/fast-forward so callers don't have to repeat the nil checks.
 type TimeSkippingInfoUtil struct {
 	tsi *persistencespb.TimeSkippingInfo
 }
 
-func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
-	return &TimeSkippingInfoUtil{tsi: tsi}
+func (util *TimeSkippingInfoUtil) GetAccumulatedSkippedDuration() time.Duration {
+	if util == nil || util.tsi == nil {
+		return 0
+	}
+	return util.tsi.GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // HasPendingFastForward reports whether time skipping is enabled and carries a fast-forward that has
@@ -289,7 +303,7 @@ func (util *TimeSkippingInfoUtil) HasPendingFastForward() bool {
 // IsEnabled reports whether time skipping is enabled. Nil-safe: a nil util, nil info, or nil config
 // all yield false.
 func (util *TimeSkippingInfoUtil) IsEnabled() bool {
-	if util == nil {
+	if util == nil || util.tsi == nil {
 		return false
 	}
 	return util.tsi.GetConfig().GetEnabled()
@@ -514,7 +528,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		tsi.Config.Enabled = false
 		tsi.DisableReason = persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_FAST_FORWARD_COMPLETION
 	}
-
 	// update skip
 	tsi.SessionSkipCount += 1
 	if tsi.SessionSkipCount >= tsi.Config.GetMaxSkipPerSession() && tsi.Config.Enabled {

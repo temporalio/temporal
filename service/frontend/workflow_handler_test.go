@@ -3583,6 +3583,38 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
 }
 
+// TestValidateTimeSkippingConfig_MaxSkipPerSession verifies how MaxSkipPerSession is populated
+// from dynamic config: a per-namespace override wins for that namespace, a constraint-less
+// (per-cell) value is the fallback for other namespaces, and a value already set on the
+// request is left untouched.
+func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig_MaxSkipPerSession() {
+	const otherNamespace = "other-namespace"
+	client := dc.StaticClient{
+		dc.WorkflowTimeSkippingEnabled.Key(): true,
+		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+			{Value: 42}, // per-cell (constraint-less) value
+			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
+		},
+	}
+	config := NewConfig(dc.NewCollection(client, log.NewNoopLogger()), numHistoryShards)
+	wh := s.getWorkflowHandler(config)
+
+	// namespace with a per-namespace override uses that value
+	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(7), tsc.GetMaxSkipPerSession())
+
+	// namespace without a per-namespace setting falls back to the per-cell value
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
+	s.Require().Equal(int32(42), tsc.GetMaxSkipPerSession())
+
+	// a value already on the request is preserved, not overwritten by dynamic config
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 999}
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(999), tsc.GetMaxSkipPerSession())
+}
+
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
 // a Start-with-time-skipping inside ExecuteMultiOperation is rejected. The error is wrapped
 // as a MultiOperationExecution error with the per-operation InvalidArgument at index 0.
