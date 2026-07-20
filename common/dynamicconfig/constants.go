@@ -260,6 +260,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5*time.Second,
 		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
 	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
 		"system.historyHealthSignalUsePercentiles",
@@ -270,6 +275,26 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
+	)
+	PersistenceHealthSignalPercentilesEnabled = NewGlobalBoolSetting(
+		"system.persistenceHealthSignalPercentilesEnabled",
+		false,
+		`PersistenceHealthSignalPercentilesEnabled determines whether persistence latency is tracked using distribution objects`,
+	)
+	PersistenceHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.persistenceHealthSignalLatencyWindowCount",
+		10,
+		`PersistenceHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	PersistenceHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.persistenceHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`PersistenceHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	PersistenceHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.persistenceHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"persistenceHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the persistence system",
 	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
@@ -1506,6 +1531,19 @@ a decision to scale down the number of pollers will be issued`,
 		10,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
+	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
+		"matching.enablePollerScalingDecisionMetrics",
+		false,
+		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
+metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
+scoped by namespace and/or task queue.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
@@ -3118,7 +3156,7 @@ existing workflows to attach callbacks.`,
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
-		false,
+		true,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
 	)
@@ -3421,6 +3459,20 @@ The configured value will be divided by the number of worker hosts to get the pe
 		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
+	)
+	SchedulerSpecMaxIterations = NewGlobalIntSetting(
+		"scheduler.specMaxIterations",
+		2*7*24*60*60,
+		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
+scheduler evaluates while searching for a schedule's next action time before giving up with an
+error and stopping the schedule.`,
+	)
+	SchedulerSpecWarnIterations = NewGlobalIntSetting(
+		"scheduler.specWarnIterations",
+		24*60*60,
+		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
+while searching for a schedule's next action time before emitting a warning (metric + log). It
+is non-fatal: the search continues past this threshold.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

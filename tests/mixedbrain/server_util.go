@@ -4,87 +4,22 @@ import (
 	"context"
 	"net"
 	"os"
-	"os/exec"
 	"strconv"
-	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/temporalio/omes/devserver"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
-
-type serverProcess struct {
-	name     string
-	cmd      *exec.Cmd
-	cancel   context.CancelFunc
-	logFile  *os.File
-	logPath  string
-	done     chan error
-	stopOnce sync.Once
-}
-
-func startServerProcess(t *testing.T, name, binary, configDir, logPath string) *serverProcess {
-	t.Helper()
-	t.Logf("Starting %s: %s", name, binary)
-
-	logFile, err := os.Create(logPath)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(t.Context())
-	cmd := exec.CommandContext(ctx, binary,
-		"--root", "/",
-		"--config", configDir,
-		"--allow-no-auth",
-		"start",
-	)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	cmd.Dir = sourceRoot()
-	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-	cmd.WaitDelay = 15 * time.Second
-
-	require.NoError(t, cmd.Start())
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	return &serverProcess{
-		name:    name,
-		cmd:     cmd,
-		cancel:  cancel,
-		logFile: logFile,
-		logPath: logPath,
-		done:    done,
-	}
-}
-
-// stop is idempotent: it may be called explicitly and again via t.Cleanup.
-func (p *serverProcess) stop() {
-	p.stopOnce.Do(func() {
-		p.cancel()
-		<-p.done
-		_ = p.logFile.Close()
-	})
-}
-
-func (p *serverProcess) requireAlive(t *testing.T) {
-	t.Helper()
-	select {
-	case err := <-p.done:
-		p.done <- err // put back so stop() doesn't deadlock
-		t.Fatalf("%s exited unexpectedly: %v (logs: %s)", p.name, err, p.logPath)
-	default:
-	}
-}
 
 func registerNamespace(t *testing.T, conn *grpc.ClientConn, namespace string) {
 	t.Helper()
@@ -131,10 +66,31 @@ func createNexusEndpoint(t *testing.T, conn *grpc.ClientConn, endpointName, name
 	}, retryTimeout, time.Second, "failed to create nexus endpoint %s", endpointName)
 }
 
+func startDevServer(t *testing.T, name, logPath string, opts devserver.Options) (*devserver.Server, *os.File) {
+	t.Helper()
+
+	f, err := os.Create(logPath)
+	require.NoError(t, err)
+
+	var srv *devserver.Server
+	t.Cleanup(func() {
+		if srv != nil {
+			_ = srv.Stop()
+		}
+	})
+	t.Cleanup(func() { _ = f.Close() })
+
+	opts.Output = f
+	srv, err = devserver.Start(t.Context(), opts)
+	require.NoError(t, err, "start %s server", name)
+
+	return srv, f
+}
+
 // waitForClusterFormation waits until the server's reachable members include
-// all membership ports from all provided port sets, confirming the servers
+// all membership ports from all provided servers, confirming the servers
 // discovered each other. Reachable members use raw ringpop addresses (membership ports).
-func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, portSets ...portSet) {
+func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, servers ...devserver.Ports) {
 	t.Helper()
 
 	client := adminservice.NewAdminServiceClient(conn)
@@ -162,8 +118,13 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 			seen[port] = true
 		}
 
-		for _, ps := range portSets {
-			for _, port := range ps.membershipPorts() {
+		for _, server := range servers {
+			for _, port := range []int{
+				server.FrontendMembership,
+				server.HistoryMembership,
+				server.MatchingMembership,
+				server.WorkerMembership,
+			} {
 				if !seen[port] {
 					t.Logf("Waiting for cluster formation: port %d not yet visible", port)
 					return false
@@ -172,4 +133,18 @@ func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.D
 		}
 		return true
 	}, timeout, time.Second, "cluster did not form within %v", timeout)
+}
+
+func requireServerAlive(t *testing.T, name, address string) {
+	t.Helper()
+
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err = adminservice.NewAdminServiceClient(conn).DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	require.NoError(t, err, "%s server is not reachable", name)
 }

@@ -325,10 +325,11 @@ func TestTransitionStarted(t *testing.T) {
 
 func TestTransitionTimedout(t *testing.T) {
 	testCases := []struct {
-		name         string
-		startStatus  activitypb.ActivityExecutionStatus
-		timeoutType  enumspb.TimeoutType
-		attemptCount int32
+		name             string
+		startStatus      activitypb.ActivityExecutionStatus
+		timeoutType      enumspb.TimeoutType
+		attemptCount     int32
+		heartbeatDetails *commonpb.Payloads
 	}{
 		{
 			name:         "schedule to start timeout",
@@ -343,19 +344,28 @@ func TestTransitionTimedout(t *testing.T) {
 			attemptCount: 3,
 		},
 		{
-			name:         "schedule to close timeout from started status",
-			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			timeoutType:  enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-			attemptCount: 4,
+			name:             "schedule to close timeout from started status with heartbeat details",
+			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			timeoutType:      enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			attemptCount:     4,
+			heartbeatDetails: payloads.EncodeString("schedule-to-close-heartbeat"),
 		},
 		{
-			name:         "start to close timeout",
-			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			timeoutType:  enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-			attemptCount: 5,
+			name:             "start to close timeout with heartbeat details",
+			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			timeoutType:      enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			attemptCount:     5,
+			heartbeatDetails: payloads.EncodeString("start-to-close-heartbeat"),
 		},
 		{
-			name:         "heartbeat timeout",
+			name:             "heartbeat timeout with heartbeat details",
+			startStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			timeoutType:      enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			attemptCount:     2,
+			heartbeatDetails: payloads.EncodeString("heartbeat-details"),
+		},
+		{
+			name:         "heartbeat timeout without heartbeat details",
 			startStatus:  activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 			timeoutType:  enumspb.TIMEOUT_TYPE_HEARTBEAT,
 			attemptCount: 2,
@@ -380,6 +390,11 @@ func TestTransitionTimedout(t *testing.T) {
 				},
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
 				Outcome:     chasm.NewDataField(ctx, outcome),
+			}
+			if tc.heartbeatDetails != nil {
+				activity.LastHeartbeat = chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+					Details: tc.heartbeatDetails,
+				})
 			}
 
 			controller := gomock.NewController(t)
@@ -419,17 +434,24 @@ func TestTransitionTimedout(t *testing.T) {
 				// Timeout failure is recorded in outcome but not attempt state
 				require.Nil(t, attemptState.GetLastFailureDetails())
 				require.Nil(t, attemptState.GetCompleteTime())
-				require.NotNil(t, outcome.GetFailed().GetFailure())
-				// do something
+				outcomeFailure := outcome.GetFailed().GetFailure()
+				require.NotNil(t, outcomeFailure)
+				// The last heartbeat details must be surfaced on the timeout failure so callers can
+				// inspect the activity's last reported progress.
+				protorequire.ProtoEqual(t, tc.heartbeatDetails, outcomeFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 				enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				// Timeout failure is recorded in attempt state only. TransitionTimedOut should only be called when there
 				// are no more retries. Retries go through TransitionRescheduled.
-				require.NotNil(t, attemptState.GetLastFailureDetails().GetFailure())
+				recordedFailure := attemptState.GetLastFailureDetails().GetFailure()
+				require.NotNil(t, recordedFailure)
 				require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
 				require.NotNil(t, attemptState.GetCompleteTime())
 				require.Nil(t, attemptState.GetCurrentRetryInterval())
 				require.Nil(t, outcome.GetVariant())
+				// The last heartbeat details must be surfaced on the timeout failure so callers can
+				// inspect the activity's last reported progress.
+				protorequire.ProtoEqual(t, tc.heartbeatDetails, recordedFailure.GetTimeoutFailureInfo().GetLastHeartbeatDetails())
 
 			default:
 				t.Fatalf("unexpected timeout type: %v", tc.timeoutType)

@@ -66,10 +66,10 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState(testWithChasm bool) {
 		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(env.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 

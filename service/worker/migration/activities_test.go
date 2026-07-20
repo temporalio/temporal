@@ -122,6 +122,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(gomock.Any()).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Gauge(gomock.Any()).Return(metrics.NoopGaugeMetricFunc).AnyTimes()
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(remoteCluster).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).
 		Return(namespace.Name(mockedNamespace), nil).AnyTimes()
@@ -909,4 +910,95 @@ func (s *activitiesSuite) TestWaitCatchUp() {
 
 	_, err := env.ExecuteActivity(s.a.WaitCatchup, request)
 	s.NoError(err)
+}
+
+// Guards the uninitialized-ack-watermark fix: production-shaped garbage input (shard has
+// produced 225M tasks but the remote reports no ack: AckedTaskId == 0, nil visibility time)
+// must be reported not-ready and NOT yield the bogus now-since-1970 lag values.
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWatermark() {
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          1,
+		MaxReplicationTaskId:             225443839,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             0,
+		AckedTaskVisibilityTime: nil,
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.False(status.isReady)
+	s.Zero(status.laggingTasks) // must NOT be maxTaskId - 0
+	s.Zero(status.timeLag)      // must NOT be now - epoch(1970)
+}
+
+// Same condition but with an explicit epoch (1970) visibility time rather than nil.
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWatermarkEpoch() {
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          2,
+		MaxReplicationTaskId:             5000,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             0,
+		AckedTaskVisibilityTime: timestamppb.New(time.Unix(0, 0)),
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.False(status.isReady)
+	s.Zero(status.laggingTasks)
+	s.Zero(status.timeLag)
+}
+
+// Negative control: a real ack watermark behind by genuine lag must compute real lag values
+// (and not be mistaken for the uninitialized-watermark case).
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_GenuineLagNotFlagged() {
+	now := time.Now()
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          3,
+		MaxReplicationTaskId:             5000,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(now),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             3000,
+		AckedTaskVisibilityTime: timestamppb.New(now.Add(-30 * time.Second)),
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.Equal(int64(2000), status.laggingTasks)
+	s.Equal(30*time.Second, status.timeLag)
+	s.False(status.isReady) // 2000 > 1000 tasks AND 30s > 10s => outside tolerance
+}
+
+// End-to-end through checkReplicationOnce: a single no-ack-watermark shard keeps catchup
+// not ready, without surfacing an error.
+func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotReady() {
+	req := WaitReplicationRequest{
+		Namespace:           mockedNamespace,
+		ShardCount:          1,
+		RemoteCluster:       remoteCluster,
+		AllowedLagging:      10 * time.Second,
+		AllowedLaggingTasks: 1000,
+		WaitForTaskIds:      map[int32]int64{1: 0},
+	}
+
+	s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(&historyservice.GetReplicationStatusResponse{
+		Shards: []*historyservice.ShardReplicationStatus{
+			{
+				ShardId:                          1,
+				MaxReplicationTaskId:             225443839,
+				MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+				RemoteClusters: map[string]*historyservice.ShardReplicationStatusPerCluster{
+					remoteCluster: {AckedTaskId: 0, AckedTaskVisibilityTime: nil},
+				},
+			},
+		},
+	}, nil).Times(1)
+
+	ready, err := s.a.checkReplicationOnce(context.Background(), req)
+	s.NoError(err)
+	s.False(ready)
 }

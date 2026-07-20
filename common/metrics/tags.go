@@ -29,6 +29,7 @@ const (
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
+	pollerScaleDecisionTag  = "decision"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -332,6 +333,25 @@ const (
 
 func TaskAddResultTag(result string) Tag {
 	return Tag{Key: taskAddResult, Value: result}
+}
+
+const (
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
+)
+
+const (
+	PollerScaleReasonIdle        ReasonString = "idle"
+	PollerScaleReasonBacklog     ReasonString = "backlog"
+	PollerScaleReasonTaskRate    ReasonString = "task_rate"
+	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {

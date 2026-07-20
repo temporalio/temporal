@@ -204,7 +204,7 @@ func (s *NexusWorkflowUpdateTestSuite) newSimpleCallerWF(endpointName, childWfID
 // awaitUpdateAccepted polls the workflow history until a WorkflowExecutionUpdateAccepted
 // event is found, failing the test if it does not appear within 10 seconds.
 func (s *NexusWorkflowUpdateTestSuite) awaitUpdateAccepted(ctx context.Context, env *NexusTestEnv, workflowID, runID string) {
-	await.Require(env.Context(), s.T(), func(t *await.T) {
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -270,7 +270,7 @@ func (s *NexusWorkflowUpdateTestSuite) assertReappliedUpdateInNewRun(ctx context
 
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
 	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
@@ -326,7 +326,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOperation() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
 	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
@@ -388,7 +388,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 // The child workflow should only have one update callback (from the first request).
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNoCallbackAttachedOnAlreadyCompletedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "already-completed-update-id"
 
@@ -497,7 +497,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNoCallbackAttachedOnAlr
 // returns update-level callbacks after an update with callbacks is sent.
 func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	updateID := "describe-callback-update-id"
 	callbackURL := "http://localhost:9999/callback"
@@ -562,7 +562,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 	}()
 
 	// Wait until the update is accepted by checking DescribeWorkflowExecution.
-	await.Require(env.Context(), s.T(), func(t *await.T) {
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, desc.GetCallbacks(), "callbacks should be present")
@@ -593,7 +593,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestDescribeWorkflowShowsUpdateCallbacks(
 // the update is reapplied in the new run and the callback fires when the update completes.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetInflightUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
 	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
@@ -674,7 +674,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetInfli
 // completion callback fires with a failure and the caller's nexus operation fails.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejectedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
 	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
@@ -772,7 +772,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 // receives the result via the AttachCallbacks path.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompletedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "reset-completed-update-id"
 
@@ -823,7 +823,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 
 	// The update is reapplied and completes again in the new run.
 	// Wait for the update to complete in the new run before sending the second operation.
-	await.Require(env.Context(), s.T(), func(t *await.T) {
+	await.Require(s.Context(), s.T(), func(t *await.T) {
 		hist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for hist.HasNext() {
 			event, err := hist.Next()
@@ -858,7 +858,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 // (instead of starting an async operation with callbacks).
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateSyncReturnForCompletedWorkflow() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "sync-return-completed-wf-update-id"
 
@@ -921,7 +921,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateSyncReturnForCompletedW
 // the caller's nexus operation completes with a failure.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "failed-update-id"
 
@@ -980,7 +980,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate(
 // nexus operation completes.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowTerminate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "terminate-update-id"
 
@@ -1045,7 +1045,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowTermi
 // This exercises mutable_state_impl.go processCloseCallbacksChasm -> wf.ProcessCloseCallbacks.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowComplete() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "complete-wf-update-id"
 
@@ -1097,7 +1097,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowCompl
 // completes with a failure (the old run is closed).
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowContinueAsNew() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "continue-as-new-update-id"
 
@@ -1162,7 +1162,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowConti
 // and the caller's nexus operation completes with a failure (the old run is closed).
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowFailedWithRetry() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "failed-retry-update-id"
 
@@ -1233,7 +1233,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowFaile
 // caller. This tests the proper handling of rejection in the callback flow.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnRejectedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 	cfg.updateID = "rejected-update-id"
 
@@ -1299,7 +1299,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnRejectedUpdat
 // a RequestId, it is preserved in the WorkflowExecutionUpdateAccepted event's AcceptedRequest.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateRequestIDInAcceptedEvent() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
-	ctx := testcore.NewContext()
+	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	updateID := "request-id-accepted-test"
 	requestID := uuid.NewString()
