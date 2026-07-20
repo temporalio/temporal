@@ -1991,5 +1991,6 @@ func (a *Activity) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyV
 		TypeSearchAttribute.Value(a.GetActivityType().GetName()),
 		StatusSearchAttribute.Value(InternalStatusToAPIStatus(a.GetStatus()).String()),
 		chasm.SearchAttributeTaskQueue.Value(a.GetTaskQueue().GetName()),
+		chasm.SearchAttributeExecutionTime.Value(a.firstDispatchTime()),
 	}
 }

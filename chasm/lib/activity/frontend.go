@@ -220,6 +220,9 @@ func (h *frontendHandler) ListActivityExecutions(
 				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
 			}
 		}
+		if executionTime, ok := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, chasm.SearchAttributeExecutionTime); ok {
+			info.ExecutionTime = timestamppb.New(executionTime)
+		}
 		executions = append(executions, info)
 	}
 

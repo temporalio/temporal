@@ -21,12 +21,56 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	testCases := []struct {
+		name       string
+		startDelay time.Duration
+	}{
+		{name: "without start delay"},
+		{name: "with start delay", startDelay: 5 * time.Minute},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return testTime },
+				},
+			}
+
+			activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:           "ns",
+				ActivityId:          "act",
+				ActivityType:        &commonpb.ActivityType{Name: "T"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "tq"},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				StartDelay:          durationpb.New(tc.startDelay),
+			})
+			require.NoError(t, err)
+
+			var executionTime time.Time
+			for _, sa := range activity.SearchAttributes(ctx) {
+				if sa.Field == sadefs.ExecutionTime {
+					var ok bool
+					executionTime, ok = sa.Value.Value().(time.Time)
+					require.True(t, ok)
+					break
+				}
+			}
+			require.False(t, executionTime.IsZero(), "SearchAttributes must include ExecutionTime")
+			require.Equal(t, testTime.Add(tc.startDelay), executionTime)
+		})
+	}
+}
 
 func TestHandleStarted(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
