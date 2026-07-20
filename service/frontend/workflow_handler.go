@@ -6308,10 +6308,9 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return nil, err
 	}
 
-	// matchingResponse.GetResponse() is nil when the long poll returned no task. Unlike the
-	// workflow/activity handlers, which build a fresh response struct, the Nexus handler passes
-	// matching's response through directly, so a nil here would surface as a typed-nil pointer
-	// wrapped in a non-nil interface to downstream interceptors. Return an empty response instead.
+	// matchingResponse.GetResponse() is nil when the long poll returned no task. To align
+	// with the workflow/activity handlers, an empty response is returned instead. This prevents
+	// the typed-nil pointer wrapped in a non-nil interface from surfacing to downstream interceptors.
 	if resp := matchingResponse.GetResponse(); resp != nil {
 		return resp, nil
 	}
