@@ -715,8 +715,8 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		)
 	}
 	if tsc.GetMaxSkipPerSession() <= 0 {
-		// todo: add to dc
-		tsc.MaxSkipPerSession = 100
+		defaultMaxSkipPerSession := wh.config.WorkflowMaxSkipPerSession(ns.String())
+		tsc.MaxSkipPerSession = max(1, int32(defaultMaxSkipPerSession))
 	}
 
 	if !tsc.GetEnabled() {
