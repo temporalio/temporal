@@ -3311,15 +3311,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 // __temporal_system endpoint.
 func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadataFlag(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
-	ctx := env.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, "workflow")
 	s.NoError(err)
 
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -3328,7 +3327,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 		Identity: "test",
 	})
 	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -3348,7 +3347,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 	s.NoError(err)
 
 	// Poll for the completion
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -3367,7 +3366,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
 
 	// Complete the workflow
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
 		Commands: []*commandpb.Command{
@@ -3384,7 +3383,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 		},
 	})
 	s.NoError(err)
-	s.NoError(run.Get(ctx, nil))
+	s.NoError(run.Get(s.Context(), nil))
 }
 
 func (s *NexusWorkflowTestSuite) mutateCompletionComponentRef(
