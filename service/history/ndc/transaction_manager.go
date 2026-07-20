@@ -313,8 +313,10 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseRebuildLastEventID := baseMutableState.GetLastCompletedWorkflowTaskStartedEventId()
 		if baseRebuildLastEventID == common.EmptyEventID {
 			// No completed workflow task. Pick the reset anchor by scenario:
-			//  - real pending workflow task (scheduled/started): anchor at it. Resetting to a
-			//    pending task is already supported by the resetter.
+			//  - real pending workflow task: anchor at its ScheduledEventID. The resetter
+			//    rebuilds to that workflow task and fails it (synthesizing a started event if it
+			//    has not started yet), so the scheduled event is a sufficient anchor whether or
+			//    not the task already started.
 			//  - transient (failing, attempt > 1) or speculative pending task: not a usable
 			//    anchor - it has no persisted WorkflowTaskScheduled event (its ScheduledEventID
 			//    is a not-yet-written NextEventID placeholder), so skip it.
@@ -322,11 +324,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			if workflowTask := baseMutableState.GetPendingWorkflowTask(); workflowTask != nil &&
 				!baseMutableState.IsTransientWorkflowTask() &&
 				workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-				if workflowTask.StartedEventID != common.EmptyEventID {
-					baseRebuildLastEventID = workflowTask.StartedEventID
-				} else {
-					baseRebuildLastEventID = workflowTask.ScheduledEventID
-				}
+				baseRebuildLastEventID = workflowTask.ScheduledEventID
 			}
 		}
 

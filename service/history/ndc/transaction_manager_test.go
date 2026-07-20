@@ -579,8 +579,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Pendin
 
 func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_StartedPendingWorkflowTask() {
 	// A closed current workflow that never completed a workflow task but has a real pending
-	// workflow task that was already started (StartedEventID set) is anchored at that started
-	// event, not its scheduled event, so the resetter rebuilds to the started boundary.
+	// workflow task that was already started is anchored at its scheduled event (not the started
+	// one): the resetter rebuilds to that workflow task and fails it, so the scheduled event is a
+	// sufficient anchor whether or not the task already started.
 	ctx := context.Background()
 
 	namespaceID := namespace.ID("some random namespace ID")
@@ -589,9 +590,9 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Starte
 	scheduledEventID := int64(2)
 	startedEventID := int64(3)
 	nextEventID := int64(4)
-	startedEventVersion := s.namespaceEntry.FailoverVersion(workflowID)
+	scheduledEventVersion := s.namespaceEntry.FailoverVersion(workflowID)
 	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
-		{EventId: startedEventID, Version: startedEventVersion},
+		{EventId: startedEventID, Version: scheduledEventVersion},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
 	historySize := rand.Int63()
@@ -634,15 +635,15 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Starte
 	}).AnyTimes()
 	mutableState.EXPECT().AddHistorySize(historySize)
 
-	// Reset must be anchored at the started workflow task's event, not the scheduled one.
+	// Reset must be anchored at the scheduled workflow task's event even though the task started.
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
 		runID,
 		versionHistory.GetBranchToken(),
-		startedEventID,
-		startedEventVersion,
+		scheduledEventID,
+		scheduledEventVersion,
 		nextEventID,
 		gomock.Any(),
 		targetWorkflow,
