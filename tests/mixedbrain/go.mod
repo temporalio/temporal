@@ -7,7 +7,7 @@ require (
 	github.com/siderolabs/grpc-proxy v0.5.2
 	github.com/stretchr/testify v1.11.1
 	github.com/temporalio/omes v0.0.0-20260528212322-14460bcc246f
-	go.temporal.io/api v1.63.4-0.20260714232926-421d65d20788
+	go.temporal.io/api v1.63.4-0.20260720155646-7a3ca3626ec2
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
