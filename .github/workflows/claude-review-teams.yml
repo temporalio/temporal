@@ -8,7 +8,7 @@ name: Claude review for opted-in PRs
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [opened, reopened, ready_for_review, labeled]
 
 env:
   # Space- or newline-separated list of temporalio team slugs whose
@@ -21,8 +21,17 @@ env:
 jobs:
   check-review-eligibility:
     if: >-
-      github.event.label.name == 'request-claude-review' ||
-      github.event.label.name == 'skip-claude-review'
+      (
+        github.event.action != 'labeled' &&
+        github.event.pull_request.draft == false
+      ) ||
+      (
+        github.event.action == 'labeled' &&
+        (
+          github.event.label.name == 'request-claude-review' ||
+          github.event.label.name == 'skip-claude-review'
+        )
+      )
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {} # uses the Temporal CI/CD Bot app token, not GITHUB_TOKEN
@@ -67,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           AUTHOR: ${{ steps.resolve.outputs.author }}
           EVENT_ACTOR: ${{ github.actor }}
+          EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL_NAME: ${{ github.event.label.name }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           REPO: ${{ github.repository }}
@@ -142,35 +152,12 @@ jobs:
             fi
           }
 
-          require_review_team_member() {
-            user="$1"
-
-            if [ -z "$REVIEW_TEAMS" ]; then
-              skip_review "automation label requires REVIEW_TEAMS to be configured"
-            fi
-
-            echo "Checking configured review teams for ${user}"
-            for team in $REVIEW_TEAMS; do
-              if response=$(gh api \
-                  -H "Accept: application/vnd.github+json" \
-                  "/orgs/temporalio/teams/${team}/memberships/${user}" 2>&1); then
-                if [ "$(echo "$response" | jq -r '.state')" = "active" ]; then
-                  echo "${user} is an active member of temporalio/${team}"
-                  return 0
-                fi
-              elif echo "$response" | grep -q "HTTP 404"; then
-                : # user is not a member of this team; try the next one
-              else
-                echo "Unexpected error checking temporalio/${team} membership: ${response}" >&2
-                exit 1
-              fi
-            done
-
-            skip_review "author is not in a configured review team"
-          }
-
-          if ! labels_match "$EVENT_LABEL_NAME" "$REVIEW_OPT_IN_LABEL"; then
-            skip_review "label '${EVENT_LABEL_NAME}' does not request Claude review"
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            require_org_member "$EVENT_ACTOR" "labeler"
+            require_repo_write "$EVENT_ACTOR" "labeler"
+          else
+            require_org_member "$AUTHOR" "author"
+            require_repo_write "$AUTHOR" "author"
           fi
 
           echo "Fetching labels for PR #${PR_NUMBER}"
@@ -187,17 +174,47 @@ jobs:
             skip_review "skip label '${REVIEW_OPT_OUT_LABEL}' is present"
           fi
           echo "No skip label '${REVIEW_OPT_OUT_LABEL}' found on PR #${PR_NUMBER}"
-
-          if [ "$EVENT_ACTOR" = "github-actions[bot]" ]; then
-            require_org_member "$AUTHOR" "author"
-            require_repo_write "$AUTHOR" "author"
-            require_review_team_member "$AUTHOR"
-            enable_review "request label was added by automation and author is in a configured review team"
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            if ! labels_match "$EVENT_LABEL_NAME" "$REVIEW_OPT_IN_LABEL"; then
+              skip_review "label '${EVENT_LABEL_NAME}' does not request Claude review"
+            fi
           fi
 
-          require_org_member "$EVENT_ACTOR" "labeler"
-          require_repo_write "$EVENT_ACTOR" "labeler"
-          enable_review "request label was added by trusted labeler ${EVENT_ACTOR}"
+          echo "Checking PR #${PR_NUMBER} for request label '${REVIEW_OPT_IN_LABEL}'"
+          if has_label "$REVIEW_OPT_IN_LABEL"; then
+            enable_review "request label '${REVIEW_OPT_IN_LABEL}' is present"
+          fi
+          echo "No request label '${REVIEW_OPT_IN_LABEL}' found on PR #${PR_NUMBER}"
+          if [ -z "$REVIEW_TEAMS" ]; then
+            skip_review "no REVIEW_TEAMS configured; PR requires request label '${REVIEW_OPT_IN_LABEL}'"
+          fi
+
+          echo "Checking configured review teams for ${AUTHOR}"
+          is_member=false
+          matched_team=""
+          for team in $REVIEW_TEAMS; do
+            if response=$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/orgs/temporalio/teams/${team}/memberships/${AUTHOR}" 2>&1); then
+              if [ "$(echo "$response" | jq -r '.state')" = "active" ]; then
+                echo "${AUTHOR} is an active member of temporalio/${team}"
+                is_member=true
+                matched_team="$team"
+                break
+              fi
+            elif echo "$response" | grep -q "HTTP 404"; then
+              : # author is not a member of this team; try the next one
+            else
+              echo "Unexpected error checking temporalio/${team} membership: ${response}" >&2
+              exit 1
+            fi
+          done
+
+          if [ "$is_member" = "false" ]; then
+            skip_review "author is not in a configured review team"
+          fi
+
+          enable_review "author is in configured review team 'temporalio/${matched_team}'"
 
   review:
     needs: check-review-eligibility
@@ -219,7 +236,7 @@ jobs:
         with:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          track_progress: false
+          track_progress: ${{ github.event.action != 'labeled' }}
           prompt: |
             Use `.claude/skills/review/SKILL.md` and apply it as the review skill.
             Please review PR #${{ needs.check-review-eligibility.outputs.pr_number }}.
