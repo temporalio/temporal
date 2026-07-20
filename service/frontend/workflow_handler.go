@@ -6308,9 +6308,8 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return nil, err
 	}
 
-	// matchingResponse.GetResponse() is nil when the long poll returned no task. To align
-	// with the workflow/activity handlers, an empty response is returned instead. This prevents
-	// the typed-nil pointer wrapped in a non-nil interface from surfacing to downstream interceptors.
+	// matchingResponse.GetResponse() can be nil, but gRPC handlers must not return a nil
+	// response, so return an empty one instead.
 	if resp := matchingResponse.GetResponse(); resp != nil {
 		return resp, nil
 	}
