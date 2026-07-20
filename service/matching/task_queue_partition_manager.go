@@ -120,6 +120,10 @@ func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
 
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
+// newTaskQueuePartitionManager must only allocate: the matching engine may drop the
+// result without starting it when it loses the race with a concurrent load of the same
+// partition, so acquiring external references here (e.g. dynamic config subscriptions)
+// would leak. Anything that registers the manager elsewhere belongs in Start.
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
 	ns *namespace.Namespace,
@@ -291,6 +295,7 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
+	pm.rateLimitManager.Start()
 	pm.userDataManager.Start()
 	for _, hook := range pm.taskHooks {
 		hook.Start()
@@ -341,19 +346,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 
 	pm.goroGroup.Cancel()
-}
-
-// closeUnstarted releases the resources acquired when constructing a manager that
-// was never started, so that it can be garbage collected. In particular, the rate
-// limit manager registers dynamic config subscriptions at construction time, which
-// keep the whole manager graph reachable from the dynamic config collection until
-// they are cancelled. Stop cannot be used for this purpose: it blocks on
-// defaultQueueFuture, which is only set once a started manager has initialized.
-// Must not be called on a manager that has been started.
-func (pm *taskQueuePartitionManagerImpl) closeUnstarted() {
-	pm.initCancel()
-	pm.rateLimitManager.Stop()
-	pm.userDataManager.Stop()
 }
 
 func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persistencespb.PartitionScaleState) {
