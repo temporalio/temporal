@@ -334,6 +334,15 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		Priority:               u.priority,
 		Stamp:                  u.workflowTaskStamp,
 	})
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		// NotFound error is not expected for AddTasks calls
+		// but will be ignored by task error handling logic, so log it here
+		u.shardCtx.GetLogger().Error("Matching returned not found error for AddWorkflowTask",
+			tag.WorkflowNamespaceID(u.wfKey.NamespaceID),
+			tag.WorkflowID(u.wfKey.WorkflowID),
+			tag.WorkflowRunID(u.wfKey.RunID),
+			tag.Error(err))
+	}
 	if err != nil {
 		return err
 	}
