@@ -682,6 +682,48 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			)
 		}
 
+	case p.UpdateWorkflowModeBrandNewCurrent:
+		// insert a brand-new current record (fail if one exists), pointing at the new run if one is
+		// carried, otherwise at the updated run itself
+		if newWorkflow != nil {
+			if namespaceID != newWorkflow.NamespaceID {
+				return serviceerror.NewInternal("UpdateWorkflowExecution: cannot continue as new to another namespace")
+			}
+			batch.Query(templateCreateCurrentWorkflowExecutionQuery,
+				shardID,
+				rowTypeExecution,
+				namespaceID,
+				workflowID,
+				currentRecordRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				newWorkflow.RunID,
+				newWorkflow.ExecutionStateBlob.Data,
+				newWorkflow.ExecutionStateBlob.EncodingType.String(),
+				newWorkflow.LastWriteVersion,
+				newWorkflow.ExecutionState.State,
+			)
+		} else {
+			executionStateDatablob, err := d.serializer.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
+			if err != nil {
+				return err
+			}
+			batch.Query(templateCreateCurrentWorkflowExecutionQuery,
+				shardID,
+				rowTypeExecution,
+				namespaceID,
+				workflowID,
+				currentRecordRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
+				runID,
+				executionStateDatablob.Data,
+				executionStateDatablob.EncodingType.String(),
+				updateWorkflow.LastWriteVersion,
+				updateWorkflow.ExecutionState.State,
+			)
+		}
+
 	default:
 		return serviceerror.NewInternalf("UpdateWorkflowExecution: unknown mode: %v", request.Mode)
 	}
@@ -809,6 +851,33 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
 			currentRunID,
+		)
+
+	case p.ConflictResolveWorkflowModeBrandNewCurrent:
+		// insert a brand-new current record (fail if one exists), pointing at the new run if carried,
+		// otherwise the reset workflow
+		executionState := resetWorkflow.ExecutionState
+		executionStateBlob := resetWorkflow.ExecutionStateBlob
+		lastWriteVersion := resetWorkflow.LastWriteVersion
+		if newWorkflow != nil {
+			lastWriteVersion = newWorkflow.LastWriteVersion
+			executionState = newWorkflow.ExecutionState
+			executionStateBlob = newWorkflow.ExecutionStateBlob
+		}
+
+		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			currentRecordRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			executionState.RunId,
+			executionStateBlob.Data,
+			executionStateBlob.EncodingType.String(),
+			lastWriteVersion,
+			executionState.State,
 		)
 
 	default:

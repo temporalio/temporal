@@ -68,6 +68,11 @@ const (
 	// This is similar to SetWorkflowExecution, but UpdateWorkflowExecution with this mode persists the workflow as a mutation,
 	// instead of a snapshot.
 	UpdateWorkflowModeIgnoreCurrent
+	// UpdateWorkflowModeBrandNewCurrent update workflow and insert a brand-new current record, failing if a current record already exists.
+	// This is the update-path analogue of CreateWorkflowModeBrandNew. It is used to (re)establish a missing current execution
+	// record (e.g. on a passive cluster where the current record was deleted) by pointing it at the new run if one is carried,
+	// otherwise at the updated run itself.
+	UpdateWorkflowModeBrandNewCurrent
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode
@@ -81,6 +86,10 @@ const (
 	// ConflictResolveWorkflowModeBypassCurrent conflict resolve workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	ConflictResolveWorkflowModeBypassCurrent
+	// ConflictResolveWorkflowModeBrandNewCurrent conflict resolve workflow and insert a brand-new current record, failing if
+	// a current record already exists. Update-path analogue of CreateWorkflowModeBrandNew for the rebuilt/snapshot case; used to
+	// (re)establish a missing current execution record, pointing it at the new run if carried, otherwise the reset workflow.
+	ConflictResolveWorkflowModeBrandNewCurrent
 )
 
 // UnknownNumRowsAffected is returned when the number of rows that an API affected cannot be determined

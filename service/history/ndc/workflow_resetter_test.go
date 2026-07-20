@@ -333,34 +333,23 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 		historyi.TransactionPolicyActive,
 	).Return(baseMutation, baseEventsSeq, nil)
 
-	// Base-first: the base run is persisted with BypassCurrent (tolerating the missing current
-	// record) before the reset run is created as the new current.
-	baseUpdateEventsSize := int64(1234)
-	baseUpdateCurrent := s.mockTransaction.EXPECT().UpdateWorkflowExecution(
+	// The base run is updated and the reset run created as the new current in a single atomic
+	// transaction via BrandNewCurrent: base as the primary mutation, reset run as the new-run rider,
+	// inserting a fresh current record pointing at the reset run. There is no separate
+	// CreateWorkflowExecution and no partial-write window between the base link and the new current.
+	resetVersion := int64(0)
+	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
-		persistence.UpdateWorkflowModeBypassCurrent,
+		persistence.UpdateWorkflowModeBrandNewCurrent,
 		chasm.WorkflowArchetypeID,
 		int64(0),
 		baseMutation,
 		baseEventsSeq,
-		(*int64)(nil),
-		(*persistence.WorkflowSnapshot)(nil),
-		([]*persistence.WorkflowEvents)(nil),
-		true, // isWorkflow
-	).Return(baseUpdateEventsSize, int64(0), nil)
-
-	resetNewEventsSize := int64(4321)
-	// The key assertion: reset run is created as the new current with BrandNew mode,
-	// not an Update/ConflictResolve mode (both of which assume an existing current row).
-	s.mockTransaction.EXPECT().CreateWorkflowExecution(
-		gomock.Any(),
-		persistence.CreateWorkflowModeBrandNew,
-		chasm.WorkflowArchetypeID,
-		int64(0),
+		&resetVersion,
 		resetSnapshot,
 		resetEventsSeq,
 		true, // isWorkflow
-	).Return(resetNewEventsSize, nil).After(baseUpdateCurrent)
+	).Return(int64(1234), int64(0), nil)
 
 	// nil current workflow, and nil current mutation/events.
 	err := s.workflowResetter.persistToDB(context.Background(), baseWorkflow, nil, nil, nil, resetWorkflow)
