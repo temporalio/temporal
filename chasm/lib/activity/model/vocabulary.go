@@ -18,6 +18,7 @@ const (
 	RespondCompleted
 	RespondFailed
 	BackoffElapses
+	Pause
 )
 
 // Event is an EventKind together with flags describing the RPC

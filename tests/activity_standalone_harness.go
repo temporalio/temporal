@@ -149,6 +149,11 @@ func (a *saaHandle) rpc(e model.Event) error {
 			Namespace: ns, TaskToken: a.token, Identity: "worker", Failure: saaFailure(e.Retryable),
 		})
 		return err
+	case model.Pause:
+		_, err := fc.PauseActivityExecution(a.h.ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: "worker", Reason: "drive",
+		})
+		return err
 	default:
 		return fmt.Errorf("saaHarness: unhandled event kind %v", e.Kind)
 	}
@@ -227,4 +232,5 @@ var (
 	saaFailRetryably      = model.Event{Kind: model.RespondFailed, Retryable: true}
 	saaBackoffDelayElapse = model.Event{Kind: model.BackoffElapses}
 	saaComplete           = model.Event{Kind: model.RespondCompleted}
+	saaPause              = model.Event{Kind: model.Pause}
 )
