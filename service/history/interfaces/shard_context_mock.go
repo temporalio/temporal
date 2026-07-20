@@ -21,6 +21,7 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
+	workflow "go.temporal.io/server/chasm/lib/workflow"
 	archiver "go.temporal.io/server/common/archiver"
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -149,6 +150,20 @@ func (m *MockShardContext) ChasmRegistry() *chasm.Registry {
 func (mr *MockShardContextMockRecorder) ChasmRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockShardContext)(nil).ChasmRegistry))
+}
+
+// ChasmWorkflowRegistry mocks base method.
+func (m *MockShardContext) ChasmWorkflowRegistry() *workflow.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowRegistry")
+	ret0, _ := ret[0].(*workflow.Registry)
+	return ret0
+}
+
+// ChasmWorkflowRegistry indicates an expected call of ChasmWorkflowRegistry.
+func (mr *MockShardContextMockRecorder) ChasmWorkflowRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowRegistry", reflect.TypeOf((*MockShardContext)(nil).ChasmWorkflowRegistry))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
@@ -982,6 +997,20 @@ func (m *MockControllableContext) ChasmRegistry() *chasm.Registry {
 func (mr *MockControllableContextMockRecorder) ChasmRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmRegistry))
+}
+
+// ChasmWorkflowRegistry mocks base method.
+func (m *MockControllableContext) ChasmWorkflowRegistry() *workflow.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmWorkflowRegistry")
+	ret0, _ := ret[0].(*workflow.Registry)
+	return ret0
+}
+
+// ChasmWorkflowRegistry indicates an expected call of ChasmWorkflowRegistry.
+func (mr *MockControllableContextMockRecorder) ChasmWorkflowRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmWorkflowRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmWorkflowRegistry))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.

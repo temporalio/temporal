@@ -72,7 +72,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -111,7 +111,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {
 	poller := env.TaskPoller()
 
 	for i := int32(0); i < activityCount-1; i++ {
-		dwResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		dwResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -146,7 +146,7 @@ SignalLoop:
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput := payloads.EncodeString("another signal input")
-		_, signalErr = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -196,7 +196,7 @@ SignalLoop:
 	s.Eventually(
 		func() bool {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
+				s.Context(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       env.Namespace().String(),
 					MaximumPageSize: 100,
@@ -253,7 +253,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Identity:            "worker",
 	}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err)
 
 	go func() {
@@ -265,8 +265,8 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 			select {
 			case <-sigSendDoneChan:
-			case <-env.Context().Done():
-				return nil, env.Context().Err()
+			case <-s.Context().Done():
+				return nil, s.Context().Err()
 			}
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
@@ -287,11 +287,11 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	select {
 	case <-sigReadyToSendChan:
-	case <-env.Context().Done():
+	case <-s.Context().Done():
 		s.FailNow("timed out waiting for workflow task handler to be ready")
 	}
 
-	_, err = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
@@ -348,7 +348,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Identity:            "worker",
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -377,7 +377,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	poller := env.TaskPoller()
 
-	dwResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	dwResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -399,7 +399,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	}
 
 	// Send another signal without RunID
-	_, signalErr := env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, signalErr := env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -427,7 +427,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.Eventually(
 		func() bool {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
+				s.Context(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       env.Namespace().String(),
 					MaximumPageSize: 100,
@@ -477,7 +477,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
 		Identity:            "worker",
 	}
 
-	we, err0 := env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
 	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -491,7 +491,7 @@ SignalLoop:
 		signalName := "another signal"
 		signalInput, err := payloads.Encode(largePayload)
 		s.NoError(err)
-		_, signalErr = env.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -532,7 +532,7 @@ SignalLoop:
 	s.Eventually(
 		func() bool {
 			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
+				s.Context(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       env.Namespace().String(),
 					MaximumPageSize: 100,

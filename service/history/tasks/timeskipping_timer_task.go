@@ -5,30 +5,37 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*TimeSkippingTimerTask)(nil)
+var (
+	_ Task           = (*TimeSkippingTimerTask)(nil)
+	_ HasArchetypeID = (*TimeSkippingTimerTask)(nil)
+)
 
 type (
 	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
 	// on its TimeSkippingConfig should take effect.
-	//
-	// EventID identifies the event (WorkflowExecutionStartedEvent or
-	// WorkflowExecutionOptionsUpdatedEvent) that installed the fast-forward this task targets.
-	// It is matched against TimeSkippingInfo.FastForward.SourceEventId at
-	// firing time to detect superseded tasks: re-configuring the fast-forward emits a new task
-	// with a new EventID, and the old task is silently dropped on mismatch.
 	TimeSkippingTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
+		VersionedTransition *persistencespb.VersionedTransition
 		TaskID              int64
-		EventID             int64
+		// ArchetypeID identifies the execution archetype (workflow or a CHASM component) this task
+		// targets. It is required to acquire the correct execution context at firing time, since the
+		// context cache is keyed by archetype. Always set at generation from the mutable state's
+		// archetype (chasm.WorkflowArchetypeID for workflows).
+		ArchetypeID uint32
 	}
 )
 
 func (t *TimeSkippingTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
+}
+
+func (t *TimeSkippingTimerTask) GetArchetypeID() uint32 {
+	return t.ArchetypeID
 }
 
 func (t *TimeSkippingTimerTask) GetTaskID() int64 {
@@ -56,10 +63,13 @@ func (t *TimeSkippingTimerTask) GetType() enumsspb.TaskType {
 }
 
 func (t *TimeSkippingTimerTask) String() string {
-	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, EventID: %v}",
+	vt := t.VersionedTransition
+	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v, ArchetypeID: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
-		t.EventID,
+		vt.GetNamespaceFailoverVersion(),
+		vt.GetTransitionCount(),
+		t.ArchetypeID,
 	)
 }

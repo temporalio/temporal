@@ -206,6 +206,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
 	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
+	}
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(h.metricsHandler, scheduler)
@@ -356,13 +359,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// processing in a new task.
 		if !ctx.takeNextAction() {
 			break
-		}
-
-		// Check if this start is already started. If so, we crashed after
-		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
-			continue
 		}
 
 		// Clone start before concurrent access. The clone will have RunId/StartTime
@@ -785,6 +781,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,

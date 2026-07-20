@@ -180,7 +180,7 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
 
-// RunLegacySequential behaves like [Run] but does not mark any test as parallel.
+// RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
 //
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
@@ -188,7 +188,7 @@ func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
 
-func run[T testingSuite](t *testing.T, s T, parallel bool, args ...any) {
+func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -214,11 +214,11 @@ func run[T testingSuite](t *testing.T, s T, parallel bool, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	s.initSuite(t, parallel, nil, nil)
+	s.initSuite(t, true, nil, nil)
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			cpS := s.copySuite(t, parallel, nil, nil)
+			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})

@@ -2,6 +2,7 @@ package configs
 
 import (
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -72,6 +73,7 @@ type Config struct {
 	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -412,12 +414,14 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
-	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
-	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
-	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
-	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
-	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
+	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
+	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn
+	HealthRPCLatencyFailure             dynamicconfig.FloatPropertyFn
+	HealthRPCLatencyPercentiles         dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
+	HealthRPCErrorRatio                 dynamicconfig.FloatPropertyFn
+	HealthHistoryInitializationTime     dynamicconfig.DurationPropertyFn
+	BreakdownMetricsByTaskQueue         dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -498,6 +502,7 @@ func NewConfig(
 		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
+		EnableChasmNexusWorkflowOperations:    nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
@@ -800,11 +805,13 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
-		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
-		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
-		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
-		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
-		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
+		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
+		HealthPersistenceLatencyPercentiles: dynamicconfig.PersistenceHealthSignalPercentileLatencySettings.Get(dc),
+		HealthPersistenceErrorRatio:         dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+		HealthRPCLatencyFailure:             dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCLatencyPercentiles:         dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
+		HealthRPCErrorRatio:                 dynamicconfig.HealthRPCErrorRatio.Get(dc),
+		HealthHistoryInitializationTime:     dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 

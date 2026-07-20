@@ -64,7 +64,7 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 	}
 
 	fn := func() (RunIDGetter, error) {
-		return env.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		return env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	}
 	s.startWithMemoHelper(env, fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -106,7 +106,7 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 	}
 
 	fn := func() (RunIDGetter, error) {
-		return env.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
+		return env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), request)
 	}
 	s.startWithMemoHelper(env, fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -149,7 +149,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
-			resp, err1 := env.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			resp, err1 := env.FrontendClient().ListOpenWorkflowExecutions(s.Context(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
@@ -179,7 +179,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 		Namespace: env.Namespace().String(),
 		Execution: execution,
 	}
-	descResp, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -193,7 +193,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 	s.EqualHistoryEvents(expectedHistory, historyEvents)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
-	descResp, err = env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+	descResp, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -201,7 +201,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
-			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			resp, err1 := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
@@ -222,7 +222,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(env *testcore.TestEnv, start
 	s.ProtoEqual(memo, closedExecutionInfo.Memo)
 
 	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
-	descResp, err = env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
+	descResp, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 }
