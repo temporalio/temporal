@@ -6308,7 +6308,14 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return nil, err
 	}
 
-	return matchingResponse.GetResponse(), nil
+	// matchingResponse.GetResponse() is nil when the long poll returned no task. Unlike the
+	// workflow/activity handlers, which build a fresh response struct, the Nexus handler passes
+	// matching's response through directly, so a nil here would surface as a typed-nil pointer
+	// wrapped in a non-nil interface to downstream interceptors. Return an empty response instead.
+	if resp := matchingResponse.GetResponse(); resp != nil {
+		return resp, nil
+	}
+	return &workflowservice.PollNexusTaskQueueResponse{}, nil
 }
 
 func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
