@@ -485,6 +485,8 @@ go.temporal.io/api v1.63.4-0.20260719230552-aa57c3fcca1f h1:0zzkFoXOLDG/0OVNtxFt
 go.temporal.io/api v1.63.4-0.20260719230552-aa57c3fcca1f/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/api v1.63.4-0.20260719232400-f9e031effa8f h1:TSvmg1+WUZ4qk4jvU+aDjwi5kQ5CkDqaaRFjtB9r8/M=
 go.temporal.io/api v1.63.4-0.20260719232400-f9e031effa8f/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
+go.temporal.io/api v1.63.4-0.20260720212511-a086e3776097 h1:v8VMzpUmOlrQpxP4SFJ8Egc+RWr2mhSmukiRZyyCJR0=
+go.temporal.io/api v1.63.4-0.20260720212511-a086e3776097/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee h1:y6A65Iml06cR3CpxW2Zn8FQLjniPDTnN4jtr69UZxXI=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee/go.mod h1:hhHijO9XRPIkAflLJJHix61M9FzbRPqk8fSydkcLkqw=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=

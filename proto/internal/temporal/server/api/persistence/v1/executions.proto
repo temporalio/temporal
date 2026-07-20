@@ -338,6 +338,10 @@ message TimeSkippingInfo {
   // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
   // skip transition changed accumulated_skipped_duration or a request updated the config.)
   VersionedTransition last_update_versioned_transition = 5;
+  
+  // Tracks the number of times a time-skipping transition has occurred since time skipping
+  // was most recently enabled. It is reset every time the skipping config is updated.
+  int32 session_skip_count = 6;
 }
 
 message FastForwardInfo {
