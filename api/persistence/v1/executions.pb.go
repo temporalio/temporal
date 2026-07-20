@@ -1168,21 +1168,21 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionIn
 
 type TimeSkippingInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Current time-skipping configuration applied to the workflow.
+	// Current time-skipping configuration applied to the execution.
 	Config *v13.TimeSkippingConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
-	// Total skipped duration for the current workflow execution run, including any
-	// inherited skipped duration carried over from a preceding execution that started this run.
+	// Total skipped duration for the current execution, including any
+	// inherited skipped duration carried over from a preceding run that started this one.
 	AccumulatedSkippedDuration *durationpb.Duration `protobuf:"bytes,2,opt,name=accumulated_skipped_duration,json=accumulatedSkippedDuration,proto3" json:"accumulated_skipped_duration,omitempty"`
 	// The current fast-forward info for time skipping.
 	FastForwardInfo *FastForwardInfo `protobuf:"bytes,4,opt,name=fast_forward_info,json=fastForwardInfo,proto3" json:"fast_forward_info,omitempty"`
 	// Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
-	// skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
-	// that pending timer tasks must be re-stamped against the new accumulated skip, since a
-	// skip mutates this workflow-level field without bumping any per-timer
-	// last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+	// skip transition changed accumulated_skipped_duration or a request updated the config.)
 	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// Tracks the number of times a time-skipping transition has occurred since time skipping
+	// was most recently enabled. It is reset every time the skipping config is updated.
+	SessionSkipCount int32 `protobuf:"varint,6,opt,name=session_skip_count,json=sessionSkipCount,proto3" json:"session_skip_count,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TimeSkippingInfo) Reset() {
@@ -1241,6 +1241,13 @@ func (x *TimeSkippingInfo) GetLastUpdateVersionedTransition() *VersionedTransiti
 		return x.LastUpdateVersionedTransition
 	}
 	return nil
+}
+
+func (x *TimeSkippingInfo) GetSessionSkipCount() int32 {
+	if x != nil {
+		return x.SessionSkipCount
+	}
+	return 0
 }
 
 type FastForwardInfo struct {
@@ -5080,12 +5087,13 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xbd\x03\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\bp\x10qJ\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\xeb\x03\n" +
 	"\x10TimeSkippingInfo\x12B\n" +
 	"\x06config\x18\x01 \x01(\v2*.temporal.api.common.v1.TimeSkippingConfigR\x06config\x12[\n" +
 	"\x1caccumulated_skipped_duration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x1aaccumulatedSkippedDuration\x12_\n" +
 	"\x11fast_forward_info\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.FastForwardInfoR\x0ffastForwardInfo\x12\x80\x01\n" +
-	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x89\x02\n" +
+	" last_update_versioned_transition\x18\x05 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransition\x12,\n" +
+	"\x12session_skip_count\x18\x06 \x01(\x05R\x10sessionSkipCountJ\x04\b\x03\x10\x04R\x1ecurrent_elapsed_duration_bound\"\x89\x02\n" +
 	"\x0fFastForwardInfo\x12;\n" +
 	"\vtarget_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"targetTime\x12\x1f\n" +

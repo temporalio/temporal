@@ -1039,7 +1039,7 @@ func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.St
 // refreshTasksForTimeSkipping).
 func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 
-	if accumulatedSkippedDuration(r.mutableState.GetExecutionInfo()) <= 0 {
+	if NewTimeSkippingInfoUtil(r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() <= 0 {
 		return nil
 	}
 
