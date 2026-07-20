@@ -81,6 +81,7 @@ type (
 
 		tokenSerializer              *tasktoken.Serializer
 		config                       *configs.Config
+		nexusCompletionHandler       *nexusoperations.CompletionHandler
 		eventNotifier                events.Notifier
 		deepHealthCheckHandler       deepHealthCheckHandler
 		logger                       log.Logger
@@ -117,6 +118,7 @@ type (
 		fx.In
 
 		Config                       *configs.Config
+		NexusCompletionHandler       *nexusoperations.CompletionHandler
 		Logger                       log.SnTaggedLogger
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
@@ -493,7 +495,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	return resp, nil
 }
 
-// RespondActivityTaskCanceled - records failure of an activity task
+// RespondActivityTaskCanceled - records cancellation of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
 	if err != nil {
@@ -2151,7 +2153,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			}
 		}
 	}
-	err = nexusoperations.CompletionHandler(
+	err = h.nexusCompletionHandler.Handle(
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,

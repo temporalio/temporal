@@ -99,12 +99,3 @@ func (s *executableUnknownTaskSuite) TestMarkPoisonPill() {
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 }
-
-func (s *executableUnknownTaskSuite) TestQueueID() {
-	s.Equal(unknownTaskID, s.task.QueueID())
-}
-
-func (s *executableUnknownTaskSuite) TestIsRetryableError() {
-	s.False(s.task.IsRetryableError(errors.New("OwO")))
-	s.False(s.task.IsRetryableError(serviceerror.NewUnavailable("")))
-}

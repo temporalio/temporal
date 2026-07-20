@@ -46,7 +46,7 @@ type Suite[T testingSuite] struct {
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-// ctx overrides the suite's context; nil means use the default (lazy testcontext.New).
+// ctx overrides the suite's context; nil means use the default (lazy testcontext.For).
 //
 //nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
 func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
@@ -88,7 +88,7 @@ func (s *Suite[T]) T() *testing.T {
 func (s *Suite[T]) Context() context.Context {
 	s.ctxOnce.Do(func() {
 		if s.ctx == nil {
-			s.ctx = testcontext.New(s.T())
+			s.ctx = testcontext.For(s.T())
 		}
 	})
 	return s.ctx
@@ -140,7 +140,7 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, true, args...)
 }
 
-// RunLegacySequential behaves like [Run] but does not mark any test as parallel.
+// RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
 //
 // Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
 // with legacy behavior to ease migration.
@@ -148,7 +148,7 @@ func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
 	run(t, s, false, args...)
 }
 
-func run[T testingSuite](t *testing.T, s T, parallel bool, args ...any) {
+func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -174,11 +174,11 @@ func run[T testingSuite](t *testing.T, s T, parallel bool, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	s.initSuite(t, parallel, nil, nil)
+	s.initSuite(t, true, nil, nil)
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			cpS := s.copySuite(t, parallel, nil, nil)
+			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})

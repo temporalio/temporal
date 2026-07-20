@@ -97,6 +97,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 
 	s.setupSuite(
 		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
+		testcore.WithClusterHistoryTaskRecorder(),
 	)
 }
 
@@ -137,13 +138,17 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 		s.namespaceID = nsRes.NamespaceInfo.GetId()
 		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 	})
+	for _, cluster := range s.clusters {
+		recorder := cluster.GetHistoryTaskRecorder()
+		s.Require().NotNil(recorder)
+	}
 }
 
-// getRecorder returns the TaskQueueRecorder for the specified cluster index.
+// getRecorder returns the HistoryTaskRecorder for the specified cluster index.
 // Returns nil if the cluster doesn't have a recorder.
-func (s *streamBasedReplicationTestSuite) getRecorder(clusterIdx int) *testcore.TaskQueueRecorder {
+func (s *streamBasedReplicationTestSuite) getRecorder(clusterIdx int) *testcore.HistoryTaskRecorder {
 	if clusterIdx < len(s.clusters) {
-		return s.clusters[clusterIdx].GetTaskQueueRecorder()
+		return s.clusters[clusterIdx].GetHistoryTaskRecorder()
 	}
 	return nil
 }
@@ -338,7 +343,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 
 	historyClient = history.NewRetryableClient(
 		historyClient,
-		common.CreateHistoryClientRetryPolicy(),
+		common.CreateHistoryClientRetryPolicy(func() bool { return false }),
 		common.IsResourceExhausted,
 	)
 	var token []byte
@@ -1312,7 +1317,7 @@ func (s *streamBasedReplicationTestSuite) TestWorkflowTaskFailureStampReplicatio
 }
 
 func (s *streamBasedReplicationTestSuite) verifyWorkflowTaskStamps(
-	recorder *testcore.TaskQueueRecorder,
+	recorder *testcore.HistoryTaskRecorder,
 	clusterName string,
 	workflowID string,
 	runID string,

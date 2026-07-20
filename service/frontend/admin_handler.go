@@ -1153,13 +1153,16 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
-	hostIDEqual, err := uuid.Parse(request.GetHostId())
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
-	}
-	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
-	if err != nil {
-		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	var hostIDEqualBytes []byte
+	if request.GetHostId() != "" {
+		hostIDEqual, err := uuid.Parse(request.GetHostId())
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+		}
+		hostIDEqualBytes, err = hostIDEqual.MarshalBinary()
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+		}
 	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
@@ -1286,7 +1289,7 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, request.GetClusterName()); err != nil {
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
 		return nil, err
 	}
 
@@ -1708,7 +1711,7 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: Operation/Reason/Namespace/Query or Executions")
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, Namespace, AND one of (Query OR Executions)")
 	}
 
 	if len(params.GetJobId()) == 0 {

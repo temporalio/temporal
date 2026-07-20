@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -244,7 +246,8 @@ func newMatchingEngine(
 		taskManager:     taskMgr,
 		fairTaskManager: fairTaskMgr,
 		historyClient:   mockHistoryClient,
-		partitions:      make(map[tqid.PartitionKey]taskQueuePartitionManager),
+
+		partitions: make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
 			loadedTaskQueueFamilyCount:    make(map[taskQueueCounterKey]int),
 			loadedTaskQueueCount:          make(map[taskQueueCounterKey]int),
@@ -438,7 +441,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 			},
 		})
 		s.NoError(err)
-		s.Equal(1, len(descResp.DescResponse.Pollers))
+		s.Len(descResp.DescResponse.Pollers, 1)
 		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
 		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
@@ -528,10 +531,28 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		}
 	})
 
-	partitionReady := func() bool {
-		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
+	// Wait until the poller is actually blocked in the matcher, ready for a sync match.
+	pollerReady := func() bool {
+		for _, p := range s.matchingEngine.getTaskQueuePartitions(10) {
+			pm, ok := p.(*taskQueuePartitionManagerImpl)
+			if !ok {
+				continue
+			}
+			pq, err := pm.defaultQueueFuture.GetIfReady()
+			if err != nil || pq == nil {
+				continue
+			}
+			pqImpl, ok := pq.(*physicalTaskQueueManagerImpl)
+			if !ok {
+				continue
+			}
+			if pqImpl.matcher.HasWaitingPoller() {
+				return true
+			}
+		}
+		return false
 	}
-	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+	await.RequireTrue(s.T(), pollerReady, 5*time.Second, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,
@@ -560,7 +581,7 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 	if expectedError != nil {
 		s.ErrorAs(err, &expectedError)
 	} else {
-		s.Nil(err)
+		s.NoError(err)
 	}
 	wg.Wait()
 }
@@ -661,7 +682,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		NextPageToken: nil,
 	}
 
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(expectedResp, resp)
 }
 
@@ -1300,7 +1321,7 @@ func (s *matchingEngineSuite) TestAddWorkflowTaskDoesNotLoadSticky() {
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
-	s.Equal(0, len(s.matchingEngine.partitions))
+	s.Empty(s.matchingEngine.partitions)
 }
 
 func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
@@ -1318,7 +1339,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	// check loaded queues
 	s.matchingEngine.partitionsLock.RLock()
 	defer s.matchingEngine.partitionsLock.RUnlock()
-	s.Equal(0, len(s.matchingEngine.partitions))
+	s.Empty(s.matchingEngine.partitions)
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
@@ -1359,7 +1380,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
 		s.NoError(err)
 	}
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
+	s.Equal(taskCount, s.taskManager.getTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -1410,15 +1431,15 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("empty poll returned")
 			continue
 		}
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
-		s.Equal(true, validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
-		s.Equal(true, validateTimeRange(result.StartedTime.AsTime(), time.Minute))
-		s.EqualValues(time.Second*50, result.StartToCloseTimeout.AsDuration())
-		s.EqualValues(time.Second*10, result.HeartbeatTimeout.AsDuration())
+		s.Equal(activityID, result.ActivityId)
+		s.Equal(activityType, result.ActivityType)
+		s.Equal(activityInput, result.Input)
+		s.Equal(workflowExecution, result.WorkflowExecution)
+		s.True(validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
+		s.Equal(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
+		s.True(validateTimeRange(result.StartedTime.AsTime(), time.Minute))
+		s.Equal(time.Second*50, result.StartToCloseTimeout.AsDuration())
+		s.Equal(time.Second*10, result.HeartbeatTimeout.AsDuration())
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceID,
@@ -1430,10 +1451,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -1558,13 +1579,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.NoError(err)
 			s.NoError(pollErr)
 			s.NotNil(result)
-			s.True(len(result.TaskToken) > 0)
+			s.NotEmpty(result.TaskToken)
 		}
 
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
-		s.EqualValues(workflowExecution, result.WorkflowExecution)
+		s.Equal(activityID, result.ActivityId)
+		s.Equal(activityType, result.ActivityType)
+		s.Equal(activityInput, result.Input)
+		s.Equal(workflowExecution, result.WorkflowExecution)
 
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
@@ -1576,7 +1597,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			ActivityType:     activityTypeName,
 		}
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		s.EqualValues(serializedToken, result.TaskToken)
+		s.Equal(serializedToken, result.TaskToken)
 	}
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
@@ -1601,7 +1622,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(1, len(descResp.DescResponse.Pollers))
+	s.Len(descResp.DescResponse.Pollers, 1)
 	s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
 	s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 	s.Equal(defaultTaskDispatchRPS, descResp.DescResponse.Pollers[0].GetRatePerSecond())
@@ -1961,11 +1982,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	wg.Wait()
 	totalTasks := int(taskCount) * workerCount
 	persisted := s.taskManager.getCreateTaskCount(dbq)
-	s.True(persisted < totalTasks)
+	s.Less(persisted, totalTasks)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
-	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
+	s.Equal(0, s.taskManager.getTaskCount(dbq))
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
 	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -2086,13 +2107,77 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
-	s.True(persisted < totalTasks)
+	s.Less(persisted, totalTasks)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
+}
+
+func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAttemptStamp() {
+	testCases := []struct {
+		name                  string
+		componentRef          []byte
+		wantActivityTaskStamp int32
+	}{
+		{
+			name: "WorkflowActivity",
+		},
+		{
+			name:                  "StandaloneActivity",
+			componentRef:          []byte("standalone-activity-component-ref"),
+			wantActivityTaskStamp: 17,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			namespaceID := uuid.NewString()
+			workflowID := "workflow1"
+			runID := uuid.NewString()
+			activityID := "activity1"
+			activityType := "activityType"
+			scheduledEventID := int64(10)
+			attempt := int32(1)
+			taskStamp := int32(17)
+
+			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+				NamespaceId:      namespaceID,
+				WorkflowId:       workflowID,
+				RunId:            runID,
+				ScheduledEventId: scheduledEventID,
+				Stamp:            taskStamp,
+				ComponentRef:     tc.componentRef,
+				CreateTime:       timestamppb.Now(),
+			}, nil, 0, nil)
+
+			resp := s.matchingEngine.createPollActivityTaskQueueResponse(task, &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: attempt,
+				ScheduledEvent: &historypb.HistoryEvent{
+					EventId: scheduledEventID,
+					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+							ActivityId:   activityID,
+							ActivityType: &commonpb.ActivityType{Name: activityType},
+						},
+					},
+				},
+			}, metrics.NoopMetricsHandler)
+
+			token, err := s.matchingEngine.tokenSerializer.Deserialize(resp.GetTaskToken())
+			s.NoError(err)
+			s.Equal(namespaceID, token.GetNamespaceId())
+			s.Equal(workflowID, token.GetWorkflowId())
+			s.Equal(runID, token.GetRunId())
+			s.Equal(scheduledEventID, token.GetScheduledEventId())
+			s.Equal(activityID, token.GetActivityId())
+			s.Equal(activityType, token.GetActivityType())
+			s.Equal(attempt, token.GetAttempt())
+			s.Equal(tc.componentRef, token.GetComponentRef())
+			s.Equal(tc.wantActivityTaskStamp, token.GetActivityAttemptStamp())
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
@@ -2128,7 +2213,7 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 			Identity:  identity,
 		},
 	}, metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
 
@@ -2158,7 +2243,7 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 			Identity:  identity,
 		}},
 		metrics.NoopMetricsHandler)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(pollResp)
 
 	// Sanity check: adding a task should succeed with the queue loaded
@@ -2241,7 +2326,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		}
 	}
 
-	s.EqualValues(iterations*engineCount*taskCount, s.taskManager.getCreateTaskCount(tlID))
+	s.Equal(iterations*engineCount*taskCount, s.taskManager.getCreateTaskCount(tlID))
 
 	activityTypeName := "activity1"
 	activityID := "activityId1"
@@ -2299,10 +2384,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(activityID, result.ActivityId)
-				s.EqualValues(activityType, result.ActivityType)
-				s.EqualValues(activityInput, result.Input)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
+				s.Equal(activityID, result.ActivityId)
+				s.Equal(activityType, result.ActivityType)
+				s.Equal(activityInput, result.Input)
+				s.Equal(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:      1,
 					NamespaceId:  namespaceID,
@@ -2328,11 +2413,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		e.Stop()
 	}
 
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
-	s.EqualValues(totalTasks, persisted)
+	s.Equal(totalTasks, persisted)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -2444,10 +2529,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 					s.logger.Debug("empty poll returned")
 					continue
 				}
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
-				s.EqualValues(workflowType, result.WorkflowType)
-				s.EqualValues(startedEventID, result.StartedEventId)
-				s.EqualValues(workflowExecution, result.WorkflowExecution)
+				s.Equal(workflowExecution, result.WorkflowExecution)
+				s.Equal(workflowType, result.WorkflowType)
+				s.Equal(startedEventID, result.StartedEventId)
+				s.Equal(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
 					Attempt:        1,
 					NamespaceId:    namespaceID,
@@ -2472,11 +2557,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Stop()
 	}
 
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
-	s.EqualValues(totalTasks, persisted)
+	s.Equal(totalTasks, persisted)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -2506,7 +2591,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 		})
 	s.NoError(err)
-	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
+	s.Equal(1, s.taskManager.getTaskCount(dbq))
 
 	task1, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
@@ -2562,7 +2647,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	}
 
 	tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-	s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
+	s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
@@ -2579,15 +2664,15 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// This is only for unit test purpose
 	blm.taskAckManager.setReadLevel(blm.getDB().GetMaxReadLevel(0))
 	batch, err := blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
+	s.NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
 	blm.taskAckManager.setReadLevel(0)
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(rangeSize, len(batch.tasks))
+	s.NoError(err)
+	s.Len(batch.tasks, rangeSize)
 	s.EqualValues(rangeSize, batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
@@ -2617,9 +2702,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 			continue
 		}
 	}
-	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
+	s.Equal(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
 	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
 }
@@ -2696,7 +2781,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		}
 
 		tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
+		s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
 		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
@@ -2841,7 +2926,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal("9", curDefault.GetBuildIds()[0])
 	lastNode = curDefault.GetBuildIds()[len(curDefault.GetBuildIds())-1]
 	s.Equal("9.79", lastNode)
-	s.Equal(1, len(majorSets))
+	s.Len(majorSets, 1)
 
 	res, err = s.matchingEngine.GetWorkerBuildIdCompatibility(context.Background(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
@@ -2972,9 +3057,19 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	pollFuture := future.NewFuture[*matchingservice.GetTaskQueueUserDataResponse]()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID.String(),
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0, // must be zero to start
+			WaitNewData:              true,
+		})
+		pollFuture.Set(res, err)
+	}()
 
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
@@ -2990,18 +3085,14 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_FromNoth
 				},
 			},
 		})
-		s.NoError(err)
-	}()
+		require.NoError(t, err)
+	}, 5*time.Second, 50*time.Millisecond)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              namespaceID.String(),
-		TaskQueue:                tq,
-		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: 0, // must be zero to start
-		WaitNewData:              true,
-	})
-	s.NoError(err)
-	s.NotNil(res.UserData.Data.VersioningData)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		res, err := pollFuture.Get(t.Context())
+		require.NoError(t, err)
+		require.NotNil(t, res.UserData.Data.VersioningData)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3() {
@@ -3026,9 +3117,19 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	pollFuture := future.NewFuture[*matchingservice.GetTaskQueueUserDataResponse]()
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID.String(),
+			TaskQueue:                tq,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: userData.Version,
+			WaitNewData:              true,
+		})
+		pollFuture.Set(res, err)
+	}()
 
+	await.Require(ctx, s.T(), func(t *await.T) {
 		_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 			NamespaceId: namespaceID.String(),
 			TaskQueue:   tq,
@@ -3044,19 +3145,15 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 				},
 			},
 		})
-		s.NoError(err)
-	}()
+		require.NoError(t, err)
+	}, 5*time.Second, 50*time.Millisecond)
 
-	res, err := s.matchingEngine.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-		NamespaceId:              namespaceID.String(),
-		TaskQueue:                tq,
-		TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		LastKnownUserDataVersion: userData.Version,
-		WaitNewData:              true,
-	})
-	s.NoError(err)
-	s.True(hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
-	s.NotNil(res.UserData.Data.VersioningData)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		res, err := pollFuture.Get(t.Context())
+		require.NoError(t, err)
+		require.True(t, hlc.Greater(res.UserData.Data.Clock, userData.Data.Clock))
+		require.NotNil(t, res.UserData.Data.VersioningData)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
@@ -3207,7 +3304,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 			},
 		},
 	})
-	s.Assert().NoError(err)
+	s.NoError(err)
 
 	// add a task for build0, will get spooled in its set
 	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -3323,7 +3420,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
 	s.NoError(err)
 
-	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
+	s.Len(e.getTaskQueuePartitions(1000), 2)
 
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
 
@@ -3334,7 +3431,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{self})
 	e.membershipChangedCh <- nil
 	time.Sleep(50 * time.Millisecond)
-	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
+	s.Len(e.getTaskQueuePartitions(1000), 2, "nothing should be unloaded yet")
 
 	// signal again but p2 doesn't belong to us anymore
 	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
@@ -3468,7 +3565,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		partitionType: prtn.Kind(),
 		versioned:     "unversioned",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3511,7 +3608,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "versionSet",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3552,7 +3649,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 		partitionType: dbq.Partition().Kind(),
 		versioned:     "buildId",
 	}
-	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
+	s.Require().Equal(2, s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters])
 
 }
 
@@ -3756,12 +3853,12 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.NoError(err)
 	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
 
-	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
+	s.Equal(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
 	// Check the maxReadLevel with the value of task stored in db
 	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
 	s.True(ok)
-	s.EqualValues(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
+	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
 	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
@@ -3782,7 +3879,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	}
 	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
 	s.NoError(err)
-	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
+	s.Equal((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
 	// Add pollers which shall also load the fresher version of tqMgr
 	s.pollWorkflowTasks(workflowType, (taskCount*numWorkers)-1, ptq, taskQueue)
@@ -3794,7 +3891,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// stopped (which would not result in resetting).
 	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
-	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
+	s.Equal(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
@@ -4107,6 +4204,93 @@ func (s *matchingEngineSuite) TestDispatchNexusTask_ValidateTimeoutBuffer() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			testFn(t, tc)
+		})
+	}
+}
+
+func (s *matchingEngineSuite) TestPollNexusTaskQueue_TaskTokenContainsTaskQueueKind() {
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "normal kind",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "worker commands kind",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			namespaceID := s.ns.ID().String()
+			taskQueueName := "test-nexus-tq"
+
+			dispatchReq := &matchingservice.DispatchNexusTaskRequest{
+				NamespaceId: namespaceID,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueueName,
+					Kind: tc.kind,
+				},
+				Request: &nexuspb.Request{
+					Header: map[string]string{
+						"request-timeout": "10s",
+					},
+				},
+			}
+
+			nexusTask := newInternalNexusTask(
+				"test-task-id",
+				time.Now().Add(10*time.Second),
+				time.Time{},
+				dispatchReq,
+			)
+
+			partition, err := tqid.PartitionFromProto(
+				&taskqueuepb.TaskQueue{Name: taskQueueName, Kind: tc.kind},
+				namespaceID,
+				enumspb.TASK_QUEUE_TYPE_NEXUS,
+			)
+			s.Require().NoError(err)
+
+			mockPM := NewMocktaskQueuePartitionManager(s.controller)
+			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+			mockPM.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+			mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
+			mockPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(nexusTask, false, nil)
+
+			s.matchingEngine.partitionsLock.Lock()
+			s.matchingEngine.partitions[partition.Key()] = mockPM
+			s.matchingEngine.partitionsLock.Unlock()
+			s.matchingEngine.nexusResults = collection.NewSyncMap[string, chan *nexusResult]()
+			s.matchingEngine.outstandingPollers = collection.NewSyncMap[string, context.CancelFunc]()
+			s.matchingEngine.shutdownWorkers = cache.New(100, &cache.Options{TTL: 30 * time.Second})
+
+			resp, err := s.matchingEngine.PollNexusTaskQueue(
+				context.Background(),
+				&matchingservice.PollNexusTaskQueueRequest{
+					NamespaceId: namespaceID,
+					PollerId:    uuid.NewString(),
+					Request: &workflowservice.PollNexusTaskQueueRequest{
+						Namespace: string(s.ns.Name()),
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueueName,
+							Kind: tc.kind,
+						},
+					},
+				},
+				metrics.NoopMetricsHandler,
+			)
+			s.Require().NoError(err)
+
+			token, err := s.matchingEngine.tokenSerializer.DeserializeNexusTaskToken(resp.GetResponse().GetTaskToken())
+			s.Require().NoError(err)
+			s.Require().Equal(tc.expectedKind, token.GetTaskQueueKind())
 		})
 	}
 }
@@ -5381,6 +5565,14 @@ func (m *testTaskManager) CreateTasks(
 		return nil, &persistence.ConditionFailedError{Msg: "Fake ConditionFailedError"}
 	} else if m.fault("CreateTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailable("Fake Unavailable")
+	} else if m.fault("CreateTasks", "PersistenceLimit") {
+		return nil, persistence.ErrPersistenceNamespaceShardLimitExceeded
+	} else if m.fault("CreateTasks", "ConcurrentLimit") {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "Fake concurrent request limit exceeded",
+		}
 	}
 
 	tlm := m.getQueueData(taskQueue, namespaceID, taskType)
@@ -6128,13 +6320,22 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("unknown worker key succeeds", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: "unknown-worker",
 			})
 
@@ -6144,7 +6345,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("cancels all polls for worker", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
@@ -6159,6 +6366,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
@@ -6169,9 +6379,15 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("does not affect other workers", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		worker1Cancelled := false
 		worker2Cancelled := false
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
@@ -6183,6 +6399,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		// Cancel worker1's polls only
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: "worker-1",
 			})
 
@@ -6194,7 +6413,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
@@ -6211,6 +6436,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
@@ -6221,16 +6449,53 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	})
 
 	t.Run("adds worker to shutdown cache", func(t *testing.T) {
+		// Exercises the matching fan-out path (flag=true, root partition).
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		nsName := namespace.Name("test-namespace")
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(nsName, nil)
+		mockHostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+		mockHostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("self-host")).AnyTimes()
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
+
+		rootPartition := tqid.UnsafeTaskQueueFamily("test-namespace-id", "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		rawClient := &routingMatchingClient{
+			MockMatchingServiceClient: mockMatchingClient,
+			routeFn: func(p tqid.Partition) (string, error) {
+				return "self-host", nil
+			},
+		}
+
 		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNsRegistry,
+			matchingRawClient:     rawClient,
+			hostInfoProvider:      mockHostInfoProvider,
+			logger:                log.NewNoopLogger(),
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
 		}
 
 		workerKey := "test-worker"
 
 		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
@@ -6238,21 +6503,499 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
 	})
 
-	t.Run("empty worker key does not populate shutdown cache", func(t *testing.T) {
+	t.Run("partition API adds worker to shutdown cache", func(t *testing.T) {
+		// CancelOutstandingWorkerPollsPartition should also populate the shutdown cache
+		// so that child matching hosts reject new polls from shutting-down workers.
 		t.Parallel()
 		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+		}
+
+		_, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: workerKey,
+				}},
+			})
+
+		require.NoError(t, err)
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache on child host")
+	})
+
+	t.Run("empty worker key does not populate shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
+		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: "",
 			})
 
 		require.NoError(t, err)
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
+
+	// Flat fan-out test helper: creates an engine with a mock root PM and routing client.
+	setupFanOutTest := func(t *testing.T, numPartitions int, routeFn func(p tqid.Partition) (string, error)) (
+		*matchingEngineImpl,
+		*matchingservicemock.MockMatchingServiceClient,
+	) {
+		t.Helper()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+		mockHostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+		mockHostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("self-host")).AnyTimes()
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+
+		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+		mockPM := NewMocktaskQueuePartitionManager(ctrl)
+		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+
+		var rawClient matchingservice.MatchingServiceClient
+		if routeFn != nil {
+			rawClient = &routingMatchingClient{
+				MockMatchingServiceClient: mockMatchingClient,
+				routeFn:                   routeFn,
+			}
+		} else {
+			rawClient = mockMatchingClient
+		}
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     rawClient,
+			hostInfoProvider:      mockHostInfoProvider,
+			logger:                log.NewNoopLogger(),
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{rootPartition.Key(): mockPM},
+		}
+
+		return engine, mockMatchingClient
+	}
+
+	t.Run("fan-out: single partition handled locally", func(t *testing.T) {
+		t.Parallel()
+		// All partitions route to self — no RPCs expected.
+		engine, _ := setupFanOutTest(t, 1, func(p tqid.Partition) (string, error) {
+			return "self-host", nil
+		})
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.CancelledCount)
+	})
+
+	t.Run("fan-out: partitions grouped by host", func(t *testing.T) {
+		// 5 partitions: 0 -> self-host (local), 1,2 -> host-a, 3,4 -> host-b.
+		// Expect 2 RPCs (one per remote host), local partition processed directly.
+		t.Parallel()
+		routeFn := func(p tqid.Partition) (string, error) {
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/3") || strings.Contains(rpcName, "/4") {
+				return "host-b", nil
+			}
+			if strings.Contains(rpcName, "/1") || strings.Contains(rpcName, "/2") {
+				return "host-a", nil
+			}
+			return "self-host", nil // root partition
+		}
+		engine, mockMatchingClient := setupFanOutTest(t, 5, routeFn)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		rpcsByHost := map[string][]int32{}
+		var mu sync.Mutex
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				var ids []int32
+				for _, p := range req.GetPartitions() {
+					ids = append(ids, p.GetNormalPartitionId())
+				}
+				host, _ := routeFn(tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), "test-namespace-id"))
+				mu.Lock()
+				rpcsByHost[host] = ids
+				mu.Unlock()
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: int32(len(ids))}, nil
+			}).
+			Times(2) // 2 remote hosts
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// Local cancels 1 poller + host-a returns 2 + host-b returns 2 = 5 total
+		require.Equal(t, int32(5), resp.CancelledCount)
+		require.Len(t, rpcsByHost, 2)
+		require.ElementsMatch(t, []int32{1, 2}, rpcsByHost["host-a"])
+		require.ElementsMatch(t, []int32{3, 4}, rpcsByHost["host-b"])
+	})
+
+	t.Run("fan-out: remote host error does not block other hosts", func(t *testing.T) {
+		// 3 partitions: 0 -> self-host, 1 -> host-a (fails), 2 -> host-b (succeeds).
+		t.Parallel()
+		routeFn := func(p tqid.Partition) (string, error) {
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/1") {
+				return "host-a", nil
+			}
+			if strings.Contains(rpcName, "/2") {
+				return "host-b", nil
+			}
+			return "self-host", nil
+		}
+		engine, mockMatchingClient := setupFanOutTest(t, 3, routeFn)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
+				if partitionID == 1 {
+					return nil, errors.New("host unavailable")
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(2)
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// Local cancels 1 + host-a fails (0) + host-b returns 1 = 2
+		require.Equal(t, int32(2), resp.CancelledCount)
+	})
+
+	t.Run("fan-out: unimplemented error from old host is handled gracefully", func(t *testing.T) {
+		// Simulates a mixed-version deployment where some matching nodes don't have
+		// the CancelOutstandingWorkerPollsPartition RPC. The error should be treated
+		// like any other RPC failure: logged, counted as failed, no crash or cycle.
+		// 3 partitions: 0 -> self-host, 1 -> old-host (Unimplemented), 2 -> new-host (succeeds).
+		t.Parallel()
+		routeFn := func(p tqid.Partition) (string, error) {
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/1") {
+				return "old-host", nil
+			}
+			if strings.Contains(rpcName, "/2") {
+				return "new-host", nil
+			}
+			return "self-host", nil
+		}
+		engine, mockMatchingClient := setupFanOutTest(t, 3, routeFn)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetPartitions()[0].GetNormalPartitionId()
+				if partitionID == 1 {
+					return nil, serviceerror.NewUnimplemented("method not implemented")
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(2) // old-host + new-host
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// Local cancels 1 + old-host fails (0) + new-host returns 1 = 2
+		require.Equal(t, int32(2), resp.CancelledCount)
+	})
+
+	t.Run("fan-out: no routing client falls back to individual RPCs", func(t *testing.T) {
+		// 3 partitions, no routing client. Each remote partition gets its own RPC.
+		t.Parallel()
+		engine, mockMatchingClient := setupFanOutTest(t, 3, nil /* no routing */)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		// Without routing, all partitions are "ungrouped" — each gets its own RPC.
+		// Root partition (0) also goes as ungrouped since we can't determine self.
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				require.Len(t, req.GetPartitions(), 1, "without routing, each partition should be individual")
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(3) // all 3 partitions
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// 3 RPCs return 1 each = 3 total (no local handling without routing)
+		require.Equal(t, int32(3), resp.CancelledCount)
+	})
+
+	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
+		// Verifies that poller history is cleaned up for each partition, not just
+		// the routing partition.
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+		numPartitions := 3
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+		mockHostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+		mockHostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("self-host")).AnyTimes()
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+
+		tqFamily := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue")
+		partitionsMap := map[tqid.PartitionKey]taskQueuePartitionManager{}
+		mockPMs := make([]*MocktaskQueuePartitionManager, numPartitions)
+
+		for i := range numPartitions {
+			partition := tqFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(i)
+			mockPM := NewMocktaskQueuePartitionManager(ctrl)
+			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+			if i == 0 {
+				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition.TaskQueue(), config, nsName))
+			}
+			// Each partition must get RemovePoller called exactly once with the worker identity.
+			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)
+			mockPMs[i] = mockPM
+			partitionsMap[partition.Key()] = mockPM
+		}
+
+		rawClient := &routingMatchingClient{
+			MockMatchingServiceClient: mockMatchingClient,
+			routeFn: func(p tqid.Partition) (string, error) {
+				return "self-host", nil
+			},
+		}
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     rawClient,
+			hostInfoProvider:      mockHostInfoProvider,
+			logger:                log.NewNoopLogger(),
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            partitionsMap,
+		}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		// gomock verifies RemovePoller was called exactly once per partition.
+	})
+
+	t.Run("partition API: empty partitions returns gracefully", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId: "test-namespace-id",
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+				}},
+			})
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.GetCancelledCount())
+	})
+
+	t.Run("partition API: empty workers returns gracefully", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+			})
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.GetCancelledCount())
+	})
+
+	t.Run("partition API: cancels polls and populates shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		partitionProto := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+				}},
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.GetCancelledCount())
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-key"))
+	})
+
+	t.Run("partition API: cancels pollers across multiple batched partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		// Register pollers on different partitions for the same worker.
+		// In production, each partition's poller gets a unique tracker key.
+		var cancelledCount atomic.Int32
+		engine.workerInstancePollers.Add("worker-key", "test-queue:poller-0", func() { cancelledCount.Add(1) })
+		engine.workerInstancePollers.Add("worker-key", "/_sys/test-queue/1:poller-1", func() { cancelledCount.Add(1) })
+		engine.workerInstancePollers.Add("worker-key", "/_sys/test-queue/2:poller-2", func() { cancelledCount.Add(1) })
+
+		partition0 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+		}
+		partition1 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+		}
+		partition2 := &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     "test-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 2},
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPollsPartition(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        "test-namespace-id",
+				TaskQueuePartition: partition0,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partition0, partition1, partition2},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "worker-key",
+					WorkerIdentity:    "worker-identity",
+				}},
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.GetCancelledCount())
+		require.Equal(t, int32(3), cancelledCount.Load())
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-key"))
+	})
+}
+
+// routingMatchingClient wraps a mock matching client with a Route() method
+// so it satisfies the matching.RoutingClient interface for host-grouping tests.
+type routingMatchingClient struct {
+	*matchingservicemock.MockMatchingServiceClient
+	routeFn func(p tqid.Partition) (string, error)
+}
+
+func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
+	return r.routeFn(p)
 }
 
 // TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes

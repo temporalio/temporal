@@ -51,6 +51,20 @@ func (c *metricClient) CancelOutstandingWorkerPolls(
 	return c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
 }
 
+func (c *metricClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPollsPartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+}
+
 func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,

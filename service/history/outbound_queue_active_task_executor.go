@@ -9,8 +9,10 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/workercommands"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -25,8 +27,8 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine                  chasm.Engine
-	workerCommandsTaskDispatcher *workerCommandsTaskDispatcher
+	chasmEngine              chasm.Engine
+	workerCommandsDispatcher *workercommands.Dispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -50,7 +52,7 @@ func newOutboundQueueActiveTaskExecutor(
 			metricsHandler: scopedMetricsHandler,
 		},
 		chasmEngine: chasmEngine,
-		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
+		workerCommandsDispatcher: workercommands.NewDispatcher(
 			matchingClient,
 			shardCtx.GetConfig(),
 			scopedMetricsHandler,
@@ -102,9 +104,20 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	case *tasks.StateMachineOutboundTask:
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
-		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task, executable.Attempt(), namespaceTag.Value))
+		if executable.Attempt() > workercommands.MaxTaskAttempts {
+			e.logger.Info("Worker commands task exceeded max attempts, dropping",
+				tag.WorkflowID(task.WorkflowID),
+				tag.WorkflowRunID(task.RunID),
+				tag.NewStringTag("control_queue", task.Destination),
+				tag.Attempt(int32(executable.Attempt())),
+			)
+			workercommands.RecordCommandMetrics(task.Commands, e.metricsHandler, namespaceTag.Value, "max_attempts_exceeded")
+			return respond(nil)
+		}
+		return respond(e.workerCommandsDispatcher.Execute(ctx, task, namespaceTag.Value))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

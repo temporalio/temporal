@@ -170,8 +170,16 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
-	// MaxRate limits scale change frequency.
+	// MaxRate limits target change frequency.
 	MaxRate float32
+	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
+	// at any time. E.g. if ShrinkRatio is 0.1 and read partitions is 40, then write partitions
+	// may not be lower than 36, until read partitions falls lower.
+	ShrinkRatio float32
+	// ShrinkDelta is how much smaller write partitions is allowed to be than read partitions,
+	// by absolute count. E.g. if ShrinkDelta is 2 and read partitions is 24, then write
+	// partitions may not be lower than 22.
+	ShrinkDelta int32
 	// BatchSize is the size of a batch to send to the partition scaler. (Needs task queue
 	// reload.)
 	BatchSize int32
@@ -185,6 +193,11 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
+	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
+	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
+	// is evaluated and logged at that cadence but decisions are not applied. If the partition
+	// scaler is disabled, shadow mode does not log.
+	ShadowModeLogInterval time.Duration
 }
 
 type SimplePartitionScalerSettings struct {
@@ -206,6 +219,18 @@ type SimplePartitionScalerSettings struct {
 	Downs []SimplePartitionScalerThreshold
 	Ups   []SimplePartitionScalerThreshold
 
+	// Backlog-based scaling: If these are > 0, then we'll a new partition for each partition
+	// whose backlog count grows above BacklogBase and has not shrunk below BacklogReset (for
+	// hysteresis).
+	BacklogReset int32
+	BacklogBase  int32
+
+	// BacklogCap adjusts task distribution with the above two settings: If > 0, then tasks
+	// are distributed based on the gap between the current backlog and BacklogCap,
+	// effectively making it a soft cap on backlog count. If 0, uniform distribution is used.
+	// When in use, they should be set so that Reset < Base < Cap.
+	BacklogCap int32
+
 	// Overall bounds (0 means don't enforce).
 	Min int32
 	Max int32
@@ -214,4 +239,20 @@ type SimplePartitionScalerSettings struct {
 type SimplePartitionScalerThreshold struct {
 	Window     time.Duration // window to measure add rate over
 	TargetRate int           // target tasks/second per partition
+}
+
+type LatencyHealthCheckSettings struct {
+	// Percentile is a number from 0.00 to 1.00 which represents how far into the distribution we should look, eg 0.99 is p99.
+	Percentile float64
+
+	// Threshold is the amount of time this percentiles reading must exceed to trigger an unhealthy response (if enforced).
+	Threshold time.Duration
+
+	// Enforced allows this health check to return unhealthy responses, when false this health check will always report healthy.
+	Enforced bool
+}
+
+type LatencyHealthChecksPerPercentile struct {
+	// PercentileSettings stores settings for the health check of each percentile.
+	PercentileSettings []LatencyHealthCheckSettings
 }

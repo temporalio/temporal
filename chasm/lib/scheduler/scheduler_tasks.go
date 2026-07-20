@@ -72,7 +72,7 @@ const (
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
 	if scheduler.Closed {
@@ -186,6 +186,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
+	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
 	}
 
 	// Attach callbacks and check workflow status.
@@ -329,7 +332,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 func (r *SchedulerCallbacksTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerCallbacksTask,
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)

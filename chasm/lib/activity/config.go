@@ -10,7 +10,7 @@ import (
 var (
 	Enabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.enableStandalone",
-		false,
+		true,
 		`Toggles standalone activity functionality on the server.`,
 	)
 
@@ -30,7 +30,7 @@ var (
 
 	StartDelayEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.startDelayEnabled",
-		false,
+		true,
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
 

@@ -45,6 +45,10 @@ func Invoke(
 						activityIDs = append(activityIDs, ai.ActivityId)
 					}
 				}
+			case *workflowservice.ResetActivityRequest_MatchAll:
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					activityIDs = append(activityIDs, ai.ActivityId)
+				}
 			}
 
 			if len(activityIDs) == 0 {
@@ -78,9 +82,11 @@ func Invoke(
 	targetingMethod := "type"
 	if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_Id); ok {
 		targetingMethod = "id"
+	} else if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_MatchAll); ok {
+		targetingMethod = "match_all"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(req.NamespaceId)); err == nil {
-		metrics.ActivityResetRequests.With(shardContext.GetMetricsHandler().WithTags(
+		metrics.ActivityReset.With(shardContext.GetMetricsHandler().WithTags(
 			metrics.NamespaceTag(ns.Name().String()),
 			metrics.ActivityTargetingMethodTag(targetingMethod),
 		)).Record(1)

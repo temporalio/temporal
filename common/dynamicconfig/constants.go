@@ -155,6 +155,15 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
 	)
+	RetryUnboundedOnSystemResourceExhausted = NewGlobalBoolSetting(
+		"system.retryUnboundedOnSystemResourceExhausted",
+		false,
+		`RetryUnboundedOnSystemResourceExhausted controls retry behavior of inter-service
+calls (frontend, CHASM, etc.) to history and matching on system-scoped ResourceExhausted
+errors. When false (the default), these calls follow the standard 2-attempt cap. When
+true, they ignore the attempt cap and keep retrying for up to the policy's expiration
+interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
+	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
 		time.Minute,
@@ -241,10 +250,51 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
 	)
+	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.historyHealthSignalLatencyWindowCount",
+		10,
+		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.historyHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
+	// TODO: This should be removed once percentiles are the default.
+	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
+		"system.historyHealthSignalUsePercentiles",
+		false,
+		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
+	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
+	)
+	PersistenceHealthSignalPercentilesEnabled = NewGlobalBoolSetting(
+		"system.persistenceHealthSignalPercentilesEnabled",
+		false,
+		`PersistenceHealthSignalPercentilesEnabled determines whether persistence latency is tracked using distribution objects`,
+	)
+	PersistenceHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.persistenceHealthSignalLatencyWindowCount",
+		10,
+		`PersistenceHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	PersistenceHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.persistenceHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`PersistenceHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	PersistenceHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.persistenceHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"persistenceHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the persistence system",
 	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
@@ -1079,6 +1129,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		1,
 		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
 	)
+	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
+		"frontend.enableBatchOperationsForStandaloneActivities",
+		false,
+		`FrontendEnableBatchOperationsForStandaloneActivities controls whether the frontend accepts the batch cancel, terminate, and delete standalone activity operation fields`,
+	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
@@ -1482,6 +1537,19 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
+		"matching.enablePollerScalingDecisionMetrics",
+		false,
+		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
+metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
+scoped by namespace and/or task queue.`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),
@@ -1567,10 +1635,13 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
-			MaxRate:            0.33,
-			BatchSize:          100,
-			BackgroundInterval: 23 * time.Second,
-			DrainBufferTime:    15 * time.Second,
+			MaxRate:               0.33,
+			ShrinkRatio:           0.1,
+			ShrinkDelta:           8,
+			BatchSize:             100,
+			BackgroundInterval:    23 * time.Second,
+			DrainBufferTime:       15 * time.Second,
+			ShadowModeLogInterval: 0,
 		},
 		`Settings for partition scale manager.`,
 	)
@@ -1644,6 +1715,11 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 		true,
 		`EnableReplicationStream turn on replication stream`,
 	)
+	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
+		"history.emitReplicationLifecycleEvents",
+		false,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
 		true,
@@ -1710,6 +1786,18 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
+		"history.enableWorkflowTaskCompletionPagination",
+		false,
+		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
+		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
+	)
+	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
+		"history.workflowTaskCompletionBufferSizeLimit",
+		40*1024*1024,
+		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
+		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -1938,6 +2026,12 @@ unlimited. When the predicate size is surpassed for a given scope, the predicate
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
+	)
+	QueueShrinkPredicateMaxPendingKeys = NewGlobalIntSetting(
+		"history.queueShrinkPredicateMaxPendingKeys",
+		10,
+		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
+keys.`,
 	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
@@ -3067,7 +3161,7 @@ existing workflows to attach callbacks.`,
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
-		false,
+		true,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
 	)
@@ -3371,6 +3465,20 @@ The configured value will be divided by the number of worker hosts to get the pe
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
+	SchedulerSpecMaxIterations = NewGlobalIntSetting(
+		"scheduler.specMaxIterations",
+		2*7*24*60*60,
+		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
+scheduler evaluates while searching for a schedule's next action time before giving up with an
+error and stopping the schedule.`,
+	)
+	SchedulerSpecWarnIterations = NewGlobalIntSetting(
+		"scheduler.specWarnIterations",
+		24*60*60,
+		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
+while searching for a schedule's next action time before emitting a warning (metric + log). It
+is non-fatal: the search continues past this threshold.`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
@@ -3443,6 +3551,15 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
 		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
+	)
+
+	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
+		"frontend.enableMatchingFanOutForPollCancellation",
+		false,
+		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
+		When enabled, frontend sends root partition only; matching fans out to all partitions.
+		When disabled, frontend iterates partitions; matching handles each partition locally.
+		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are

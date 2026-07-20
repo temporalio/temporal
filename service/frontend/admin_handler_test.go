@@ -96,6 +96,8 @@ type (
 		namespaceID    namespace.ID
 		namespaceEntry *namespace.Namespace
 
+		currentClusterName string
+
 		handler *AdminHandler
 	}
 )
@@ -191,7 +193,8 @@ func (s *adminHandlerSuite) SetupTest() {
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
+	s.currentClusterName = "current-cluster"
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
 
@@ -547,12 +550,15 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
 	var clusterName = "cluster"
+	// The namespace lists both the current cluster and the cluster being
+	// removed, so removing clusterName would sever a link the current cluster
+	// relies on -> blocked.
 	globalNS := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "global-ns"},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: "other",
-			Clusters:          []string{"other", clusterName},
+			ActiveClusterName: s.currentClusterName,
+			Clusters:          []string{s.currentClusterName, clusterName},
 		},
 		1,
 	)
@@ -562,6 +568,60 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() 
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.Require().ErrorAs(err, &failedPrecondition)
 	s.Contains(err.Error(), "global-ns")
+}
+
+// Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock covers the case that
+// motivated adding the current-cluster membership check: the local registry
+// holds a stale copy of a global namespace that references clusterName but that
+// the current cluster is no longer a member of (e.g. left behind after a
+// namespace migration re-homed the namespace). Removing clusterName cannot
+// strand any replication the current cluster performs, so it must be allowed.
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	orphanedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "orphaned-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			// References clusterName but NOT s.currentClusterName.
+			Clusters: []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{orphanedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+// Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock covers the other half
+// of the conjunction: the current cluster participates in a multi-cluster
+// namespace, but that namespace does not involve the cluster being removed, so
+// removing it endangers nothing.
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	unrelatedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "unrelated-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: s.currentClusterName,
+			// Includes the current cluster but NOT clusterName.
+			Clusters: []string{s.currentClusterName, "another-cluster"},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{unrelatedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_DeletedNamespaceDoesNotBlock() {

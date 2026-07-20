@@ -93,3 +93,10 @@
 /service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
 
 /tools/ @temporalio/server
+
+# Generated code
+*.pb.go        @temporalio/server @temporalio/cgs @temporalio/nexus
+*.pb.mock.go   @temporalio/server @temporalio/cgs @temporalio/nexus
+*_mock.go      @temporalio/server @temporalio/cgs @temporalio/nexus
+*_gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
+*.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus

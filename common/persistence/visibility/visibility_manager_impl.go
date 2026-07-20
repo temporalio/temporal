@@ -206,11 +206,12 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 			IndexedFields: make(map[string]*commonpb.Payload),
 		}
 	}
-	if exec.TaskQueue != "" {
-		chasmAliasedSAs.IndexedFields[sadefs.TaskQueue] = sadefs.MustEncodeValue(
-			exec.TaskQueue,
-			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		)
+	// Surface registered system search attribute overrides (e.g. TaskQueue, ExecutionTime), which
+	// are stored in dedicated system columns rather than the search attribute blob.
+	for field, valueType := range mapper.OverriddenSystemFields() {
+		if value, ok := chasmSystemOverrideValue(exec, field); ok {
+			chasmAliasedSAs.IndexedFields[field] = sadefs.MustEncodeValue(value, valueType)
+		}
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
@@ -240,6 +241,31 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		Memo:                   userMemo,
 		ChasmMemo:              chasmMemoPayload,
 	}, nil
+}
+
+// chasmSystemOverrideValue returns the value for a registered system search attribute override
+// (e.g. TaskQueue, ExecutionTime), read from the dedicated column on InternalExecutionInfo.
+// Supported fields must match sadefs.IsChasmOverridableSystem (enforced at registration and by
+// TestChasmSystemOverrideReadBridgeCoversOverridableFields).
+func chasmSystemOverrideValue(exec *store.InternalExecutionInfo, field string) (any, bool) {
+	switch field {
+	case sadefs.WorkflowType:
+		return exec.TypeName, true
+	case sadefs.ExecutionTime:
+		return exec.ExecutionTime, true
+	case sadefs.TaskQueue:
+		return exec.TaskQueue, true
+	case sadefs.ParentWorkflowID:
+		return exec.ParentWorkflowID, true
+	case sadefs.ParentRunID:
+		return exec.ParentRunID, true
+	case sadefs.RootWorkflowID:
+		return exec.RootWorkflowID, true
+	case sadefs.RootRunID:
+		return exec.RootRunID, true
+	default:
+		return nil, false
+	}
 }
 
 // splitSearchAttributes splits decoded search attributes into CHASM and custom attributes.
@@ -488,8 +514,10 @@ func (p *visibilityManagerImpl) convertToWorkflowExecutionInfo(
 		}
 	}
 
-	// for close records
-	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	// for close records. Running and paused workflows are still open executions and
+	// must not have a CloseTime; only truly closed workflows have one.
+	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+		internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
 		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength

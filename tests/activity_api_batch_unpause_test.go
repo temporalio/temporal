@@ -85,7 +85,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(env *testcore.Te
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := env.SdkClient().ExecuteWorkflow(env.Context(), workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -197,6 +197,109 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 
 	err = workflowRun2.Get(ctx, &out)
 	s.NoError(err)
+}
+
+func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_MatchAll() {
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	ctx := s.Context()
+
+	const workflowCount = 10
+	workflowTypeName := testcore.RandomizeStr("activity-batch-unpause-match-all-workflow")
+
+	internalWorkflow := newInternalWorkflow()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
+	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
+
+	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
+	for range workflowCount {
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			TaskQueue: env.WorkerTaskQueue(),
+		}, workflowTypeName)
+		s.NoError(err)
+		s.NotNil(workflowRun)
+		workflowRuns = append(workflowRuns, workflowRun)
+	}
+
+	s.Await(func(s *ActivityApiBatchUnpauseClientTestSuite) {
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.GetPendingActivities(), 1)
+			s.Positive(internalWorkflow.startedActivityCount.Load())
+		}
+	}, 5*time.Second, 100*time.Millisecond)
+
+	for _, workflowRun := range workflowRuns {
+		resp, err := env.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowRun.GetID(),
+			},
+			Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+	}
+
+	s.Await(func(s *ActivityApiBatchUnpauseClientTestSuite) {
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.PendingActivities, 1)
+			s.True(description.PendingActivities[0].Paused)
+		}
+	}, 5*time.Second, 100*time.Millisecond)
+
+	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
+	s.Await(func(s *ActivityApiBatchUnpauseClientTestSuite) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  workflowCount,
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Len(listResp.GetExecutions(), workflowCount)
+	}, 5*time.Second, 500*time.Millisecond)
+
+	jobID := uuid.NewString()
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+				Activity: &batchpb.BatchOperationUnpauseActivities_MatchAll{MatchAll: true},
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	s.NoError(err)
+
+	s.Await(func(s *ActivityApiBatchUnpauseClientTestSuite) {
+		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+	}, 15*time.Second, 100*time.Millisecond)
+
+	for _, workflowRun := range workflowRuns {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		s.NoError(err)
+		s.Len(description.PendingActivities, 1)
+		s.False(description.PendingActivities[0].Paused)
+	}
+
+	internalWorkflow.letActivitySucceed.Store(true)
+
+	for _, workflowRun := range workflowRuns {
+		var out string
+		err = workflowRun.Get(ctx, &out)
+		s.NoError(err)
+	}
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed() {

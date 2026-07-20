@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -59,6 +60,7 @@ type (
 		searchAttributesMapper          searchattribute.Mapper
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
 		metricHandler                   metrics.Handler
+		eventLoggerProvider             otellog.LoggerProvider
 		tokenProvider                   auth.TokenProvider
 	}
 )

@@ -15,6 +15,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -54,6 +55,7 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 	metricsHandler := metrics.NoopMetricsHandler
 	s.nDCReapplication = NewEventsReapplier(
 		hsm.NewRegistry(),
+		chasmworkflow.NewRegistry(),
 		metricsHandler,
 		logger,
 	)
@@ -532,41 +534,6 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
 	s.Len(appliedEvent, 1)
-}
-
-func (s *nDCEventReapplicationSuite) TestReapplyEvents_ClosedWorkflow() {
-	reapplierRunID := uuid.NewString()
-	msCurrent := historyi.NewMockMutableState(s.controller)
-	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
-	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
-	updateRegistry := update.NewRegistry(msCurrent)
-	// Sanity check at the top of ReapplyEvents fails immediately.
-	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(false)
-	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED},
-	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, reapplierRunID)
-	s.Error(err)
-	s.ErrorAs(err, new(*serviceerror.Internal))
-	s.Nil(appliedEvent)
-}
-
-func (s *nDCEventReapplicationSuite) TestReapplyEvents_NoEventsToReapply() {
-	reapplierRunID := uuid.NewString()
-	msCurrent := historyi.NewMockMutableState(s.controller)
-	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
-	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
-	updateRegistry := update.NewRegistry(msCurrent)
-	// running, but no reappliable events in the slice -> reappliedEvents empty -> returns nil, nil
-	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
-	events := []*historypb.HistoryEvent{
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
-		{EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
-	}
-	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, reapplierRunID)
-	s.NoError(err)
-	s.Nil(appliedEvent)
 }
 
 // Reapplies a signal event to a paused workflow

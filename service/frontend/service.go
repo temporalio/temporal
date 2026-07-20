@@ -191,7 +191,8 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Admin Batch operation dynamic config
-	MaxConcurrentAdminBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableBatchOperationsForStandaloneActivities dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -230,14 +231,16 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
-	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	PollerAutoscalingAutoEnroll       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelWorkerPollsOnShutdown       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableMatchingFanOutForPollCancellation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumTaskQueueReadPartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
+	WorkerCommandsEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	PollerAutoscalingAutoEnroll             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingEnabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -368,10 +371,11 @@ func NewConfig(
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
-		EnableBatcher:                    dynamicconfig.FrontendEnableBatcher.Get(dc),
-		MaxConcurrentBatchOperation:      dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
-		MaxExecutionCountBatchOperation:  dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-		MaxConcurrentAdminBatchOperation: dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
+		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
+		MaxExecutionCountBatchOperation:              dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		EnableBatchOperationsForStandaloneActivities: dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
 		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
@@ -398,20 +402,22 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		HistoryHostErrorPercentage:        dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:    dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
-		LogAllReqErrors:                   dynamicconfig.LogAllReqErrors.Get(dc),
-		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		WorkflowRulesAPIsEnabled:          dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
-		MaxWorkflowRulesPerNamespace:      dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
-		WorkerHeartbeatsEnabled:           dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
-		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
-		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
-		PollerAutoscalingAutoEnroll:       dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
-		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
-		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
-		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
+		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
+		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
+		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
+		WorkerHeartbeatsEnabled:                 dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
+		EnableCancelWorkerPollsOnShutdown:       dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
+		EnableMatchingFanOutForPollCancellation: dynamicconfig.EnableMatchingFanOutForPollCancellation.Get(dc),
+		NumTaskQueueReadPartitions:              dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		WorkerCommandsEnabled:                   dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		PollerAutoscalingAutoEnroll:             dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
+		WorkflowPauseEnabled:                    dynamicconfig.WorkflowPauseEnabled.Get(dc),
+		TimeSkippingEnabled:                     dynamicconfig.TimeSkippingEnabled.Get(dc),
+		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
+		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),

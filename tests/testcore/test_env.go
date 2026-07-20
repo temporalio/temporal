@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
@@ -23,16 +22,15 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.uber.org/fx"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -41,10 +39,7 @@ import (
 //go:embed shard_salt.txt
 var shardSalt string
 
-var (
-	_                  Env = (*TestEnv)(nil)
-	defaultTestTimeout     = 90 * time.Second * debug.TimeoutMultiplier
-)
+var _ Env = (*TestEnv)(nil)
 
 type Env interface {
 	// T returns the *testing.T.
@@ -58,6 +53,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	// Deprecated: use the suite's Context() method instead.
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
@@ -93,17 +89,21 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster         bool
+	needWorkerService        bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
+	historyTaskRecorder      bool
 }
 
 type dynamicConfigOverride struct {
 	setting dynamicconfig.GenericSetting
 	value   any
 }
+
+type versionHeadersContextKey struct{}
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
@@ -140,23 +140,12 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 	}
 }
 
-// WithFxOptions appends fx options to a specific service's fx graph. This
-// implies a dedicated cluster because custom fx options cannot be shared
-// across tests.
-func WithFxOptions(serviceName primitives.ServiceName, opts ...fx.Option) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFxOptionsForService(serviceName, opts...))
-		o.dedicatedReason = "custom fx options used"
-	}
-}
-
 // WithWorkerService enables the system worker service. The service is off by
 // default to avoid the worker overhead. This implies a dedicated cluster.
 func WithWorkerService(reason string) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, withWorkerService(true))
+		o.needWorkerService = true
 		o.dedicatedReason = "worker service required: " + reason
 	}
 }
@@ -225,6 +214,15 @@ func WithHistoryShardCount(n int32) TestOption {
 	}
 }
 
+func WithHistoryTaskRecorder() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterHistoryTaskRecorder())
+		o.dedicatedReason = "task queue recorder used"
+		o.historyTaskRecorder = true
+	}
+}
+
 // WithDynamicConfig overrides a dynamic config setting for the test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
@@ -269,7 +267,13 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	}
 
 	// Obtain the test cluster from the router.
-	base := testClusterRouter.get(t, options.dedicatedCluster, startupConfig, options.clusterOptions)
+	base := testClusterRouter.get(t, clusterRequest{
+		dedicated:         options.dedicatedCluster,
+		needWorkerService: options.needWorkerService,
+		dedicatedReason:   options.dedicatedReason,
+		dynamicConfig:     startupConfig,
+		clusterOpts:       options.clusterOptions,
+	})
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -291,6 +295,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		tv = options.testVars(tv)
 	}
 
+	// Attach version headers decorator to the test context.
+	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -301,7 +308,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 tv,
-		ctx:                setupTestTimeoutWithContext(t),
+		ctx:                testcontext.For(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
@@ -326,6 +333,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
+	}
+	if options.historyTaskRecorder {
+		recorder := cluster.GetHistoryTaskRecorder()
+		require.NotNil(t, recorder)
 	}
 
 	return env
@@ -435,6 +446,8 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
+//
+// Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
 	return e.ctx
 }

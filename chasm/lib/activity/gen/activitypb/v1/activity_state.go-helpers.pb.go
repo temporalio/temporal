@@ -118,6 +118,43 @@ func (this *ActivityTerminateState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ActivityPauseState to the protobuf v3 wire format
+func (val *ActivityPauseState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivityPauseState from the protobuf v3 wire format
+func (val *ActivityPauseState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivityPauseState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivityPauseState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivityPauseState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivityPauseState
+	switch t := that.(type) {
+	case *ActivityPauseState:
+		that1 = t
+	case ActivityPauseState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ActivityAttemptState to the protobuf v3 wire format
 func (val *ActivityAttemptState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -277,6 +314,9 @@ var (
 		"Canceled":        6,
 		"Terminated":      7,
 		"TimedOut":        8,
+		"Paused":          9,
+		"PauseRequested":  10,
+		"ResetRequested":  11,
 	}
 )
 
@@ -289,4 +329,23 @@ func ActivityExecutionStatusFromString(s string) (ActivityExecutionStatus, error
 		return ActivityExecutionStatus(v), nil
 	}
 	return ActivityExecutionStatus(0), fmt.Errorf("%s is not a valid ActivityExecutionStatus", s)
+}
+
+var (
+	ActivityRetryIntervalSource_shorthandValue = map[string]int32{
+		"Unspecified":    0,
+		"RetryPolicy":    1,
+		"WorkerOverride": 2,
+	}
+)
+
+// ActivityRetryIntervalSourceFromString parses a ActivityRetryIntervalSource value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ActivityRetryIntervalSource
+func ActivityRetryIntervalSourceFromString(s string) (ActivityRetryIntervalSource, error) {
+	if v, ok := ActivityRetryIntervalSource_value[s]; ok {
+		return ActivityRetryIntervalSource(v), nil
+	} else if v, ok := ActivityRetryIntervalSource_shorthandValue[s]; ok {
+		return ActivityRetryIntervalSource(v), nil
+	}
+	return ActivityRetryIntervalSource(0), fmt.Errorf("%s is not a valid ActivityRetryIntervalSource", s)
 }
