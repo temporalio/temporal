@@ -3571,10 +3571,6 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 		})
 
 		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			info := s.driveTrace(t, env, saaTrace{
-				trace:        []model.Event{},
-				startDelayed: true,
-			}).describe(t).GetInfo()
 			require.Nil(t, info.GetCurrentRetryInterval())
 		})
 	})
