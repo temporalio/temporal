@@ -3976,6 +3976,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
 				ActivityId:             activityID,
 				ActivityType:           env.Tv().ActivityType(),
 				Attempt:                1,
+				CurrentRetryInterval:   durationpb.New(time.Second),
 				HeartbeatTimeout:       durationpb.New(0),
 				LastWorkerIdentity:     defaultIdentity,
 				RetryPolicy:            defaultRetryPolicy,
