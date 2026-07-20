@@ -3565,14 +3565,9 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			startDelayed: true,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
-			require.Equal(t, info.GetExecutionTime().AsTime(), info.GetNextAttemptScheduleTime().AsTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Nil(t, info.GetCurrentRetryInterval())
-		})
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.Equal(t, info.GetExecutionTime().AsTime(), info.GetNextAttemptScheduleTime().AsTime())
+		require.Nil(t, info.GetCurrentRetryInterval())
 	})
 
 	// First attempt running: no pending next dispatch.
@@ -3583,14 +3578,9 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
-		})
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
 	})
 
 	// Backing off before the retry dispatches.
@@ -3601,14 +3591,9 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
-			require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()))
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
-		})
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()))
+		require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
 	})
 
 	// Retry dispatched to Matching but not yet picked up.
@@ -3619,15 +3604,10 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.EqualValues(t, 2, info.GetAttempt())
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
-		})
+		require.EqualValues(t, 2, info.GetAttempt())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
 	})
 
 	// Retry attempt running with a further retry permitted.
@@ -3638,15 +3618,10 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.EqualValues(t, 2, info.GetAttempt())
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
-		})
+		require.EqualValues(t, 2, info.GetAttempt())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration())
 	})
 
 	// Final attempt running with no retries remaining.
@@ -3657,15 +3632,10 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.EqualValues(t, 2, info.GetAttempt())
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Nil(t, info.GetCurrentRetryInterval())
-		})
+		require.EqualValues(t, 2, info.GetAttempt())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Nil(t, info.GetCurrentRetryInterval())
 	})
 
 	// Terminal (completed after a retry): no attempt is pending or running.
@@ -3676,14 +3646,9 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 			retryInterval: saaDelayWindow,
 		}).describe(t).GetInfo()
 
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus())
-			require.Nil(t, info.GetNextAttemptScheduleTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Nil(t, info.GetCurrentRetryInterval())
-		})
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, info.GetStatus())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Nil(t, info.GetCurrentRetryInterval())
 	})
 }
 
