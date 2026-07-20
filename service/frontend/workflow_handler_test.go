@@ -247,6 +247,29 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	)
 }
 
+func (s *WorkflowHandlerSuite) TestPollNexusTaskQueue_EmptyLongPollReturnsNonNilResponse() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+
+	// An empty long poll: matching returns a response whose inner Response is nil. The handler
+	// must not surface that as a typed-nil pointer, which would panic downstream interceptors.
+	s.mockMatchingClient.EXPECT().
+		PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.PollNexusTaskQueueResponse{}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	resp, err := wh.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
 	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
 	wh := &WorkflowHandler{
