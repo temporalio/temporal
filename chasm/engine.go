@@ -17,13 +17,13 @@ type Engine interface {
 	StartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
+		func(MutableContext) (RootComponent, error),
 		...TransitionOption,
 	) (StartExecutionResult, error)
 	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
+		func(MutableContext) (RootComponent, error),
 		func(MutableContext, Component) error,
 		...TransitionOption,
 	) (EngineUpdateWithStartExecutionResult, error)
@@ -48,8 +48,21 @@ type Engine interface {
 		...TransitionOption,
 	) ([]byte, error)
 
+	DeleteExecution(
+		context.Context,
+		ComponentRef,
+		DeleteExecutionRequest,
+	) error
+
 	// NotifyExecution notifies any PollComponent callers waiting on the execution.
 	NotifyExecution(ExecutionKey)
+}
+
+// DeleteExecutionRequest is the request for [DeleteExecution]. TerminateComponentRequest will only be
+// used if the execution is still running. The actual deletion of the execution is async, and will return
+// after creating the DeleteExecutionTask.
+type DeleteExecutionRequest struct {
+	TerminateComponentRequest
 }
 
 type BusinessIDReusePolicy int
@@ -68,11 +81,39 @@ const (
 	BusinessIDConflictPolicyUseExisting
 )
 
+// RefConsistencyLevel controls how strictly a [ComponentRef] is validated when it is used to address a
+// component in UpdateComponent. Each level selects which versioned transition the execution staleness check
+// ([Node.IsStale]) keys off — i.e. how fresh the loaded mutable state must be — and, at the weakest level,
+// whether the run ID is honored. It governs only the consistency-token / run resolution of the ref;
+// archetype validation and access-intent (operation-intent) checks always apply.
+//
+// The levels form a ladder from strongest to weakest:
+//
+//   - ExecutionLastUpdate: staleness is checked against the execution's last-update versioned transition —
+//     the loaded state must be at the exact transition the ref was taken at. Strongest; the default.
+//   - ComponentCreation: staleness is checked against the target component's initial (creation) versioned
+//     transition — the loaded state need only be at least as new as when the component was created (so it
+//     is guaranteed to know about the component), tolerating a stale execution transition. The creation
+//     transition is additionally matched in [Node.Component] so the same component instance must still
+//     exist at the path.
+//   - CurrentRun: the ref is resolved by component path on the current run, dropping the run ID and every
+//     versioned transition (no staleness check). Callers relying on this level must re-establish identity
+//     in component logic (e.g. by request ID). Weakest; note this resolves the current run only and does
+//     NOT verify the ref's run and the current run are in the same chain.
+type RefConsistencyLevel int
+
+const (
+	RefConsistencyLevelExecutionLastUpdate RefConsistencyLevel = iota
+	RefConsistencyLevelComponentCreation
+	RefConsistencyLevelCurrentRun
+)
+
 type TransitionOptions struct {
-	ReusePolicy    BusinessIDReusePolicy
-	ConflictPolicy BusinessIDConflictPolicy
-	RequestID      string
-	Speculative    bool
+	ReusePolicy      BusinessIDReusePolicy
+	ConflictPolicy   BusinessIDConflictPolicy
+	ConsistencyLevel RefConsistencyLevel
+	RequestID        string
+	Speculative      bool
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -159,6 +200,15 @@ func WithRequestID(
 	}
 }
 
+// WithRefConsistencyLevel sets the [RefConsistencyLevel] for the transition, controlling how strictly the
+// supplied component ref is validated. Currently only UpdateComponent() honors it; it defaults to
+// [RefConsistencyLevelExecutionLastUpdate].
+func WithRefConsistencyLevel(level RefConsistencyLevel) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.ConsistencyLevel = level
+	}
+}
+
 // Not needed for V1
 // func WithEagerLoading(
 // 	paths []ComponentPath,
@@ -172,7 +222,7 @@ func WithRequestID(
 // the lifecycle of creating and persisting a new component within an execution context.
 //
 // Type Parameters:
-//   - C: The component type to create, must implement [Component]
+//   - C: The component type to create, must implement [RootComponent]
 //   - I: The input type passed to the factory function
 //   - O: The output type returned by the factory function
 //
@@ -191,7 +241,7 @@ func WithRequestID(
 //   - O: The output value produced by startFn
 //   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
-func StartExecution[C Component, I any](
+func StartExecution[C RootComponent, I any](
 	ctx context.Context,
 	key ExecutionKey,
 	startFn func(MutableContext, I) (C, error),
@@ -201,12 +251,12 @@ func StartExecution[C Component, I any](
 	result, err := engineFromContext(ctx).StartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(mutableContext MutableContext) (_ RootComponent, retErr error) {
+			defer log.CapturePanic(mutableContext.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, err = startFn(ctx, input)
+			c, err = startFn(mutableContext, input)
 			return c, err
 		},
 		opts...,
@@ -222,7 +272,7 @@ func StartExecution[C Component, I any](
 	}, nil
 }
 
-func UpdateWithStartExecution[C Component, I any, O any](
+func UpdateWithStartExecution[C RootComponent, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
 	startFn func(MutableContext, I) (C, error),
@@ -234,19 +284,23 @@ func UpdateWithStartExecution[C Component, I any, O any](
 	result, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(mutableContext MutableContext) (_ RootComponent, retErr error) {
+			defer log.CapturePanic(mutableContext.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, err = startFn(ctx, input)
+			c, err = startFn(mutableContext, input)
 			return c, err
 		},
-		func(ctx MutableContext, c Component) (retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(mutableContext MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(mutableContext.Logger(), &retErr)
 
 			var err error
-			output, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				mutableContext,
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -271,7 +325,13 @@ func UpdateWithStartExecution[C Component, I any, O any](
 //     comment of the NewRef method in MutableContext.
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
-// It returns the result, along with the new component reference. opts are currently ignored.
+//
+// The only opts currently honored is [WithRefConsistencyLevel]; it selects the [RefConsistencyLevel] used to
+// resolve and validate the ref (see that type for the ladder of levels). Other options are ignored.
+//
+// It returns the result, along with the new component reference. The returned reference may be
+// nil when updateFn deletes the component in the same transaction and the component is not the
+// root component.
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -286,14 +346,27 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 
+	var options TransitionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	ref, err = ref.forConsistencyLevel(options.ConsistencyLevel)
+	if err != nil {
+		return output, nil, err
+	}
+
 	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
-		func(ctx MutableContext, c Component) (retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(mutableContext MutableContext, c Component) (retErr error) {
+			defer log.CapturePanic(mutableContext.Logger(), &retErr)
 
 			var err error
-			output, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				mutableContext,
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -324,11 +397,15 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(chasmContext Context, c Component) (retErr error) {
+			defer log.CapturePanic(chasmContext.Logger(), &retErr)
 
 			var err error
-			output, err = readFn(c.(C), ctx, input)
+			output, err = readFn(
+				c.(C),
+				chasmContext,
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -361,10 +438,14 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (_ bool, retErr error) {
-			defer log.CapturePanic(ctx.Logger(), &retErr)
+		func(chasmContext Context, c Component) (_ bool, retErr error) {
+			defer log.CapturePanic(chasmContext.Logger(), &retErr)
 
-			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
+			out, satisfied, err := monotonicPredicate(
+				c.(C),
+				chasmContext,
+				input,
+			)
 			if satisfied {
 				output = out
 			}
@@ -376,6 +457,21 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 	return output, newSerializedRef, err
+}
+
+// DeleteExecution deletes the execution identified by the supplied execution key.
+// If the execution is still running, it is terminated first. A DeleteExecutionTask is
+// then queued to remove all execution data from persistence.
+func DeleteExecution[C RootComponent](
+	ctx context.Context,
+	key ExecutionKey,
+	request DeleteExecutionRequest,
+) error {
+	return engineFromContext(ctx).DeleteExecution(
+		ctx,
+		NewComponentRef[C](key),
+		request,
+	)
 }
 
 func convertComponentRef[R []byte | ComponentRef](

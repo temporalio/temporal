@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -92,15 +93,25 @@ type serializedHandlerError struct {
 // TemporalFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
 // the proto fullname of the temporal API Failure message or the standard Nexus SDK failure types.
 // Returns an error if the failure cannot be converted.
-// Mutates the failure temporarily, unsetting the Message and StackTrace fields to avoid duplicating the information in
-// the serialized failure. Mutating was chosen over cloning for performance reasons since this function may be called
-// frequently.
+//
+// Compared to TemporalFailureToNexusFailureInPlace, this function clones the failure before converting it to avoid
+// mutating a shared proto.
 func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
+	return TemporalFailureToNexusFailureInPlace(proto.Clone(failure).(*failurepb.Failure))
+}
+
+// TemporalFailureToNexusFailureInPlace converts an API proto Failure to a Nexus SDK Failure setting the metadata
+// "type" field to the proto fullname of the temporal API Failure message or the standard Nexus SDK failure types.
+// Returns an error if the failure cannot be converted.
+//
+// Compared to TemporalFailureToNexusFailure, this function converts the failure in place to avoid cloning. This
+// is only safe for callers who exclusively own the failure.
+func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Failure, error) {
 	var causep *nexus.Failure
 	if failure.GetCause() != nil {
 		var cause nexus.Failure
 		var err error
-		cause, err = TemporalFailureToNexusFailure(failure.GetCause())
+		cause, err = TemporalFailureToNexusFailureInPlace(failure.GetCause())
 		if err != nil {
 			return nexus.Failure{}, err
 		}
@@ -299,6 +310,7 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 	}
 	return &failurepb.Failure_ApplicationFailureInfo{
 		ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:    "NexusFailure",
 			Details: payloads,
 		},
 	}, nil

@@ -17,7 +17,7 @@ import (
 )
 
 type (
-	BackfillerTaskExecutorOptions struct {
+	BackfillerTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
@@ -26,7 +26,8 @@ type (
 		SpecProcessor  SpecProcessor
 	}
 
-	BackfillerTaskExecutor struct {
+	BackfillerTaskHandler struct {
+		chasm.PureTaskHandlerBase
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
@@ -34,8 +35,8 @@ type (
 	}
 )
 
-func NewBackfillerTaskExecutor(opts BackfillerTaskExecutorOptions) *BackfillerTaskExecutor {
-	return &BackfillerTaskExecutor{
+func NewBackfillerTaskHandler(opts BackfillerTaskHandlerOptions) *BackfillerTaskHandler {
+	return &BackfillerTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
@@ -43,19 +44,30 @@ func NewBackfillerTaskExecutor(opts BackfillerTaskExecutorOptions) *BackfillerTa
 	}
 }
 
-func (b *BackfillerTaskExecutor) Validate(
+// BackfillerTask invalidation reasons. Limited cardinality for ReasonTag.
+const (
+	backfillerInvalidatedStaleHWM metrics.ReasonString = "stale_hwm"
+)
+
+func (b *BackfillerTaskHandler) Validate(
 	ctx chasm.Context,
 	backfiller *Backfiller,
-	attrs chasm.TaskAttributes,
+	attrs chasm.TaskInvocation,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(
-		backfiller.GetLastProcessedTime(),
-		attrs.ScheduledTime,
-	)
+	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		newTaggedMetricsHandler(b.metricsHandler, backfiller.Scheduler.Get(ctx)).
+			Counter(metrics.ScheduleBackfillerTask.Name()).
+			Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(backfillerInvalidatedStaleHWM))
+	}
+	return valid, nil
 }
 
-func (b *BackfillerTaskExecutor) Execute(
+func (b *BackfillerTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	backfiller *Backfiller,
 	_ chasm.TaskAttributes,
@@ -65,8 +77,12 @@ func (b *BackfillerTaskExecutor) Execute(
 
 	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
+	metricsHandler := newTaggedMetricsHandler(b.metricsHandler, scheduler)
+	metricsHandler.Counter(metrics.ScheduleBackfillerTask.Name()).Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 
 	invoker := scheduler.Invoker.Get(ctx)
+
+	backfiller.getOrCreateEventLog(ctx).LogEvent(ctx, "backfillerTask executed")
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
@@ -109,6 +125,11 @@ func (b *BackfillerTaskExecutor) Execute(
 		logger.Debug("backfill complete, deleting Backfiller",
 			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
+		metricsHandler.Counter(metrics.ScheduleBackfillerCompleted.Name()).Record(1)
+
+		// Revive the Generator so it can re-evaluate idle/close eligibility now
+		// that this backfiller is gone.
+		scheduler.Generator.Get(ctx).Generate(ctx)
 		return nil
 	}
 
@@ -119,13 +140,13 @@ func (b *BackfillerTaskExecutor) Execute(
 	return nil
 }
 
-func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
+func (b *BackfillerTaskHandler) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
 	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
-func (b *BackfillerTaskExecutor) processBackfill(
+func (b *BackfillerTaskHandler) processBackfill(
 	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
@@ -172,14 +193,14 @@ func (b *BackfillerTaskExecutor) processBackfill(
 }
 
 // backoffDelay returns the amount of delay that should be added when retrying.
-func (b *BackfillerTaskExecutor) backoffDelay(backfiller *Backfiller) time.Duration {
+func (b *BackfillerTaskHandler) backoffDelay(backfiller *Backfiller) time.Duration {
 	// Increment GetAttempt here early, to avoid needing to increment
 	// backfiller.Attempt wherever backoffDelay's result is needed.
 	return b.config.RetryPolicy().ComputeNextDelay(0, int(backfiller.GetAttempt()+1), nil)
 }
 
 // processTrigger processes a Backfiller's TriggerImmediatelyRequest.
-func (b *BackfillerTaskExecutor) processTrigger(
+func (b *BackfillerTaskHandler) processTrigger(
 	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
@@ -214,7 +235,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 
 // allowedBufferedStarts returns the number of BufferedStarts that the Backfiller should
 // buffer, taking into account buffer limits and concurrent backfills.
-func (b *BackfillerTaskExecutor) allowedBufferedStarts(
+func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	ctx chasm.Context,
 	scheduler *Scheduler,
 	invoker *Invoker,

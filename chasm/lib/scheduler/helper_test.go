@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -32,6 +33,12 @@ const (
 	defaultInterval      = 1 * time.Minute
 	defaultCatchupWindow = 5 * time.Minute
 )
+
+// newLegacySpecBuilder builds a legacy SpecBuilder with the given warn/max compute-limit bounds.
+// A value of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
+func newLegacySpecBuilder(warnIter, maxIter int) *legacyscheduler.SpecBuilder {
+	return legacyscheduler.NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
+}
 
 // defaultSchedule returns a protobuf definition for a schedule matching this
 // package's other testing defaults.
@@ -72,6 +79,9 @@ func defaultConfig() *scheduler.Config {
 		ServiceCallTimeout: func() time.Duration {
 			return 5 * time.Second
 		},
+		EncodeInternalTokenWithEnvelope: func(string) bool {
+			return true
+		},
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(1 * time.Second)
 		},
@@ -80,32 +90,43 @@ func defaultConfig() *scheduler.Config {
 
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
 	config := defaultConfig()
-	specBuilder := legacyscheduler.NewSpecBuilder()
-	invokerOpts := scheduler.InvokerTaskExecutorOptions{
+	specBuilder := newLegacySpecBuilder(0, 0)
+	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     logger,
 		SpecProcessor:  specProcessor,
 	}
 	return scheduler.NewLibrary(
+		config,
 		nil,
-		scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+		scheduler.NewSchedulerIdleTaskHandler(scheduler.SchedulerIdleTaskHandlerOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
+		}),
+		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
 			Config: config,
 		}),
-		scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
+		scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
 			SpecBuilder:    specBuilder,
 		}),
-		scheduler.NewInvokerExecuteTaskExecutor(invokerOpts),
-		scheduler.NewInvokerProcessBufferTaskExecutor(invokerOpts),
-		scheduler.NewBackfillerTaskExecutor(scheduler.BackfillerTaskExecutorOptions{
+		scheduler.NewInvokerExecuteTaskHandler(invokerOpts),
+		scheduler.NewInvokerProcessBufferTaskHandler(invokerOpts),
+		scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
+		}),
+		scheduler.NewSchedulerMigrateToWorkflowTaskHandler(scheduler.SchedulerMigrateToWorkflowTaskHandlerOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 	)
 }
@@ -114,6 +135,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 type testEnv struct {
 	t             *testing.T // only used within these setup helpers
 	Ctrl          *gomock.Controller
+	Registry      *chasm.Registry
 	Node          *chasm.Node
 	NodeBackend   *chasm.MockNodeBackend
 	TimeSource    *clock.EventTimeSource
@@ -159,7 +181,7 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 		defaultConfig(),
 		mockMetrics,
 		logger,
-		legacyscheduler.NewSpecBuilder(),
+		newLegacySpecBuilder(0, 0),
 	)
 }
 
@@ -200,6 +222,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
 		HandleIsWorkflow:          func() bool { return false },
+		HandleGetNamespaceEntry:   tv.Namespace,
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
 			return &persistencespb.VersionedTransition{
 				NamespaceFailoverVersion: 1,
@@ -208,7 +231,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		},
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	if err != nil {
@@ -230,6 +253,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	env := &testEnv{
 		t:             t,
 		Ctrl:          ctrl,
+		Registry:      registry,
 		Node:          node,
 		NodeBackend:   nodeBackend,
 		TimeSource:    timeSource,
@@ -264,12 +288,25 @@ func (e *testEnv) CloseTransaction() error {
 // HasTask returns true if the given task type was added with the given visibilityTime.
 func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
-	for _, tasks := range e.NodeBackend.TasksByCategory {
-		for _, t := range tasks {
+	for _, categoryTasks := range e.NodeBackend.TasksByCategory {
+		for _, t := range categoryTasks {
 			if reflect.TypeOf(t) == taskType &&
 				t.GetVisibilityTime().Equal(visibilityTime) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// HasTaskInCategory is like HasTask but scoped to a single queue category, to
+// distinguish tasks that share a physical type but land in different queues.
+func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilityTime time.Time) bool {
+	taskType := reflect.TypeOf(task)
+	for _, t := range e.NodeBackend.TasksByCategory[category] {
+		if reflect.TypeOf(t) == taskType &&
+			t.GetVisibilityTime().Equal(visibilityTime) {
+			return true
 		}
 	}
 	return false
@@ -336,6 +373,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
 	nodeBackend.HandleIsWorkflow = func() bool { return false }
+	nodeBackend.HandleGetNamespaceEntry = tv.Namespace
 	nodeBackend.HandleCurrentVersionedTransition = func() *persistencespb.VersionedTransition {
 		return &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,
@@ -343,7 +381,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 		}
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	return &testInfra{
 		node:        node,
 		nodeBackend: nodeBackend,

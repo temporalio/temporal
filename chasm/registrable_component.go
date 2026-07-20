@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 
 	"github.com/dgryski/go-farm"
@@ -24,6 +25,8 @@ type (
 		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
+
+		contextValues map[any]any
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -79,15 +82,7 @@ func WithBusinessIDAlias(
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string),
-				fieldToAlias:       make(map[string]string),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType),
-				systemAliasToField: make(map[string]string),
-			}
-		}
-		if rc.searchAttributesMapper.systemAliasToField == nil {
-			rc.searchAttributesMapper.systemAliasToField = make(map[string]string)
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 		if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 			//nolint:forbidigo
@@ -112,18 +107,29 @@ func WithSearchAttributes(
 		}
 
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string, len(searchAttributes)),
-				fieldToAlias:       make(map[string]string, len(searchAttributes)),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
-				systemAliasToField: make(map[string]string),
-			}
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 
 		for _, sa := range searchAttributes {
 			alias := sa.definition().alias
 			field := sa.definition().field
 			valueType := sa.definition().valueType
+
+			// An identity-mapped system search attribute (alias == field, e.g. TaskQueue,
+			// ExecutionTime) overrides that system column directly, so it is recorded only in
+			// overriddenSystemFields; queries resolve via the system column.
+			if field == alias && sadefs.IsSystem(field) {
+				if !sadefs.IsChasmOverridableSystem(field) {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute %q cannot be overridden by a CHASM component", field))
+				}
+				if _, ok := rc.searchAttributesMapper.overriddenSystemFields[field]; ok {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute override %q is already defined", field))
+				}
+				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
+				continue
+			}
 
 			if sadefs.IsChasmSystem(alias) {
 				//nolint:forbidigo
@@ -151,6 +157,27 @@ func WithSearchAttributes(
 			rc.searchAttributesMapper.fieldToAlias[field] = alias
 			rc.searchAttributesMapper.saTypeMap[field] = valueType
 		}
+	}
+}
+
+// WithContextValues allows specifying key-value pairs that will be available in the Context
+// via the Value() method whenever the chasm framework starts, updates, reads, polls, executes or
+// validates tasks on a component.
+//
+// This is useful for propagating values needed for those processing logic but are not avaiable via the
+// component's struct definition, such as configurations.
+//
+// Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
+//
+// Manually added key-value pairs via ContextWithValue() will take precedence over registered context values.
+func WithContextValues(
+	keyVals map[any]any,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.contextValues == nil {
+			rc.contextValues = make(map[any]any, len(keyVals))
+		}
+		maps.Copy(rc.contextValues, keyVals)
 	}
 }
 

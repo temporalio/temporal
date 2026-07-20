@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -150,13 +151,25 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 		return nil, errWrongChain
 	}
 
+	// A paused workflow is still open and still occupies the schedule's overlap
+	// slot, so treat it as running for watch purposes (mirroring the CHASM
+	// scheduler, which considers PAUSED "still progressing"). Otherwise we would
+	// fall through and look for a close event that never arrives, stalling the
+	// schedule. Treating it as running lets the scheduler apply the overlap
+	// policy against it - e.g. TERMINATE_OTHER terminates it and starts the next
+	// run.
+	workflowStatus := pollRes.WorkflowStatus
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		workflowStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
 	rb := newResponseBuilder(
 		req,
-		pollRes.WorkflowStatus,
+		workflowStatus,
 		a.Logger,
 		a.maxBlobSize()-recordOverheadSize,
 	)
-	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
 	}
 
@@ -196,7 +209,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedulespb.WatchWo
 		// StartToCloseTimeout if ScheduleToCloseTimeout is set, so add a timeout here.
 		// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+		ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions().StartToCloseTimeout)
 		defer cancel()
 	}
 
@@ -220,7 +233,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedulespb.WatchWo
 func (a *activities) CancelWorkflow(ctx context.Context, req *schedulespb.CancelWorkflowRequest) error {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions().StartToCloseTimeout)
 	defer cancel()
 
 	rreq := &historyservice.RequestCancelWorkflowExecutionRequest{
@@ -243,7 +256,7 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedulespb.Cancel
 func (a *activities) TerminateWorkflow(ctx context.Context, req *schedulespb.TerminateWorkflowRequest) error {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
+	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions().StartToCloseTimeout)
 	defer cancel()
 
 	rreq := &historyservice.TerminateWorkflowExecutionRequest{
@@ -371,4 +384,29 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Failure{Failure: failure}
 	}
 	return res
+}
+
+func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+	if req.GetNamespaceId() != a.namespaceID.String() {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("MigrateScheduleToChasm: request namespace ID %q does not match activity namespace ID %q", req.GetNamespaceId(), a.namespaceID),
+			"namespace_mismatch",
+			nil,
+		)
+	}
+	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
+	if err != nil {
+		// Treat "already exists" as success (idempotency).
+		var alreadyExists *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExists) {
+			return nil
+		}
+		// Sentinel blocking migration is transient; will retry on next workflow wake-up.
+		var unavailableErr *serviceerror.Unavailable
+		if errors.As(err, &unavailableErr) {
+			return translateError(err, "MigrateScheduleToChasm: blocked by sentinel, will retry")
+		}
+		return translateError(err, "MigrateScheduleToChasm")
+	}
+	return nil
 }

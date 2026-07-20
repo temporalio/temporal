@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -17,6 +18,8 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -42,6 +45,74 @@ var (
 
 func TestVisibilityManagerSuite(t *testing.T) {
 	suite.Run(t, new(VisibilityManagerSuite))
+}
+
+// testChasmComponent is a minimal component used to build a search attribute mapper.
+type testChasmComponent struct {
+	chasm.UnimplementedComponent
+}
+
+func (testChasmComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+// TestConvertToChasmExecutionInfoSystemOverrides verifies that registered system search
+// attribute overrides (e.g. ExecutionTime, TaskQueue) are surfaced from their dedicated columns
+// only when the archetype registered the override.
+func TestConvertToChasmExecutionInfoSystemOverrides(t *testing.T) {
+	executionTime := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+
+	// A mapper for an archetype that registers ExecutionTime + TaskQueue as system overrides.
+	overrideMapper := chasm.NewRegistrableComponent[*testChasmComponent](
+		"test_component",
+		chasm.WithSearchAttributes(chasm.SearchAttributeExecutionTime, chasm.SearchAttributeTaskQueue),
+	).SearchAttributesMapper()
+
+	visibilityManager := &visibilityManagerImpl{
+		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
+	}
+	convert := func(mapper *chasm.VisibilitySearchAttributesMapper, exec *store.InternalExecutionInfo) map[string]*commonpb.Payload {
+		exec.SearchAttributes = &commonpb.SearchAttributes{}
+		info, err := visibilityManager.convertToChasmExecutionInfo(exec, mapper, testNamespace)
+		require.NoError(t, err)
+		return info.GetChasmSearchAttributes().GetIndexedFields()
+	}
+
+	t.Run("registered ExecutionTime override is surfaced", func(t *testing.T) {
+		fields := convert(overrideMapper, &store.InternalExecutionInfo{ExecutionTime: executionTime})
+		payload, ok := fields[sadefs.ExecutionTime]
+		require.True(t, ok)
+		value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_DATETIME, false)
+		require.NoError(t, err)
+		require.Equal(t, executionTime, value)
+	})
+
+	t.Run("registered TaskQueue override is surfaced", func(t *testing.T) {
+		fields := convert(overrideMapper, &store.InternalExecutionInfo{TaskQueue: "my-task-queue"})
+		payload, ok := fields[sadefs.TaskQueue]
+		require.True(t, ok)
+		value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		require.NoError(t, err)
+		require.Equal(t, "my-task-queue", value)
+	})
+
+	t.Run("without registration nothing is surfaced", func(t *testing.T) {
+		fields := convert(nil, &store.InternalExecutionInfo{ExecutionTime: executionTime, TaskQueue: "my-task-queue"})
+		_, hasET := fields[sadefs.ExecutionTime]
+		_, hasTQ := fields[sadefs.TaskQueue]
+		require.False(t, hasET)
+		require.False(t, hasTQ)
+	})
+}
+
+// TestChasmSystemOverrideReadBridgeCoversOverridableFields guards against drift: every
+// overridable system field must have a case in the read bridge, otherwise a registered override
+// would silently not be surfaced.
+func TestChasmSystemOverrideReadBridgeCoversOverridableFields(t *testing.T) {
+	for field := range sadefs.ChasmOverridableSystem() {
+		_, ok := chasmSystemOverrideValue(&store.InternalExecutionInfo{}, field)
+		require.True(t, ok, "read bridge chasmSystemOverrideValue missing case for %q", field)
+	}
 }
 
 func (s *VisibilityManagerSuite) SetupTest() {
@@ -117,6 +188,55 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.Error(err)
 	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
+}
+
+func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted_AddsPersistenceDurationToContext() {
+	ctx := metrics.AddMetricsContext(context.Background())
+	startTime := time.Now().UTC()
+	executionTime := startTime.Add(1 * time.Minute)
+	request := &manager.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Namespace:        testNamespace,
+			Execution:        &testWorkflowExecution,
+			WorkflowTypeName: testWorkflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+	}
+
+	memoBlob, err := serializeMemo(request.Memo)
+	s.NoError(err)
+
+	s.visibilityStore.EXPECT().RecordWorkflowExecutionStarted(
+		gomock.Any(),
+		&store.InternalRecordWorkflowExecutionStartedRequest{
+			InternalVisibilityRequestBase: &store.InternalVisibilityRequestBase{
+				NamespaceID:      request.NamespaceID.String(),
+				WorkflowID:       request.Execution.GetWorkflowId(),
+				RunID:            request.Execution.GetRunId(),
+				WorkflowTypeName: request.WorkflowTypeName,
+				StartTime:        request.StartTime,
+				ExecutionTime:    request.ExecutionTime,
+				Status:           request.Status,
+				Memo:             memoBlob,
+			},
+		},
+	).Return(nil)
+	s.metricsHandler.EXPECT().
+		WithTags(
+			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
+			metrics.VisibilityPluginNameTag(s.visibilityStore.GetName()),
+			metrics.VisibilityIndexNameTag(s.visibilityStore.GetIndexName()),
+		).
+		Return(metrics.NoopMetricsHandler).AnyTimes()
+
+	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(ctx, request))
+
+	val, ok := metrics.ContextCounterGet(ctx, metrics.TaskPersistenceLatency.Name())
+	s.True(ok, "context should have TaskPersistenceLatency accumulated")
+	s.Positive(val, "persistence duration should be non-zero (nanoseconds)")
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {

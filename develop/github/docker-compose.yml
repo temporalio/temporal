@@ -1,11 +1,11 @@
 x-healthcheck-defaults: &healthcheck-defaults
   interval: 3s
   timeout: 3s
-  retries: 30
+  retries: 60
 
 services:
   cassandra:
-    image: cassandra:3.11
+    image: cassandra:5.0
     ports:
       - "9042:9042"
     environment:

@@ -126,6 +126,7 @@ func (s *executableTaskSuite) SetupTest() {
 		NamespaceCache:          s.namespaceCache,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
+		ThrottledLogger:         s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Serializer:              s.serializer,
@@ -606,7 +607,7 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 	)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
-	s.Nil(err)
+	s.NoError(err)
 	s.False(doContinue)
 }
 
@@ -660,7 +661,7 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
-	s.Nil(err)
+	s.NoError(err)
 	s.False(doContinue)
 }
 
@@ -1063,7 +1064,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 		nil, errors.New("some error"))
 
 	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
-	s.Nil(err)
+	s.NoError(err)
 	s.False(toProcess)
 }
 

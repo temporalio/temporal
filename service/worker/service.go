@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/matchingservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -34,6 +35,8 @@ import (
 
 // ServiceName is the name used for the worker service health check.
 const ServiceName = "temporal.api.workflowservice.v1.WorkerService"
+
+type CustomTaskHandler func(ctx context.Context, task *replicationspb.ReplicationTask) error
 
 type (
 	// Service represents the temporal-worker service. This service hosts all background processing needed for temporal cluster:
@@ -66,6 +69,7 @@ type (
 		scanner                          *scanner.Scanner
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
 
 		server       *grpc.Server
 		grpcListener net.Listener
@@ -169,6 +173,11 @@ func NewService(
 	return s, nil
 }
 
+// SetCustomTaskHandler sets an optional handler for custom replication task types.
+func (s *Service) SetCustomTaskHandler(handler CustomTaskHandler) {
+	s.customTaskHandler = handler
+}
+
 // NewConfig builds the new Config for worker service
 func NewConfig(
 	dc *dynamicconfig.Collection,
@@ -203,6 +212,8 @@ func NewConfig(
 			ExecutionScannerHistoryEventIdValidator: dynamicconfig.ExecutionScannerHistoryEventIdValidator.Get(dc),
 			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
 			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
+
+			ScheduleInvariantsScannerOptions: dynamicconfig.ScheduleInvariantsScannerOptions.Get(dc),
 		},
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
@@ -364,6 +375,9 @@ func (s *Service) startReplicator() {
 		s.matchingClient,
 		s.namespaceRegistry,
 	)
+	if s.customTaskHandler != nil {
+		msgReplicator.WithCustomTaskHandler(s.customTaskHandler)
+	}
 	msgReplicator.Start()
 }
 

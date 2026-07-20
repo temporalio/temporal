@@ -9,6 +9,7 @@ const (
 
 const (
 	DeleteWorkflowExecutionStageVisibility DeleteWorkflowExecutionStage = 1 << iota
+	DeleteWorkflowExecutionStageReplication
 	DeleteWorkflowExecutionStageCurrent
 	DeleteWorkflowExecutionStageMutableState
 	DeleteWorkflowExecutionStageHistory

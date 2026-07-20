@@ -6,7 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // SlackMessage represents Slack Block Kit message
@@ -36,7 +40,7 @@ func truncateToSlackLimit(text string, limit int) string {
 }
 
 // buildSuccessMessage creates success notification with report summary
-func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent string, runID, repo string, days int) *SlackMessage {
+func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *SlackMessage {
 	// Calculate CI success rate
 	ciSuccessRate := 0.0
 	if summary.TotalWorkflowRuns > 0 {
@@ -77,33 +81,45 @@ func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent 
 		},
 	}
 
-	// Add CI breakers details if present
-	if ciBreakerContent != "" {
-		ciBreakerText := fmt.Sprintf("*CI Breakers (Failed All Retries):*\n%s", ciBreakerContent)
+	// Add CI breakers details
+	if lines := formatReportLines(summary.CIBreakers); len(lines) > 0 {
+		if len(lines) > slackMaxListItems {
+			lines = lines[:slackMaxListItems]
+		}
+		text := fmt.Sprintf("*CI Breakers (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: truncateToSlackLimit(ciBreakerText, 2900),
+				Text: truncateToSlackLimit(text, 2900),
 			},
 		})
 	}
 
-	// Add flaky tests details if present
-	if flakyContent != "" {
-		flakyText := fmt.Sprintf("*Flaky Tests Details:*\n%s", flakyContent)
+	// Add flaky tests details (already sorted by failure rate)
+	var flakyFiltered []TestReport
+	for _, r := range summary.FlakyTests {
+		if r.FailureCount >= minFlakyFailures {
+			flakyFiltered = append(flakyFiltered, r)
+		}
+	}
+	if lines := formatReportLines(flakyFiltered); len(lines) > 0 {
+		if len(lines) > slackMaxListItems {
+			lines = lines[:slackMaxListItems]
+		}
+		text := fmt.Sprintf("*Flaky Tests (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: truncateToSlackLimit(flakyText, 2900),
+				Text: truncateToSlackLimit(text, 2900),
 			},
 		})
 	}
 
 	// Add link to report
 	if runID != "" {
-		linkURL := fmt.Sprintf("https://github.com/%s/actions/runs/%s", repo, runID)
+		linkURL := github.RunURL(repo, runID)
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
@@ -114,6 +130,83 @@ func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent 
 	}
 
 	return msg
+}
+
+// addBisectSection appends a Bayesian bisect section to an existing Slack message.
+// TODO seankane: after validating this methodology can identify problematic commits
+// add the section to the Slack message.
+func (msg *SlackMessage) addBisectSection(reports []TestBisectReport, repo string) {
+	// Count qualifying
+	qualifying := 0
+	for _, r := range reports {
+		if !r.Skipped {
+			qualifying++
+		}
+	}
+	if qualifying == 0 {
+		return
+	}
+
+	// Find hot commits (top suspect in 2+ tests)
+	type commitCount struct {
+		title string
+		count int
+	}
+	hotCommits := make(map[string]*commitCount)
+	for _, r := range reports {
+		if r.Skipped || len(r.TopSuspects) == 0 {
+			continue
+		}
+		top := r.TopSuspects[0]
+		if _, ok := hotCommits[top.CommitSHA]; !ok {
+			hotCommits[top.CommitSHA] = &commitCount{title: top.CommitTitle}
+		}
+		hotCommits[top.CommitSHA].count++
+	}
+
+	var lines []string
+	for sha, cc := range hotCommits {
+		if cc.count >= 2 {
+			shortSHA := sha
+			if len(shortSHA) > 7 {
+				shortSHA = shortSHA[:7]
+			}
+			commitURL := github.CommitURL(repo, sha)
+			title := cc.title
+			if title == sha || title == "" {
+				title = shortSHA
+			}
+			lines = append(lines, fmt.Sprintf("• <%s|%s> — %d tests — %s", commitURL, shortSHA, cc.count, title))
+		}
+	}
+
+	if len(lines) == 0 {
+		// No multi-test suspects; just report the count
+		msg.Blocks = append(msg.Blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*🔍 Commit Suspects (Bayesian)*\n%d tests analyzed. See GitHub summary for details.", qualifying),
+			},
+		})
+		return
+	}
+
+	// Sort lines for deterministic output
+	sort.Strings(lines)
+	if len(lines) > slackMaxListItems {
+		lines = lines[:slackMaxListItems]
+	}
+
+	text := fmt.Sprintf("*🔍 Hot Commits (Bayesian, implicated in 2+ tests):*\n%s\n\nSee GitHub summary for full details.",
+		strings.Join(lines, "\n"))
+	msg.Blocks = append(msg.Blocks, SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: truncateToSlackLimit(text, 2900),
+		},
+	})
 }
 
 // buildFailureMessage creates failure notification
@@ -141,7 +234,7 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 					},
 					{
 						Type: "mrkdwn",
-						Text: fmt.Sprintf("*Commit:*\n%s", sha[:7]),
+						Text: fmt.Sprintf("*Commit:*\n%.7s", sha),
 					},
 					{
 						Type: "mrkdwn",
@@ -154,7 +247,7 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 
 	// Add link to workflow run
 	if runID != "" {
-		linkURL := fmt.Sprintf("https://github.com/%s/actions/runs/%s", repo, runID)
+		linkURL := github.RunURL(repo, runID)
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
@@ -167,13 +260,32 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 	return msg
 }
 
-// sendSlackMessage sends message to webhook URL
-func sendSlackMessage(webhookURL string, message *SlackMessage) error {
+// renderMarkdown renders a SlackMessage as markdown, treating each block's text as markdown.
+func (msg *SlackMessage) renderMarkdown() string {
+	var sb strings.Builder
+	for _, block := range msg.Blocks {
+		if block.Text != nil {
+			sb.WriteString(block.Text.Text)
+			sb.WriteString("\n\n")
+		}
+		for _, field := range block.Fields {
+			sb.WriteString(field.Text)
+			sb.WriteString("\n")
+		}
+		if len(block.Fields) > 0 {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+// send sends message to webhook URL
+func (msg *SlackMessage) send(webhookURL string) error {
 	if webhookURL == "" {
 		return errors.New("webhook URL is empty")
 	}
 
-	jsonData, err := json.Marshal(message)
+	jsonData, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}

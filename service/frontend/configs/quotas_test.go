@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/quotastest"
 	"go.temporal.io/server/common/testing/temporalapi"
 )
 
@@ -67,19 +69,19 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
-		s.True(ExecutionAPIPrioritiesOrdered[idx] < ExecutionAPIPrioritiesOrdered[idx+1])
+		s.Less(ExecutionAPIPrioritiesOrdered[idx], ExecutionAPIPrioritiesOrdered[idx+1])
 	}
 }
 
 func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
 	for idx := range VisibilityAPIPrioritiesOrdered[1:] {
-		s.True(VisibilityAPIPrioritiesOrdered[idx] < VisibilityAPIPrioritiesOrdered[idx+1])
+		s.Less(VisibilityAPIPrioritiesOrdered[idx], VisibilityAPIPrioritiesOrdered[idx+1])
 	}
 }
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	for idx := range NamespaceReplicationInducingAPIPrioritiesOrdered[1:] {
-		s.True(NamespaceReplicationInducingAPIPrioritiesOrdered[idx] < NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
+		s.Less(NamespaceReplicationInducingAPIPrioritiesOrdered[idx], NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -93,6 +95,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 {},
 
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         {},
@@ -104,16 +107,17 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             {},
 
-		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":        {},
+		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListNexusOperationExecutions":  {},
 	}
 
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
-		if t.Method(i).Name == "DescribeTaskQueue" {
+	for method := range t.Methods() {
+		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + method.Name
+		if method.Name == "DescribeTaskQueue" {
 			apiName += "WithReachability"
 		}
 		if _, ok := apis[apiName]; ok {
@@ -125,17 +129,20 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 	apis := map[string]struct{}{
-		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      {},
+		"/temporal.api.workflowservice.v1.WorkflowService/RegisterNamespace":                 {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                   {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility":  {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":       {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     {},
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             {},
 	}
 
-	var service workflowservice.WorkflowServiceServer
-	t := reflect.TypeOf(&service).Elem()
+	t := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + t.Method(i).Name
+	for method := range t.Methods() {
+		apiName := "/temporal.api.workflowservice.v1.WorkflowService/" + method.Name
 		if _, ok := apis[apiName]; ok {
 			apiToPriority[apiName] = NamespaceReplicationInducingAPIToPriority[apiName]
 		}
@@ -180,6 +187,35 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
+}
+
+func (s *quotasSuite) TestGlobalNamespaceRateLimiterUsesConfiguredBurstRatio() {
+	limiter := NewGlobalNamespaceRateLimiter(
+		quotastest.NewFakeMemberCounter(2),
+		func(namespace string) int {
+			s.Equal("test-namespace", namespace)
+			return 10
+		},
+		func(namespace string) float64 {
+			s.Equal("test-namespace", namespace)
+			return 3
+		},
+		log.NewNoopLogger(),
+	)
+	request := quotas.NewRequest(
+		"DescribeWorkerDeployment",
+		1,
+		"test-namespace",
+		headers.CallerTypeAPI,
+		-1,
+		"",
+	)
+	requestTime := time.Now()
+
+	for range 15 {
+		s.True(limiter.Allow(requestTime, request))
+	}
+	s.False(limiter.Allow(requestTime, request))
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {

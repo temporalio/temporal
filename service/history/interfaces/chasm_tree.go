@@ -18,6 +18,8 @@ var _ ChasmTree = (*chasm.Node)(nil)
 type ChasmTree interface {
 	CloseTransaction() (chasm.NodesMutation, error)
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
+	PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState)
+	ApplySystemMutation(chasm.NodesMutation) error
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	RefreshTasks() error
@@ -32,7 +34,12 @@ type ChasmTree interface {
 	) error
 	ExecuteSideEffectTask(
 		ctx context.Context,
-		registry *chasm.Registry,
+		executionKey chasm.ExecutionKey,
+		task *tasks.ChasmTask,
+		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+	) error
+	ExecuteSideEffectDiscardTask(
+		ctx context.Context,
 		executionKey chasm.ExecutionKey,
 		task *tasks.ChasmTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
@@ -40,7 +47,7 @@ type ChasmTree interface {
 	ValidateSideEffectTask(
 		ctx context.Context,
 		task *tasks.ChasmTask,
-	) (bool, error)
+	) (isTaskInTree bool, isValidByComponent bool, err error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)

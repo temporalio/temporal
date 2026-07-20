@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,21 +20,22 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalTestBase
+type WorkflowFailuresSuite struct {
+	parallelsuite.Suite[*WorkflowFailuresSuite]
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowFailuresTestSuite))
+	parallelsuite.Run(t, &WorkflowFailuresSuite{})
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
+func (s *WorkflowFailuresSuite) TestWorkflowTimeout() {
+	env := testcore.NewEnv(s.T())
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -45,7 +45,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -55,24 +55,24 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	time.Sleep(time.Second) //nolint:forbidigo
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for range 10 {
-		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		historyEvents = env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
 
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
+			env.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 			continue GetHistoryLoop
 		}
@@ -92,8 +92,8 @@ GetHistoryLoop:
 	closedCount := 0
 ListClosedLoop:
 	for range 10 {
-		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.Namespace().String(),
+		resp, err3 := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -103,7 +103,7 @@ ListClosedLoop:
 		s.NoError(err3)
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
-			s.Logger.Info("Closed WorkflowExecution is not yet visibile")
+			env.Logger.Info("Closed WorkflowExecution is not yet visibile")
 			time.Sleep(1000 * time.Millisecond) //nolint:forbidigo
 			continue ListClosedLoop
 		}
@@ -112,7 +112,8 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
+func (s *WorkflowFailuresSuite) TestWorkflowTaskFailed() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -122,7 +123,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -132,9 +133,9 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+	env.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -164,16 +165,16 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalC", nil, identity))
-			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalD", nil, identity))
-			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalE", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalC", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalD", nil, identity))
+			s.NoError(env.SendSignal(env.Namespace().String(), workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 
 		if !activityScheduled {
 			activityScheduled = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -196,7 +197,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 		workflowComplete = true
 		time.Sleep(time.Second) //nolint:forbidigo
-		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
+		env.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
 			len(task.History.Events)))
 		lastWorkflowTaskEvent := task.History.Events[task.StartedEventId-1]
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, lastWorkflowTaskEvent.GetEventType())
@@ -216,24 +217,24 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
 	// Make first workflow task to schedule activity
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// process activity
 	err = poller.PollAndProcessActivityTask(false)
-	s.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessActivityTask", tag.Error(err))
 	s.NoError(err)
 
 	// fail workflow task 5 times
@@ -242,17 +243,17 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		s.NoError(err)
 	}
 
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalA", nil, identity)
+	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger workflow task
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalB", nil, identity)
+	err = env.SendSignal(env.Namespace().String(), workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail workflow task 2 more times
@@ -277,12 +278,12 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 	// Make complete workflow workflow task
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithExpectedAttemptCount(3))
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	env.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	events := env.GetHistory(env.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -316,10 +317,11 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	lastWorkflowTaskStartedEvent := events[25]
 	s.Equal(lastWorkflowTaskTime, lastWorkflowTaskStartedEvent.GetEventTime().AsTime())
 	wfCompletedEvent := events[27]
-	s.True(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
+	s.GreaterOrEqual(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime), time.Second)
 }
 
-func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+func (s *WorkflowFailuresSuite) TestRespondWorkflowTaskCompletedReturnsErrorIfInvalidArgument() {
+	env := testcore.NewEnv(s.T())
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
@@ -327,7 +329,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
-		Namespace:          s.Namespace().String(),
+		Namespace:          env.Namespace().String(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -336,7 +338,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 		Identity:           identity,
 	}
 
-	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we0, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	s.NotNil(we0)
 
@@ -355,13 +357,13 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -370,7 +372,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

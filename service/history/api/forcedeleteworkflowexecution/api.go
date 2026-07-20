@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -54,6 +55,8 @@ func Invoke(
 
 	var warnings []string
 	var branchTokens [][]byte
+	var startTime time.Time
+	var closeTime *time.Time
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -82,19 +85,11 @@ func Invoke(
 				branchTokens = append(branchTokens, branchToken)
 			}
 		}
-	}
-
-	// NOTE: the deletion is best effort, for sql visibility implementation,
-	// we can't guarantee there's no update or record close request for this workflow since
-	// visibility queue processing is async. Operator can call this api again to delete visibility
-	// record again if this happens.
-	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespace.ID(request.GetNamespaceId()),
-		WorkflowID:  execution.GetWorkflowId(),
-		RunID:       execution.GetRunId(),
-		TaskID:      math.MaxInt64,
-	}); err != nil {
-		return nil, err
+		startTime = resp.State.GetExecutionState().GetStartTime().AsTime()
+		closeTime = new(executionInfo.GetCloseTime().AsTime())
+		if !closeTime.After(time.Unix(0, 0)) {
+			closeTime = nil
+		}
 	}
 
 	if err := persistenceExecutionMgr.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
@@ -126,6 +121,22 @@ func Invoke(
 			logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
 			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
 		}
+	}
+
+	// NOTE: the deletion is best effort, for sql visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api again to delete visibility
+	// record again if this happens.
+	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID:       namespace.ID(request.GetNamespaceId()),
+		WorkflowID:        execution.GetWorkflowId(),
+		RunID:             execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		StartTime:         startTime,
+		CloseTime:         closeTime,
+		IsRetentionDelete: false,
+	}); err != nil {
+		return nil, err
 	}
 
 	return &historyservice.ForceDeleteWorkflowExecutionResponse{

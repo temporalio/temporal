@@ -3,6 +3,7 @@ package backoff
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -111,6 +112,7 @@ func ThrottleRetryContextWithReturn[T any](
 	isRetryable IsRetryable,
 ) (T, error) {
 	var zero T
+	var result T
 	var err error
 	var next time.Duration
 
@@ -124,7 +126,7 @@ func ThrottleRetryContextWithReturn[T any](
 	r := NewRetrier(policy, timeSrc)
 	t := NewRetrier(throttleRetryPolicy, timeSrc)
 	for ctx.Err() == nil {
-		result, err := fn(ctx)
+		result, err = fn(ctx)
 		if err == nil {
 			return result, nil
 		}
@@ -163,13 +165,7 @@ func ThrottleRetryContextWithReturn[T any](
 // IgnoreErrors can be used as IsRetryable handler for Retry function to exclude certain errors from the retry list
 func IgnoreErrors(errorsToExclude []error) func(error) bool {
 	return func(err error) bool {
-		for _, errorToExclude := range errorsToExclude {
-			if err == errorToExclude {
-				return false
-			}
-		}
-
-		return true
+		return !slices.Contains(errorsToExclude, err)
 	}
 }
 

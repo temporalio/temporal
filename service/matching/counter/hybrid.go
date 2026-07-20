@@ -35,6 +35,9 @@ var DefaultCounterParams = CounterParams{
 			Ratio:         1.5,
 			MaxW:          10_000,
 		},
+		Reseed: CMSReseedParams{
+			Interval: 250_000,
+		},
 	},
 }
 

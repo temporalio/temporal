@@ -11,7 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -34,10 +34,17 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
-		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+
+		ListChasmExecutions(
+			ctx context.Context,
+			request *visibilityservice.ListChasmExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error)
+		CountChasmExecutions(
+			ctx context.Context,
+			request *visibilityservice.CountChasmExecutionsRequest,
+		) (*visibilityservice.CountChasmExecutionsResponse, error)
 
 		// Admin APIs
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
@@ -113,24 +120,6 @@ type (
 		NextPageToken []byte
 	}
 
-	ListChasmExecutionsRequest struct {
-		ArchetypeID chasm.ArchetypeID
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		PageSize    int // Maximum number of workflow executions per page
-		Query       string
-		// Token to continue reading next page of workflow executions.
-		// Pass in empty slice for first page.
-		NextPageToken []byte
-	}
-
-	CountChasmExecutionsRequest struct {
-		ArchetypeID chasm.ArchetypeID
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		Query       string
-	}
-
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
 		NamespaceID namespace.ID
@@ -146,11 +135,13 @@ type (
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
-		NamespaceID namespace.ID
-		RunID       string
-		WorkflowID  string
-		TaskID      int64
-		CloseTime   *time.Time
+		NamespaceID       namespace.ID
+		RunID             string
+		WorkflowID        string
+		TaskID            int64
+		CloseTime         *time.Time
+		StartTime         time.Time
+		IsRetentionDelete bool
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution

@@ -7,6 +7,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -20,6 +22,7 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseActivityResponse, retError error) {
+
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -56,6 +59,7 @@ func Invoke(
 						Reason:   frontendRequest.GetReason(),
 					},
 				},
+				RequestId: request.GetFrontendRequest().GetRequestId(),
 			}
 
 			for _, activityId := range activityIDs {
@@ -76,6 +80,17 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	targetingMethod := "type"
+	if _, ok := request.GetFrontendRequest().GetActivity().(*workflowservice.PauseActivityRequest_Id); ok {
+		targetingMethod = "id"
+	}
+	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
+		metrics.ActivityPause.With(shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.ActivityTargetingMethodTag(targetingMethod),
+		)).Record(1)
 	}
 
 	return &historyservice.PauseActivityResponse{}, nil

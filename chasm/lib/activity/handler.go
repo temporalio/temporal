@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
@@ -31,14 +33,25 @@ var (
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
+	historyHandler    historyservice.HistoryServiceServer
+	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
 	namespaceRegistry namespace.Registry
 }
 
-func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logger, namespaceRegistry namespace.Registry) *handler {
+func newHandler(
+	config *Config,
+	historyHandler historyservice.HistoryServiceServer,
+	linkValidator *linkValidator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+) *handler {
 	return &handler{
 		config:            config,
+		historyHandler:    historyHandler,
+		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
 		namespaceRegistry: namespaceRegistry,
@@ -61,16 +74,29 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
+	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  req.GetFrontendRequest().GetActivityId(),
+			BusinessID:  frontendReq.GetActivityId(),
 		},
 		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
 				return nil, err
+			}
+
+			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+					return nil, err
+				}
+			}
+			if len(request.GetLinks()) > 0 {
+				if err := newActivity.attachLinks(mutableContext, request.GetLinks(), request.GetRequestId(), h.linkValidator, frontendReq.GetNamespace()); err != nil {
+					return nil, err
+				}
 			}
 
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
@@ -80,8 +106,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 			return newActivity, nil
 		},
-		req.GetFrontendRequest(),
-		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
+		frontendReq,
+		chasm.WithRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 
@@ -94,10 +120,52 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	// Apply on_conflict_options to an existing activity.
+	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
+		requestID := frontendReq.GetRequestId()
+		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			ref,
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				if attachCallbacks {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
 			RunId:   result.ExecutionKey.RunID,
 			Started: result.Created,
+			Link: &commonpb.Link{
+				Variant: &commonpb.Link_Activity_{
+					Activity: &commonpb.Link_Activity{
+						Namespace:  frontendReq.GetNamespace(),
+						ActivityId: frontendReq.GetActivityId(),
+						RunId:      result.ExecutionKey.RunID,
+					},
+				},
+			},
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
@@ -119,6 +187,11 @@ func (h *handler) DescribeActivityExecution(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
+	token := req.GetFrontendRequest().GetLongPollToken()
+	if len(token) == 0 {
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req)
+	}
+
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
 	// chasm.activity.longPollBuffer). We also cap the caller's deadline at
@@ -131,10 +204,6 @@ func (h *handler) DescribeActivityExecution(
 	)
 	defer cancel()
 
-	token := req.GetFrontendRequest().GetLongPollToken()
-	if len(token) == 0 {
-		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req, nil)
-	}
 	response, _, err = chasm.PollComponent(ctx, ref, func(
 		a *Activity,
 		ctx chasm.Context,
@@ -214,11 +283,35 @@ func (h *handler) PollActivityExecution(
 	return response, err
 }
 
+// DeleteActivityExecution terminates the activity if running, then schedules it for deletion.
+func (h *handler) DeleteActivityExecution(
+	ctx context.Context,
+	req *activitypb.DeleteActivityExecutionRequest,
+) (*activitypb.DeleteActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+
+	key := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	}
+
+	if err := chasm.DeleteExecution[*Activity](ctx, key, chasm.DeleteExecutionRequest{
+		TerminateComponentRequest: chasm.TerminateComponentRequest{
+			Reason: "Delete activity execution",
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	return &activitypb.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates an activity execution.
 func (h *handler) TerminateActivityExecution(
 	ctx context.Context,
 	req *activitypb.TerminateActivityExecutionRequest,
-) (response *activitypb.TerminateActivityExecutionResponse, err error) {
+) (*activitypb.TerminateActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 
 	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
@@ -227,22 +320,14 @@ func (h *handler) TerminateActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
-	response, _, err = chasm.UpdateComponent(
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
-		(*Activity).handleTerminated,
-		terminateEvent{
-			request: req,
-			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-				Handler:                     h.metricsHandler,
-				NamespaceName:               namespaceName.String(),
-				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-			},
+		(*Activity).Terminate,
+		chasm.TerminateComponentRequest{
+			Reason:    frontendReq.GetReason(),
+			Identity:  frontendReq.GetIdentity(),
+			RequestID: frontendReq.GetRequestId(),
 		},
 	)
 
@@ -250,7 +335,7 @@ func (h *handler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	return response, nil
+	return &activitypb.TerminateActivityExecutionResponse{}, nil
 }
 
 // RequestCancelActivityExecution requests cancellation of an activity execution.
@@ -266,27 +351,175 @@ func (h *handler) RequestCancelActivityExecution(
 		RunID:       frontendReq.GetRunId(),
 	})
 
-	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	response, _, err = chasm.UpdateComponent(
 		ctx,
 		ref,
 		(*Activity).handleCancellationRequested,
-		requestCancelEvent{
-			request: req,
-			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-				Handler:                     h.metricsHandler,
-				NamespaceName:               namespaceName.String(),
-				BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-			},
-		},
+		req,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	return response, nil
+}
+
+func (h *handler) PauseActivityExecution(ctx context.Context, req *activitypb.PauseActivityExecutionRequest) (*activitypb.PauseActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyHandler.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.PauseActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:  &workflowservice.PauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Reason:    frontendReq.GetReason(),
+				Identity:  frontendReq.GetIdentity(),
+				RequestId: frontendReq.GetRequestId(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.PauseActivityExecutionResponse{}, nil
+	}
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handlePauseRequested, req)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.PauseActivityExecutionResponse{}, nil
+}
+
+func (h *handler) UnpauseActivityExecution(ctx context.Context, req *activitypb.UnpauseActivityExecutionRequest) (*activitypb.UnpauseActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyHandler.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.UnpauseActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:       &workflowservice.UnpauseActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				Jitter:         frontendReq.GetJitter(),
+				ResetAttempts:  frontendReq.GetResetAttempts(),
+				ResetHeartbeat: frontendReq.GetResetHeartbeat(),
+				Identity:       frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.UnpauseActivityExecutionResponse{}, nil
+	}
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(ctx, ref, (*Activity).handleUnpauseRequested, req)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.UnpauseActivityExecutionResponse{}, nil
+}
+
+func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.ResetActivityExecutionRequest) (*activitypb.ResetActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		_, err := h.historyHandler.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+			NamespaceId: req.GetNamespaceId(),
+			FrontendRequest: &workflowservice.ResetActivityRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
+				ResetHeartbeat:         true,
+				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
+				KeepPaused:             frontendReq.GetKeepPaused(),
+				Jitter:                 frontendReq.GetJitter(),
+				Identity:               frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.ResetActivityExecutionResponse{}, nil
+	}
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).handleReset,
+		req,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &activitypb.ResetActivityExecutionResponse{}, nil
+}
+
+func (h *handler) UpdateActivityExecutionOptions(ctx context.Context, req *activitypb.UpdateActivityExecutionOptionsRequest) (*activitypb.UpdateActivityExecutionOptionsResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+	if frontendReq.GetWorkflowId() != "" {
+		resp, err := h.historyHandler.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+			NamespaceId: req.GetNamespaceId(),
+			UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+				Namespace: frontendReq.GetNamespace(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: frontendReq.GetWorkflowId(),
+					RunId:      frontendReq.GetRunId(),
+				},
+				Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: frontendReq.GetActivityId()},
+				ActivityOptions: frontendReq.GetActivityOptions(),
+				UpdateMask:      frontendReq.GetUpdateMask(),
+				RestoreOriginal: frontendReq.GetRestoreOriginal(),
+				Identity:        frontendReq.GetIdentity(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &activitypb.UpdateActivityExecutionOptionsResponse{
+			FrontendResponse: &workflowservice.UpdateActivityExecutionOptionsResponse{
+				ActivityOptions: resp.GetActivityOptions(),
+			},
+		}, nil
+	}
+
+	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFrontendRequest().GetActivityId(),
+		RunID:       req.GetFrontendRequest().GetRunId(),
+	})
+	response, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		(*Activity).UpdateActivityExecutionOptions,
+		req,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return response, nil
 }

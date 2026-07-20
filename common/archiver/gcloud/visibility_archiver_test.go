@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 )
 
@@ -244,9 +243,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      util.Ptr(testWorkflowID),
-		runID:           util.Ptr(testRunID),
+		workflowType:    new("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      new(testWorkflowID),
+		runID:           new(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -287,9 +286,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      util.Ptr(testWorkflowID),
-		runID:           util.Ptr(testRunID),
+		workflowType:    new("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      new(testWorkflowID),
+		runID:           new(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -368,7 +367,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	storageWrapper.EXPECT().QueryWithFilters(
 		gomock.Any(),
 		URI,
-		gomock.Any(),
+		constructVisibilityFilenamePrefix(testNamespaceID, indexKeyCloseTimeout),
 		1,
 		0,
 		gomock.Any(),
@@ -381,7 +380,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	storageWrapper.EXPECT().QueryWithFilters(
 		gomock.Any(),
 		URI,
-		gomock.Any(),
+		constructVisibilityFilenamePrefix(testNamespaceID, indexKeyCloseTimeout),
 		1,
 		1,
 		gomock.Any(),

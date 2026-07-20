@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
+	lognoop "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/propagation"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,11 +23,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -47,10 +47,12 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -105,15 +107,18 @@ type (
 		ServiceNames    resource.ServiceNames
 		NamespaceLogger resource.NamespaceLogger
 
-		ServiceResolver        resolver.ServiceResolver
-		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
-		CustomVisibilityStore  visibility.VisibilityStoreFactory
+		ServiceResolver                 resolver.ServiceResolver
+		CustomDataStoreFactory          persistenceClient.AbstractDataStoreFactory
+		CustomVisibilityStore           visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		AudienceGetter             authorization.JWTAudienceMapper
+		TokenProvider              auth.TokenProvider
 		ServiceHosts               map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
@@ -123,6 +128,7 @@ type (
 		TLSConfigProvider     encryption.TLSConfigProvider
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
+		EventLoggerProvider   otellog.LoggerProvider
 	}
 )
 
@@ -148,13 +154,6 @@ var (
 		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
-	)
-
-	ChasmLibraryOptions = fx.Options(
-		chasm.Module,
-		chasmworkflow.Module,
-		chasmscheduler.Module,
-		chasmcallback.Module,
 	)
 )
 
@@ -209,12 +208,20 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// EventLoggerProvider backs structured ("wide") events. Select the custom OTEL LoggerProvider
+	// if injected, else a no-op provider that discards events. A deployment opts in by injecting a
+	// provider via WithCustomEventLoggerProvider.
+	eventLoggerProvider := so.eventLoggerProvider
+	if eventLoggerProvider == nil {
+		eventLoggerProvider = lognoop.NewLoggerProvider()
+	}
+
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
 	if dcClient == nil {
 		dcConfig := so.config.DynamicConfigClient
 		if dcConfig != nil {
-			dcClient, err = dynamicconfig.NewFileBasedClient(dcConfig, logger, stopChan)
+			dcClient, err = dynamicconfig.NewFileBasedClientWithMetrics(dcConfig, logger, stopChan, metricHandler)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create dynamic config client: %w", err)
 			}
@@ -276,6 +283,17 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
+		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
+	}
+	// TokenCredentials require TLS (RFC 9700); without a remote-cluster TLS source the first
+	// cross-cluster dial would fatal-log, with no clear "you forgot TLS" diagnostic.
+	// Coarse check: any remote-cluster TLS entry passes; per-hostname config is still validated
+	// lazily on first dial.
+	if so.tokenProvider != nil && so.tlsConfigProvider == nil && len(so.config.Global.TLS.RemoteClusters) == 0 {
+		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -289,15 +307,18 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
-		ServiceResolver:        so.persistenceServiceResolver,
-		CustomDataStoreFactory: so.customDataStoreFactory,
-		CustomVisibilityStore:  so.customVisibilityStoreFactory,
+		ServiceResolver:                 so.persistenceServiceResolver,
+		CustomDataStoreFactory:          so.customDataStoreFactory,
+		CustomVisibilityStore:           so.customVisibilityStoreFactory,
+		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
 
 		SearchAttributesMapper:     so.searchAttributesMapper,
 		CustomFrontendInterceptors: so.customFrontendInterceptors,
 		Authorizer:                 so.authorizer,
 		ClaimMapper:                so.claimMapper,
 		AudienceGetter:             so.audienceGetter,
+		TokenProvider:              so.tokenProvider,
 
 		Logger:                logger,
 		ClientFactoryProvider: clientFactoryProvider,
@@ -305,6 +326,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:     tlsConfigProvider,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
+		EventLoggerProvider:   eventLoggerProvider,
 	}, nil
 }
 
@@ -344,30 +366,34 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg                        *config.Config
-		ServiceNames               resource.ServiceNames
-		Logger                     log.Logger
-		NamespaceLogger            resource.NamespaceLogger
-		DynamicConfigClient        dynamicconfig.Client
-		MetricsHandler             metrics.Handler
-		EsClient                   esclient.Client
-		TlsConfigProvider          encryption.TLSConfigProvider
-		PersistenceConfig          config.Persistence
-		ClusterMetadata            *cluster.Config
-		ClientFactoryProvider      client.FactoryProvider
-		AudienceGetter             authorization.JWTAudienceMapper
-		PersistenceServiceResolver resolver.ServiceResolver
-		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
-		VisibilityStoreFactory     visibility.VisibilityStoreFactory
-		SpanExporters              []otelsdktrace.SpanExporter
-		InstanceID                 resource.InstanceID                     `optional:"true"`
-		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
-		TaskCategoryRegistry       tasks.TaskCategoryRegistry
+		Cfg                             *config.Config
+		ServiceNames                    resource.ServiceNames
+		Logger                          log.Logger
+		NamespaceLogger                 resource.NamespaceLogger
+		DynamicConfigClient             dynamicconfig.Client
+		MetricsHandler                  metrics.Handler
+		EventLoggerProvider             otellog.LoggerProvider
+		EsClient                        esclient.Client
+		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
+		PersistenceConfig               config.Persistence
+		ClusterMetadata                 *cluster.Config
+		ClientFactoryProvider           client.FactoryProvider
+		AudienceGetter                  authorization.JWTAudienceMapper
+		PersistenceServiceResolver      resolver.ServiceResolver
+		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
+		SearchAttributesMapper          searchattribute.Mapper
+		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		Authorizer                      authorization.Authorizer
+		ClaimMapper                     authorization.ClaimMapper
+		TokenProvider                   auth.TokenProvider
+		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory          visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		SpanExporters                   []otelsdktrace.SpanExporter
+		InstanceID                      resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 	}
 )
 
@@ -401,6 +427,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() visibility.VisibilityStoreFactory {
 				return params.VisibilityStoreFactory
 			},
+			func() provider.CustomHistoryArchiverFactory {
+				return params.CustomHistoryArchiverFactory
+			},
+			func() provider.CustomVisibilityArchiverFactory {
+				return params.CustomVisibilityArchiverFactory
+			},
 			func() client.FactoryProvider {
 				return params.ClientFactoryProvider
 			},
@@ -419,6 +451,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() authorization.ClaimMapper {
 				return params.ClaimMapper
 			},
+			func() auth.TokenProvider {
+				return params.TokenProvider
+			},
 			func() encryption.TLSConfigProvider {
 				return params.TlsConfigProvider
 			},
@@ -430,6 +465,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+			},
+			func() otellog.Logger {
+				return wideevents.NewLogger(params.EventLoggerProvider, string(serviceName))
 			},
 			func() esclient.Client {
 				return params.EsClient
@@ -445,7 +483,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
-		ChasmLibraryOptions,
+		chasm.Module,
 	)
 }
 
@@ -542,7 +580,7 @@ func genericFrontendServiceProvider(
 			case primitives.FrontendService:
 				return params.ClaimMapper
 			case primitives.InternalFrontendService:
-				return authorization.NewNoopClaimMapper()
+				return authorization.NewInternalClaimMapper()
 			default:
 				panic("Unexpected frontend service name")
 			}
@@ -651,9 +689,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
-		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
-		}
+		indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 	}
 
 	clusterMetadata := svc.ClusterMetadata

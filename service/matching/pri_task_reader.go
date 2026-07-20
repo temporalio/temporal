@@ -109,6 +109,8 @@ func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+
 	err := res.err()
 
 	// We can handle some transient errors by just putting the task back in the matcher to
@@ -137,7 +139,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 
-	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.Data.CreateTime, -1)
 
 	numAcked := tr.ackTaskLocked(task.event.TaskId)
 
@@ -249,6 +251,7 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		if IsTaskExpired(t) {
 			// task expired when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 			return true
 		}
 
@@ -298,7 +301,7 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 	}
 
 	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(nil, false)
+		task.finish(taskFinishResult{})
 	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
@@ -347,12 +350,12 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
 			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 			} else if retry {
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
 				return err
@@ -378,7 +381,8 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 			// Because we checked readLevel, we know that getTasksPump can't have beat us to
 			// adding these tasks to outstandingTasks. So they should definitely not be there.
 			_, found := tr.outstandingTasks.Get(t.TaskId)
-			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+			return found
 		})
 
 	if !canAddDirect {
@@ -426,8 +430,11 @@ func (tr *priTaskReader) getLoadedTasks() int {
 func (tr *priTaskReader) isDrained() bool {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
-	return tr.readLevel >= maxReadLevel && tr.outstandingTasks.Empty()
+	return tr.isDrainedLocked()
+}
+
+func (tr *priTaskReader) isDrainedLocked() bool {
+	return tr.outstandingTasks.Empty() && tr.readLevel >= tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
 }
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
@@ -453,6 +460,12 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 		tr.outstandingTasks.Remove(minId)
 		numAcked += 1
 	}
+
+	// Also if we're completely drained, we can move the ack level up to the read level.
+	if tr.isDrainedLocked() {
+		tr.ackLevel = tr.readLevel
+	}
+
 	return numAcked
 }
 
@@ -467,6 +480,10 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
 		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
 		tr.ackLevel = newReadLevel
+		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
+		// wouldn't reach the db until another task is written and acked, which could be far in the
+		// future. This also lets the approximate backlog count reset if we've reached max read level.
+		tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, 0, tr.backlogAge.oldestTime())
 	}
 	tr.readLevel = newReadLevel
 }

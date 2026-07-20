@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
@@ -196,4 +198,34 @@ func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, versio
 		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
 		LastCheckedTime: timestamppb.Now(),
 	}, nil
+}
+
+func (a *VersionActivities) DescribeWorkerControllerInstanceStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.ComputeStatus, error) {
+	resp, _, err := a.WorkerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, a.namespace, &deploymentpb.WorkerDeploymentVersion{DeploymentName: version.GetDeploymentName(), BuildId: version.GetBuildId()})
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return wciValidationStatusToComputeStatus(resp.ValidationStatus), nil
+}
+
+func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, input *deploymentspb.UpdateWorkerControllerInstanceInput) (*computepb.ComputeConfigSummary, error) {
+	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
+	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
+	if err != nil {
+		var invalidArgs *serviceerror.InvalidArgument
+		if errors.As(err, &invalidArgs) {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+		}
+		return nil, err
+	}
+	return wciSpecToComputeConfigSummary(resp.Spec), nil
+}
+
+func (a *VersionActivities) DeleteWorkerControllerInstance(ctx context.Context, input *deploymentspb.DeleteWorkerControllerInstanceInput) error {
+	return a.WorkerControllerInstanceClient.DeleteWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), input.GetIdentity())
 }

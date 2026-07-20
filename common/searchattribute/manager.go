@@ -76,7 +76,7 @@ func (m *managerImpl) GetSearchAttributes(
 	forceRefreshCache bool,
 ) (NameTypeMap, error) {
 	now := m.timeSource.Now()
-	result := NameTypeMap{}
+	result := NewNameTypeMap(nil)
 	saCache, err := m.refreshCache(forceRefreshCache, now)
 	if err != nil {
 		m.logger.Error("failed to refresh search attributes cache", tag.Error(err))

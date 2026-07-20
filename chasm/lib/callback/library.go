@@ -9,18 +9,24 @@ type (
 	Library struct {
 		chasm.UnimplementedLibrary
 
-		InvocationTaskExecutor *InvocationTaskExecutor
-		BackoffTaskExecutor    *BackoffTaskExecutor
+		InvocationTaskHandler *invocationTaskHandler
+		BackoffTaskHandler    *backoffTaskHandler
 	}
 )
 
+// NewNilLibrary creates a Library with all nil handlers. Useful for
+// registration-only contexts like tdbg where no task execution is needed.
+func NewNilLibrary() *Library {
+	return &Library{}
+}
+
 func newLibrary(
-	InvocationTaskExecutor *InvocationTaskExecutor,
-	BackoffTaskExecutor *BackoffTaskExecutor,
+	InvocationTaskHandler *invocationTaskHandler,
+	BackoffTaskHandler *backoffTaskHandler,
 ) *Library {
 	return &Library{
-		InvocationTaskExecutor: InvocationTaskExecutor,
-		BackoffTaskExecutor:    BackoffTaskExecutor,
+		InvocationTaskHandler: InvocationTaskHandler,
+		BackoffTaskHandler:    BackoffTaskHandler,
 	}
 }
 
@@ -41,13 +47,11 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask(
 			"invoke",
-			l.InvocationTaskExecutor,
-			l.InvocationTaskExecutor,
+			l.InvocationTaskHandler,
 		),
 		chasm.NewRegistrablePureTask(
 			"backoff",
-			l.BackoffTaskExecutor,
-			l.BackoffTaskExecutor,
+			l.BackoffTaskHandler,
 		),
 	}
 }

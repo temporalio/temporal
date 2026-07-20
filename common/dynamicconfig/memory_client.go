@@ -14,9 +14,10 @@ type (
 	}
 
 	kvpair struct {
-		valid bool
-		key   Key
-		value any
+		valid     bool
+		mergeable bool
+		key       Key
+		value     any
 	}
 )
 
@@ -32,16 +33,22 @@ func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 }
 
 func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
+	var result []ConstrainedValue
 	for i := len(d.overrides) - 1; i >= 0; i-- {
 		if d.overrides[i].valid && d.overrides[i].key == key {
 			v := d.overrides[i].value
-			if value, ok := v.([]ConstrainedValue); ok {
-				return value
+			if cvs, ok := v.([]ConstrainedValue); ok {
+				result = append(result, cvs...)
+			} else {
+				result = append(result, ConstrainedValue{Value: v})
 			}
-			return []ConstrainedValue{{Value: v}}
+			if !d.overrides[i].mergeable {
+				// Non-mergeable: take this value and stop.
+				return result
+			}
 		}
 	}
-	return nil
+	return result
 }
 
 func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {
@@ -49,12 +56,29 @@ func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (clean
 }
 
 func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
+	return d.overrideValue(key, value, false)
+}
+
+// PartialOverrideSetting is like OverrideSetting but marks the override as mergeable.
+// Mergeable overrides accumulate with other mergeable overrides for the same key,
+// rather than shadowing them. This is used for namespace-constrained overrides on
+// shared test clusters, where parallel tests need their overrides to coexist.
+func (d *MemoryClient) PartialOverrideSetting(setting GenericSetting, value any) (cleanup func()) {
+	return d.PartialOverrideValue(setting.Key(), value)
+}
+
+// PartialOverrideValue is like OverrideValue but marks the override as mergeable.
+func (d *MemoryClient) PartialOverrideValue(key Key, value any) (cleanup func()) {
+	return d.overrideValue(key, value, true)
+}
+
+func (d *MemoryClient) overrideValue(key Key, value any, mergeable bool) (cleanup func()) {
 	d.lock.Lock()
 
 	var idx atomic.Int64
 	idx.Store(int64(len(d.overrides)))
 
-	d.overrides = append(d.overrides, kvpair{valid: true, key: key, value: value})
+	d.overrides = append(d.overrides, kvpair{valid: true, mergeable: mergeable, key: key, value: value})
 
 	newValue := d.getValueLocked(key)
 	changed := map[Key][]ConstrainedValue{key: newValue}

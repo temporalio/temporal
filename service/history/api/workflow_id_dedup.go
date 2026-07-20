@@ -37,6 +37,7 @@ func ResolveDuplicateWorkflowID(
 	currentState enumsspb.WorkflowExecutionState,
 	currentStatus enumspb.WorkflowExecutionStatus,
 	currentRequestIDs map[string]*persistencespb.RequestIDInfo,
+	currentFirstExecutionRunID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
 	currentWorkflowStartTime time.Time,
@@ -53,6 +54,7 @@ func ResolveDuplicateWorkflowID(
 			namespaceEntry,
 			newRunID,
 			currentRequestIDs,
+			currentFirstExecutionRunID,
 			wfIDConflictPolicy,
 			currentWorkflowStartTime,
 			parentExecutionInfo,
@@ -68,6 +70,7 @@ func ResolveDuplicateWorkflowID(
 			namespaceEntry,
 			currentStatus,
 			currentRequestIDs,
+			currentFirstExecutionRunID,
 			wfIDReusePolicy,
 			currentWorkflowStartTime,
 		)
@@ -86,6 +89,7 @@ func ResolveWorkflowIDConflictPolicy(
 	namespaceEntry *namespace.Namespace,
 	newRunID string,
 	currentRequestIDs map[string]*persistencespb.RequestIDInfo,
+	currentFirstExecutionRunID string,
 	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
 	currentWorkflowStartTime time.Time,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
@@ -94,7 +98,7 @@ func ResolveWorkflowIDConflictPolicy(
 	switch wfIDConflictPolicy { //nolint:exhaustive
 	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-		return nil, generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey)
+		return nil, generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey, currentFirstExecutionRunID)
 	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 		return nil, ErrUseCurrentExecution
 	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
@@ -112,6 +116,7 @@ func ResolveWorkflowIDReusePolicy(
 	namespaceEntry *namespace.Namespace,
 	currentStatus enumspb.WorkflowExecutionStatus,
 	currentRequestIDs map[string]*persistencespb.RequestIDInfo,
+	currentFirstExecutionRunID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	currentWorkflowStartTime time.Time,
 ) error {
@@ -121,11 +126,11 @@ func ResolveWorkflowIDReusePolicy(
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
 		if _, ok := consts.FailedWorkflowStatuses[currentStatus]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-			return generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey)
+			return generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey, currentFirstExecutionRunID)
 		}
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-		return generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey)
+		return generateWorkflowAlreadyStartedError(msg, currentRequestIDs, workflowKey, currentFirstExecutionRunID)
 	default:
 		return serviceerror.NewInternal(
 			fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy),
@@ -234,6 +239,7 @@ func generateWorkflowAlreadyStartedError(
 	errMsg string,
 	requestIDs map[string]*persistencespb.RequestIDInfo,
 	workflowKey definition.WorkflowKey,
+	firstExecutionRunID string,
 ) error {
 	createRequestID := ""
 	for requestID, info := range requestIDs {
@@ -241,19 +247,23 @@ func generateWorkflowAlreadyStartedError(
 			createRequestID = requestID
 		}
 	}
-	return serviceerror.NewWorkflowExecutionAlreadyStarted(
+	// firstExecutionRunID may be empty for records written before WorkflowExecutionState.first_execution_run_id
+	// existed. In that case return empty rather than guessing — callers must not assume RunId.
+	return serviceerror.NewWorkflowExecutionAlreadyStartedWithFirstExecutionRunId(
 		fmt.Sprintf(errMsg, workflowKey.WorkflowID, workflowKey.RunID),
 		createRequestID,
 		workflowKey.RunID,
+		firstExecutionRunID,
 	)
 }
 
-func MigrateWorkflowIdReusePolicyForRunningWorkflow(
+func MigrateWorkflowIDReusePolicyForRunningWorkflow(
 	wfIDReusePolicy *enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy *enumspb.WorkflowIdConflictPolicy,
 ) {
 	// workflow id reuse policy's Terminate-if-Running has been replaced by
 	// workflow id conflict policy's Terminate-Existing
+	//nolint:staticcheck // SA1019: intentional migration of deprecated policy
 	if *wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		*wfIDConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 

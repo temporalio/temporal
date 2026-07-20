@@ -6,6 +6,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -19,6 +21,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.ResetActivityResponse, retError error) {
 	request := req.GetFrontendRequest()
+
 	workflowKey := definition.NewWorkflowKey(
 		req.NamespaceId,
 		request.GetExecution().GetWorkflowId(),
@@ -41,6 +44,10 @@ func Invoke(
 					if ai.ActivityType.Name == activityType {
 						activityIDs = append(activityIDs, ai.ActivityId)
 					}
+				}
+			case *workflowservice.ResetActivityRequest_MatchAll:
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					activityIDs = append(activityIDs, ai.ActivityId)
 				}
 			}
 
@@ -70,6 +77,19 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	targetingMethod := "type"
+	if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_Id); ok {
+		targetingMethod = "id"
+	} else if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_MatchAll); ok {
+		targetingMethod = "match_all"
+	}
+	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(req.NamespaceId)); err == nil {
+		metrics.ActivityReset.With(shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.ActivityTargetingMethodTag(targetingMethod),
+		)).Record(1)
 	}
 
 	return &historyservice.ResetActivityResponse{}, nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -56,7 +57,15 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
+	// CHASM search attribute of type Text is not supported at this moment.
+	// SearchAttributeFieldText01 = newSearchAttributeFieldText(1)
+
+	// Predefined search attributes use their system field names as aliases.
+	// TaskQueue and ExecutionTime are system search attributes; a component may override the value
+	// written to their system column by registering the identity-mapped attribute below and emitting
+	// its own value from SearchAttributes(). See sadefs.IsChasmOverridableSystem.
 	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
+	SearchAttributeExecutionTime                        = newSearchAttributeDateTimeByField(sadefs.ExecutionTime)
 	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
 	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
 	SearchAttributeBuildIds                             = newSearchAttributeKeywordListByField(sadefs.BuildIds)
@@ -81,6 +90,7 @@ var (
 	_ SearchAttribute = (*SearchAttributeDouble)(nil)
 	_ SearchAttribute = (*SearchAttributeKeyword)(nil)
 	_ SearchAttribute = (*SearchAttributeKeywordList)(nil)
+	_ SearchAttribute = (*SearchAttributeText)(nil)
 
 	_ typedSearchAttribute[bool]      = (*SearchAttributeBool)(nil)
 	_ typedSearchAttribute[time.Time] = (*SearchAttributeDateTime)(nil)
@@ -88,6 +98,7 @@ var (
 	_ typedSearchAttribute[float64]   = (*SearchAttributeDouble)(nil)
 	_ typedSearchAttribute[string]    = (*SearchAttributeKeyword)(nil)
 	_ typedSearchAttribute[[]string]  = (*SearchAttributeKeywordList)(nil)
+	_ typedSearchAttribute[string]    = (*SearchAttributeText)(nil)
 )
 
 type (
@@ -188,6 +199,17 @@ type SearchAttributeFieldKeywordList struct {
 func newSearchAttributeFieldKeywordList(index int) SearchAttributeFieldKeywordList {
 	return SearchAttributeFieldKeywordList{
 		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, index),
+	}
+}
+
+// SearchAttributeFieldText is a search attribute field for a text value.
+type SearchAttributeFieldText struct {
+	field string
+}
+
+func newSearchAttributeFieldText(index int) SearchAttributeFieldText {
+	return SearchAttributeFieldText{
+		field: resolveFieldName(enumspb.INDEXED_VALUE_TYPE_TEXT, index),
 	}
 }
 
@@ -369,7 +391,7 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
 		Field: s.field,
-		Value: VisibilityValueString(value),
+		Value: VisibilityValueKeyword(value),
 	}
 }
 
@@ -412,6 +434,43 @@ func (s SearchAttributeKeywordList) Value(value []string) SearchAttributeKeyValu
 
 func (s SearchAttributeKeywordList) typeMarker(_ []string) {}
 
+// SearchAttributeText is a search attribute for a text value.
+type SearchAttributeText struct {
+	searchAttributeDefinition
+}
+
+// NewSearchAttributeText creates a new text search attribute given a predefined chasm field
+func NewSearchAttributeText(alias string, textField SearchAttributeFieldText) SearchAttributeText {
+	return SearchAttributeText{
+		searchAttributeDefinition: searchAttributeDefinition{
+			alias:     alias,
+			field:     textField.field,
+			valueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
+		},
+	}
+}
+
+func newSearchAttributeTextByField(field string) SearchAttributeText {
+	return SearchAttributeText{
+		searchAttributeDefinition: searchAttributeDefinition{
+			alias:     field,
+			field:     field,
+			valueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
+		},
+	}
+}
+
+// Value sets the string value of the search attribute.
+func (s SearchAttributeText) Value(value string) SearchAttributeKeyValue {
+	return SearchAttributeKeyValue{
+		Alias: s.alias,
+		Field: s.field,
+		Value: VisibilityValueText(value),
+	}
+}
+
+func (s SearchAttributeText) typeMarker(_ string) {}
+
 // SearchAttributesMap wraps search attribute values with type-safe access.
 type SearchAttributesMap struct {
 	values map[string]VisibilityValue
@@ -420,6 +479,26 @@ type SearchAttributesMap struct {
 // NewSearchAttributesMap creates a new SearchAttributeMap from raw values.
 func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
 	return SearchAttributesMap{values: values}
+}
+
+// newSearchAttributesMapFromProto creates a new SearchAttributesMap from commonpb.SearchAttributes.
+func newSearchAttributesMapFromProto(
+	searchAttributes *commonpb.SearchAttributes,
+) (SearchAttributesMap, error) {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
+		return SearchAttributesMap{}, nil
+	}
+	result := SearchAttributesMap{
+		values: make(map[string]VisibilityValue),
+	}
+	for saName, saPayload := range searchAttributes.IndexedFields {
+		value, err := visibilityValueFromPayload(saPayload)
+		if err != nil {
+			return SearchAttributesMap{}, err
+		}
+		result.values[saName] = value
+	}
+	return result, nil
 }
 
 // SearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.

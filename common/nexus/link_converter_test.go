@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package nexus_test
 
 import (
@@ -33,8 +11,123 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/testing/protocmp"
 )
+
+func TestConvertLinkNexusOperationToNexusLink(t *testing.T) {
+	input := &commonpb.Link_NexusOperation{
+		Namespace:   "ns",
+		OperationId: "op-id",
+		RunId:       "run-id",
+	}
+
+	output := commonnexus.ConvertLinkNexusOperationToNexusLink(input)
+	require.Equal(t, nexus.Link{
+		URL: &url.URL{
+			Scheme:  "temporal",
+			Path:    "/namespaces/ns/nexus-operations/op-id/run-id/details",
+			RawPath: "/namespaces/ns/nexus-operations/op-id/run-id/details",
+		},
+		Type: "temporal.api.common.v1.Link.NexusOperation",
+	}, output)
+	require.Equal(t, "temporal:///namespaces/ns/nexus-operations/op-id/run-id/details", output.URL.String())
+}
+
+func TestConvertLinkActivityToNexusLink(t *testing.T) {
+	input := &commonpb.Link_Activity{
+		Namespace:  "ns",
+		ActivityId: "act-id",
+		RunId:      "run-id",
+	}
+
+	output := commonnexus.ConvertLinkActivityToNexusLink(input)
+	require.Equal(t, nexus.Link{
+		URL: &url.URL{
+			Scheme:  "temporal",
+			Path:    "/namespaces/ns/activities/act-id/run-id/details",
+			RawPath: "/namespaces/ns/activities/act-id/run-id/details",
+		},
+		Type: "temporal.api.common.v1.Link.Activity",
+	}, output)
+	require.Equal(t, "temporal:///namespaces/ns/activities/act-id/run-id/details", output.URL.String())
+}
+
+func TestConvertNexusLinkToLinkActivity(t *testing.T) {
+	type testcase struct {
+		name     string
+		input    nexus.Link
+		expected *commonpb.Link_Activity
+		errMsg   string
+	}
+
+	cases := []testcase{
+		{
+			name: "valid",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme: "temporal",
+					Path:   "/namespaces/ns/activities/act-id/run-id/details",
+				},
+				Type: "temporal.api.common.v1.Link.Activity",
+			},
+			expected: &commonpb.Link_Activity{
+				Namespace:  "ns",
+				ActivityId: "act-id",
+				RunId:      "run-id",
+			},
+		},
+		{
+			name: "round-trip with escaped path",
+			input: commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
+				Namespace:  "ns/with/slash",
+				ActivityId: "act id with space",
+				RunId:      "run-id",
+			}),
+			expected: &commonpb.Link_Activity{
+				Namespace:  "ns/with/slash",
+				ActivityId: "act id with space",
+				RunId:      "run-id",
+			},
+		},
+		{
+			name: "wrong type",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/activities/act-id"},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			errMsg: "cannot parse link type",
+		},
+		{
+			name: "invalid scheme",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "http", Path: "/namespaces/ns/activities/act-id"},
+				Type: "temporal.api.common.v1.Link.Activity",
+			},
+			errMsg: "invalid scheme",
+		},
+		{
+			name: "malformed path",
+			input: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/foo/act-id"},
+				Type: "temporal.api.common.v1.Link.Activity",
+			},
+			errMsg: "malformed URL path",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := commonnexus.ConvertNexusLinkToLinkActivity(tc.input)
+			if tc.errMsg != "" {
+				require.ErrorContains(t, err, tc.errMsg)
+				return
+			}
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.expected, out)
+		})
+	}
+}
 
 func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 	type testcase struct {

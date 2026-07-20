@@ -10,9 +10,11 @@
 package ndc
 
 import (
+	context "context"
 	reflect "reflect"
 
 	interfaces "go.temporal.io/server/service/history/interfaces"
+	workflow "go.temporal.io/server/service/history/workflow"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -128,17 +130,17 @@ func (mr *MockWorkflowMockRecorder) HappensAfter(that any) *gomock.Call {
 }
 
 // Revive mocks base method.
-func (m *MockWorkflow) Revive() error {
+func (m *MockWorkflow) Revive(ctx context.Context, taskRefresher workflow.TaskRefresher) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Revive")
+	ret := m.ctrl.Call(m, "Revive", ctx, taskRefresher)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Revive indicates an expected call of Revive.
-func (mr *MockWorkflowMockRecorder) Revive() *gomock.Call {
+func (mr *MockWorkflowMockRecorder) Revive(ctx, taskRefresher any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Revive", reflect.TypeOf((*MockWorkflow)(nil).Revive))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Revive", reflect.TypeOf((*MockWorkflow)(nil).Revive), ctx, taskRefresher)
 }
 
 // SuppressBy mocks base method.

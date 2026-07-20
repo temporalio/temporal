@@ -1,0 +1,14 @@
+<testsuites tests="1" failures="1">
+    <testsuite name="ALERTS" tests="1" failures="1" errors="0" id="0" time="">
+        <testcase name="DATA RACE: Data race detected in TestFoo">
+            <failure message="DATA RACE" type="DATA RACE"><![CDATA[WARNING: DATA RACE
+Write at 0x00c000123456 by goroutine 7:
+  main.TestFoo()
+      /path/to/foo_test.go:42 +0x123
+
+Previous read at 0x00c000123456 by goroutine 8:
+  main.TestFoo()
+      /path/to/foo_test.go:43 +0x456]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

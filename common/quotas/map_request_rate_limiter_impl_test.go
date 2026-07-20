@@ -1,11 +1,13 @@
 package quotas
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/await"
 )
 
 type (
@@ -80,6 +82,97 @@ func (s *mapRequestRateLimiterSuite) TestCleanup() {
 
 	// Both should be evicted
 	s.Empty(rateLimiter.rateLimiters)
+}
+
+func (s *mapRequestRateLimiterSuite) TestLazyCleanupOnAccess() {
+	rateLimiter := NewMapRequestRateLimiter(
+		func(_ Request) RequestRateLimiter { return NoopRequestRateLimiter },
+		namespaceRequestRateLimiterKeyFn,
+	)
+	rateLimiter.ttlNano = int64(50 * time.Millisecond)
+	rateLimiter.cleanupTicker.Reset(time.Millisecond)
+
+	now := time.Now()
+	req1 := Request{Caller: "namespace1"}
+	req2 := Request{Caller: "namespace2"}
+
+	rateLimiter.Allow(now, req1)
+	s.Len(rateLimiter.rateLimiters, 1)
+
+	// Once a ticker tick is available, an access triggers the async sweep, which
+	// evicts req1 (past its TTL) and keeps the just-accessed req2.
+	await.RequireTrue(s.T(), func() bool {
+		rateLimiter.Allow(now.Add(time.Second), req2)
+		rateLimiter.RLock()
+		defer rateLimiter.RUnlock()
+		_, has1 := rateLimiter.rateLimiters["namespace1"]
+		_, has2 := rateLimiter.rateLimiters["namespace2"]
+		return !has1 && has2
+	}, time.Second, time.Millisecond)
+}
+
+func (s *mapRequestRateLimiterSuite) TestCleanupThrottledByInterval() {
+	rateLimiter := NewMapRequestRateLimiter(
+		func(_ Request) RequestRateLimiter { return NoopRequestRateLimiter },
+		namespaceRequestRateLimiterKeyFn,
+	)
+	rateLimiter.ttlNano = int64(10 * time.Millisecond)
+	// The default cleanup ticker (1h) will not fire during the test.
+
+	now := time.Now()
+	req1 := Request{Caller: "namespace1"}
+	req2 := Request{Caller: "namespace2"}
+
+	rateLimiter.Allow(now, req1)
+	// req1 is now past its TTL, but no ticker tick has fired, so the next access
+	// must not evict it.
+	rateLimiter.Allow(now.Add(50*time.Millisecond), req2)
+	s.Len(rateLimiter.rateLimiters, 2)
+}
+
+// TestConcurrentAccessAndCleanup races the access path against cleanup to guard
+// against data races; run with -race. The default ticker (1h) will not fire, so
+// only the explicit cleanup goroutine below sweeps.
+func (s *mapRequestRateLimiterSuite) TestConcurrentAccessAndCleanup() {
+	rateLimiter := NewMapRequestRateLimiter(
+		func(_ Request) RequestRateLimiter { return NoopRequestRateLimiter },
+		func(req Request) int { return req.Token },
+	)
+	rateLimiter.ttlNano = int64(time.Millisecond)
+
+	base := time.Now()
+
+	const (
+		workers = 8
+		iters   = 5000
+		keys    = 16
+	)
+	stop := make(chan struct{})
+	var cleanerWG sync.WaitGroup
+	cleanerWG.Go(func() {
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			rateLimiter.cleanup(base.Add(time.Duration(i) * time.Millisecond))
+		}
+	})
+
+	var accessWG sync.WaitGroup
+	for w := range workers {
+		accessWG.Go(func() {
+			for i := range iters {
+				req := Request{Token: (w + i) % keys}
+				rateLimiter.Allow(base.Add(time.Duration(i)*time.Microsecond), req)
+			}
+		})
+	}
+	accessWG.Wait()
+
+	close(stop)
+	cleanerWG.Wait()
 }
 
 func (s *mapRequestRateLimiterSuite) TestAccessRefreshesTTL() {

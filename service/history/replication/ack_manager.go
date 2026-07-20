@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -386,7 +385,7 @@ func (p *ackMgrImpl) taskIDsRange(
 
 	p.Lock()
 	defer p.Unlock()
-	defer func() { p.maxTaskID = util.Ptr(maxTaskID) }()
+	defer func() { p.maxTaskID = new(maxTaskID) }()
 
 	now := p.shardContext.GetTimeSource().Now()
 	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
@@ -444,6 +443,8 @@ func (p *ackMgrImpl) ConvertTask(
 			task,
 			p.workflowCache,
 		)
+	case *tasks.DeleteExecutionReplicationTask:
+		return convertDeleteExecutionReplicationTask(task)
 	default:
 		return nil, errUnknownReplicationTask
 	}

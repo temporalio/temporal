@@ -124,11 +124,13 @@ func (s *registryWatchSuite) newRegistryWithResolverFactory(
 	return nsregistry.NewRegistry(
 		s.regPersistence,
 		true,
+		"active",
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		dynamicconfig.GetBoolPropertyFn(false),
 		s.captureHandler,
 		s.logger,
 		resolverFactory,
+		nsregistry.DefaultNamespaceStateChanged,
 	)
 }
 
@@ -157,6 +159,40 @@ func (s *registryWatchSuite) newNamespaceResponse(
 				Clusters:          []string{activeCluster},
 			},
 		},
+		NotificationVersion: notificationVersion,
+	}
+}
+
+func (s *registryWatchSuite) newGlobalNamespaceResponse(
+	id namespace.ID,
+	name string,
+	activeCluster string,
+	notificationVersion int64,
+) *persistence.GetNamespaceResponse {
+	return &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    id.String(),
+				Name:  name,
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+				Data:  make(map[string]string),
+			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(int32(1)),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: activeCluster,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			FailoverVersion: 1,
+		},
+		IsGlobalNamespace:   true,
 		NotificationVersion: notificationVersion,
 	}
 }
@@ -197,10 +233,10 @@ func (s *registryWatchSuite) waitForCallback(ch <-chan struct{}, description str
 // create, update, and delete events received over the watch channel.
 func (s *registryWatchSuite) TestWatchEvents() {
 	ns1ID := namespace.NewID()
-	ns1Record := s.newNamespaceResponse(ns1ID, "initial-namespace", cluster.TestCurrentClusterName, 1)
+	ns1Record := s.newGlobalNamespaceResponse(ns1ID, "initial-namespace", cluster.TestCurrentClusterName, 1)
 
 	ns2ID := namespace.NewID()
-	ns2Record := s.newNamespaceResponse(ns2ID, "created-via-watch", cluster.TestCurrentClusterName, 2)
+	ns2Record := s.newGlobalNamespaceResponse(ns2ID, "created-via-watch", cluster.TestCurrentClusterName, 2)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, ns1Record)
@@ -217,13 +253,14 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	ns, err := s.registry.GetNamespace("initial-namespace")
 	s.NoError(err)
 	s.Equal(ns1ID, ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	events := tracker.getEvents()
 	s.Len(events, 1)
 	s.Equal("initial-namespace", events[0].ns.Name().String())
 	s.Equal(int64(1), events[0].ns.NotificationVersion())
 	s.False(events[0].deleted)
+	s.InEpsilon(float64(1), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][0].Value, 0.01)
 
 	// --- Create event ---
 	watchCh <- &persistence.NamespaceWatchEvent{
@@ -244,9 +281,10 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.Len(events, 2)
 	s.Equal("created-via-watch", events[1].ns.Name().String())
 	s.False(events[1].deleted)
+	s.InEpsilon(float64(2), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][1].Value, 0.01)
 
 	// --- Update event (change active cluster to trigger state change callback) ---
-	ns1UpdatedRecord := s.newNamespaceResponse(ns1ID, "initial-namespace", cluster.TestAlternativeClusterName, 3)
+	ns1UpdatedRecord := s.newGlobalNamespaceResponse(ns1ID, "initial-namespace", cluster.TestAlternativeClusterName, 3)
 
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
@@ -257,18 +295,19 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	ns, err = s.registry.GetNamespace("initial-namespace")
 	s.NoError(err)
 	s.Equal(ns1ID, ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	ns, err = s.registry.GetNamespaceByID(ns1ID)
 	s.NoError(err)
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	events = tracker.getEvents()
 	s.Len(events, 3)
 	s.Equal("initial-namespace", events[2].ns.Name().String())
 	s.Equal(int64(3), events[2].ns.NotificationVersion())
-	s.Equal(cluster.TestAlternativeClusterName, events[2].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[2].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[2].deleted)
+	s.InEpsilon(float64(2), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][2].Value, 0.01) // update doesn't change count
 
 	// --- Delete event ---
 	watchCh <- &persistence.NamespaceWatchEvent{
@@ -301,14 +340,16 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.True(events[3].deleted)
 
 	// Verify refresh latency metric was recorded (1 initial refresh).
-	s.Len(s.capture.Snapshot()[metrics.NamespaceRegistryRefreshLatency.Name()], 1)
+	snap := s.capture.Snapshot()
+	s.Len(snap[metrics.NamespaceRegistryRefreshLatency.Name()], 1)
+	s.InEpsilon(float64(1), snap[metrics.TotalNamespaces.Name()][3].Value, 0.01) // after delete: 1 namespace remains
 }
 
 // TestWatchStaleUpdateIgnored verifies that update events with a NotificationVersion
 // less than or equal to the cached version are ignored.
 func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
+	nsRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 3)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -323,10 +364,10 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 
 	ns, err := s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
-	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	// Send valid update (NotificationVersion 3), changing cluster to trigger callback
-	validRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 3)
+	validRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 3)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: validRecord,
@@ -335,11 +376,11 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 
 	ns, err = s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	// Send stale update (NotificationVersion 1 < current version 3)
 	// Uses different retention as a marker to verify it wasn't applied
-	staleRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	staleRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 	staleRecord.Namespace.Config.Retention = timestamp.DurationFromDays(int32(99))
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
@@ -347,7 +388,7 @@ func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
 	}
 
 	// Send another valid update to flush the channel and verify stale was skipped
-	finalRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 4)
+	finalRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 4)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: finalRecord,
@@ -624,7 +665,7 @@ func (s *registryWatchSuite) TestWatchMultipleCallbacks() {
 // (per namespaceStateChanged) don't trigger callbacks.
 func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 2)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -644,7 +685,7 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 	s.Equal(24*time.Hour, ns.Retention())
 
 	// Send update that only changes retention (not a "state" field)
-	updatedRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
+	updatedRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 2)
 	updatedRecord.Namespace.Config.Retention = timestamp.DurationFromDays(int32(7))
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
@@ -652,7 +693,7 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 	}
 
 	// Send another update that does change state (active cluster) to flush the channel
-	stateChangeRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 3)
+	stateChangeRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 3)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeUpdate,
 		Response: stateChangeRecord,
@@ -669,12 +710,12 @@ func (s *registryWatchSuite) TestWatchUpdateWithoutStateChange() {
 
 	// First event: initial namespace with original cluster
 	s.Equal(nsID, events[0].ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[0].deleted)
 
 	// Second event: state change with new cluster (the retention-only update was skipped)
 	s.Equal(nsID, events[1].ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[1].deleted)
 }
 
@@ -996,6 +1037,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 
 	// Verify no callbacks fired (no namespaces)
 	s.Equal(int32(0), tracker.getCount())
+	s.Zero(s.capture.Snapshot()[metrics.TotalNamespaces.Name()][0].Value)
 
 	// Verify GetNamespace returns not found
 	_, err := s.registry.GetNamespaceWithOptions(
@@ -1019,6 +1061,7 @@ func (s *registryWatchSuite) TestWatchEmptyInitialRefresh() {
 	ns, err := s.registry.GetNamespace("new-namespace")
 	s.NoError(err)
 	s.Equal(nsID, ns.ID())
+	s.InEpsilon(float64(1), s.capture.Snapshot()[metrics.TotalNamespaces.Name()][1].Value, 0.01)
 }
 
 // TestWatchUpdateForUnknownNamespace verifies that an update event for a namespace
@@ -1065,7 +1108,7 @@ func (s *registryWatchSuite) TestWatchUpdateForUnknownNamespace() {
 // namespace updates it if the version is higher.
 func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	nsID := namespace.NewID()
-	nsRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
+	nsRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestCurrentClusterName, 1)
 
 	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
 	s.expectWatchAndList(watchCh, nsRecord)
@@ -1079,7 +1122,7 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	s.waitForCallback(tracker.ch, "initial refresh")
 
 	// Send Create event with higher version (changing cluster to trigger callback)
-	updatedRecord := s.newNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 2)
+	updatedRecord := s.newGlobalNamespaceResponse(nsID, "test-namespace", cluster.TestAlternativeClusterName, 2)
 	watchCh <- &persistence.NamespaceWatchEvent{
 		Type:     persistence.NamespaceWatchEventTypeCreate,
 		Response: updatedRecord,
@@ -1090,7 +1133,7 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	ns, err := s.registry.GetNamespace("test-namespace")
 	s.NoError(err)
 	s.Equal(int64(2), ns.NotificationVersion())
-	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, ns.ActiveClusterName(namespace.RoutingKey{}))
 
 	s.Equal(int32(2), tracker.getCount())
 
@@ -1099,11 +1142,11 @@ func (s *registryWatchSuite) TestWatchCreateForExistingNamespace() {
 	s.Len(events, 2)
 	// Initial refresh
 	s.Equal(nsID, events[0].ns.ID())
-	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestCurrentClusterName, events[0].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[0].deleted)
 	// Create event (acts as update)
 	s.Equal(nsID, events[1].ns.ID())
-	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.EmptyBusinessID))
+	s.Equal(cluster.TestAlternativeClusterName, events[1].ns.ActiveClusterName(namespace.RoutingKey{}))
 	s.False(events[1].deleted)
 }
 

@@ -393,7 +393,7 @@ func shouldIncludeTransientOrSpeculativeTasks(
 	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 ) bool {
 	return len(tranOrSpecEvents.GetHistorySuffix()) > 0 &&
-		clientSupportsTranOrSpecEvents(ctx) &&
+		ClientSupportsTranOrSpecEvents(ctx) &&
 		areValidTransientOrSpecEvents(tranOrSpecEvents)
 }
 
@@ -421,10 +421,10 @@ func areValidTransientOrSpecEvents(tranOrSpecEvents *historyspb.TransientWorkflo
 	return true
 }
 
-// clientSupportsTranOrSpecEvents detects if client supports transient events
+// ClientSupportsTranOrSpecEvents detects if client supports transient events
 // Default to include transient events for clients, only CLI and UI are
 // explicitly excluded for backward compatability
-func clientSupportsTranOrSpecEvents(ctx context.Context) bool {
+func ClientSupportsTranOrSpecEvents(ctx context.Context) bool {
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 
 	switch clientName {

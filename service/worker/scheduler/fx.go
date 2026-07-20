@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -48,20 +49,24 @@ var VisibilityListQueryChasm = fmt.Sprintf(
 
 type (
 	workerComponent struct {
-		specBuilder              *SpecBuilder // workflow dep
-		activityDeps             activityDeps
-		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
-		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		specBuilder                  *SpecBuilder // workflow dep
+		activityDeps                 activityDeps
+		enabledForNs                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableCHASMMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
+		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		HistoryClient  resource.HistoryClient
-		FrontendClient workflowservice.WorkflowServiceClient
+		MetricsHandler  metrics.Handler
+		Logger          log.Logger
+		HistoryClient   resource.HistoryClient
+		FrontendClient  workflowservice.WorkflowServiceClient
+		SchedulerClient schedulerpb.SchedulerServiceClient
 	}
 
 	fxResult struct {
@@ -82,12 +87,15 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:              specBuilder,
-			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
-			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
-			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
+			specBuilder:                  specBuilder,
+			activityDeps:                 params,
+			enabledForNs:                 dynamicconfig.WorkerEnableScheduler.Get(dc),
+			enableCHASMMigration:         dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
+			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
+			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
+			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
+			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
+			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
 	}
 }
@@ -99,8 +107,17 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
+	nsName := ns.Name().String()
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
+		key := fmt.Appendf(nil, "%s\x00%s", nsName, args.State.ScheduleId)
+		enableMigration := func() bool {
+			return s.enableCHASMMigration(nsName) &&
+				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
+		}
+		migrateWithRunningWorkflows := func() bool {
+			return s.migrateWithRunningWorkflows(nsName)
+		}
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, migrateWithRunningWorkflows)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 

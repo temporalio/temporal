@@ -13,8 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	common "go.temporal.io/api/common/v1"
-	chasm "go.temporal.io/server/chasm"
+	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -70,10 +69,10 @@ func (mr *MockVisibilityManagerMockRecorder) Close() *gomock.Call {
 }
 
 // CountChasmExecutions mocks base method.
-func (m *MockVisibilityManager) CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error) {
+func (m *MockVisibilityManager) CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
-	ret0, _ := ret[0].(*chasm.CountExecutionsResponse)
+	ret0, _ := ret[0].(*visibilityservice.CountChasmExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -185,10 +184,10 @@ func (mr *MockVisibilityManagerMockRecorder) HasStoreName(stName any) *gomock.Ca
 }
 
 // ListChasmExecutions mocks base method.
-func (m *MockVisibilityManager) ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*common.Payload], error) {
+func (m *MockVisibilityManager) ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
-	ret0, _ := ret[0].(*chasm.ListExecutionsResponse[*common.Payload])
+	ret0, _ := ret[0].(*visibilityservice.ListChasmExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

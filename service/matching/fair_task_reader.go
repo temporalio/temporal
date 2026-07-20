@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"time"
 
@@ -32,10 +31,11 @@ type (
 
 		lock sync.Mutex
 
-		readPending  bool
-		backoffTimer *time.Timer
-		retrier      backoff.Retrier
-		addRetries   *semaphore.Weighted
+		readPending     bool
+		backoffTimer    *time.Timer
+		retrier         backoff.Retrier
+		throttleRetrier backoff.Retrier
+		addRetries      *semaphore.Weighted
 
 		backlogAge       backlogAgeTracker
 		outstandingTasks treemap.Map // fairLevel -> *internalTask if unacked, or nil if acked
@@ -48,7 +48,7 @@ type (
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
 		// evicted before it could be used to advance ackLevel.
-		evictedAcks *btree.BTreeG[fairLevel]
+		evictedAcks btree.BTreeG[fairLevel]
 
 		// Hold tasks written while a read is pending so we make sure to account for them in
 		// our read level.
@@ -90,7 +90,15 @@ func newFairTaskReader(
 		subqueue:   subqueue,
 		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
-			common.CreateReadTaskRetryPolicy(),
+			backoff.NewExponentialRetryPolicy(50*time.Millisecond).
+				WithMaximumInterval(10*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
+			clock.NewRealTimeSource(),
+		),
+		throttleRetrier: backoff.NewRetrier(
+			backoff.NewExponentialRetryPolicy(2*time.Second).
+				WithMaximumInterval(30*time.Second).
+				WithExpirationInterval(backoff.NoInterval),
 			clock.NewRealTimeSource(),
 		),
 		backlogAge: newBacklogAgeTracker(),
@@ -100,7 +108,7 @@ func newFairTaskReader(
 		outstandingTasks: *newFairLevelTreeMap(),
 		readLevel:        initialAckLevel,
 		ackLevel:         initialAckLevel,
-		evictedAcks:      btree.NewBTreeG(fairLevel.less),
+		evictedAcks:      *btree.NewBTreeGOptions(fairLevel.less, btree.Options{NoLocks: true}),
 
 		// gc state
 		lastGCTime: time.Now(),
@@ -120,6 +128,8 @@ func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+
 	tr.lock.Lock()
 
 	// We might have a race where mergeTasks tries to read a task from matcher (because new tasks
@@ -237,6 +247,10 @@ func (tr *fairTaskReader) readTasksImpl() {
 		tr.advanceAckLevelLocked()
 	}
 
+	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
+	// was a no-op. Re-check now that readPending is false to avoid getting stuck.
+	tr.maybeReadTasksLocked()
+
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
@@ -254,13 +268,14 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		if tr.backlogMgr.signalIfFatal(err) || common.IsContextCanceledErr(err) {
 			// don't retry
 		} else if common.IsResourceExhausted(err) {
-			tr.retryReadAfter(taskReaderThrottleRetryDelay)
+			tr.retryReadAfter(tr.throttleRetrier.NextBackOff(err))
 		} else {
 			tr.retryReadAfter(tr.retrier.NextBackOff(err))
 		}
 		return err
 	}
 	tr.retrier.Reset()
+	tr.throttleRetrier.Reset()
 
 	// If we got less than we asked for, we know we hit the end.
 	// If there was a concurrent write such that we incorrectly think we hit the end here,
@@ -270,20 +285,11 @@ func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) er
 		mode = mergeReadToEnd
 	}
 
-	// filter out expired
-	// TODO(fairness): if we have _only_ expired tasks, and we filter them out here, we won't move
-	// the ack level and delete them. maybe we should put them in outstandingTasks as pre-acked.
-	tasks := slices.DeleteFunc(res.Tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
-		if IsTaskExpired(t) {
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
-			return true
-		}
-		return false
-	})
-
 	// Note: even if (especially if) len(tasks) == 0, we should go through the mergeTasks logic
-	// to update atEnd and the backlog size estimate.
-	tr.mergeTasks(tasks, mode)
+	// to update atEnd and the backlog size estimate. Expired tasks are passed through to
+	// mergeTasksLocked where they'll be added as pre-acked (nil) entries so they advance the
+	// ack level and get GC'd.
+	tr.mergeTasks(res.Tasks, mode)
 
 	return nil
 }
@@ -297,7 +303,7 @@ func (tr *fairTaskReader) addTaskToMatcher(task *internalTask) {
 	}
 
 	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(nil, false)
+		task.finish(taskFinishResult{})
 	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
@@ -346,12 +352,12 @@ func (tr *fairTaskReader) retryAddAfterError(task *internalTask) {
 		tr.backlogMgr.tqCtx,
 		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 				return nil
 			}
 			err := tr.backlogMgr.addSpooledTask(task)
 			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil, false)
+				task.finish(taskFinishResult{})
 			} else if retry {
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1)
 				return err
@@ -379,6 +385,18 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	}
 
 	newTasks := tr.mergeTasksLocked(tasks, mode)
+
+	// Detect stuck reader: no tasks in memory, not at end, no read goroutine running, no
+	// retry pending. In this state, written tasks go only to DB (filtered above readLevel)
+	// and nothing will trigger a read. The root cause is still under investigation.
+	// TODO: remove this once the root cause is found and fixed.
+	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
+		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
+		tr.backlogMgr.throttledLogger.Warn("fair task reader stuck: atEnd=false, loadedTasks=0, no read pending")
+		if tr.backlogMgr.config.ForceReadTasksOnWrite() {
+			tr.maybeReadTasksLocked()
+		}
+	}
 
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
@@ -412,10 +430,10 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// If write/read race or we have to re-read a range, we may read something we had
 			// already added to the matcher or acked. Ignore tasks we already have.
 			continue
-		} else if _, have := tr.evictedAcks.Delete(level); have {
-			// This task was already acked but the ack was evicted. Skip it.
-			continue
 		}
+		// Note: tasks whose acks were evicted (present in evictedAcks) flow through here as
+		// regular tasks and are turned back into acks in the final loop below, the same way
+		// expired tasks are handled.
 		merged.Put(level, t)
 	}
 
@@ -477,17 +495,41 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.evictedAcks.PopMax()
 	}
 
-	internalTasks := make([]*internalTask, len(tasks))
-	for i, t := range tasks {
+	internalTasks := make([]*internalTask, 0, len(tasks))
+	for _, t := range tasks {
 		level := fairLevelFromAllocatedTask(t)
-		internalTasks[i] = newInternalTaskFromBacklog(t, tr.completeTask)
-		tr.backlogMgr.setPriority(internalTasks[i])
+		if _, have := tr.evictedAcks.Delete(level); have {
+			// This task was already acked, but its ack was evicted from memory before it could
+			// advance the ack level, and now we've re-read it. Add it back as a pre-acked (nil)
+			// entry (like an expired task) so it advances the ack level, instead of re-delivering
+			// it to the matcher. We remove it from the cache since it's tracked in
+			// outstandingTasks again; if it later gets evicted above the read level, it'll be
+			// re-cached then. Note its level is <= readLevel here (it made the in-memory cut), so
+			// the eviction above won't have touched it.
+			tr.outstandingTasks.Put(level, nil)
+			continue
+		}
+		if IsTaskExpired(t) {
+			// Expired tasks are added as pre-acked (nil) so they participate in
+			// readLevel calculation above and advance ackLevel + get GC'd below.
+			tr.outstandingTasks.Put(level, nil)
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
+			continue
+		}
+		task := newInternalTaskFromBacklog(t, tr.completeTask)
+		tr.backlogMgr.setPriority(task)
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
-		tr.outstandingTasks.Put(level, internalTasks[i])
+		tr.outstandingTasks.Put(level, task)
 		tr.loadedTasks++
 		tr.backlogAge.record(t.Data.CreateTime, 1)
+		internalTasks = append(internalTasks, task)
 	}
+
+	// Advance the ack level past any pre-acked (nil) entries we just added: expired tasks and
+	// acks we re-inserted from the evicted-ack cache. Harmless if we added none.
+	tr.advanceAckLevelLocked()
 
 	// Update atEnd:
 	// If we did a read and didn't get to the end, we can't possibly be at the end.

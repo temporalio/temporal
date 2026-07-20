@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -121,6 +122,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(gomock.Any()).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Gauge(gomock.Any()).Return(metrics.NoopGaugeMetricFunc).AnyTimes()
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(remoteCluster).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).
 		Return(namespace.Name(mockedNamespace), nil).AnyTimes()
@@ -128,20 +130,20 @@ func (s *activitiesSuite) SetupTest() {
 		Return(&testNamespace, nil).AnyTimes()
 
 	chasmRegistry := chasm.NewRegistry(s.logger)
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	s.a = &activities{
-		namespaceRegistry:                s.mockNamespaceRegistry,
+		NamespaceRegistry:                s.mockNamespaceRegistry,
 		namespaceReplicationQueue:        s.mockNamespaceReplicationQueue,
 		clientFactory:                    s.mockClientFactory,
 		clientBean:                       s.mockClientBean,
 		taskManager:                      s.mockTaskManager,
 		frontendClient:                   s.mockFrontendClient,
 		adminClient:                      s.mockAdminClient,
-		historyClient:                    s.mockHistoryClient,
-		logger:                           s.logger,
-		metricsHandler:                   s.mockMetricsHandler,
+		HistoryClient:                    s.mockHistoryClient,
+		Logger:                           s.logger,
+		MetricsHandler:                   s.mockMetricsHandler,
 		forceReplicationMetricsHandler:   s.mockMetricsHandler,
 		generateMigrationTaskViaFrontend: dynamicconfig.GetBoolPropertyFn(false),
 		enableHistoryRateLimiter:         dynamicconfig.GetBoolPropertyFn(false),
@@ -181,6 +183,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 
@@ -202,6 +205,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 				RunId:      execution2.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution2.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(r.resp, r.err).Times(1)
 	}
@@ -272,6 +276,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -328,6 +333,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).AnyTimes()
 
@@ -384,6 +390,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 	result, err := s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[0])
@@ -398,6 +405,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution2.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution2.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, serviceerror.NewNotFound("")).Times(1)
 
@@ -412,6 +420,23 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 	})).Return(completeState, nil).AnyTimes()
 
 	result, err = s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[1])
+	s.NoError(err)
+	s.False(result.isVerified())
+
+	// Test busy workflow — treated as not-yet-replicated, not an error
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace: mockedNamespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution1.BusinessID,
+			RunId:      execution1.RunID,
+		},
+		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
+		SkipForceReload: true,
+	})).Return(nil, &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+	}).Times(1)
+	result, err = s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[0])
 	s.NoError(err)
 	s.False(result.isVerified())
 }
@@ -446,6 +471,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 		case executionNotfound:
@@ -456,6 +482,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 			break Loop
@@ -467,6 +494,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewInternal("")).Times(1)
 		}
@@ -616,6 +644,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -661,6 +690,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -880,4 +910,95 @@ func (s *activitiesSuite) TestWaitCatchUp() {
 
 	_, err := env.ExecuteActivity(s.a.WaitCatchup, request)
 	s.NoError(err)
+}
+
+// Guards the uninitialized-ack-watermark fix: production-shaped garbage input (shard has
+// produced 225M tasks but the remote reports no ack: AckedTaskId == 0, nil visibility time)
+// must be reported not-ready and NOT yield the bogus now-since-1970 lag values.
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWatermark() {
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          1,
+		MaxReplicationTaskId:             225443839,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             0,
+		AckedTaskVisibilityTime: nil,
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.False(status.isReady)
+	s.Zero(status.laggingTasks) // must NOT be maxTaskId - 0
+	s.Zero(status.timeLag)      // must NOT be now - epoch(1970)
+}
+
+// Same condition but with an explicit epoch (1970) visibility time rather than nil.
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_UninitializedAckWatermarkEpoch() {
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          2,
+		MaxReplicationTaskId:             5000,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             0,
+		AckedTaskVisibilityTime: timestamppb.New(time.Unix(0, 0)),
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.False(status.isReady)
+	s.Zero(status.laggingTasks)
+	s.Zero(status.timeLag)
+}
+
+// Negative control: a real ack watermark behind by genuine lag must compute real lag values
+// (and not be mistaken for the uninitialized-watermark case).
+func (s *activitiesSuite) TestClassifyShardReplicationStatus_GenuineLagNotFlagged() {
+	now := time.Now()
+	localShard := &historyservice.ShardReplicationStatus{
+		ShardId:                          3,
+		MaxReplicationTaskId:             5000,
+		MaxReplicationTaskVisibilityTime: timestamppb.New(now),
+	}
+	remoteProgress := &historyservice.ShardReplicationStatusPerCluster{
+		AckedTaskId:             3000,
+		AckedTaskVisibilityTime: timestamppb.New(now.Add(-30 * time.Second)),
+	}
+
+	status := classifyShardReplicationStatus(localShard, remoteProgress, 0, 1000, 10*time.Second)
+
+	s.Equal(int64(2000), status.laggingTasks)
+	s.Equal(30*time.Second, status.timeLag)
+	s.False(status.isReady) // 2000 > 1000 tasks AND 30s > 10s => outside tolerance
+}
+
+// End-to-end through checkReplicationOnce: a single no-ack-watermark shard keeps catchup
+// not ready, without surfacing an error.
+func (s *activitiesSuite) TestCheckReplicationOnce_UninitializedAckWatermarkNotReady() {
+	req := WaitReplicationRequest{
+		Namespace:           mockedNamespace,
+		ShardCount:          1,
+		RemoteCluster:       remoteCluster,
+		AllowedLagging:      10 * time.Second,
+		AllowedLaggingTasks: 1000,
+		WaitForTaskIds:      map[int32]int64{1: 0},
+	}
+
+	s.mockHistoryClient.EXPECT().GetReplicationStatus(gomock.Any(), gomock.Any()).Return(&historyservice.GetReplicationStatusResponse{
+		Shards: []*historyservice.ShardReplicationStatus{
+			{
+				ShardId:                          1,
+				MaxReplicationTaskId:             225443839,
+				MaxReplicationTaskVisibilityTime: timestamppb.New(time.Now()),
+				RemoteClusters: map[string]*historyservice.ShardReplicationStatusPerCluster{
+					remoteCluster: {AckedTaskId: 0, AckedTaskVisibilityTime: nil},
+				},
+			},
+		},
+	}, nil).Times(1)
+
+	ready, err := s.a.checkReplicationOnce(context.Background(), req)
+	s.NoError(err)
+	s.False(ready)
 }

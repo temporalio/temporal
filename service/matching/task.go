@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -23,12 +24,14 @@ type (
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
-		taskID  string
-		request *matchingservice.QueryWorkflowRequest
+		taskID     string
+		createTime *timestamppb.Timestamp
+		request    *matchingservice.QueryWorkflowRequest
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
 		taskID            string
+		createTime        *timestamppb.Timestamp
 		deadline          time.Time
 		operationDeadline time.Time
 		request           *matchingservice.DispatchNexusTaskRequest
@@ -96,6 +99,20 @@ type (
 		forwardRes any // note this may be a non-nil "any" containing a nil pointer
 		forwardErr error
 		startErr   error
+		// dropReason, when set, marks a dropped backlog task;
+		// reader.completeTask records it in tasks_dropped.
+		dropReason dropReason
+	}
+
+	// taskFinishResult describes how a task finished. It is passed to internalTask.finish.
+	taskFinishResult struct {
+		// err is the result of RecordTaskStarted (or forwarding); nil on success or drop.
+		err error
+		// consumedToken reports whether the task consumed its rate-limit token (see finish).
+		consumedToken bool
+		// dropReason, when set, indicates the task is being dropped rather than dispatched
+		// and is recorded in tasks_dropped.
+		dropReason dropReason
 	}
 )
 
@@ -165,14 +182,22 @@ func newInternalQueryTask(
 ) *internalTask {
 	return &internalTask{
 		query: &queryTaskInfo{
-			taskID:  taskID,
-			request: request,
+			taskID:     taskID,
+			createTime: getCreateTime(request.GetForwardInfo()),
+			request:    request,
 		},
 		forwardInfo:       request.GetForwardInfo(),
 		responseC:         make(chan taskResponse, 1),
 		source:            enumsspb.TASK_SOURCE_HISTORY,
 		effectivePriority: effectivePriorityFactor * priorityKey(request.GetPriority().GetPriorityKey()),
 	}
+}
+
+func getCreateTime(f *taskqueuespb.TaskForwardInfo) *timestamppb.Timestamp {
+	if t := f.GetCreateTime(); t != nil {
+		return t
+	}
+	return timestamppb.Now()
 }
 
 func newInternalNexusTask(
@@ -184,6 +209,7 @@ func newInternalNexusTask(
 	return &internalTask{
 		nexus: &nexusTaskInfo{
 			taskID:            taskID,
+			createTime:        getCreateTime(request.GetForwardInfo()),
 			deadline:          deadline,
 			operationDeadline: operationDeadline,
 			request:           request,
@@ -229,6 +255,20 @@ func (task *internalTask) isForwarded() bool {
 
 func (task *internalTask) isSyncMatchTask() bool {
 	return task.responseC != nil
+}
+
+func (task *internalTask) getCreateTime() *timestamppb.Timestamp {
+	if task.forwardInfo.GetCreateTime() != nil {
+		return task.forwardInfo.GetCreateTime()
+	} else if task.event != nil {
+		return task.event.Data.GetCreateTime()
+	} else if task.query != nil {
+		return task.query.createTime
+	} else if task.nexus != nil {
+		return task.nexus.createTime
+	}
+
+	return timestamppb.Now()
 }
 
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
@@ -320,22 +360,27 @@ func (task *internalTask) setEvicted() {
 // method should be called with a non-nil error argument.
 //
 // If the task took a rate limit token and didn't "use" it by actually dispatching the task,
-// finish will be called with wasValid=false and task.recycleToken=clockedRateLimiter.RecycleToken,
+// finish will be called with consumedToken=false and task.recycleToken=clockedRateLimiter.RecycleToken,
 // so finish will call the rate limiter's RecycleToken to give the unused token back to any process
 // that is waiting on the token, if one exists.
-func (task *internalTask) finish(err error, wasValid bool) {
-	res := taskResponse{startErr: err}
-	task.finishInternal(res, wasValid)
+//
+// When a backlog task is being dropped rather than dispatched, set r.dropReason; it is
+// carried on the taskResponse and counted in tasks_dropped by the backlog completion
+// callback (reader.completeTask).
+func (task *internalTask) finish(r taskFinishResult) {
+	task.finishInternal(taskResponse{
+		startErr:   r.err,
+		dropReason: r.dropReason,
+	}, r.consumedToken)
 }
 
 // finishForward must be called after forwarding a task.
-func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
-	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
-	task.finishInternal(res, wasValid)
+func (task *internalTask) finishForward(forwardRes any, forwardErr error, consumedToken bool) {
+	task.finishInternal(taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}, consumedToken)
 }
 
-func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
-	if !wasValid && task.recycleToken != nil {
+func (task *internalTask) finishInternal(res taskResponse, consumedToken bool) {
+	if !consumedToken && task.recycleToken != nil {
 		task.recycleToken(task)
 	}
 

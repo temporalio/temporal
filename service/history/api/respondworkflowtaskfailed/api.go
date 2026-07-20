@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
@@ -98,14 +99,21 @@ func Invoke(
 
 				return api.UpdateWorkflowTerminate, nil
 			}
-
+			//nolint:staticcheck // SA1019
+			versioningStamp := request.GetWorkerVersion()
+			if versioningStamp.GetUseVersioning() && mutableState.GetAssignedBuildId() == "" {
+				// WV2 is not used. making sure the versioning stamp does not go through otherwise the
+				// workflow will start using WV2 which can cause issues.
+				// TODO: remove this block after deleting old wv [cleanup-old-wv]
+				versioningStamp = nil
+			}
 			if _, err := mutableState.AddWorkflowTaskFailedEvent(
 				workflowTask,
 				request.GetCause(),
 				request.GetFailure(),
 				request.GetIdentity(),
 				//nolint:staticcheck
-				request.GetWorkerVersion(),
+				versioningStamp,
 				//nolint:staticcheck
 				request.GetBinaryChecksum(),
 				"",
@@ -113,6 +121,15 @@ func Invoke(
 				0); err != nil {
 				return nil, err
 			}
+
+			shardContext.GetLogger().Warn("workflow task failed",
+				tag.WorkflowNamespaceID(token.NamespaceId),
+				tag.WorkflowID(token.WorkflowId),
+				tag.WorkflowRunID(token.RunId),
+				tag.WorkflowTaskFailedCause(request.GetCause()),
+				tag.NewStringTag("failure-message", request.GetFailure().GetMessage()),
+				tag.NewStringTag("failure-source", request.GetFailure().GetSource()),
+			)
 
 			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
 			//  new WT also should be create as speculative (or not?). Currently, it will be recreated as normal WT.

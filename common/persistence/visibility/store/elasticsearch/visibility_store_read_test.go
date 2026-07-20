@@ -17,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -86,7 +87,7 @@ var (
 )
 
 func mustEncodeValue(val any, valueType enumspb.IndexedValueType) *commonpb.Payload {
-	p, err := searchattribute.EncodeValue(val, valueType)
+	p, err := sadefs.EncodeValue(val, valueType)
 	if err != nil {
 		panic(fmt.Sprintf("failed to encode value %v: %v", val, err))
 	}
@@ -679,10 +680,10 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
-	// test for last page hits
+	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
 	s.NoError(err)
-	s.Equal(0, len(resp.NextPageToken))
+	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
@@ -700,10 +701,10 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371234567), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
-	// for last page
+	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
 	s.NoError(err)
-	s.Equal(0, len(resp.NextPageToken))
+	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(numOfHits, len(resp.Executions))
 }
 
@@ -2119,10 +2120,10 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
 	p, err := s.visibilityStore.BuildChasmSearchParameters(
-		&manager.ListChasmExecutionsRequest{
-			NamespaceID: testNamespaceID,
-			Namespace:   testNamespace,
-			PageSize:    testPageSize,
+		&visibilityservice.ListChasmExecutionsRequest{
+			NamespaceId: testNamespaceID.String(),
+			Namespace:   testNamespace.String(),
+			PageSize:    int32(testPageSize),
 			Query:       request.Query,
 		},
 		s.visibilityStore.GetListFieldSorter,
@@ -2146,10 +2147,10 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.BuildChasmSearchParameters(
-		&manager.ListChasmExecutionsRequest{
-			NamespaceID: testNamespaceID,
-			Namespace:   testNamespace,
-			PageSize:    testPageSize,
+		&visibilityservice.ListChasmExecutionsRequest{
+			NamespaceId: testNamespaceID.String(),
+			Namespace:   testNamespace.String(),
+			PageSize:    int32(testPageSize),
 			Query:       request.Query,
 		},
 		s.visibilityStore.GetListFieldSorter,

@@ -2,8 +2,6 @@ package headers
 
 import (
 	"context"
-
-	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -151,24 +149,6 @@ func SetOrigin(
 	callOrigin string,
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{CallOriginHeaderName: callOrigin})
-}
-
-func setIncomingMD(
-	ctx context.Context,
-	kv map[string]string,
-) context.Context {
-	mdIncoming, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		mdIncoming = metadata.MD{}
-	}
-
-	for k, v := range kv {
-		if v != "" {
-			mdIncoming.Set(k, v)
-		}
-	}
-
-	return metadata.NewIncomingContext(ctx, mdIncoming)
 }
 
 // GetCallerInfo retrieves caller information from the context if exists. Empty value is returned

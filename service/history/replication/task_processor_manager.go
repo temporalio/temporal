@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -46,6 +47,7 @@ type (
 		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
 		logger                        log.Logger
+		testHooks                     testhooks.TestHooks
 		dlqWriter                     DLQWriter
 
 		enableFetcher     bool
@@ -66,6 +68,7 @@ func NewTaskProcessorManager(
 	eventSerializer serialization.Serializer,
 	replicationTaskFetcherFactory TaskFetcherFactory,
 	taskExecutorProvider TaskExecutorProvider,
+	testHooks testhooks.TestHooks,
 	dlqWriter DLQWriter,
 ) *taskProcessorManagerImpl {
 	historyFetcher := eventhandler.NewHistoryPaginatedFetcher(shardContext.GetNamespaceRegistry(), clientBean, eventSerializer, shardContext.GetLogger())
@@ -81,6 +84,7 @@ func NewTaskProcessorManager(
 		removeHistoryFetcher:          historyFetcher,
 		logger:                        shardContext.GetLogger(),
 		metricsHandler:                shardContext.GetMetricsHandler(),
+		testHooks:                     testHooks,
 		dlqWriter:                     dlqWriter,
 
 		enableFetcher:        !config.EnableReplicationStream(),
@@ -193,6 +197,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 					WorkflowCache:        r.workflowCache,
 				}),
 				r.eventSerializer,
+				r.testHooks,
 				r.dlqWriter,
 			)
 			replicationTaskProcessor.Start()

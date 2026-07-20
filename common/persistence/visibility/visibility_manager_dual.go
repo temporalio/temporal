@@ -3,10 +3,10 @@ package visibility
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 
-	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -72,12 +72,7 @@ func (v *VisibilityManagerDual) GetStoreNames() []string {
 }
 
 func (v *VisibilityManagerDual) HasStoreName(stName string) bool {
-	for _, sn := range v.GetStoreNames() {
-		if sn == stName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(v.GetStoreNames(), stName)
 }
 
 func (v *VisibilityManagerDual) GetIndexName() string {
@@ -163,13 +158,13 @@ func (v *VisibilityManagerDual) ListWorkflowExecutions(
 
 func (v *VisibilityManagerDual) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
-) (*chasm.ListExecutionsResponse[*commonpb.Payload], error) {
+	request *visibilityservice.ListChasmExecutionsRequest,
+) (*visibilityservice.ListChasmExecutionsResponse, error) {
 	return dualReadWrapper(
 		ctx,
 		v,
 		request,
-		request.Namespace,
+		namespace.Name(request.Namespace),
 		manager.VisibilityManager.ListChasmExecutions,
 	)
 }
@@ -189,13 +184,13 @@ func (v *VisibilityManagerDual) CountWorkflowExecutions(
 
 func (v *VisibilityManagerDual) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
-) (*chasm.CountExecutionsResponse, error) {
+	request *visibilityservice.CountChasmExecutionsRequest,
+) (*visibilityservice.CountChasmExecutionsResponse, error) {
 	return dualReadWrapper(
 		ctx,
 		v,
 		request,
-		request.Namespace,
+		namespace.Name(request.Namespace),
 		manager.VisibilityManager.CountChasmExecutions,
 	)
 }
@@ -236,11 +231,9 @@ func dualWriteWrapper[RequestT any](
 	errs := make([]error, len(ms))
 	wg := sync.WaitGroup{}
 	for i, m := range ms {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			errs[i] = fn(m, ctx, request)
-		}()
+		})
 	}
 	wg.Wait()
 	return errors.Join(errs...)

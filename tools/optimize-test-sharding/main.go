@@ -1,7 +1,7 @@
 package optimizetestsharding
 
 import (
-	"encoding/json"
+	"context"
 	"encoding/xml"
 	"errors"
 	"flag"
@@ -9,7 +9,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/github"
 )
 
 const (
@@ -126,11 +126,10 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	var downloaded int
 	for _, runID := range runIDs {
 		log.Printf("Downloading artifacts from run %s", runID)
-		cmd := exec.Command("gh", "run", "download", runID,
-			"--pattern", artifactPattern,
-			"--dir", filepath.Join(dir, runID))
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		if err := github.RunDownload(context.Background(), runID, github.RunDownloadOptions{
+			Pattern: artifactPattern,
+			Dir:     filepath.Join(dir, runID),
+		}); err != nil {
 			log.Printf("Skipping run %s: %v", runID, err)
 			continue
 		}
@@ -144,26 +143,16 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	return dir, nil
 }
 
-type ghRun struct {
-	DatabaseID int `json:"databaseId"`
-}
-
 func findLatestRuns(workflow, branch, event string, limit int) ([]string, error) {
-	cmd := exec.Command("gh", "run", "list",
-		"--workflow="+workflow,
-		"--event="+event,
-		"--branch="+branch,
-		"--status=success",
-		"--limit="+strconv.Itoa(limit),
-		"--json=databaseId")
-	out, err := cmd.Output()
+	runs, err := github.ListRuns(context.Background(), github.RunListOptions{
+		Workflow: workflow,
+		Event:    event,
+		Branch:   branch,
+		Status:   "success",
+		Limit:    limit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("gh run list: %w", err)
-	}
-
-	var runs []ghRun
-	if err := json.Unmarshal(out, &runs); err != nil {
-		return nil, fmt.Errorf("parsing gh output: %w", err)
 	}
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("no successful runs found for workflow %s on %s/%s", workflow, branch, event)
@@ -171,7 +160,7 @@ func findLatestRuns(workflow, branch, event string, limit int) ([]string, error)
 
 	ids := make([]string, len(runs))
 	for i, r := range runs {
-		ids[i] = strconv.Itoa(r.DatabaseID)
+		ids[i] = strconv.FormatInt(r.DatabaseID, 10)
 	}
 	return ids, nil
 }

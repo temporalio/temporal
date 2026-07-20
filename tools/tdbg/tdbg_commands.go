@@ -65,6 +65,12 @@ func getCommands(
 			},
 		},
 		{
+			Name:        "schedule",
+			Aliases:     []string{"sch"},
+			Usage:       "Run admin operation on a schedule",
+			Subcommands: newAdminScheduleCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -160,6 +166,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
@@ -184,6 +194,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 				&cli.StringFlag{
 					Name:  FlagVisibilityQuery,
@@ -242,6 +256,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -267,9 +285,74 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "migrate",
+			Usage: "Migrate a schedule between V1 (workflow-backed) and V2 (CHASM)",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage:   "Schedule ID (single-schedule mode)",
+				},
+				&cli.StringFlag{
+					Name: FlagTarget,
+					// Not marked Required here: it is validated (and required) by
+					// parseMigrateTarget when the migrate action itself runs. Marking it
+					// Required at the CLI level would also apply to the "status" subcommand
+					// below, which has no use for --target.
+					Usage: "Target scheduler implementation: chasm, workflow",
+				},
+				&cli.BoolFlag{
+					Name: FlagFromVisibility,
+					Usage: "Select schedules from visibility instead of --schedule-id, scoped to --namespace. " +
+						"The default query is chosen from --target: migrating to chasm selects running V1 schedules, " +
+						"migrating to workflow selects running V2 schedules. Override with --query",
+				},
+				&cli.StringFlag{
+					Name: FlagVisibilityQuery,
+					Usage: "Visibility query used with --from-visibility, overriding the target-based default. The defaults are:\n" +
+						"\tV1 (workflow-backed): TemporalNamespaceDivision = 'TemporalScheduler' AND ExecutionStatus = 'Running'\n" +
+						"\tV2 (CHASM):           TemporalNamespaceDivision = '<scheduler-archetype-id>' AND ExecutionStatus = 'Running'",
+				},
+				&cli.BoolFlag{
+					Name:  FlagExecute,
+					Usage: "Perform the migration. Without this flag, --from-visibility and stdin modes only print what they would do (dry-run)",
+				},
+				&cli.IntFlag{
+					Name:  FlagWorkers,
+					Value: defaultMigrateWorkers,
+					Usage: "Number of concurrent workers migrating schedules in --from-visibility and stdin modes",
+				},
+				&cli.StringFlag{
+					Name:  FlagOutputLog,
+					Usage: "Path to write a structured (JSON lines) log of each migration result in --from-visibility and stdin modes",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminMigrateSchedule(c, clientFactory)
+			},
+			Subcommands: []*cli.Command{
+				{
+					Name:  "status",
+					Usage: "Show counts of V1 (workflow-backed) and V2 (CHASM) schedules in --namespace, from visibility",
+					Action: func(c *cli.Context) error {
+						return AdminScheduleStatus(c, clientFactory)
+					},
+				},
 			},
 		},
 	}
@@ -633,6 +716,35 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "get-user-data",
+			Usage: "Get per-type user data stored for a task queue",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID to fetch user data from (default 0 = root partition)",
+					Value: 0,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminGetTaskQueueUserData(c, clientFactory)
 			},
 		},
 	}

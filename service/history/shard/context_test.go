@@ -202,11 +202,13 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 
 	s.NoError(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
@@ -228,10 +230,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
@@ -243,10 +247,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
 	stage = tasks.DeleteWorkflowExecutionStageVisibility | tasks.DeleteWorkflowExecutionStageCurrent | tasks.DeleteWorkflowExecutionStageMutableState
@@ -257,10 +263,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
@@ -282,10 +290,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
@@ -296,10 +306,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageCurrent, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication|tasks.DeleteWorkflowExecutionStageCurrent, stage)
 
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(errors.New("some error"))
@@ -310,10 +322,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
 	err = s.mockShard.DeleteWorkflowExecution(
@@ -323,10 +337,82 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.NoError(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageCurrent|tasks.DeleteWorkflowExecutionStageMutableState|tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageHistory|tasks.DeleteWorkflowExecutionStageReplication, stage)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkflowActiveInCurrentCluster() {
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName)
+
+	replicationTasks := captured.Tasks[tasks.CategoryReplication]
+	s.Require().Len(replicationTasks, 1, "expected a DeleteExecutionReplicationTask when workflow is active in current cluster")
+	deleteTask, ok := replicationTasks[0].(*tasks.DeleteExecutionReplicationTask)
+	s.True(ok, "task should be *DeleteExecutionReplicationTask")
+	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
+	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName)
+
+	s.Empty(captured.Tasks[tasks.CategoryReplication],
+		"expected no DeleteExecutionReplicationTask when workflow is active in another cluster")
+}
+
+func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
+	workflowActiveCluster string,
+) *persistence.AddHistoryTasksRequest {
+	nsID := namespace.NewID()
+	nsEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID.String(), Name: "global-ns-for-delete-replication"},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: workflowActiveCluster,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		tests.Version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(nsID).Return(nsEntry, nil).AnyTimes()
+
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: nsID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
+	}
+
+	var captured *persistence.AddHistoryTasksRequest
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *persistence.AddHistoryTasksRequest) error {
+			captured = req
+			return nil
+		})
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(nil)
+
+	stage := tasks.DeleteWorkflowExecutionStageNone
+	err := s.mockShard.DeleteWorkflowExecution(
+		context.Background(),
+		workflowKey,
+		chasm.WorkflowArchetypeID,
+		[]byte("branchToken"),
+		0,
+		time.Time{},
+		time.Time{},
+		&stage,
+		false,
+	)
+	s.NoError(err)
+	s.Require().NotNil(captured, "AddHistoryTasks was never called")
+	return captured
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotifiction() {
@@ -347,7 +433,9 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
 	s.Equal(tasks.DeleteWorkflowExecutionStageNone, stage)
@@ -363,10 +451,12 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		branchToken,
 		0,
 		time.Time{},
+		time.Time{},
 		&stage,
+		false,
 	)
 	s.Error(err)
-	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility, stage)
+	s.Equal(tasks.DeleteWorkflowExecutionStageVisibility|tasks.DeleteWorkflowExecutionStageReplication, stage)
 }
 
 func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
@@ -378,7 +468,7 @@ func (s *contextSuite) TestAcquireShardOwnershipLostErrorIsNotRetried() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
@@ -390,7 +480,7 @@ func (s *contextSuite) TestAcquireShardNonOwnershipLostErrorIsRetried() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
@@ -405,7 +495,7 @@ func (s *contextSuite) TestAcquireShardEventuallySucceeds() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+	s.Equal(contextStateAcquired, s.mockShard.state)
 }
 
 func (s *contextSuite) TestAcquireShardNoError() {
@@ -418,7 +508,7 @@ func (s *contextSuite) TestAcquireShardNoError() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateAcquired, s.mockShard.state)
+	s.Equal(contextStateAcquired, s.mockShard.state)
 }
 
 func (s *contextSuite) TestHandoverNamespace() {
@@ -685,7 +775,7 @@ func (s *contextSuite) TestShardStopReasonAcquireShard() {
 
 	s.mockShard.acquireShard()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
 }
@@ -695,7 +785,7 @@ func (s *contextSuite) TestShardStopReasonUnload() {
 
 	s.mockShard.UnloadForOwnershipLost()
 
-	s.Assert().Equal(contextStateStopping, s.mockShard.state)
+	s.Equal(contextStateStopping, s.mockShard.state)
 	s.False(s.mockShard.IsValid())
 	s.True(s.mockShard.stoppedForOwnershipLost())
 }
@@ -861,7 +951,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 2)
+	s.Equal(2, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// update after ShardFirstUpdateInterval
 	s.mockShard.initLastUpdatesTime()
@@ -872,7 +962,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// update again. This time update will not work since shard lastUpdate time was set during previous update
 	s.timeSource.Update(time.Now().Add(s.mockShard.config.ShardFirstUpdateInterval() + 15*time.Second))
@@ -882,7 +972,7 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 1)
+	s.Equal(1, s.mockShard.tasksCompletedSinceLastUpdate)
 
 	// now move past last updated interval. This time hard info should be updated/persisted
 	s.timeSource.Update(s.mockShard.lastUpdated.Add(s.mockShard.config.ShardUpdateMinInterval() + 10*time.Second))
@@ -892,5 +982,5 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 
 	s.NoError(err)
 	s.True(called)
-	s.Equal(s.mockShard.tasksCompletedSinceLastUpdate, 0)
+	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 }

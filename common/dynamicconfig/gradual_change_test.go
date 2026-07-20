@@ -35,7 +35,7 @@ func TestGradualChangeValue_DuringTransition(t *testing.T) {
 
 	oldCount, newCount := 0, 0
 	for i := range 1000 {
-		key := []byte(fmt.Sprintf("key%d", i))
+		key := fmt.Appendf(nil, "key%d", i)
 		if gc.Value(key, midpoint) == "old" {
 			oldCount++
 		} else {
@@ -56,7 +56,7 @@ func TestGradualChangeValue_TransitionProgresses(t *testing.T) {
 
 	earlyNew, lateNew := 0, 0
 	for i := range 1000 {
-		key := []byte(fmt.Sprintf("key%d", i))
+		key := fmt.Appendf(nil, "key%d", i)
 		if gc.Value(key, early) == "new" {
 			earlyNew++
 		}
@@ -84,7 +84,7 @@ func TestGradualChangeValue_Monotonic(t *testing.T) {
 	gc := GradualChange[string]{Old: "old", New: "new", Start: start, End: end}
 
 	for i := range 1000 {
-		key := []byte(fmt.Sprintf("key%d", i))
+		key := fmt.Appendf(nil, "key%d", i)
 		earlyNew := gc.Value(key, start.Add(24*time.Hour)) == "new"
 		midNew := gc.Value(key, start.Add(5*24*time.Hour)) == "new"
 		lateNew := gc.Value(key, end.Add(-24*time.Hour)) == "new"
@@ -306,12 +306,12 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 
 	ts.Update(gc.When(key).Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+		assert.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(end.Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+		assert.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 

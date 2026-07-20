@@ -115,6 +115,7 @@ func NewScheduler(
 		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
 		if err == nil {
 			namespaceName = ns.Name()
+			//nolint:forbidigo // scheduler is namespace-scoped
 			if !ns.ActiveInCluster(currentClusterName) {
 				namespaceWeights = options.StandbyNamespaceWeights
 			}
@@ -266,7 +267,7 @@ func NewRateLimitedScheduler(
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
 		return append(
-			estimateTaskMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry, GetTaskTypeTagValue),
+			taskBaseMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry, GetTaskTypeTagValue),
 			metrics.TaskPriorityTag(e.GetPriority().String()),
 		)
 	}

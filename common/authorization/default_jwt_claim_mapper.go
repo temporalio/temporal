@@ -75,7 +75,7 @@ var _ ClaimMapper = (*defaultJWTClaimMapper)(nil)
 
 func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
-	claims := Claims{}
+	claims := Claims{AuthType: "jwt"}
 
 	if authInfo.AuthToken == "" {
 		return &claims, nil

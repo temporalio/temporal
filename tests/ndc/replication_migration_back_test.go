@@ -252,12 +252,12 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 	currentHistoryIndex := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex
 	currentHistoryItems := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.Histories[currentHistoryIndex].Items
 
-	s.Equal(2, len(currentHistoryItems))
+	s.Len(currentHistoryItems, 2)
 	s.Equal(&historyspb.VersionHistoryItem{EventId: 5, Version: 1}, currentHistoryItems[0])
 	s.Equal(&historyspb.VersionHistoryItem{EventId: 10, Version: 2}, currentHistoryItems[1])
 
 	// last imported event (event 10) is a timer started event, so it should have a timer in mutablestate
-	s.Equal(1, len(res1.DatabaseMutableState.TimerInfos))
+	s.Len(res1.DatabaseMutableState.TimerInfos, 1)
 	s.assertHistoryEvents(context.Background(), s.namespaceID.String(), workflowID, runID, 1, 1, 10, 2, eventBatches[0:7])
 }
 
@@ -324,7 +324,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 	currentHistoryIndex := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex
 	currentHistoryItems := res1.DatabaseMutableState.ExecutionInfo.VersionHistories.Histories[currentHistoryIndex].Items
 
-	s.Equal(3, len(currentHistoryItems))
+	s.Len(currentHistoryItems, 3)
 	s.Equal(&historyspb.VersionHistoryItem{EventId: 5, Version: 1}, currentHistoryItems[0])
 	s.Equal(&historyspb.VersionHistoryItem{EventId: 10, Version: 2}, currentHistoryItems[1])
 	s.Equal(&historyspb.VersionHistoryItem{EventId: 12, Version: 11}, currentHistoryItems[2])

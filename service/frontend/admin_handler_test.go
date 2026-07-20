@@ -32,6 +32,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
@@ -41,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -54,9 +57,12 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -89,6 +95,8 @@ type (
 		namespace      namespace.Name
 		namespaceID    namespace.ID
 		namespaceEntry *namespace.Namespace
+
+		currentClusterName string
 
 		handler *AdminHandler
 	}
@@ -149,7 +157,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	chasmRegistry := chasm.NewRegistry(s.mockResource.GetLogger())
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
 	args := NewAdminHandlerArgs{
@@ -180,13 +188,26 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
+		nsreplication.NewNoopDataMerger(),
+		nil, // schedulerClient - not needed for most admin handler tests
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
+	s.currentClusterName = "current-cluster"
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
-	s.handler = NewAdminHandler(args)
+
+	namespaceDLQHandler := NamespaceDLQHandlerProvider(
+		s.mockMetadata,
+		s.mockResource.GetMetadataManager(),
+		nsreplication.NewNoopDataMerger(),
+		nsreplication.NewDefaultAdmitter(),
+		s.mockResource.GetNamespaceReplicationQueue(),
+		s.mockResource.GetLogger(),
+		testhooks.TestHooks{},
+	)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()
 }
 
@@ -505,6 +526,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -516,6 +538,7 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
@@ -525,6 +548,123 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	s.Error(err)
 }
 
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
+	var clusterName = "cluster"
+	// The namespace lists both the current cluster and the cluster being
+	// removed, so removing clusterName would sever a link the current cluster
+	// relies on -> blocked.
+	globalNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "global-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: s.currentClusterName,
+			Clusters:          []string{s.currentClusterName, clusterName},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{globalNS})
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.Contains(err.Error(), "global-ns")
+}
+
+// Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock covers the case that
+// motivated adding the current-cluster membership check: the local registry
+// holds a stale copy of a global namespace that references clusterName but that
+// the current cluster is no longer a member of (e.g. left behind after a
+// namespace migration re-homed the namespace). Removing clusterName cannot
+// strand any replication the current cluster performs, so it must be allowed.
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	orphanedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "orphaned-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			// References clusterName but NOT s.currentClusterName.
+			Clusters: []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{orphanedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+// Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock covers the other half
+// of the conjunction: the current cluster participates in a multi-cluster
+// namespace, but that namespace does not involve the cluster being removed, so
+// removing it endangers nothing.
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	unrelatedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "unrelated-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: s.currentClusterName,
+			// Includes the current cluster but NOT clusterName.
+			Clusters: []string{s.currentClusterName, "another-cluster"},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{unrelatedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_DeletedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	deletedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name:  "deleted-ns",
+			State: enumspb.NAMESPACE_STATE_DELETED,
+		},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			Clusters:          []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{deletedNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_LocalNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	localNS := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "temporal-system"},
+		nil,
+		clusterName,
+	)
+	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS})
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() {
 	var rpcAddress = uuid.NewString()
 	var frontendHTTPAddress = uuid.NewString()
@@ -532,7 +672,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -543,8 +683,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -558,8 +698,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
@@ -576,7 +716,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -586,9 +726,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 			ClusterId:                clusterID,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
-			FailoverVersionIncrement: 0,
+			FailoverVersionIncrement: 10,
 			HttpAddress:              frontendHTTPAddress,
-			InitialFailoverVersion:   0,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -602,8 +742,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
@@ -687,7 +827,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -697,8 +837,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 			ClusterId:                clusterID,
 			ClusterName:              clusterName,
 			HistoryShardCount:        16,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -711,8 +851,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple() 
 			HistoryShardCount:        16,
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: recordVersion,
@@ -772,6 +912,59 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Initia
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
 
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardCountZero() {
+	var rpcAddress = uuid.NewString()
+	var clusterName = uuid.NewString()
+	var clusterID = uuid.NewString()
+
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10))
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
+		&adminservice.DescribeClusterResponse{
+			ClusterId:                clusterID,
+			ClusterName:              clusterName,
+			HistoryShardCount:        0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
+			IsGlobalNamespaceEnabled: true,
+		}, nil)
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
+	s.Contains(err.Error(), "HistoryShardCount must be positive")
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyRPCAddressWhenEnabled() {
+	var clusterName = uuid.NewString()
+	var clusterID = uuid.NewString()
+
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout("", gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
+		&adminservice.DescribeClusterResponse{
+			ClusterId:                clusterID,
+			ClusterName:              clusterName,
+			HistoryShardCount:        4,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
+			IsGlobalNamespaceEnabled: true,
+		}, nil)
+	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:               "",
+		EnableRemoteClusterConnection: true,
+	})
+	s.Require().Error(err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArg)
+	s.Contains(err.Error(), "RPCAddress must not be empty when Enabled=true")
+}
+
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
 
@@ -791,7 +984,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -801,8 +994,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 			ClusterId:                clusterID,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -819,7 +1012,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -830,8 +1023,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -845,8 +1038,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
@@ -863,7 +1056,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 
-	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
+	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -874,8 +1067,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
@@ -889,8 +1082,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 			ClusterId:                clusterID,
 			ClusterAddress:           rpcAddress,
 			HttpAddress:              frontendHTTPAddress,
-			FailoverVersionIncrement: 0,
-			InitialFailoverVersion:   0,
+			FailoverVersionIncrement: 10,
+			InitialFailoverVersion:   1,
 			IsGlobalNamespaceEnabled: true,
 		},
 		Version: 0,
@@ -1941,8 +2134,8 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
-				if strings.HasPrefix(alias, "AliasOf") {
-					return strings.TrimPrefix(alias, "AliasOf"), nil
+				if after, ok := strings.CutPrefix(alias, "AliasOf"); ok {
+					return after, nil
 				}
 				return "", serviceerror.NewInvalidArgument("unknown alias")
 			}).Times(eventsWithSasCount)
@@ -2093,4 +2286,332 @@ func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQu
 	s.Equal(expectedPhysicalTaskQueueInfo.GetPollers(), responsePhysicalTaskQueueInfo.GetPollers())
 	s.Equal(expectedPhysicalTaskQueueInfo.GetTaskQueueStats(), responsePhysicalTaskQueueInfo.GetTaskQueueStats())
 	s.Equal(expectedPhysicalTaskQueueInfo.GetInternalTaskQueueStatus(), responsePhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
+}
+
+// fakeSchedulerClient is a minimal test double for SchedulerServiceClient.
+// Only MigrateToWorkflow is implemented; other methods panic if called.
+type fakeSchedulerClient struct {
+	migrateToWorkflowFn func(context.Context, *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error)
+}
+
+func (f *fakeSchedulerClient) CreateSchedule(context.Context, *schedulerpb.CreateScheduleRequest, ...grpc.CallOption) (*schedulerpb.CreateScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) UpdateSchedule(context.Context, *schedulerpb.UpdateScheduleRequest, ...grpc.CallOption) (*schedulerpb.UpdateScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) PatchSchedule(context.Context, *schedulerpb.PatchScheduleRequest, ...grpc.CallOption) (*schedulerpb.PatchScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) DeleteSchedule(context.Context, *schedulerpb.DeleteScheduleRequest, ...grpc.CallOption) (*schedulerpb.DeleteScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) DescribeSchedule(context.Context, *schedulerpb.DescribeScheduleRequest, ...grpc.CallOption) (*schedulerpb.DescribeScheduleResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) ListScheduleMatchingTimes(context.Context, *schedulerpb.ListScheduleMatchingTimesRequest, ...grpc.CallOption) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) CreateFromMigrationState(_ context.Context, _ *schedulerpb.CreateFromMigrationStateRequest, _ ...grpc.CallOption) (*schedulerpb.CreateFromMigrationStateResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) CreateSentinel(context.Context, *schedulerpb.CreateSentinelRequest, ...grpc.CallOption) (*schedulerpb.CreateSentinelResponse, error) {
+	panic("not implemented")
+}
+func (f *fakeSchedulerClient) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest, _ ...grpc.CallOption) (*schedulerpb.MigrateToWorkflowResponse, error) {
+	return f.migrateToWorkflowFn(ctx, req)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflow() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(nil, serviceerror.NewNotFound("workflow not found"))
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(s.namespaceID.String(), capturedReq.NamespaceId)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
+	s.Equal("test-identity", capturedReq.Identity)
+	s.Equal("test-request-id", capturedReq.RequestId)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowExistingWorkflow() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type: &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+		},
+	}, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(s.namespaceID.String(), capturedReq.NamespaceId)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
+	s.Equal("test-identity", capturedReq.Identity)
+	s.Equal("test-request-id", capturedReq.RequestId)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentinel() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type: &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+		},
+	}, nil)
+
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(context.Context, *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			s.Fail("scheduler migration should not be called")
+			return nil, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	_, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.ErrorIs(err, chasmscheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+}
+
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "nonexistent",
+			},
+		},
+	}).Return(nil, serviceerror.NewNotFound("workflow not found"))
+
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, _ *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			return nil, serviceerror.NewNotFound("schedule not found")
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	_, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "nonexistent",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.Error(err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
+}
+
+func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type testCase struct {
+		Name     string
+		Request  *adminservice.GetTaskQueueUserDataRequest
+		Expected error
+	}
+
+	// Validation error cases — no mock setup needed.
+	errorCases := []testCase{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty namespace",
+			Request:  &adminservice.GetTaskQueueUserDataRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, tc := range errorCases {
+		s.Run(tc.Name, func() {
+			resp, err := handler.GetTaskQueueUserData(ctx, tc.Request)
+			s.Equal(tc.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// Namespace registry error is propagated before matching is called.
+	s.Run("namespace not found", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(""), serviceerror.NewNotFound("Namespace nonexistent is not found."))
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace: "nonexistent",
+			TaskQueue: "my-queue",
+		})
+		s.Error(err)
+		s.Nil(resp)
+	})
+
+	// Task queue name starting with /_sys/ is rejected by tqid.NewTaskQueueFamily before matching is called.
+	s.Run("invalid task queue name", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace: s.namespace.String(),
+			TaskQueue: "/_sys/my-queue/1",
+		})
+		s.Error(err)
+		s.Nil(resp)
+	})
+
+	// Root partition (partition_id=0) sends bare task queue name to matching.
+	s.Run("root partition", func() {
+		perTypeData := &persistencespb.TaskQueueTypeUserData{}
+		matchingReq := &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:                   s.namespaceID.String(),
+			TaskQueue:                     "my-queue",
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: -1,
+		}
+		matchingResp := &matchingservice.GetTaskQueueUserDataResponse{
+			UserData: &persistencespb.VersionedTaskQueueUserData{
+				Version: 5,
+				Data: &persistencespb.TaskQueueUserData{
+					PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): perTypeData,
+					},
+				},
+			},
+		}
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, matchingReq).Return(matchingResp, nil)
+
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     s.namespace.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   0,
+		})
+		s.NoError(err)
+		s.Equal(perTypeData, resp.UserData)
+		s.Equal(int64(5), resp.Version)
+	})
+
+	// Non-root partition (partition_id=1) sends mangled name /_sys/my-queue/1 to matching.
+	s.Run("non-root partition", func() {
+		matchingReq := &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:                   s.namespaceID.String(),
+			TaskQueue:                     "/_sys/my-queue/1",
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: -1,
+		}
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, matchingReq).Return(
+			&matchingservice.GetTaskQueueUserDataResponse{}, nil,
+		)
+
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     s.namespace.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   1,
+		})
+		s.NoError(err)
+		s.Nil(resp.UserData)
+		s.Equal(int64(0), resp.Version)
+	})
+
+	// Empty per_type map: UserData is nil, but Version is still populated.
+	s.Run("no per-type data", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, gomock.Any()).Return(
+			&matchingservice.GetTaskQueueUserDataResponse{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Version: 3,
+					Data:    &persistencespb.TaskQueueUserData{},
+				},
+			}, nil,
+		)
+
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     s.namespace.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		s.NoError(err)
+		s.Nil(resp.UserData)
+		s.Equal(int64(3), resp.Version)
+	})
+
+	// Matching error is propagated to the caller.
+	s.Run("matching error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().GetTaskQueueUserData(ctx, gomock.Any()).Return(
+			nil, serviceerror.NewUnavailable("matching unavailable"),
+		)
+
+		resp, err := handler.GetTaskQueueUserData(ctx, &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     s.namespace.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		s.Error(err)
+		s.Nil(resp)
+	})
 }

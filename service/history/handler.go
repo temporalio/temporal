@@ -10,6 +10,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -18,7 +19,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -47,12 +48,15 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	sdkconverter "go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteexecution"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
@@ -65,7 +69,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -78,15 +81,14 @@ type (
 
 		tokenSerializer              *tasktoken.Serializer
 		config                       *configs.Config
+		nexusCompletionHandler       *nexusoperations.CompletionHandler
 		eventNotifier                events.Notifier
+		deepHealthCheckHandler       deepHealthCheckHandler
 		logger                       log.Logger
 		throttledLogger              log.Logger
 		persistenceExecutionManager  persistence.ExecutionManager
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
-		persistenceHealthSignal      persistence.HealthSignalAggregator
-		healthServer                 *health.Server
-		historyHealthSignal          interceptor.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -104,6 +106,7 @@ type (
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
 		nexusHandler                 nexus.Handler
+		testHooks                    testhooks.TestHooks
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -115,6 +118,7 @@ type (
 		fx.In
 
 		Config                       *configs.Config
+		NexusCompletionHandler       *nexusoperations.CompletionHandler
 		Logger                       log.SnTaggedLogger
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
@@ -140,6 +144,7 @@ type (
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
 		ChasmRegistry                *chasm.Registry
+		TestHooks                    testhooks.TestHooks
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -205,46 +210,7 @@ func (h *Handler) DeepHealthCheck(
 	ctx context.Context,
 	_ *historyservice.DeepHealthCheckRequest,
 ) (*historyservice.DeepHealthCheckResponse, error) {
-
-	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
-	if err != nil {
-		return nil, err
-	}
-	if status.Status != healthpb.HealthCheckResponse_SERVING {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
-	}
-
-	rsp := h.checkHistoryHealthSignals()
-	if rsp != nil {
-		return rsp, nil
-	}
-
-	latency := h.persistenceHealthSignal.AverageLatency()
-	errRatio := h.persistenceHealthSignal.ErrorRatio()
-
-	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
-	}
-	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
-	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
-}
-
-// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
-func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
-	// Check that the RPC latency doesn't exceed the threshold.
-	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
-	}
-
-	// Check if the RPC error ratio exceeds the threshold
-	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
-	}
-	return nil
+	return h.deepHealthCheckHandler.DeepHealthCheck(ctx, time.Now())
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -321,6 +287,12 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
+	if !contextutil.ContextMetadataMarkActivityID(ctx, taskToken.GetActivityId()) {
+		h.throttledLogger.Warn("Failed to mark activity ID in context metadata",
+			tag.WorkflowID(taskToken.GetWorkflowId()),
+			tag.ActivityID(taskToken.GetActivityId()))
+	}
+
 	// Handle worklow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -379,10 +351,6 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response.Clock, err = shardContext.NewVectorClock()
-	if err != nil {
-		return nil, h.convertError(err)
-	}
 	return response, nil
 }
 
@@ -438,11 +406,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -450,11 +413,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			activity.RespondCompletedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -499,11 +457,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -511,11 +464,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			activity.RespondFailedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -547,7 +495,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	return resp, nil
 }
 
-// RespondActivityTaskCanceled - records failure of an activity task
+// RespondActivityTaskCanceled - records cancellation of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
 	if err != nil {
@@ -560,11 +508,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -572,11 +515,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			activity.RespondCancelledEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -1855,6 +1793,11 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 		return nil, errWorkflowExecutionNotSet
 	}
 
+	closeTime := new(request.WorkflowCloseTime.AsTime())
+	if !closeTime.After(time.Unix(0, 0)) {
+		closeTime = nil
+	}
+
 	// NOTE: the deletion is best effort, for sql visibility implementation,
 	// we can't guarantee there's no update or record close request for this workflow since
 	// visibility queue processing is async. Operator can call this api (through admin workflow
@@ -1862,10 +1805,13 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
 	// the last operation applied for this workflow
 	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespaceID,
-		WorkflowID:  request.Execution.GetWorkflowId(),
-		RunID:       request.Execution.GetRunId(),
-		TaskID:      math.MaxInt64,
+		NamespaceID:       namespaceID,
+		WorkflowID:        request.Execution.GetWorkflowId(),
+		RunID:             request.Execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		CloseTime:         closeTime,
+		StartTime:         request.WorkflowStartTime.AsTime(),
+		IsRetentionDelete: false,
 	})
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1918,7 +1864,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retErr error) {
 	// Note that since this is not a unary RPC, we cannot use the interceptor to capture panics.
-	metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
 	getter := headers.NewGRPCHeaderGetter(server.Context())
 	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(getter)
 	if err != nil {
@@ -2088,6 +2034,21 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	)
 }
 
+func (h *Handler) DeleteExecution(
+	ctx context.Context,
+	request *historyservice.DeleteExecutionRequest,
+) (*historyservice.DeleteExecutionResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	h.logger.Info("DeleteExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(request.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(request.GetExecution().GetRunId()))
+	return deleteexecution.Invoke(ctx, h.chasmEngine, request)
+}
+
 func (h *Handler) GetDLQTasks(
 	ctx context.Context,
 	request *historyservice.GetDLQTasksRequest,
@@ -2096,6 +2057,16 @@ func (h *Handler) GetDLQTasks(
 }
 
 func (h *Handler) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	if hook, ok := testhooks.Get(h.testHooks, testhooks.HistoryDLQTaskDeleteInterceptor, testhooks.GlobalScope); ok {
+		return hook(ctx, request, h.deleteDLQTasks)
+	}
+	return h.deleteDLQTasks(ctx, request)
+}
+
+func (h *Handler) deleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
@@ -2182,7 +2153,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			}
 		}
 	}
-	err = nexusoperations.CompletionHandler(
+	err = h.nexusCompletionHandler.Handle(
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
@@ -2203,9 +2174,32 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
+	componentRef := request.GetCompletion().GetComponentRef()
+	if len(componentRef) == 0 {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
+	// Ignore transition-history fields when applying completion,
+	// use Request ID to accept or reject the completion instead.
+	// TODO(stephan): This should be a CHASM transition option.
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(componentRef); err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+	ref.ExecutionVersionedTransition = nil
+	ref.ComponentInitialVersionedTransition = nil
+	var err error
+	componentRef, err = ref.Marshal()
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid component ref")
+	}
+
 	completion := &persistencespb.ChasmNexusCompletion{
-		CloseTime: request.CloseTime,
-		RequestId: request.Completion.RequestId,
+		StartTime:      request.StartTime,
+		CloseTime:      request.CloseTime,
+		RequestId:      request.Completion.RequestId,
+		Links:          request.Links,
+		OperationToken: request.OperationToken,
 	}
 	switch variant := request.Outcome.(type) {
 	case *historyservice.CompleteNexusOperationChasmRequest_Failure:
@@ -2224,9 +2218,9 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// this similarly as we would a pure task (holding an exclusive lock), as the
 	// assumption is that the accessed component will be recording (or generating a
 	// task) based on this result.
-	_, _, err := chasm.UpdateComponent(
+	_, _, err = chasm.UpdateComponent(
 		ctx,
-		request.GetCompletion().GetComponentRef(),
+		componentRef,
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
@@ -2241,6 +2235,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
+// NOTE: Keep in sync with ChasmEngine.convertError in chasm_engine.go, which is a superset of this function.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
@@ -2536,7 +2531,7 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := payloads.Encode(r.ValueAsAny())
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")

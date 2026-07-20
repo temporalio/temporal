@@ -12,14 +12,18 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -124,11 +128,13 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
+	s.mockMutableState.EXPECT().SetReplayEventBatchID(gomock.Any()).AnyTimes()
+	s.mockMutableState.EXPECT().GenerateEventLoadToken(gomock.Any()).Return([]byte("token"), nil).AnyTimes()
 
-	taskGeneratorProvider = &testTaskGeneratorProvider{
+	populateTaskGeneratorProvider(&testTaskGeneratorProvider{
 		mockMutableState:  s.mockMutableState,
 		mockTaskGenerator: s.mockTaskGenerator,
-	}
+	})
 	s.stateRebuilder = NewMutableStateRebuilder(
 		s.mockShard,
 		s.logger,
@@ -199,7 +205,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	s.mockMutableState.EXPECT().SetHistoryTree(nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -248,7 +254,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	s.mockMutableState.EXPECT().SetHistoryTree(nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -281,7 +287,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -345,7 +351,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut_W
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 
@@ -382,7 +388,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -440,7 +446,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, uuid.NewString())
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 
@@ -478,7 +484,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -542,7 +548,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed_Wit
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 
@@ -580,7 +586,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -643,12 +649,12 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted_
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), newRunEvents, newRunID)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 
 	newRunTasks := newRunStateBuilder.PopTasks()
-	s.Len(newRunTasks[tasks.CategoryTimer], 0)
+	s.Empty(newRunTasks[tasks.CategoryTimer])
 	s.Len(newRunTasks[tasks.CategoryVisibility], 1) // recordWorkflowStarted
 }
 
@@ -681,7 +687,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -794,7 +800,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(
 		context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(continueAsNewEvent), newRunEvents, "",
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(newRunStateBuilder)
 	s.Equal(continueAsNewEvent.TaskId, s.executionInfo.LastRunningClock)
 
@@ -844,7 +850,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	newRunStateBuilder, err := s.stateRebuilder.ApplyEvents(
 		context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(continueAsNewEvent), nil, "",
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.Nil(newRunStateBuilder)
 	s.Equal(continueAsNewEvent.TaskId, s.executionInfo.LastRunningClock)
 }
@@ -873,7 +879,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionSignaled()
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -901,7 +907,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCancelRequ
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -932,7 +938,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -963,7 +969,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowPropertiesModified(
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -990,7 +996,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeMarkerRecorded() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1042,7 +1048,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
@@ -1082,7 +1088,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	}
 	s.mockMutableState.EXPECT().ApplyWorkflowTaskStartedEvent(
 		(*historyi.WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
-		false, gomock.Any(), nil, int64(0), nil, false,
+		false, gomock.Any(), nil, int64(0), nil,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
@@ -1091,7 +1097,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1136,7 +1142,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1180,7 +1186,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1213,7 +1219,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskCompleted() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1258,7 +1264,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerStarted() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1289,7 +1295,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerFired() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1320,7 +1326,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeTimerCanceled() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1378,7 +1384,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1421,7 +1427,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskStarted() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(startedEvent), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(startedEvent.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1453,7 +1459,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskTimedOut() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1484,7 +1490,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskFailed() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1515,7 +1521,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCompleted() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1543,7 +1549,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCancelRequested
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1574,7 +1580,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskCanceled() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1627,7 +1633,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1655,7 +1661,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1683,7 +1689,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionStart
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1711,7 +1717,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTimed
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1739,7 +1745,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionTermi
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1767,7 +1773,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionFaile
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1795,7 +1801,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCompl
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1852,7 +1858,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1880,7 +1886,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1908,7 +1914,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionCa
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1936,7 +1942,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionCance
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -1999,7 +2005,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -2027,7 +2033,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -2055,7 +2061,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
@@ -2121,6 +2127,38 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionUpdateComp
 	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
 }
 
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionOptionsUpdated_TimeSkippingConfig() {
+	version := int64(1)
+	requestID := uuid.NewString()
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: timestamppb.New(now),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+					Enabled: true,
+				},
+			},
+		},
+	}
+	s.mockMutableState.EXPECT().ApplyWorkflowExecutionOptionsUpdatedEvent(protomock.Eq(event)).Return(nil)
+	s.mockUpdateVersion(event)
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
+	s.NoError(err)
+	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
+}
+
 func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	version := int64(1)
 	requestID := uuid.NewString()
@@ -2150,6 +2188,8 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	}
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	s.mockUpdateVersion(event)
+	// CHASM disabled -> the create event is routed to the HSM tree (legacy behavior).
+	s.mockMutableState.EXPECT().ChasmEnabled().Return(false).AnyTimes()
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
 	s.NoError(err)
@@ -2157,6 +2197,59 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	sm, err := nexusoperations.MachineCollection(s.mockMutableState.HSM()).Data("5")
 	s.NoError(err)
 	s.Equal(enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, sm.State())
+}
+
+// TestApplyEvents_NexusScheduled_ChasmCreateSurfacesError verifies that when the creation-policy flag
+// is ON, rebuild commits to the CHASM tree and surfaces a failure to create the op there rather than
+// silently falling back to the HSM tree. Rebuild picks a framework by dynamic config; it is not an
+// error-fallback, so a CHASM failure must fail the rebuild instead of producing an HSM op.
+func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesError() {
+	version := int64(1)
+	requestID := uuid.NewString()
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "wf-id",
+		RunId:      tests.RunID,
+	}
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   5,
+		EventTime: timestamppb.New(time.Now().UTC()),
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				EndpointId:                   "endpoint-id",
+				Endpoint:                     "endpoint",
+				Service:                      "service",
+				Operation:                    "operation",
+				WorkflowTaskCompletedEventId: 4,
+				RequestId:                    "request-id",
+			},
+		},
+	}
+
+	// Flag ON + a CHASM registry that owns the scheduled event, so the event is routed to the CHASM
+	// tree and reaches the (failing) component lookup rather than falling back to HSM.
+	s.mockShard.GetConfig().EnableChasmNexusWorkflowOperations = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockShard.SetChasmWorkflowRegistry(newFakeChasmRegistry(&fakeChasmEventDefinition{
+		eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+	}))
+
+	// Only expect the calls that run before the state-rebuild fails; the terminal task-generation and
+	// history-builder calls (set up by mockUpdateVersion) are never reached because the op create errors.
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue().AnyTimes()
+	s.mockMutableState.EXPECT().UpdateCurrentVersion(gomock.Any(), true).AnyTimes()
+	s.mockMutableState.EXPECT().ChasmEnabled().Return(true).AnyTimes()
+	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
+	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
+		Return(nil, nil, serviceerror.NewInternal("chasm unavailable")).AnyTimes()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
+	s.Error(err)
+	// The op must NOT have been created in the HSM tree (no error-fallback).
+	_, hsmErr := nexusoperations.MachineCollection(s.mockMutableState.HSM()).Data("5")
+	s.Error(hsmErr)
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
@@ -2174,4 +2267,234 @@ func (p *testTaskGeneratorProvider) NewTaskGenerator(
 		shardContext.GetArchivalMetadata(),
 		shardContext.GetLogger(),
 	)
+}
+
+// --- applyStateMachineEvent (HSM<->CHASM dispatch) coverage -------------------------------------
+//
+// These exercise the probe-and-fallback dispatch added for rebuilding Nexus operations that may live
+// in either the HSM or CHASM tree.
+
+type fakeChasmEventDefinition struct {
+	eventType enumspb.EventType
+	applyErr  error
+	applied   *bool
+}
+
+func (d *fakeChasmEventDefinition) Type() enumspb.EventType     { return d.eventType }
+func (d *fakeChasmEventDefinition) IsWorkflowTaskTrigger() bool { return false }
+func (d *fakeChasmEventDefinition) Apply(chasm.MutableContext, *chasmworkflow.Workflow, *historypb.HistoryEvent) error {
+	if d.applied != nil {
+		*d.applied = true
+	}
+	return d.applyErr
+}
+
+func (d *fakeChasmEventDefinition) CherryPick(chasm.MutableContext, *chasmworkflow.Workflow, *historypb.HistoryEvent, map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	return nil
+}
+
+type fakeChasmLibrary struct {
+	defs []chasmworkflow.EventDefinition
+}
+
+func (l fakeChasmLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflow.CommandHandler {
+	return nil
+}
+
+func (l fakeChasmLibrary) EventDefinitions() []chasmworkflow.EventDefinition { return l.defs }
+
+func newFakeChasmRegistry(def *fakeChasmEventDefinition) *chasmworkflow.Registry {
+	reg := chasmworkflow.NewRegistry()
+	var defs []chasmworkflow.EventDefinition
+	if def != nil {
+		defs = append(defs, def)
+	}
+	_ = reg.Register(fakeChasmLibrary{defs: defs})
+	return reg
+}
+
+type fakeHSMEventDefinition struct {
+	eventType enumspb.EventType
+	applyErr  error
+	applied   *bool
+}
+
+func (d *fakeHSMEventDefinition) Type() enumspb.EventType     { return d.eventType }
+func (d *fakeHSMEventDefinition) IsWorkflowTaskTrigger() bool { return false }
+func (d *fakeHSMEventDefinition) Apply(*hsm.Node, *historypb.HistoryEvent) error {
+	if d.applied != nil {
+		*d.applied = true
+	}
+	return d.applyErr
+}
+
+func (d *fakeHSMEventDefinition) CherryPick(*hsm.Node, *historypb.HistoryEvent, map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	return nil
+}
+
+func newFakeHSMRegistry(def *fakeHSMEventDefinition) *hsm.Registry {
+	reg := hsm.NewRegistry()
+	if def != nil {
+		_ = reg.RegisterEventDefinition(def)
+	}
+	return reg
+}
+
+type nexusRebuildCase struct {
+	chasmEnabled      bool
+	flagOn            bool
+	chasmHasDef       bool
+	hsmApplyErr       error
+	chasmApplyErr     error
+	chasmComponentErr error
+}
+
+// runApplyStateMachineEvent wires fake HSM/CHASM registries onto the shard, drives applyStateMachineEvent for the given
+// event, and reports which tree's Apply ran plus the returned error.
+func (s *stateBuilderSuite) runApplyStateMachineEvent(
+	event *historypb.HistoryEvent,
+	tc nexusRebuildCase,
+) (chasmApplied bool, hsmApplied bool, err error) {
+	s.mockShard.SetStateMachineRegistry(newFakeHSMRegistry(&fakeHSMEventDefinition{
+		eventType: event.GetEventType(),
+		applyErr:  tc.hsmApplyErr,
+		applied:   &hsmApplied,
+	}))
+	var def *fakeChasmEventDefinition
+	if tc.chasmHasDef {
+		def = &fakeChasmEventDefinition{
+			eventType: event.GetEventType(),
+			applyErr:  tc.chasmApplyErr,
+			applied:   &chasmApplied,
+		}
+	}
+	s.mockShard.SetChasmWorkflowRegistry(newFakeChasmRegistry(def))
+	s.mockShard.GetConfig().EnableChasmNexusWorkflowOperations = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.flagOn)
+
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().HSM().Return(nil).AnyTimes()
+	ms.EXPECT().ChasmEnabled().Return(tc.chasmEnabled).AnyTimes()
+	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
+	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).
+		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
+
+	rebuilder := NewMutableStateRebuilder(s.mockShard, s.logger, ms)
+	err = rebuilder.applyStateMachineEvent(context.Background(), event)
+	return chasmApplied, hsmApplied, err
+}
+
+func nexusScheduledEvent() *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{EventId: 5, EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED}
+}
+
+func nexusCompletedEvent() *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{EventId: 6, EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED}
+}
+
+func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
+	hsmErr := serviceerror.NewInternal("hsm apply failed")
+	chasmErr := serviceerror.NewInternal("chasm unavailable")
+	notFound := serviceerror.NewNotFound("nexus operation not found for scheduled event ID")
+
+	testCases := []struct {
+		name             string
+		event            *historypb.HistoryEvent
+		tc               nexusRebuildCase
+		wantChasmApplied bool
+		wantHSMApplied   bool
+		wantErr          error
+	}{
+		// --- create events: routed by the per-namespace flag ---
+		{
+			name:             "nexus scheduled, flag on, creates in chasm",
+			event:            nexusScheduledEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: true},
+			wantChasmApplied: true,
+		},
+		{
+			name:           "nexus scheduled, flag off, routes to hsm",
+			event:          nexusScheduledEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: true, flagOn: false, chasmHasDef: true},
+			wantHSMApplied: true,
+		},
+		{
+			name:           "nexus scheduled, chasm disabled, routes to hsm",
+			event:          nexusScheduledEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: false, flagOn: true, chasmHasDef: true},
+			wantHSMApplied: true,
+		},
+		{
+			// Flag on, but CHASM has no definition for the event: fall back to creating in HSM.
+			name:           "nexus scheduled, flag on, chasm has no definition, falls back to hsm",
+			event:          nexusScheduledEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: false},
+			wantHSMApplied: true,
+		},
+		{
+			// A genuine CHASM error is surfaced, never fallen back to HSM (avoids split-brain).
+			name:    "nexus scheduled, flag on, chasm error surfaced without hsm fallback",
+			event:   nexusScheduledEvent(),
+			tc:      nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: true, chasmComponentErr: chasmErr},
+			wantErr: chasmErr,
+		},
+		// --- non-create events: CHASM-first, HSM fallback ---
+		{
+			name:             "non-create, chasm owns and applies",
+			event:            nexusCompletedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true},
+			wantChasmApplied: true,
+		},
+		{
+			name:           "non-create, chasm disabled, routes to hsm",
+			event:          nexusCompletedEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: false, chasmHasDef: true},
+			wantHSMApplied: true,
+		},
+		{
+			name:           "non-create, chasm has no definition, routes to hsm",
+			event:          nexusCompletedEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: true, chasmHasDef: false},
+			wantHSMApplied: true,
+		},
+		{
+			// CHASM doesn't own the op (NotFound); the event falls back to the HSM tree.
+			name:             "non-create, chasm not found, falls back to hsm",
+			event:            nexusCompletedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound},
+			wantChasmApplied: true,
+			wantHSMApplied:   true,
+		},
+		{
+			// CHASM NotFound falls back to HSM, whose error is then surfaced as-is.
+			name:             "non-create, chasm not found, hsm error surfaced",
+			event:            nexusCompletedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound, hsmApplyErr: hsmErr},
+			wantChasmApplied: true,
+			wantHSMApplied:   true,
+			wantErr:          hsmErr,
+		},
+		{
+			// A genuine (non-NotFound) CHASM error is surfaced, not fallen back to HSM.
+			name:             "non-create, chasm error surfaced without hsm fallback",
+			event:            nexusCompletedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmErr},
+			wantChasmApplied: true,
+			wantErr:          chasmErr,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			chasmApplied, hsmApplied, err := s.runApplyStateMachineEvent(tc.event, tc.tc)
+			switch {
+			case tc.wantErr != nil:
+				s.ErrorIs(err, tc.wantErr)
+			default:
+				s.NoError(err)
+			}
+			s.Equal(tc.wantChasmApplied, chasmApplied)
+			s.Equal(tc.wantHSMApplied, hsmApplied)
+		})
+	}
 }

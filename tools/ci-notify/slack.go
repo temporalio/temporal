@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // SlackMessage represents a Slack Block Kit message
@@ -40,7 +42,7 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 	}
 
 	// Workflow and commit info
-	commitURL := fmt.Sprintf("https://github.com/temporalio/temporal/commit/%s", report.Commit.SHA)
+	commitURL := github.CommitURL("temporalio/temporal", report.Commit.SHA)
 	infoBlock := SlackBlock{
 		Type: "section",
 		Fields: []SlackText{
@@ -219,6 +221,25 @@ func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
 	}
 
 	blocks := []SlackBlock{headerBlock, periodBlock, metricsBlock, timingBlock}
+	slowestRuns := report.slowestRuns(3)
+	if len(slowestRuns) > 0 {
+		var slowest []string
+		for _, run := range slowestRuns {
+			slowest = append(slowest, fmt.Sprintf("• <%s|%s> — %s (%s)",
+				run.URL,
+				run.ShortSHA(),
+				formatDuration(run.Duration),
+				run.Conclusion,
+			))
+		}
+		blocks = append(blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Slowest Runs:*\n%s", strings.Join(slowest, "\n")),
+			},
+		})
+	}
 
 	return &SlackMessage{
 		Text:   fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
@@ -245,6 +266,19 @@ func FormatReportForDebug(report *DigestReport) string {
 	fmt.Fprintf(&sb, "  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent)
 	fmt.Fprintf(&sb, "  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent)
 	fmt.Fprintf(&sb, "  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent)
+
+	slowestRuns := report.slowestRuns(3)
+	if len(slowestRuns) > 0 {
+		fmt.Fprintln(&sb, "\nSlowest Runs:")
+		for _, run := range slowestRuns {
+			fmt.Fprintf(&sb, "  %s (%s): %s\n    %s\n",
+				formatDuration(run.Duration),
+				run.Conclusion,
+				run.ShortSHA(),
+				run.URL,
+			)
+		}
+	}
 
 	return sb.String()
 }

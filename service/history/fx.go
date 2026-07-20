@@ -8,6 +8,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/scheduler"
+	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -30,10 +35,11 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
+	hsmnexusoperations "go.temporal.io/server/components/nexusoperations"
+	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -53,22 +59,27 @@ import (
 
 var Module = fx.Options(
 	resource.Module,
+	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(hsm.NewRegistry),
 	workflow.Module,
+
 	shard.Module,
 	events.Module,
 	cache.Module,
 	archival.Module,
 	ChasmEngineModule,
+	chasmtests.Module,
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
+	fx.Provide(ServiceErrorInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -83,23 +94,46 @@ var Module = fx.Options(
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(HistoryServiceServerProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
-	fx.Provide(ReactivationSignalCacheProvider),
-	fx.Provide(workerdeployment.ClientProvider),
+	workerdeployment.ClientModule,
 	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(func(
+		chasmEngine chasm.Engine,
+		chasmVisibilityManager chasm.VisibilityManager,
+		chasmRegistry *chasm.Registry,
+		testHooks testhooks.TestHooks,
+	) {
+		if hook, ok := testhooks.Get(
+			testHooks,
+			testhooks.HistoryChasmRuntimeProvider,
+			testhooks.GlobalScope,
+		); ok {
+			hook(chasmEngine, chasmVisibilityManager, chasmRegistry)
+		}
+	}),
 
 	callbacks.Module,
-	nexusoperations.Module,
-	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	hsmnexusoperations.Module,
+	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	scheduler.Module,
+	callback.Module,
+	chasmnexus.Module,
+	chasmworkflow.Module,
+	chasmworkflow.HistoryHandlerModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
+}
+
+func HistoryServiceServerProvider(handler *Handler) historyservice.HistoryServiceServer {
+	return handler
 }
 
 func ServiceResolverProvider(
@@ -108,25 +142,25 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
-	// Build and store the Nexus handler
-	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
-	if err != nil {
-		return nil, err
-	}
-
+func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 	handler := &Handler{
-		status:                       common.DaemonStatusInitialized,
-		config:                       args.Config,
-		tokenSerializer:              tasktoken.NewSerializer(),
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.Config,
+		nexusCompletionHandler: args.NexusCompletionHandler,
+		tokenSerializer:        tasktoken.NewSerializer(),
+		deepHealthCheckHandler: deepHealthCheckHandler{
+			healthServer:            args.HealthServer,
+			metricsHandler:          args.MetricsHandler,
+			config:                  args.Config,
+			historyHealthSignal:     args.HistoryHealthSignal,
+			persistenceHealthSignal: args.PersistenceHealthSignal,
+			startupTime:             time.Now(),
+		},
 		logger:                       args.Logger,
 		throttledLogger:              args.ThrottledLogger,
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
 		persistenceShardManager:      args.PersistenceShardManager,
 		persistenceVisibilityManager: args.PersistenceVisibilityManager,
-		persistenceHealthSignal:      args.PersistenceHealthSignal,
-		healthServer:                 args.HealthServer,
-		historyHealthSignal:          args.HistoryHealthSignal,
 		historyServiceResolver:       args.HistoryServiceResolver,
 		metricsHandler:               args.MetricsHandler,
 		payloadSerializer:            args.PayloadSerializer,
@@ -144,13 +178,37 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
 		chasmRegistry:                args.ChasmRegistry,
+		testHooks:                    args.TestHooks,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
-		nexusHandler:                     nexusHandler,
 	}
+
+	// Build the Nexus handler in OnStart rather than here so that it runs after all
+	// fx.Invoke functions have completed. If we built it eagerly, the dependency chain
+	//
+	//   activity.HistoryModule (fx.Invoke)
+	//     → *library → *handler → historyservice.HistoryServiceServer
+	//       → HistoryServiceServerProvider → HandlerProvider (this function)
+	//
+	// would force HandlerProvider to run before modules like chasmtests.Module have had
+	// a chance to register their nexus services via their own fx.Invoke calls. As a
+	// result, buildNexusHandler would snapshot an empty registry and h.nexusHandler
+	// would remain nil, causing all StartNexusOperation calls to the system endpoint to
+	// return "no nexus services registered". OnStart hooks run after ALL invokes are
+	// done, so the registry is fully populated by the time we call buildNexusHandler.
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			h, err := buildNexusHandler(args.ChasmRegistry)
+			if err != nil {
+				return err
+			}
+			handler.nexusHandler = h
+			return nil
+		},
+	})
 
 	return handler, nil
 }
@@ -184,6 +242,14 @@ func ConfigProvider(
 	return configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
+	)
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
 	)
 }
 
@@ -231,8 +297,11 @@ func HealthSignalAggregatorProvider(
 	return interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
+		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
+		dynamicconfig.HistoryHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 	)
 }
 
@@ -244,22 +313,47 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
-func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
-	return interceptor.NewMetadataContextInterceptor()
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
 }
 
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
-	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
-		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 	}
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *configs.Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		map[string]int{},      // no token overrides
+		map[string]struct{}{}, // no long polls on history service
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
+		metricsHandler,
+	)
 }
 
 func RateLimitInterceptorProvider(
@@ -366,10 +460,12 @@ func VisibilityManagerProvider(
 
 func ChasmVisibilityManagerProvider(
 	chasmRegistry *chasm.Registry,
+	nsRegistry namespace.Registry,
 	visibilityManager manager.VisibilityManager,
 ) chasm.VisibilityManager {
 	return visibility.NewChasmVisibilityManager(
 		chasmRegistry,
+		nsRegistry,
 		visibilityManager,
 	)
 }
@@ -402,7 +498,7 @@ func VersionMembershipCacheProvider(
 	lc fx.Lifecycle,
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
-) worker_versioning.VersionMembershipCache {
+) worker_versioning.VersionMembershipAndReactivationStatusCache {
 	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
 		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
 	})
@@ -412,24 +508,7 @@ func VersionMembershipCacheProvider(
 			return nil
 		},
 	})
-	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
-}
-
-func ReactivationSignalCacheProvider(
-	lc fx.Lifecycle,
-	serviceConfig *configs.Config,
-	metricsHandler metrics.Handler,
-) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
-	})
-	lc.Append(fx.Hook{
-		OnStop: func(context.Context) error {
-			c.Stop()
-			return nil
-		},
-	})
-	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+	return worker_versioning.NewVersionMembershipAndReactivationStatusCache(c, metricsHandler)
 }
 
 func RoutingInfoCacheProvider(

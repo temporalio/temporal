@@ -248,7 +248,7 @@ func printTable(items []any, writer io.Writer) error {
 	}
 
 	e := reflect.ValueOf(items[0])
-	for e.Type().Kind() == reflect.Ptr {
+	for e.Type().Kind() == reflect.Pointer {
 		e = e.Elem()
 	}
 
@@ -269,7 +269,7 @@ func printTable(items []any, writer io.Writer) error {
 	table.SetHeaderLine(false)
 	for i := range items {
 		item := reflect.ValueOf(items[i])
-		for item.Type().Kind() == reflect.Ptr {
+		for item.Type().Kind() == reflect.Pointer {
 			item = item.Elem()
 		}
 		var columns []string
@@ -309,13 +309,14 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
 }
 
-func getArchetypeWithDefault(
-	c *cli.Context,
-	defaultAchetype chasm.Archetype,
-) chasm.Archetype {
+func getArchetype(c *cli.Context) chasm.Archetype {
+	if c.IsSet(FlagArchetypeID) {
+		return ""
+	}
+
 	archetype := c.String(FlagArchetype)
 	if archetype != "" {
 		return archetype
 	}
-	return defaultAchetype
+	return chasm.WorkflowArchetype
 }

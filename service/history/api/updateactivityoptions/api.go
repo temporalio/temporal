@@ -2,6 +2,7 @@ package updateactivityoptions
 
 import (
 	"context"
+	"strings"
 
 	activitypb "go.temporal.io/api/activity/v1"
 	commandpb "go.temporal.io/api/command/v1"
@@ -14,8 +15,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -79,6 +84,40 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+
+	targetingMethod := "type"
+	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
+		targetingMethod = "id"
+	} else if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_MatchAll); ok {
+		targetingMethod = "match_all"
+	}
+	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
+		metrics.ActivityUpdateOptions.With(shardContext.GetMetricsHandler().WithTags(
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.ActivityTargetingMethodTag(targetingMethod),
+		)).Record(1)
+	}
+
+	logger := shardContext.GetLogger()
+	if updateRequest.RestoreOriginal {
+		logger.Info("updateactivityoptions: activity options restored to original",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(updateRequest.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(updateRequest.GetExecution().GetRunId()),
+		)
+	} else if mask := updateRequest.GetUpdateMask(); mask != nil {
+		updatedFields := util.ParseFieldMask(mask)
+		fields := make([]string, 0, len(updatedFields))
+		for f := range updatedFields {
+			fields = append(fields, f)
+		}
+		logger.Info("updateactivityoptions: activity options updated",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(updateRequest.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(updateRequest.GetExecution().GetRunId()),
+			tag.NewStringTag("updated_fields", strings.Join(fields, ",")),
+		)
 	}
 
 	return response, err
@@ -159,12 +198,18 @@ func processActivityOptionsUpdate(
 	}
 
 	// update activity options
-	if err := mergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
+	if err := activityoptions.MergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
 	}
 
+	if util.FieldMaskHasSubPath(updateFields, "retryPolicy") {
+		if err := retrypolicy.Validate(mergeInto.GetRetryPolicy()); err != nil {
+			return nil, err
+		}
+	}
+
 	// validate the updated options
-	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, ai.ActivityId, ai.ActivityType, mergeInto)
+	adjustedOptions, err := adjustActivityOptions(validator, namespaceID, mutableState.GetExecutionInfo().TaskQueue, ai.ActivityId, ai.ActivityType, mergeInto)
 	if err != nil {
 		return nil, err
 	}
@@ -172,113 +217,10 @@ func processActivityOptionsUpdate(
 	return updateActivityOptions(mutableState, ai, adjustedOptions)
 }
 
-func mergeActivityOptions(
-	mergeInto *activitypb.ActivityOptions,
-	mergeFrom *activitypb.ActivityOptions,
-	updateFields map[string]struct{},
-) error {
-
-	if _, ok := updateFields["taskQueue.name"]; ok {
-		if mergeFrom.TaskQueue == nil {
-			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
-		}
-		if mergeInto.TaskQueue == nil {
-			mergeInto.TaskQueue = mergeFrom.TaskQueue
-		}
-		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
-	}
-
-	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
-	}
-
-	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
-	}
-
-	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
-	}
-
-	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
-	}
-
-	if _, ok := updateFields["priority"]; ok {
-		mergeInto.Priority = mergeFrom.Priority
-	}
-
-	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.PriorityKey = mergeFrom.Priority.PriorityKey
-	}
-
-	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessKey = mergeFrom.Priority.FairnessKey
-	}
-
-	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.FairnessWeight
-	}
-
-	if mergeInto.RetryPolicy == nil {
-		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
-	}
-
-	if _, ok := updateFields["retryPolicy"]; ok {
-		mergeInto.RetryPolicy = mergeFrom.RetryPolicy
-	}
-
-	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
-	}
-
-	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
-	}
-
-	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
-	}
-	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.RetryPolicy.MaximumAttempts
-	}
-
-	return nil
-}
-
 func adjustActivityOptions(
 	validator *api.CommandAttrValidator,
 	namespaceID string,
+	workflowTaskQueue string,
 	activityID string,
 	activityType *commonpb.ActivityType,
 	ao *activitypb.ActivityOptions,
@@ -293,7 +235,7 @@ func adjustActivityOptions(
 		ActivityType:           activityType,
 	}
 
-	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
+	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil, workflowTaskQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -317,6 +259,10 @@ func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest,
 			if ai.ActivityType.Name == activityType {
 				activityIDs = append(activityIDs, ai.ActivityId)
 			}
+		}
+	case *workflowservice.UpdateActivityOptionsRequest_MatchAll:
+		for _, ai := range ms.GetPendingActivityInfos() {
+			activityIDs = append(activityIDs, ai.ActivityId)
 		}
 	}
 	return activityIDs

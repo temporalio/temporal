@@ -30,8 +30,9 @@ import (
 
 type MatcherDataSuite struct {
 	suite.Suite
-	ts *clock.EventTimeSource
-	md matcherData
+	ts               *clock.EventTimeSource
+	md               matcherData
+	rateLimitedCount atomic.Int32
 }
 
 func TestMatcherDataSuite(t *testing.T) {
@@ -49,7 +50,8 @@ func (s *MatcherDataSuite) SetupTest() {
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager)
+	s.rateLimitedCount.Store(0)
+	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, func() { s.rateLimitedCount.Add(1) })
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -154,7 +156,7 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres := s.md.EnqueuePollerAndWait([]context.Context{ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(0, pres.ctxErrIdx)
 
 	// add a task
@@ -174,14 +176,14 @@ func (s *MatcherDataSuite) TestMatchBacklogTask() {
 	s.Equal(t, pres.task)
 
 	// finish task
-	pres.task.finish(nil, true)
+	pres.task.finish(taskFinishResult{consumedToken: true})
 	s.True(gotResponse)
 
 	// one more, context should time out again. note two contexts this time.
 	ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()
 	pres = s.md.EnqueuePollerAndWait([]context.Context{context.Background(), ctx}, poller)
-	s.Error(context.DeadlineExceeded, pres.ctxErr)
+	s.Require().ErrorIs(pres.ctxErr, context.DeadlineExceeded)
 	s.Equal(1, pres.ctxErrIdx, "deadline context was index 1")
 }
 
@@ -189,9 +191,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	t := s.newSyncTask(nil)
 
 	// no match yet
-	canSyncMatch, gotSyncMatch := s.md.MatchTaskImmediately(t)
-	s.True(canSyncMatch)
-	s.False(gotSyncMatch)
+	s.Equal(syncMatchNoPoller, s.md.MatchTaskImmediately(t))
 
 	// poll in a goroutine
 	ch := make(chan *matchResult, 1)
@@ -204,9 +204,7 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.waitForPollers(1)
 
 	// should match this time
-	canSyncMatch, gotSyncMatch = s.md.MatchTaskImmediately(t)
-	s.True(canSyncMatch)
-	s.True(gotSyncMatch)
+	s.Equal(syncMatchSuccess, s.md.MatchTaskImmediately(t))
 
 	// check match
 	pres := <-ch
@@ -214,14 +212,75 @@ func (s *MatcherDataSuite) TestMatchTaskImmediately() {
 	s.Equal(t, pres.task)
 }
 
+func (s *MatcherDataSuite) TestMatchTaskImmediatelyRateLimited() {
+	// Set rate limit to zero — blocks all matches.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should fail due to rate limiting, not lack of poller.
+	t := s.newSyncTask(nil)
+	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+}
+
+func (s *MatcherDataSuite) TestSyncMatchRateLimitedIncrementsStats() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	s.Equal(int32(0), s.rateLimitedCount.Load())
+
+	// Add a waiting poller.
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Sync match should be rate limited and callback should fire.
+	t := s.newSyncTask(nil)
+	s.Equal(syncMatchRateLimited, s.md.MatchTaskImmediately(t))
+
+	s.Positive(s.rateLimitedCount.Load())
+}
+
+func (s *MatcherDataSuite) TestBacklogRateLimitedIncrementsStats() {
+	// Set a rate limit and consume a token so the limiter is blocking.
+	s.md.rateLimitManager.SetEffectiveRPSAndSourceForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
+	now := s.ts.Now().UnixNano()
+	s.md.rateLimitManager.mu.Lock()
+	s.md.rateLimitManager.wholeQueueReady = s.md.rateLimitManager.wholeQueueReady.consume(
+		s.md.rateLimitManager.wholeQueueLimit, now, 1)
+	s.md.rateLimitManager.mu.Unlock()
+
+	// Enqueue a backlog task.
+	_ = s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 0, nil))
+
+	// Poller arrives — findAndWakeMatches should hit the rate limiter.
+	poller := &waitingPoller{startTime: s.now()}
+	s.md.MatchPollerImmediately(poller)
+
+	s.Positive(s.rateLimitedCount.Load())
+}
+
 func (s *MatcherDataSuite) TestMatchTaskImmediatelyDisabledBacklog() {
 	// register some backlog with old tasks
 	s.md.EnqueueTaskNoWait(s.newBacklogTask(123, 10*time.Minute, nil))
 
 	t := s.newSyncTask(nil)
-	canSyncMatch, gotSyncMatch := s.md.MatchTaskImmediately(t)
-	s.False(canSyncMatch)
-	s.False(gotSyncMatch)
+	s.Equal(syncMatchBacklogPresent, s.md.MatchTaskImmediately(t))
 }
 
 func (s *MatcherDataSuite) TestQuery() {
@@ -233,7 +292,7 @@ func (s *MatcherDataSuite) TestQuery() {
 	s.True(pres.task.isQuery())
 	// wake up getResponse. use some error just to check it's passed through.
 	someError := errors.New("some error")
-	pres.task.finish(someError, true)
+	pres.task.finish(taskFinishResult{err: someError, consumedToken: true})
 
 	resp := <-respC
 	s.False(resp.forwarded)
@@ -253,7 +312,8 @@ func (s *MatcherDataSuite) TestQueryForwardNil() {
 	resp := <-respC
 	s.True(resp.forwarded)
 	s.NoError(resp.forwardErr)
-	s.True(resp.forwardRes != nil) // typed nil
+	//nolint:testifylint // NotEqual is intentional: interface is non-nil but holds typed nil *QueryWorkflowResponse
+	s.NotEqual(resp.forwardRes, nil)
 	s.Nil(resp.forwardRes.(*matchingservice.QueryWorkflowResponse))
 }
 
@@ -411,6 +471,77 @@ func (s *MatcherDataSuite) TestPerKeyRateLimit() {
 	s.Less(elapsed, 20*time.Second)
 }
 
+// TestPerKeyRateLimitDoesNotBlockOtherKeys verifies that a rate-limited task for key1 does not
+// prevent a ready task for key2 from being dispatched, even when key2's task has lower priority.
+func (s *MatcherDataSuite) TestPerKeyRateLimitDoesNotBlockOtherKeys() {
+	// Set per-key limit low (1 RPS) so consuming one token puts key1 well into the future.
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
+
+	key1 := &commonpb.Priority{PriorityKey: 1, FairnessKey: "key1"}
+	key2 := &commonpb.Priority{PriorityKey: 2, FairnessKey: "key2"}
+
+	// Consume one token for key1 so it is rate-limited.
+	task1a := s.newBacklogTaskWithPriority(1, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
+	res := s.pollFakeTime(time.Second)
+	s.Equal(task1a, res.task)
+	res.task.finish(taskFinishResult{consumedToken: true})
+
+	// Now key1 is limited; add another key1 task (high priority) and a key2 task (lower priority).
+	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
+	task2 := s.newBacklogTaskWithPriority(3, 0, nil, key2)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1b))
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task2))
+
+	// key2 task should be dispatched even though key1 task has higher priority.
+	res = s.pollFakeTime(time.Second)
+	s.Equal(task2, res.task, "key2 task should dispatch; key1 is rate-limited")
+}
+
+// TestPerKeyRateLimitRecycleWakesBlockedMatch verifies that recycling a per-fairness-key
+// rate-limit token immediately wakes a match that was blocked on that key's rate limit.
+func (s *MatcherDataSuite) TestPerKeyRateLimitRecycleWakesBlockedMatch() {
+	// Set per-key limit low (1 RPS, no burst) so consuming one token for a key puts its
+	// next allowed dispatch a full second into the future.
+	s.md.rateLimitManager.SetFairnessKeyRateLimitDefaultForTesting(1.0, enumspb.RATE_LIMIT_SOURCE_API)
+	s.md.rateLimitManager.UpdatePerKeySimpleRateLimitWithBurstForTesting(0)
+
+	key1 := &commonpb.Priority{PriorityKey: 1, FairnessKey: "key1"}
+
+	// Dispatch one key1 task to consume the key's token. Don't finish it yet.
+	task1a := s.newBacklogTaskWithPriority(1, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1a))
+	res := s.pollFakeTime(time.Second)
+	s.Require().Equal(task1a, res.task)
+
+	// Enqueue a second key1 task. key1 is now rate-limited, so it cannot match yet.
+	task1b := s.newBacklogTaskWithPriority(2, 0, nil, key1)
+	s.Require().NoError(s.md.EnqueueTaskNoWait(task1b))
+
+	// Start a poller in the background. It finds task1b but is blocked by key1's rate
+	// limit (a rate-limit timer is set), so it parks without matching. Use no contexts
+	// so it blocks indefinitely.
+	ch := make(chan *matchResult, 1)
+	go func() {
+		poller := &waitingPoller{startTime: s.now()}
+		ch <- s.md.EnqueuePollerAndWait(nil, poller)
+	}()
+	s.waitForPollers(1)
+
+	// Finish task1a with consumedToken=false, which recycles the key1 token and should unblock task1b.
+	res.task.finish(taskFinishResult{consumedToken: false})
+
+	// The parked poller should now match task1b without any fake-time advancement.
+	select {
+	case pres := <-ch:
+		s.Require().NoError(pres.ctxErr)
+		s.Equal(task1b, pres.task, "recycled token should immediately dispatch the blocked key1 task")
+	case <-time.After(time.Second):
+		s.FailNow("recycling the per-key token did not wake the blocked match")
+	}
+}
+
 func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
@@ -489,7 +620,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
 		s.md.EnqueueTaskNoWait(t2)
-		time.Sleep(11 * time.Millisecond) // nolint:forbidigo
+		time.Sleep(100 * time.Millisecond) // nolint:forbidigo
 		// but we waited too long, poller timed out, so this does nothing (but doesn't crash or assert)
 		s.md.ReenqueuePollerIfNotMatched(tres.poller)
 		done <- struct{}{}
@@ -514,9 +645,9 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 		return t.event.TaskId%4 == 0
 	})
 
-	s.Equal(25, len(removed))
+	s.Len(removed, 25)
 	for _, t := range removed {
-		s.True(t.event.TaskId%4 == 0)
+		s.Equal(int64(0), t.event.TaskId%4)
 		s.NotNil(t.matchResult)
 		s.Equal(errReprocessTask, t.matchResult.ctxErr)
 	}
@@ -526,7 +657,7 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	for range 75 {
 		t := s.pollRealTime(time.Microsecond).task
 		s.NotNil(t)
-		s.False(t.event.TaskId%4 == 0)
+		s.NotEqual(int64(0), t.event.TaskId%4)
 		s.Greater(t.event.TaskId, prev)
 		prev = t.event.TaskId
 	}
@@ -807,6 +938,10 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
+			// Reset the task tree for each subtest, since Add appends rather than
+			// replacing (the old s.md.tasks.heap assignment reset implicitly).
+			s.md.tasks = newTaskBTree()
+
 			// Create task
 			var task *internalTask
 			if tc.taskIsQuery {
@@ -823,7 +958,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			if tc.taskPriority > 0 {
 				task.effectivePriority = effectivePriorityFactor * priorityKey(tc.taskPriority)
 			}
-			s.md.tasks.heap = []*internalTask{task}
+			s.md.tasks.Add(task)
 
 			// Create poller
 			poller := &waitingPoller{
@@ -844,7 +979,8 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 			// Call findMatch
 			s.md.lock.Lock()
-			foundTask, foundPoller := s.md.findMatch(tc.allowForwarding)
+			now := s.ts.Now().UnixNano()
+			foundTask, foundPoller, _ := s.md.findMatch(tc.allowForwarding, now)
 			s.md.lock.Unlock()
 
 			if tc.shouldMatch {
@@ -956,7 +1092,7 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 		1e-8, // 1 per 1000+ days
 	} {
 		pLow := makeSimpleLimiterParams(lowRate, time.Second)
-		require.True(t, pLow.never() == (lowRate == 0))
+		require.Equal(t, pLow.never(), (lowRate == 0))
 
 		now := time.Now().UnixNano()
 		var ready simpleLimiter
@@ -1002,7 +1138,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-		md := newMatcherData(cfg, logger, ts, true, rateLimitManager)
+		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, func() {})
 
 		next := func() int {
 			if len(tape) == 0 {
@@ -1033,7 +1169,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 2: // add backlog task with priority
 				tid++
@@ -1046,7 +1182,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 3: // add poller
 				timeout := randms(100)

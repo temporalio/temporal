@@ -94,6 +94,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -108,7 +110,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		&stage,
+		false,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -136,6 +140,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -150,7 +156,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		&stage,
+		false,
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
@@ -162,6 +170,67 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		&stage,
 	)
 	s.Error(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByRetention_SkipsReplication() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	closeExecutionVisibilityTaskID := int64(39)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
+	})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
+	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		workflow.NoopChasmTree.ArchetypeID(),
+		[]byte{22, 8, 78},
+		closeExecutionVisibilityTaskID,
+		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
+		gomock.Any(),
+		true,
+	).DoAndReturn(func(
+		_ context.Context,
+		_ definition.WorkflowKey,
+		_ chasm.ArchetypeID,
+		_ []byte,
+		_ int64,
+		_ time.Time,
+		_ time.Time,
+		stagePtr *tasks.DeleteWorkflowExecutionStage,
+		_ bool,
+	) error {
+		// Verify that replication stage is already marked as processed before DeleteWorkflowExecution is called.
+		s.True(stagePtr.IsProcessed(tasks.DeleteWorkflowExecutionStageReplication),
+			"Replication stage should be pre-marked as processed for retention-based deletion")
+		return nil
+	})
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
+		context.Background(),
+		tests.NamespaceID,
+		&we,
+		mockWeCtx,
+		mockMutableState,
+		&stage,
+	)
+	s.NoError(err)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() {
@@ -177,6 +246,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(time.Unix(0, 0).UTC(), nil)
 	mockMutableState.EXPECT().ChasmTree().Return(workflow.NoopChasmTree).AnyTimes()
 	stage := tasks.DeleteWorkflowExecutionStageNone
 
@@ -191,7 +262,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		[]byte{22, 8, 78},
 		closeExecutionVisibilityTaskID,
 		time.Unix(0, 0).UTC(),
+		time.Unix(0, 0).UTC(),
 		&stage,
+		false,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 

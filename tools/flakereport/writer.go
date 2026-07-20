@@ -1,60 +1,39 @@
 package flakereport
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
-// writeReportFiles writes all report files to output directory
-// Files: flaky.txt, flaky_slack.txt, flaky_count.txt, timeout.txt, crash.txt
-func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) error {
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+// writeFailuresJSON writes failures.json containing every individual test failure (for analytics).
+func writeFailuresJSON(outputDir string, failures []TestFailure, repo string) error {
+	records := make([]FailedTestRecord, 0, len(failures))
+	for _, f := range failures {
+		runIDStr := strconv.FormatInt(f.RunID, 10)
+		records = append(records, FailedTestRecord{
+			SuiteName:   f.SuiteName,
+			TestName:    f.Name,
+			FailureDate: f.Timestamp.Format(time.RFC3339),
+			Link:        buildGitHubURL(repo, runIDStr, f.JobID),
+			FailureType: classifyFailure(f.Name),
+		})
 	}
 
-	// Generate report content (all flaky tests shown)
-	flakyMarkdown, flakySlack, flakyCount := generateFlakyReport(summary.FlakyTests, maxLinks)
-	timeoutMarkdown := generateStandardReport(summary.Timeouts, maxLinks)
-	crashMarkdown := generateStandardReport(summary.Crashes, maxLinks)
-	ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
-
-	// Write flaky.txt (markdown with links, top 10)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky.txt"), []byte(flakyMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky.txt: %w", err)
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal failures.json: %w", err)
 	}
-
-	// Write flaky_slack.txt (plain text without links, top 10)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky_slack.txt"), []byte(flakySlack), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky_slack.txt: %w", err)
+	if err := os.WriteFile(filepath.Join(outputDir, "failures.json"), data, 0644); err != nil {
+		return fmt.Errorf("failed to write failures.json: %w", err)
 	}
-
-	// Write flaky_count.txt (total count of flaky tests)
-	countStr := strconv.Itoa(flakyCount)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky_count.txt"), []byte(countStr), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky_count.txt: %w", err)
-	}
-
-	// Write timeout.txt (all timeouts)
-	if err := os.WriteFile(filepath.Join(outputDir, "timeout.txt"), []byte(timeoutMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write timeout.txt: %w", err)
-	}
-
-	// Write crash.txt (all crashes)
-	if err := os.WriteFile(filepath.Join(outputDir, "crash.txt"), []byte(crashMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write crash.txt: %w", err)
-	}
-
-	// Write ci_breakers.txt (tests that broke CI by failing all retries)
-	if err := os.WriteFile(filepath.Join(outputDir, "ci_breakers.txt"), []byte(ciBreakerMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write ci_breakers.txt: %w", err)
-	}
-
-	fmt.Printf("Report files written to %s\n", outputDir)
 	return nil
 }
 
@@ -90,44 +69,151 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	// CI Breakers section (tests that failed all retries)
 	if len(summary.CIBreakers) > 0 {
 		content += "### CI Breakers (Failed All Retries)\n\n"
-		ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
-		content += ciBreakerMarkdown + "\n\n"
+		content += generateTestReportTable(summary.CIBreakers, "CI Break Rate", maxLinks) + "\n"
 	}
 
 	// Crashes section
 	if len(summary.Crashes) > 0 {
 		content += "### Crashes\n\n"
-		crashReport := generateStandardReport(summary.Crashes, maxLinks)
-		content += crashReport + "\n\n"
+		content += generateTestReportTable(summary.Crashes, "Crash Rate", maxLinks) + "\n"
 	}
 
 	// Timeouts section
 	if len(summary.Timeouts) > 0 {
 		content += "### Timeouts\n\n"
-		timeoutReport := generateStandardReport(summary.Timeouts, maxLinks)
-		content += timeoutReport + "\n\n"
+		content += generateTestReportTable(summary.Timeouts, "Flake Rate", maxLinks) + "\n"
 	}
 
 	// Flaky tests section (show ALL tests)
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
-		flakyMarkdown, _, _ := generateFlakyReport(summary.FlakyTests, maxLinks)
-		content += flakyMarkdown + "\n\n"
+		content += generateTestReportTable(summary.FlakyTests, "Flake Rate", maxLinks) + "\n"
+	}
+
+	// Flaky suites
+	if len(summary.Suites) > 0 {
+		content += "### Flaky Suites\n\n"
+		content += generateSuiteBreakdownTable(summary.Suites) + "\n"
 	}
 
 	// Link to run
 	if runID != "" {
-		content += fmt.Sprintf("\n[View Full Report & Artifacts](https://github.com/%s/actions/runs/%s)\n", defaultRepository, runID)
+		content += fmt.Sprintf("\n[View Full Report & Artifacts](%s)\n", github.RunURL(defaultRepository, runID))
 	}
 
 	return content
 }
 
-// writeGitHubSummary writes summary to GITHUB_STEP_SUMMARY env var
-func writeGitHubSummary(content string) error {
+// countQualifyingBisectReports returns the number of non-skipped reports.
+func countQualifyingBisectReports(reports []TestBisectReport) int {
+	n := 0
+	for _, r := range reports {
+		if !r.Skipped {
+			n++
+		}
+	}
+	return n
+}
+
+// escapeTableCell replaces pipe characters so they don't corrupt GFM table rows.
+func escapeTableCell(s string) string {
+	return strings.ReplaceAll(s, "|", "&#124;")
+}
+
+// writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
+func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
+	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
+	sb.WriteString("|------|------|--------|------|--------|--------|-------|------|\n")
+	for _, r := range reports {
+		if r.Skipped || len(r.TopSuspects) == 0 {
+			continue
+		}
+		for _, s := range r.TopSuspects {
+			shortSHA := s.CommitSHA
+			if len(shortSHA) > 7 {
+				shortSHA = shortSHA[:7]
+			}
+			commitURL := github.CommitURL(repo, s.CommitSHA)
+			title := s.CommitTitle
+			if title == s.CommitSHA || title == "" {
+				title = shortSHA
+			}
+			beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
+				pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
+			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
+				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
+			fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
+				escapeTableCell(r.TestName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
+				s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
+		}
+	}
+	sb.WriteString("\n")
+}
+
+// generateBisectSummary creates the markdown section for bisect results to append to the GitHub summary.
+func generateBisectSummary(reports []TestBisectReport, repo string, minProb float64) string {
+	qualifying := countQualifyingBisectReports(reports)
+
+	skipped := len(reports) - qualifying
+	threshold := fmt.Sprintf("%.0f%%", minProb*100)
+
+	var sb strings.Builder
+	sb.WriteString("\n## Bayesian Commit Suspects\n\n")
+
+	if qualifying == 0 {
+		sb.WriteString("No actionable commit suspects found")
+		if skipped > 0 {
+			sb.WriteString(fmt.Sprintf(" — %d tests analyzed but none above %s confidence", skipped, threshold))
+		}
+		sb.WriteString("\n")
+		return sb.String()
+	}
+
+	sb.WriteString(fmt.Sprintf("%d tests with actionable suspects (≥%s confidence)", qualifying, threshold))
+	if skipped > 0 {
+		sb.WriteString(fmt.Sprintf(", %d below confidence threshold", skipped))
+	}
+	sb.WriteString("\n\n")
+
+	// Sort by top suspect probability descending so the most actionable rows appear first.
+	sort.Slice(reports, func(i, j int) bool {
+		pi := 0.0
+		if len(reports[i].TopSuspects) > 0 {
+			pi = reports[i].TopSuspects[0].Probability
+		}
+		pj := 0.0
+		if len(reports[j].TopSuspects) > 0 {
+			pj = reports[j].TopSuspects[0].Probability
+		}
+		return pi > pj
+	})
+
+	writeBisectTable(&sb, reports, repo)
+	return sb.String()
+}
+
+// pct returns percentage of num/denom, returning 0 if denom is 0.
+func pct(num, denom int) float64 {
+	if denom == 0 {
+		return 0
+	}
+	return float64(num) / float64(denom) * 100.0
+}
+
+// writeGitHubSummary writes markdown summary to GITHUB_STEP_SUMMARY (if set)
+// and always writes to outputDir/github-report.md.
+func writeGitHubSummary(content string, outputDir string) error {
+	// Always write to output dir
+	outPath := filepath.Join(outputDir, "github-report.md")
+	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write github-report.md: %w", err)
+	}
+	fmt.Printf("GitHub report written to %s\n", outPath)
+
+	// Also write to GITHUB_STEP_SUMMARY if available
 	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
 	if summaryFile == "" {
-		return errors.New("GITHUB_STEP_SUMMARY environment variable not set")
+		return nil
 	}
 
 	file, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -144,6 +230,6 @@ func writeGitHubSummary(content string) error {
 		return fmt.Errorf("failed to write summary: %w", err)
 	}
 
-	fmt.Println("GitHub Actions summary written successfully")
+	fmt.Println("GitHub Actions step summary written")
 	return nil
 }

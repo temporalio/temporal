@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func failWorkflowTask(
@@ -74,34 +75,26 @@ func TimeoutWorkflow(
 	continuedRunID string,
 ) error {
 
-	// Check TerminateWorkflow comment bellow.
-	eventBatchFirstEventID := mutableState.GetNextEventID()
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		wtFailedEvent, err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		)
-		if err != nil {
+		); err != nil {
 			return err
-		}
-		if wtFailedEvent != nil {
-			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
 	_, err := mutableState.AddTimeoutWorkflowEvent(
-		eventBatchFirstEventID,
 		retryState,
 		continuedRunID,
 	)
 	return err
 }
 
-// TerminateWorkflow will write a WorkflowExecutionTerminated event with a fresh
-// batch ID. Do not use for situations where the WorkflowExecutionTerminated
-// event must fall within an existing event batch (for example, if you've already
-// failed a workflow task via `failWorkflowTask` and have an event batch ID).
+// TerminateWorkflow writes a WorkflowExecutionTerminated event. If a workflow
+// task is currently started it is failed first, and then the terminate event
+// is added.
 func TerminateWorkflow(
 	mutableState historyi.MutableState,
 	terminateReason string,
@@ -111,38 +104,23 @@ func TerminateWorkflow(
 	links []*commonpb.Link,
 ) error {
 
-	// Terminate workflow is written as a separate batch and might result in more than one event
-	// if there is started WT which needs to be failed before.
-	// Failing speculative WT creates 3 events: WTScheduled, WTStarted, and WTFailed.
-	// First 2 goes to separate batch and eventBatchFirstEventID has to point to WTFailed event.
-	// Failing transient WT doesn't create any events at all and wtFailedEvent is nil.
-	// WTFailed event wasn't created (because there were no WT or WT was transient),
-	// then eventBatchFirstEventID points to TerminateWorkflow event (which is next event).
-	eventBatchFirstEventID := mutableState.GetNextEventID()
-
 	if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		wtFailedEvent, err := failWorkflowTask(
+		if _, err := failWorkflowTask(
 			mutableState,
 			workflowTask,
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		)
-		if err != nil {
+		); err != nil {
 			return err
-		}
-		if wtFailedEvent != nil {
-			eventBatchFirstEventID = wtFailedEvent.GetEventId()
 		}
 	}
 
 	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
 		terminateReason,
 		terminateDetails,
 		terminateIdentity,
 		deleteAfterTerminate,
 		links,
 	)
-
 	return err
 }
 
@@ -183,14 +161,14 @@ type MutableStateWithEffects struct {
 
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
-	return mse.MutableState.IsWorkflowExecutionRunning()
+	return mse.IsWorkflowExecutionRunning()
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:
 //  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 //     new deployment
-//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+//     pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Deployment: this is returned when there is no transition and no override (the most
 //     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -210,17 +188,9 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil { // //nolint:staticcheck // SA1019: worker versioning v0.30
 		return transition.GetDeployment()
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		(override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED || //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
-			override.GetPinned() != nil) {
-		if pinnedVersion := override.GetPinned().GetVersion(); pinnedVersion != nil {
-			return worker_versioning.DeploymentFromExternalDeploymentVersion(pinnedVersion)
-		}
-		if pinned := override.GetPinnedVersion(); pinned != "" { //nolint:staticcheck // SA1019: worker versioning v0.31
-			v, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(pinned)
-			return worker_versioning.DeploymentFromDeploymentVersion(v)
-		}
-		return override.GetDeployment() // //nolint:staticcheck // SA1019: worker versioning v0.30
+	} else if overrideTarget := worker_versioning.GetOverrideTargetDeploymentVersion(versioningInfo.GetVersioningOverride()); overrideTarget != nil {
+		// Pinned and pending one-time overrides route to their stored target version.
+		return worker_versioning.DeploymentFromExternalDeploymentVersion(overrideTarget)
 	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED || // v0.30 and v0.31 auto-upgrade
 		versioningInfo.GetVersioningOverride().GetAutoUpgrade() { // v0.32 auto-upgrade
 		//nolint:revive // nesting will be reduced after old code clean up
@@ -239,8 +209,8 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
 //  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 //  3. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
@@ -249,13 +219,7 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 	} else if t := versioningInfo.GetVersionTransition(); t != nil {
 		return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
-		if override.GetAutoUpgrade() || override.GetPinned() != nil { // v0.32 override behavior
-			if override.GetAutoUpgrade() {
-				return enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-			}
-			return enumspb.VERSIONING_BEHAVIOR_PINNED
-		}
-		return override.GetBehavior() // //nolint:staticcheck // SA1019: worker versioning v0.31 and v0.30
+		return worker_versioning.ExtractVersioningBehaviorFromOverride(override)
 	}
 	return versioningInfo.GetBehavior()
 }
@@ -348,4 +312,8 @@ func PersistenceCallbackToAPICallback(cb *persistencespb.Callback) (*commonpb.Ca
 		}
 	}
 	return res, nil
+}
+
+func timeNotSet(ts *timestamppb.Timestamp) bool {
+	return ts == nil || ts.AsTime().IsZero()
 }

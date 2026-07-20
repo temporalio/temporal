@@ -55,11 +55,9 @@ type (
 func NewTaskRefresher(
 	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
-
 	return &TaskRefresherImpl{
-		shard: shard,
-
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:                 shard,
+		taskGeneratorProvider: GetTaskGeneratorProvider(),
 	}
 }
 
@@ -68,10 +66,8 @@ func (r *TaskRefresherImpl) Refresh(
 	mutableState historyi.MutableState,
 	shouldSkipGeneratingCloseTransferTask bool,
 ) error {
-	if r.shard.GetConfig().EnableNexus() {
-		// Invalidate all tasks generated for this mutable state before the refresh.
-		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
-	}
+	// Invalidate all tasks generated for this mutable state before the refresh.
+	mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 
 	if err := r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, shouldSkipGeneratingCloseTransferTask); err != nil {
 		return err
@@ -202,8 +198,16 @@ func (r *TaskRefresherImpl) PartialRefresh(
 		return err
 	}
 
-	return r.refreshTasksForSubStateMachines(
+	if err := r.refreshTasksForSubStateMachines(
 		mutableState,
+		minVersionedTransition,
+	); err != nil {
+		return err
+	}
+
+	return r.refreshTasksForTimeSkipping(
+		mutableState,
+		taskGenerator,
 		minVersionedTransition,
 	)
 }
@@ -465,6 +469,33 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 	_, err := NewTimerSequence(mutableState).CreateNextUserTimer()
 	return err
+}
+
+// refreshTasksForTimeSkipping re-stamps pending timer tasks against the current accumulated
+// skip when a time-skipping transition happened within the replicated delta.
+func (r *TaskRefresherImpl) refreshTasksForTimeSkipping(
+	mutableState historyi.MutableState,
+	taskGenerator TaskGenerator,
+	minVersionedTransition *persistencespb.VersionedTransition,
+) error {
+	executionState := mutableState.GetExecutionState()
+	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING &&
+		executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return nil
+	}
+
+	tsi := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if tsi == nil {
+		return nil
+	}
+	if transitionhistory.Compare(
+		tsi.GetLastUpdateVersionedTransition(),
+		minVersionedTransition,
+	) < 0 {
+		return nil
+	}
+
+	return taskGenerator.RegenerateTimerTasksForTimeSkipping()
 }
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(

@@ -23,6 +23,7 @@ type (
 		// performed
 		PickWritePartition(
 			taskQueue *tqid.TaskQueue,
+			pc PartitionCounts,
 		) *tqid.NormalPartition
 
 		// PickReadPartition returns the task queue partition to send a poller to.
@@ -30,6 +31,7 @@ type (
 		// forwardedFrom is non-empty, no load balancing should be done.
 		PickReadPartition(
 			taskQueue *tqid.TaskQueue,
+			pc PartitionCounts,
 		) *pollToken
 	}
 
@@ -75,8 +77,9 @@ func NewLoadBalancer(
 
 func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
+	pc PartitionCounts,
 ) *tqid.NormalPartition {
-	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceWritePartition); ok {
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
 		return taskQueue.NormalPartition(n)
 	}
 
@@ -85,14 +88,21 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		return taskQueue.RootPartition()
 	}
 
-	n := max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
-	return taskQueue.NormalPartition(rand.Intn(n))
+	var partitionCount int
+	if pc.Write > 0 {
+		partitionCount = int(pc.Write)
+	} else {
+		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
+	}
+
+	return taskQueue.NormalPartition(rand.Intn(partitionCount))
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
 // Caller is responsible to call pollToken.Release() after complete the poll.
 func (lb *defaultLoadBalancer) PickReadPartition(
 	taskQueue *tqid.TaskQueue,
+	pc PartitionCounts,
 ) *pollToken {
 	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
 
@@ -100,12 +110,16 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	// map namespace ID to name.
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 
-	namespaceName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
-	if err == nil {
-		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
+	if pc.Read > 0 {
+		partitionCount = int(pc.Read)
+	} else {
+		namespaceName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
+		if err == nil {
+			partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
+		}
 	}
 
-	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceReadPartition); ok {
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceReadPartition, namespace.ID(taskQueue.NamespaceId())); ok {
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 

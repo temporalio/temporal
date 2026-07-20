@@ -90,6 +90,7 @@ type (
 		localVerificationDuration time.Duration
 		fetchHistoryDuration      time.Duration
 		discardDuration           time.Duration
+		chasmDiscardDuration      time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
 		mockSearchAttributesProvider     *searchattribute.MockProvider
@@ -119,6 +120,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.localVerificationDuration = time.Minute * 10
 	s.fetchHistoryDuration = time.Minute * 12
 	s.discardDuration = time.Minute * 30
+	s.chasmDiscardDuration = config.ChasmStandbyTaskDiscardDelay("")
 
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewTestContextWithTimeSource(
@@ -280,7 +282,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_ExecutesTask() {
@@ -291,11 +293,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 
 	// Mock the CHASM tree.
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	expectValidate := func(isValid bool, err error) {
+	expectValidate := func(isTaskInTree bool, isValidByComponent bool, err error) {
 		chasmTree.EXPECT().ValidateSideEffectTask(
 			gomock.Any(),
 			gomock.Any(),
-		).Times(1).Return(isValid, err)
+		).Times(1).Return(isTaskInTree, isValidByComponent, err)
 	}
 
 	// Mock mutable state.
@@ -347,21 +349,27 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 		s.clientBean,
 	).(*transferQueueStandbyTaskExecutor)
 
-	// Validation succeeds, task should retry.
-	expectValidate(true, nil)
+	// Task in tree and valid by component — retry.
+	expectValidate(true, true, nil)
 	resp := transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	// Validation succeeds but task is invalid.
-	expectValidate(false, nil)
+	// Task in tree but component says invalid (e.g. code-deployment) — drop the physical task.
+	expectValidate(true, false, nil)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.NoError(resp.ExecutionErr)
 
-	// Validation fails, processing should fail.
+	// Task not in tree — replication removed it, drop the physical task.
+	expectValidate(false, false, nil)
+	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NotNil(resp)
+	s.NoError(resp.ExecutionErr)
+
+	// Validation error — propagate.
 	expectedErr := errors.New("validation error")
-	expectValidate(false, expectedErr)
+	expectValidate(false, false, expectedErr)
 	resp = transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NotNil(resp)
 	s.ErrorIs(expectedErr, resp.ExecutionErr)
@@ -427,7 +435,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Paused() {
@@ -550,7 +558,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_FirstWorkflowTask() {
@@ -602,7 +610,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_NonFirstWorkflowTask() {
@@ -659,7 +667,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMismatch() {
@@ -796,7 +804,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	})
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(parentExecution.WorkflowId)).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	s.clientBean.EXPECT().GetRemoteAdminClient(tests.GlobalChildNamespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: parentExecution.WorkflowId})).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
 		Namespace:       tests.ParentNamespace.String(),
 		Execution:       parentExecution,
@@ -811,7 +819,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, nil)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowExecutionNotFound)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -823,14 +831,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, serviceerror.NewUnimplemented("not implemented"))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrResourceExhaustedBusyWorkflow)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	var verificationErr *verificationErr
-	s.True(errors.As(resp.ExecutionErr, &verificationErr))
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	s.True(errors.As(resp.ExecutionErr, &resourceExhaustedErr))
+	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.localVerificationDuration))
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
@@ -979,7 +987,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pending() {
@@ -1111,7 +1119,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Pending() {
@@ -1185,7 +1193,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -1197,14 +1205,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.Unimplemented{})
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, consts.ErrResourceExhaustedBusyWorkflow)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	var verificationErr *verificationErr
-	s.True(errors.As(resp.ExecutionErr, &verificationErr))
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	s.True(errors.As(resp.ExecutionErr, &resourceExhaustedErr))
+	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
@@ -1219,7 +1227,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {
@@ -1283,11 +1291,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 
 	// workflow closed && child started && parent close policy is abandon
 	event, err = mutableState.AddTimeoutWorkflowEvent(
-		mutableState.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.NewString(),
 	)
@@ -1300,7 +1307,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Nil(resp.ExecutionErr)
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
@@ -1336,6 +1343,98 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,
 	)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransferTask_Discard() {
+	setupDiscard := func(lib chasm.Library, taskName string, treeMockFn func(*historyi.MockChasmTree)) (*transferQueueStandbyTaskExecutor, *tasks.ChasmTask) {
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowKey.WorkflowID,
+			RunId:      tests.WorkflowKey.RunID,
+		}
+
+		registry := chasm.NewRegistry(s.logger)
+		s.NoError(registry.Register(lib))
+		s.mockShard.SetChasmRegistry(registry)
+		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
+
+		chasmTree := historyi.NewMockChasmTree(s.controller)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, true, nil).Times(1)
+		treeMockFn(chasmTree)
+
+		ms := historyi.NewMockMutableState(s.controller)
+		ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
+		ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
+		ms.EXPECT().GetNextEventID().Return(int64(2)).AnyTimes()
+		ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+		ms.EXPECT().GetExecutionState().Return(
+			&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+		).AnyTimes()
+		ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+
+		transferTask := &tasks.ChasmTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				s.namespaceID.String(),
+				execution.GetWorkflowId(),
+				execution.GetRunId(),
+			),
+			VisibilityTimestamp: s.now,
+			TaskID:              s.mustGenerateTaskID(),
+			Info: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: tests.ArchetypeID,
+				TypeId:      typeID,
+			},
+		}
+
+		wfCtx := historyi.NewMockWorkflowContext(s.controller)
+		wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil).AnyTimes()
+
+		mockCache := wcache.NewMockCache(s.controller)
+		mockCache.EXPECT().GetOrCreateChasmExecution(
+			gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, gomock.Any(),
+		).Return(wfCtx, wcache.NoopReleaseFn, nil).AnyTimes()
+
+		//nolint:revive // unchecked-type-assertion
+		executor := newTransferQueueStandbyTaskExecutor(
+			s.mockShard,
+			mockCache,
+			s.logger,
+			metrics.NoopMetricsHandler,
+			s.clusterName,
+			s.mockShard.Resource.HistoryClient,
+			s.mockShard.Resource.MatchingClient,
+			s.mockVisibilityManager,
+			s.mockChasmEngine,
+			s.clientBean,
+		).(*transferQueueStandbyTaskExecutor)
+
+		// Advance the standby cluster's time past the CHASM discard delay.
+		s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.chasmDiscardDuration+time.Second))
+
+		return executor, transferTask
+	}
+
+	s.Run("WithHandler", func() {
+		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(nil).Times(1)
+		})
+		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
+		s.NotNil(resp)
+		s.NoError(resp.ExecutionErr)
+	})
+
+	s.Run("WithoutHandler", func() {
+		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(chasm.ErrTaskDiscarded).Times(1)
+		})
+		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
+		s.NotNil(resp)
+		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
+	})
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {

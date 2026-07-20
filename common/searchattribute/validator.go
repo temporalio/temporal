@@ -3,14 +3,25 @@ package searchattribute
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+)
+
+var (
+	acceptedInvalidValueKeywordList = metrics.NewCounterDef("visibility_accepted_invalid_value_keywordlist")
+	invalidListValues               = metrics.NewCounterDef("visibility_invalid_list_values")
 )
 
 type (
@@ -29,6 +40,9 @@ type (
 		// suppressErrorSetSystemSearchAttribute suppresses errors when the user
 		// attempts to set values in system search attributes.
 		suppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 )
 
@@ -42,6 +56,8 @@ func NewValidator(
 	visibilityManager manager.VisibilityManager,
 	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	suppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:              searchAttributesProvider,
@@ -52,6 +68,9 @@ func NewValidator(
 		visibilityManager:                     visibilityManager,
 		allowList:                             allowList,
 		suppressErrorSetSystemSearchAttribute: suppressErrorSetSystemSearchAttribute,
+
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 
@@ -96,7 +115,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 
 		saType, err := saTypeMap.getType(saFieldName, customCategory|predefinedCategory)
 		if err != nil {
-			if errors.Is(err, ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				return v.validationError(
 					"search attribute %s is not defined",
 					saFieldName,
@@ -104,23 +123,36 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				)
 			}
 			return v.validationError(
-				fmt.Sprintf("unable to get %s search attribute type: %v", "%s", err),
+				fmt.Sprintf("unable to get %%s search attribute type: %v", err),
 				saFieldName,
 				namespace,
 			)
 		}
 
 		// Don't allow those SA's that are in predefined but not in predefinedWhiteList to be set by a user
-		predefined := sadefs.Predefined()
 		if _, ok := predefined[saFieldName]; ok {
-			predefinedWhiteList := sadefs.PredefinedWhiteList()
 			if _, ok = predefinedWhiteList[saFieldName]; !ok {
 				return serviceerror.NewInvalidArgumentf(
 					"%s attribute can't be set in SearchAttributes", saFieldName,
 				)
 			}
 		}
-		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
+
+		allowList := v.allowList(namespace)
+
+		// Record only invalid usages of list of values:
+		// - Any type other than KeywordList
+		// - Empty list is acceptable for backwards compatibility to unset a custom search attribute.
+		if saType != enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST && isNonEmptyListValues(saPayload) {
+			invalidListValues.With(v.metricsHandler).Record(
+				1,
+				metrics.NamespaceTag(namespace),
+				metrics.StringTag("search_attribute_type", saType.String()),
+				metrics.StringTag("allow_list", strconv.FormatBool(allowList)),
+			)
+		}
+
+		saValue, err := sadefs.DecodeValue(saPayload, saType, allowList)
 		if err != nil {
 			var invalidValue any
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
@@ -128,8 +160,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			}
 			return v.validationError(
 				fmt.Sprintf(
-					"invalid value for search attribute %s of type %s: %v",
-					"%s",
+					"invalid value for search attribute %%s of type %s: %v",
 					saType,
 					invalidValue,
 				),
@@ -137,6 +168,30 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 				namespace,
 			)
 		}
+
+		// Log occurrences of invalid values for KeywordList search attribute being accepted.
+		// Eg: [nil] is decoded successfully in sadefs.DecodeValue.
+		if saType == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
+			_, err := sadefs.DecodeKeywordList(saPayload)
+			if err != nil {
+				var invalidValue any
+				if err = payload.Decode(saPayload, &invalidValue); err != nil {
+					invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
+				}
+				err = v.validationError(
+					fmt.Sprintf(
+						"invalid value for search attribute %%s of type %s: %v",
+						saType,
+						invalidValue,
+					),
+					saFieldName,
+					namespace,
+				)
+				acceptedInvalidValueKeywordList.With(v.metricsHandler).Record(1, metrics.NamespaceTag(namespace))
+				v.logger.Warn("invalid KeywordList value decoded successfully", tag.Error(err))
+			}
+		}
+
 		saMap[saFieldName] = saValue
 	}
 	_, err = v.visibilityManager.ValidateCustomSearchAttributes(saMap)
@@ -198,4 +253,14 @@ func (v *Validator) getAlias(saFieldName string, namespaceName string) (string, 
 		}
 	}
 	return saFieldName, nil
+}
+
+func isNonEmptyListValues(p *commonpb.Payload) bool {
+	if p == nil {
+		return false
+	}
+	if string(p.Metadata[converter.MetadataEncoding]) != converter.MetadataEncodingJSON {
+		return false
+	}
+	return len(p.Data) > 0 && p.Data[0] == '[' && string(p.Data) != "[]"
 }

@@ -231,6 +231,59 @@ func TestFromOperationFailedError(t *testing.T) {
 	protorequire.ProtoEqual(t, expected, converted)
 }
 
+func TestNexusFailureToTemporalFailure_UnknownMetadataType(t *testing.T) {
+	nf := nexus.Failure{
+		Message:    "unknown failure",
+		StackTrace: "unknown stack trace",
+		Metadata: map[string]string{
+			"type": "some.custom.Type",
+		},
+		Details: []byte(`{"key":"value"}`),
+	}
+
+	converted, err := NexusFailureToTemporalFailure(nf)
+	require.NoError(t, err)
+
+	require.Equal(t, "unknown failure", converted.GetMessage())
+	require.Equal(t, "unknown stack trace", converted.GetStackTrace())
+
+	appInfo := converted.GetApplicationFailureInfo()
+	require.NotNil(t, appInfo)
+	require.Equal(t, "NexusFailure", appInfo.GetType())
+	require.NotNil(t, appInfo.GetDetails())
+	require.Len(t, appInfo.GetDetails().GetPayloads(), 1)
+}
+
+func TestNexusFailureToTemporalFailure_NoMetadataWithDetails(t *testing.T) {
+	nf := nexus.Failure{
+		Message: "bare failure",
+		Details: []byte(`{"info":"data"}`),
+	}
+
+	converted, err := NexusFailureToTemporalFailure(nf)
+	require.NoError(t, err)
+
+	require.Equal(t, "bare failure", converted.GetMessage())
+
+	appInfo := converted.GetApplicationFailureInfo()
+	require.NotNil(t, appInfo)
+	require.Equal(t, "NexusFailure", appInfo.GetType())
+	require.NotNil(t, appInfo.GetDetails())
+	require.Len(t, appInfo.GetDetails().GetPayloads(), 1)
+}
+
+func TestNexusFailureToTemporalFailure_NoMetadataNoDetails(t *testing.T) {
+	nf := nexus.Failure{
+		Message: "plain failure",
+	}
+
+	converted, err := NexusFailureToTemporalFailure(nf)
+	require.NoError(t, err)
+
+	require.Equal(t, "plain failure", converted.GetMessage())
+	require.Nil(t, converted.GetFailureInfo())
+}
+
 func TestFromOperationCanceledError(t *testing.T) {
 	nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
 		State:      nexus.OperationStateCanceled,

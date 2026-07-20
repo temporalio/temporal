@@ -56,6 +56,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		SourceClusterName() string
+		SourceShardKey() ClusterShardKey
 		Ack()
 		Nack(err error)
 		Abort()
@@ -164,6 +165,10 @@ func (e *ExecutableTaskImpl) SourceClusterName() string {
 	return e.sourceClusterName
 }
 
+func (e *ExecutableTaskImpl) SourceShardKey() ClusterShardKey {
+	return e.sourceShardKey
+}
+
 func (e *ExecutableTaskImpl) ReplicationTask() *replicationspb.ReplicationTask {
 	return e.replicationTask
 }
@@ -215,7 +220,7 @@ func (e *ExecutableTaskImpl) Abort() {
 		e.Abort() // retry abort
 	}
 
-	e.Logger.Debug(fmt.Sprintf(
+	e.ThrottledLogger.Debug(fmt.Sprintf(
 		"replication task: %v encountered abort event",
 		e.taskID,
 	))
@@ -230,7 +235,7 @@ func (e *ExecutableTaskImpl) Cancel() {
 		e.Cancel() // retry cancel
 	}
 
-	e.Logger.Debug(fmt.Sprintf(
+	e.ThrottledLogger.Debug(fmt.Sprintf(
 		"replication task: %v encountered cancellation event",
 		e.taskID,
 	))
@@ -243,7 +248,7 @@ func (e *ExecutableTaskImpl) Reschedule() {
 		return
 	}
 
-	e.Logger.Info(fmt.Sprintf(
+	e.ThrottledLogger.Info(fmt.Sprintf(
 		"replication task: %v scheduled for retry",
 		e.taskID,
 	))
@@ -302,15 +307,54 @@ func (e *ExecutableTaskImpl) NamespaceName() string {
 	return ""
 }
 
+// workflowKeyFromTask extracts namespace ID, workflow ID, and run ID from the
+// replication task. It first tries RawTaskInfo, then falls back to task-type-specific
+// attributes. Returns empty strings when workflow identity cannot be determined.
+func (e *ExecutableTaskImpl) workflowKeyFromTask() (namespaceID, workflowID, runID string) {
+	if e.replicationTask == nil {
+		return
+	}
+	if info := e.replicationTask.RawTaskInfo; info != nil {
+		return info.NamespaceId, info.WorkflowId, info.RunId
+	}
+	switch attrs := e.replicationTask.Attributes.(type) {
+	case *replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes:
+		ws := attrs.SyncWorkflowStateTaskAttributes.GetWorkflowState()
+		namespaceID = ws.GetExecutionInfo().GetNamespaceId()
+		workflowID = ws.GetExecutionInfo().GetWorkflowId()
+		runID = ws.GetExecutionState().GetRunId()
+	case *replicationspb.ReplicationTask_SyncActivityTaskAttributes:
+		a := attrs.SyncActivityTaskAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	case *replicationspb.ReplicationTask_HistoryTaskAttributes:
+		a := attrs.HistoryTaskAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	case *replicationspb.ReplicationTask_SyncHsmAttributes:
+		a := attrs.SyncHsmAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	case *replicationspb.ReplicationTask_BackfillHistoryTaskAttributes:
+		a := attrs.BackfillHistoryTaskAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	case *replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes:
+		a := attrs.VerifyVersionedTransitionTaskAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	case *replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes:
+		a := attrs.SyncVersionedTransitionTaskAttributes
+		namespaceID, workflowID, runID = a.NamespaceId, a.WorkflowId, a.RunId
+	default:
+		return
+	}
+	return
+}
+
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
 	if e.isDuplicated {
-		if e.replicationTask.RawTaskInfo != nil {
-			metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
-				metrics.OperationTag(e.metricsTag),
-				metrics.NamespaceTag(e.replicationTask.RawTaskInfo.NamespaceId))
-		}
+		namespaceID, _, _ := e.workflowKeyFromTask()
+		metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1,
+			metrics.OperationTag(e.metricsTag),
+			metrics.NamespaceTag(namespaceID))
 		return
 	}
 	nsTag := metrics.NamespaceUnknownTag()
@@ -337,19 +381,22 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			metrics.OperationTag(e.metricsTag),
 			nsTag,
 		)
-		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
-			e.Logger.Warn(fmt.Sprintf(
-				"replication task latency is too long: queue=%.2fs processing=%.2fs",
-				queueLatency.Seconds(),
-				processingLatency.Seconds(),
-			),
-				tag.WorkflowNamespace(e.NamespaceName()),
-				tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
-				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
-				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
-				tag.AttemptCount(int64(e.Attempt())),
-			)
+		if processingLatency > 10*time.Second && e.replicationTask != nil {
+			namespaceID, workflowID, runID := e.workflowKeyFromTask()
+			if workflowID != "" {
+				e.ThrottledLogger.Warn(fmt.Sprintf(
+					"replication task latency is too long: queue=%.2fs processing=%.2fs",
+					queueLatency.Seconds(),
+					processingLatency.Seconds(),
+				),
+					tag.WorkflowNamespace(e.NamespaceName()),
+					tag.WorkflowID(workflowID),
+					tag.WorkflowRunID(runID),
+					tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
+					tag.ShardID(e.Config.GetShardID(namespace.ID(namespaceID), workflowID)),
+					tag.AttemptCount(int64(e.Attempt())),
+				)
+			}
 		}
 	}
 
@@ -413,7 +460,7 @@ func (e *ExecutableTaskImpl) Resend(
 			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
-	resendErr := e.ProcessToolBox.ResendHandler.ResendHistoryEvents(
+	resendErr := e.ResendHandler.ResendHistoryEvents(
 		ctx,
 		remoteCluster,
 		namespace.ID(retryErr.NamespaceId),
@@ -546,7 +593,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	var eventsVersion = EmptyVersion
 	isLastEvent := false
 	if len(newRunId) != 0 {
-		iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+		iterator := e.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 			ctx,
 			remoteCluster,
 			namespace.ID(workflowKey.NamespaceID),
@@ -592,7 +639,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		eventsVersion = EmptyVersion
 		return nil
 	}
-	iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+	iterator := e.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
 		ctx,
 		remoteCluster,
 		namespace.ID(workflowKey.NamespaceID),
@@ -804,15 +851,15 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	switch err.(type) {
 	case nil:
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
-			_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+			_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
 				return "", false, err
 			}
 		}
 	case *serviceerror.NamespaceNotFound:
-		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
+		_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
-			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
+			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil
 		}
 	default:

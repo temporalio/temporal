@@ -6,6 +6,6 @@ const (
 )
 
 var (
-	WorkflowArchetype   = Archetype(FullyQualifiedName(WorkflowLibraryName, WorkflowComponentName))
-	WorkflowArchetypeID = ArchetypeID(GenerateTypeID(WorkflowArchetype))
+	WorkflowArchetype   = FullyQualifiedName(WorkflowLibraryName, WorkflowComponentName)
+	WorkflowArchetypeID = GenerateTypeID(WorkflowArchetype)
 )

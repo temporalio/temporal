@@ -2,7 +2,6 @@ package replication
 
 import (
 	"context"
-	"math/rand"
 	"strconv"
 
 	"github.com/dgryski/go-farm"
@@ -20,6 +19,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -44,6 +44,8 @@ var Module = fx.Provide(
 	func(m persistence.ExecutionManager) ExecutionManager {
 		return m
 	},
+	nsreplication.NewNoopDataMerger,
+	nsreplication.NewDefaultAdmitter,
 	NewExecutionManagerDLQWriter,
 	ClientSchedulerRateLimiterProvider,
 	ServerSchedulerRateLimiterProvider,
@@ -79,7 +81,10 @@ func eagerNamespaceRefresherProvider(
 	logger log.Logger,
 	clientBean client.Bean,
 	clusterMetadata cluster.Metadata,
+	dataMerger nsreplication.NamespaceDataMerger,
+	admitter nsreplication.NamespaceReplicationAdmitter,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) EagerNamespaceRefresher {
 	return NewEagerNamespaceRefresher(
 		metadataManager,
@@ -89,7 +94,10 @@ func eagerNamespaceRefresherProvider(
 		nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
+			dataMerger,
+			admitter,
 			logger,
+			testHooks,
 		),
 		clusterMetadata.GetCurrentClusterName(),
 		metricsHandler,
@@ -175,22 +183,23 @@ func replicationStreamLowPrioritySchedulerProvider(
 	metricsHandler metrics.Handler,
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	// P-way parallelism for executions of the same workflow (per ReplicationLowPriorityTaskParallelism)
+	// is modeled as P distinct per-namespace-workflow queue IDs. We bucket by execution (RunID) so all
+	// low-priority tasks for one execution share a queue; the third field stores the slot index, not
+	// the run UUID.
 	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 		item := task.QueueID()
 		workflowKey, ok := item.(definition.WorkflowKey)
 		if !ok {
 			return NewSequentialTaskQueueWithID(item)
 		}
-		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
-	}
-	taskQueueHashFunc := func(item any) uint32 {
-		workflowKey, ok := item.(definition.WorkflowKey)
-		if !ok {
-			return 0
-		}
-
-		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
-		return farm.Fingerprint32(idBytes)
+		parallelism := max(config.ReplicationLowPriorityTaskParallelism(), 1)
+		// 0..parallelism-1, stable for a given RunID. Different runs of the same workflow can share
+		// a slot, so up to P sequential queues (and workers) can progress them concurrently.
+		slot := int(farm.Fingerprint32([]byte(workflowKey.RunID)) % uint32(parallelism))
+		return NewSequentialTaskQueueWithID(
+			definition.NewWorkflowKey(workflowKey.NamespaceID, workflowKey.WorkflowID, strconv.Itoa(slot)),
+		)
 	}
 	// SequentialScheduler has panic wrapper when executing task,
 	// if changing the executor, please make sure other executor has panic wrapper
@@ -199,7 +208,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
 			WorkerCount: config.ReplicationLowPriorityProcessorSchedulerWorkerCount,
 		},
-		taskQueueHashFunc,
+		WorkflowKeyHashFn,
 		queueFactory,
 		logger,
 	)
@@ -297,7 +306,9 @@ func sequentialTaskQueueFactoryProvider(
 		if !ok {
 			return NewSequentialTaskQueueWithID(item)
 		}
-		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
+		return NewSequentialTaskQueueWithID(
+			definition.NewWorkflowKey(workflowKey.NamespaceID, workflowKey.WorkflowID, ""),
+		)
 	}
 }
 

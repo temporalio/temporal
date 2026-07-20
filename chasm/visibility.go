@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -50,8 +51,26 @@ type VisibilitySearchAttributesMapper struct {
 	fieldToAlias map[string]string
 	saTypeMap    map[string]enumspb.IndexedValueType
 
-	// map from system search attribute aliases to field names.
+	// systemAliasToField maps a CHASM search attribute alias to a system field
+	// (e.g. "ScheduleId" -> "WorkflowId"). Used to resolve system search attribute aliases,
+	// including the businessID alias configured via WithBusinessIDAlias.
 	systemAliasToField map[string]string
+
+	// overriddenSystemFields records system search attribute fields (e.g. ExecutionTime, TaskQueue)
+	// this archetype overrides with its own value, stored in the dedicated system column. Value is
+	// the field's indexed value type.
+	overriddenSystemFields map[string]enumspb.IndexedValueType
+}
+
+// newVisibilitySearchAttributesMapper returns a mapper with all maps initialized.
+func newVisibilitySearchAttributesMapper() *VisibilitySearchAttributesMapper {
+	return &VisibilitySearchAttributesMapper{
+		aliasToField:           make(map[string]string),
+		fieldToAlias:           make(map[string]string),
+		saTypeMap:              make(map[string]enumspb.IndexedValueType),
+		systemAliasToField:     make(map[string]string),
+		overriddenSystemFields: make(map[string]enumspb.IndexedValueType),
+	}
 }
 
 // Alias returns the alias for a given field.
@@ -61,7 +80,10 @@ func (v *VisibilitySearchAttributesMapper) Alias(field string) (string, error) {
 	}
 	alias, ok := v.fieldToAlias[field]
 	if !ok {
-		return "", serviceerror.NewInvalidArgument(fmt.Sprintf("visibility search attributes mapper has no registered field %q", field))
+		return "", serviceerror.NewInvalidArgumentf(
+			"visibility search attributes mapper has no registered field %q",
+			field,
+		)
 	}
 	return alias, nil
 }
@@ -113,6 +135,25 @@ func (v *VisibilitySearchAttributesMapper) SATypeMap() map[string]enumspb.Indexe
 	return v.saTypeMap
 }
 
+// IsSystemOverride returns true if this archetype overrides the given system search attribute
+// field with its own value (written to the dedicated system column).
+func (v *VisibilitySearchAttributesMapper) IsSystemOverride(field string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.overriddenSystemFields[field]
+	return ok
+}
+
+// OverriddenSystemFields returns the system search attribute fields this archetype overrides,
+// keyed by field name with the field's indexed value type as the value.
+func (v *VisibilitySearchAttributesMapper) OverriddenSystemFields() map[string]enumspb.IndexedValueType {
+	if v == nil {
+		return nil
+	}
+	return v.overriddenSystemFields
+}
+
 // ValueType returns the type of a CHASM search attribute field.
 // Returns an error if the field is not found in the type map.
 func (v *VisibilitySearchAttributesMapper) ValueType(fieldName string) (enumspb.IndexedValueType, error) {
@@ -161,16 +202,21 @@ func NewVisibilityWithData(
 		},
 	}
 
-	if len(customSearchAttributes) != 0 {
+	// Filter out nil/empty payload values for search attributes.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+	if len(filteredSA) != 0 {
 		visibility.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
 		)
 	}
-	if len(customMemo) != 0 {
+
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+	if len(filteredMemo) != 0 {
 		visibility.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 
@@ -185,14 +231,14 @@ func (v *Visibility) LifecycleState(_ Context) LifecycleState {
 // CustomSearchAttributes returns the stored custom search attribute fields.
 // Nil is returned if there are none.
 //
-// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
-// directly, use Merge/ReplaceCustomSearchAttributes methods instead.
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
 func (v *Visibility) CustomSearchAttributes(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	sa, _ := v.SA.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return sa.GetIndexedFields()
+	return maps.Clone(sa.GetIndexedFields())
 }
 
 // MergeCustomSearchAttributes merges the provided custom search attribute fields into the existing ones.
@@ -228,12 +274,16 @@ func (v *Visibility) MergeCustomSearchAttributes(
 }
 
 // ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
-// If `customSearchAttributes` is empty, the underlying search attributes node is deleted.
+// Nil/empty payload values are filtered.
+// If `customSearchAttributes` is empty or all values are nil after filtering, the underlying search attributes node is deleted.
 func (v *Visibility) ReplaceCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 ) {
-	if len(customSearchAttributes) == 0 {
+	// Filter out nil/empty payload values.
+	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
+
+	if len(filteredSA) == 0 {
 		_, ok := v.SA.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
@@ -244,7 +294,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 	} else {
 		v.SA = NewDataField(
 			mutableContext,
-			&commonpb.SearchAttributes{IndexedFields: customSearchAttributes},
+			&commonpb.SearchAttributes{IndexedFields: filteredSA},
 		)
 	}
 
@@ -254,14 +304,14 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 // CustomMemo returns the stored custom memo fields.
 // Nil is returned if there are none.
 //
-// Returned map is NOT a deep copy of the underlying data, so do NOT modify it
-// directly, use Merge/ReplaceCustomMemo methods instead.
+// Returned map is a shallow copy: callers may add, delete, or reassign keys without
+// affecting the stored data, but the *commonpb.Payload values are shared.
 func (v *Visibility) CustomMemo(
 	chasmContext Context,
 ) map[string]*commonpb.Payload {
 	memo, _ := v.Memo.TryGet(chasmContext)
 	// nil check handled by the proto getter.
-	return memo.GetFields()
+	return maps.Clone(memo.GetFields())
 }
 
 // MergeCustomMemo merges the provided custom memo fields into the existing ones.
@@ -301,7 +351,10 @@ func (v *Visibility) ReplaceCustomMemo(
 	mutableContext MutableContext,
 	customMemo map[string]*commonpb.Payload,
 ) {
-	if len(customMemo) == 0 {
+	// Filter out nil/empty payload values for memo.
+	filteredMemo := payload.MergeMapOfPayload(nil, customMemo)
+
+	if len(filteredMemo) == 0 {
 		_, ok := v.Memo.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
@@ -312,7 +365,7 @@ func (v *Visibility) ReplaceCustomMemo(
 	} else {
 		v.Memo = NewDataField(
 			mutableContext,
-			&commonpb.Memo{Fields: customMemo},
+			&commonpb.Memo{Fields: filteredMemo},
 		)
 	}
 
@@ -330,14 +383,16 @@ func (v *Visibility) generateTask(
 	)
 }
 
-type visibilityTaskHandler struct{}
+type visibilityTaskHandler struct {
+	SideEffectTaskHandlerBase[*persistencespb.ChasmVisibilityTaskData]
+}
 
 var defaultVisibilityTaskHandler = &visibilityTaskHandler{}
 
 func (v *visibilityTaskHandler) Validate(
 	_ Context,
 	component *Visibility,
-	_ TaskAttributes,
+	_ TaskInvocation,
 	task *persistencespb.ChasmVisibilityTaskData,
 ) (bool, error) {
 	return task.TransitionCount == component.Data.TransitionCount, nil
@@ -350,5 +405,5 @@ func (v *visibilityTaskHandler) Execute(
 	_ *persistencespb.ChasmVisibilityTaskData,
 ) error {
 	//nolint:forbidigo
-	panic("chasm visibilityTaskExecutor should not be called directly")
+	panic("chasm visibilityTaskHandler should not be called directly")
 }

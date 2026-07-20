@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	manager "go.temporal.io/server/common/persistence/visibility/manager"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -68,7 +69,7 @@ func (mr *MockVisibilityStoreMockRecorder) Close() *gomock.Call {
 }
 
 // CountChasmExecutions mocks base method.
-func (m *MockVisibilityStore) CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error) {
+func (m *MockVisibilityStore) CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
 	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
@@ -155,7 +156,7 @@ func (mr *MockVisibilityStoreMockRecorder) GetWorkflowExecution(ctx, request any
 }
 
 // ListChasmExecutions mocks base method.
-func (m *MockVisibilityStore) ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
 	ret0, _ := ret[0].(*InternalListExecutionsResponse)

@@ -106,6 +106,9 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	// Record Nexus-specific metrics
 	metrics.NexusRequests.With(c.metricsHandler).Record(1)
 	metrics.NexusLatency.With(c.metricsHandler).Record(time.Since(c.requestStartTime))
+	if *errPtr != nil {
+		metrics.NexusRequestErrors.With(c.metricsHandler).Record(1)
+	}
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
@@ -158,7 +161,7 @@ func (c *operationContext) interceptRequest(
 	request *matchingservice.DispatchNexusTaskRequest,
 	header nexus.Header,
 ) error {
-	err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
+	_, err := c.auth.Authorize(ctx, c.claims, &authorization.CallTarget{
 		APIName:           c.apiName,
 		Namespace:         c.namespaceName,
 		NexusEndpointName: c.endpointName,
@@ -178,11 +181,13 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName); err != nil {
+	// Nexus requests are not tied to a business ID, hence the empty string.
+	if err := c.namespaceValidationInterceptor.ValidateState(c.namespace, c.apiName, namespace.EmptyBusinessID); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("invalid_namespace_state"))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	//nolint:forbidigo // Nexus requests are not tied to a business ID by design (see line 184)
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns
@@ -190,12 +195,12 @@ func (c *operationContext) interceptRequest(
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			handler, forwardStartTime := c.redirectionInterceptor.BeforeCall(c.apiName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(_ map[string]string, retErr error) {
-				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.EmptyBusinessID), c.namespace.Name().String(), retErr)
+				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.RoutingKey{}), c.namespace.Name().String(), retErr)
 			})
 			return serviceerror.NewNamespaceNotActive(
 				c.namespaceName,
 				c.clusterMetadata.GetCurrentClusterName(),
-				c.namespace.ActiveClusterName(namespace.EmptyBusinessID),
+				c.namespace.ActiveClusterName(namespace.RoutingKey{}),
 			)
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_inactive_forwarding_disabled"))
@@ -444,6 +449,7 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
@@ -455,7 +461,7 @@ func (h *nexusHandler) StartOperation(
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -525,7 +531,7 @@ func (h *nexusHandler) StartOperation(
 			// the worker.
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
-			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+			nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 			if err != nil {
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -586,7 +592,8 @@ func (h *nexusHandler) forwardStartOperation(
 	options nexus.StartOperationOptions,
 	oc *operationContext,
 ) (nexus.HandlerStartOperationResult[any], error) {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -602,7 +609,7 @@ func (h *nexusHandler) forwardStartOperation(
 			tag.Endpoint(oc.endpointName),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)),
+			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})),
 		)
 		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -661,6 +668,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -672,7 +680,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
 		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
+		nf, err := commonnexus.TemporalFailureToNexusFailureInPlace(t.Failure)
 		if err != nil {
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -687,7 +695,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		err := convertOutcomeToNexusHandlerError(t)
 		return err
 
@@ -702,7 +710,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
+	oc.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -715,7 +723,8 @@ func (h *nexusHandler) forwardCancelOperation(
 	options nexus.CancelOperationOptions,
 	oc *operationContext,
 ) error {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -736,7 +745,7 @@ func (h *nexusHandler) forwardCancelOperation(
 			tag.Endpoint(oc.endpointName),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)),
+			tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})),
 		)
 		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -754,9 +763,9 @@ func (h *nexusHandler) forwardCancelOperation(
 }
 
 func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexusrpc.HTTPClient, error) {
-	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName(""))
+	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName(namespace.RoutingKey{}))
 	if err != nil {
-		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName(namespace.EmptyBusinessID)), tag.TargetCluster(oc.namespace.ActiveClusterName("")))
+		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})), tag.TargetCluster(oc.namespace.ActiveClusterName(namespace.RoutingKey{})))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}

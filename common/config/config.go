@@ -301,6 +301,18 @@ type (
 		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
 		// See config/development-cass-es-fi.yaml for a more detailed example.
 		Targets FaultInjectionTargets `yaml:"targets"`
+
+		// Injector optionally injects faults using runtime code instead of static YAML config.
+		Injector FaultInjector `yaml:"-" json:"-"`
+	}
+
+	FaultInjector func(FaultInjectionTarget) error
+
+	FaultInjectionTarget struct {
+		Store  DataStoreName
+		Method string
+		// Request is optionally populated by fault injection wrappers for request-aware faults.
+		Request any
 	}
 
 	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
@@ -400,6 +412,18 @@ type (
 		SerialConsistency string `yaml:"serialConsistency"`
 	}
 
+	// PasswordCommandConfig configures an external command to fetch the datastore password.
+	// The command's stdout is used as the password.
+	PasswordCommandConfig struct {
+		// Command is the path to the executable to run.
+		Command string `yaml:"command"`
+		// Args is the list of arguments to pass to the command.
+		Args []string `yaml:"args"`
+		// Timeout is the maximum duration to wait for the command to complete.
+		// Defaults to 30 seconds if unset.
+		Timeout time.Duration `yaml:"timeout"`
+	}
+
 	// SQL is the configuration for connecting to a SQL backed datastore
 	SQL struct {
 		// Connect is a function that returns a sql db connection. String based configuration is ignored if this is provided.
@@ -408,6 +432,11 @@ type (
 		User string `yaml:"user"`
 		// Password is the password corresponding to the user name
 		Password string `yaml:"password"`
+		// PasswordCommand executes an external command and uses its stdout as the password.
+		// Mutually exclusive with Password.
+		// If the command returns an expiring token (e.g. cloud IAM), set MaxConnLifetime
+		// to ensure connections are recycled before the token expires.
+		PasswordCommand *PasswordCommandConfig `yaml:"passwordCommand"`
 		// PluginName is the name of SQL plugin
 		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
@@ -416,7 +445,10 @@ type (
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
-		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url
+		// ConnectAttributes is a set of key-value attributes to be sent as part of connect data_source_name url.
+		// For the postgres12_pgx plugin, "require_auth" restricts which authentication methods the client
+		// accepts from the server (e.g. "scram-sha-256", or "!none" to negate), hardening against auth
+		// downgrade. Unset means all methods are accepted.
 		ConnectAttributes map[string]string `yaml:"connectAttributes"`
 		// MaxConns the max number of connections to this datastore
 		MaxConns int `yaml:"maxConns"`
@@ -484,6 +516,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
 		S3store   *S3Archiver        `yaml:"s3store"`
+		// CustomStores contains the config for all custom history archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// VisibilityArchival contains the config for visibility archival
@@ -501,6 +536,9 @@ type (
 		Filestore *FilestoreArchiver `yaml:"filestore"`
 		S3store   *S3Archiver        `yaml:"s3store"`
 		Gstorage  *GstorageArchiver  `yaml:"gstorage"`
+		// CustomStores contains the config for all custom visibility archivers
+		// The structure is a map of archiver name (scheme) to a map of config key-values
+		CustomStores map[string]map[string]any `yaml:"customStores"`
 	}
 
 	// FilestoreArchiver contain the config for filestore archiver
@@ -617,6 +655,14 @@ type (
 		AuthExtraHeaderName string `yaml:"authExtraHeaderName"`
 		// JWT audience for validating tokens
 		Audience string `yaml:"audience"`
+		// RemoteClusterAuth controls outbound credentials carried on cross-cluster RPCs.
+		RemoteClusterAuth RemoteClusterAuth `yaml:"remoteClusterAuth"`
+	}
+
+	// RemoteClusterAuth controls outbound auth on cross-cluster RPCs.
+	RemoteClusterAuth struct {
+		// Require fails outbound remote-cluster RPCs that have no token (and fails server boot if no TokenProvider is set).
+		Require bool `yaml:"require"`
 	}
 
 	// @@@SNIPSTART temporal-common-service-config-jwtkeyprovider

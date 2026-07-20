@@ -1,56 +1,56 @@
 syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/rules/v1/message.proto";
 
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
 // detail column
 message NamespaceDetail {
-    NamespaceInfo info = 1;
-    NamespaceConfig config = 2;
-    NamespaceReplicationConfig replication_config = 3;
-    int64 config_version = 4;
-    int64 failover_notification_version = 5;
-    int64 failover_version = 6;
-    google.protobuf.Timestamp failover_end_time = 7;
+  NamespaceInfo info = 1;
+  NamespaceConfig config = 2;
+  NamespaceReplicationConfig replication_config = 3;
+  int64 config_version = 4;
+  int64 failover_notification_version = 5;
+  int64 failover_version = 6;
+  google.protobuf.Timestamp failover_end_time = 7;
 }
 
 message NamespaceInfo {
-    string id = 1;
-    temporal.api.enums.v1.NamespaceState state = 2;
-    string name = 3;
-    string description = 4;
-    string owner = 5;
-    map<string, string> data = 6;
+  string id = 1;
+  temporal.api.enums.v1.NamespaceState state = 2;
+  string name = 3;
+  string description = 4;
+  string owner = 5;
+  map<string, string> data = 6;
 }
 
 message NamespaceConfig {
-    google.protobuf.Duration retention = 1;
-    string archival_bucket = 2;
-    temporal.api.namespace.v1.BadBinaries bad_binaries = 3;
-    temporal.api.enums.v1.ArchivalState history_archival_state = 4;
-    string history_archival_uri = 5;
-    temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
-    string visibility_archival_uri = 7;
-    map<string, string> custom_search_attribute_aliases = 8;
-    map<string, temporal.api.rules.v1.WorkflowRule> workflow_rules = 9;
+  google.protobuf.Duration retention = 1;
+  string archival_bucket = 2;
+  temporal.api.namespace.v1.BadBinaries bad_binaries = 3;
+  temporal.api.enums.v1.ArchivalState history_archival_state = 4;
+  string history_archival_uri = 5;
+  temporal.api.enums.v1.ArchivalState visibility_archival_state = 6;
+  string visibility_archival_uri = 7;
+  map<string, string> custom_search_attribute_aliases = 8;
+  map<string, temporal.api.rules.v1.WorkflowRule> workflow_rules = 9;
 }
 
 message NamespaceReplicationConfig {
-    string active_cluster_name = 1;
-    repeated string clusters = 2;
-    temporal.api.enums.v1.ReplicationState state = 3;
-    repeated FailoverStatus failover_history = 8;
+  string active_cluster_name = 1;
+  repeated string clusters = 2;
+  temporal.api.enums.v1.ReplicationState state = 3;
+  repeated FailoverStatus failover_history = 8;
 }
 
 // Represents a historical replication status of a Namespace
 message FailoverStatus {
-    google.protobuf.Timestamp failover_time = 1;
-    int64 failover_version = 2;
+  google.protobuf.Timestamp failover_time = 1;
+  int64 failover_version = 2;
 }
