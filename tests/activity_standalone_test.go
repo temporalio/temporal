@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -122,9 +121,8 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 // driveTrace runs a trace (a sequence of events) for a fresh activity, realizing each event against
 // the server, returning a handle to it at the reached state.
 func (s *standaloneActivityTestSuite) driveTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
-	ctx := testcontext.For(t)
 	h := &saaHarness{
-		env: env.TestEnv, ctx: ctx,
+		env: env.TestEnv, ctx: s.Context(),
 		idBase:        testcore.RandomizeStr(t.Name()),
 		cfg:           tr.config(),
 		startDelay:    tr.startDelay(),
