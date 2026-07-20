@@ -89,7 +89,14 @@ func defaultConfig() *scheduler.Config {
 }
 
 func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
-	config := defaultConfig()
+	return newTestLibraryWithConfig(logger, specProcessor, defaultConfig())
+}
+
+func newTestLibraryWithConfig(
+	logger log.Logger,
+	specProcessor scheduler.SpecProcessor,
+	config *scheduler.Config,
+) *scheduler.Library {
 	specBuilder := newLegacySpecBuilder(0, 0)
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
@@ -147,8 +154,9 @@ type testEnv struct {
 
 // testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
-	specProcessor  scheduler.SpecProcessor
-	withMockEngine bool
+	specProcessor   scheduler.SpecProcessor
+	withMockEngine  bool
+	schedulerConfig *scheduler.Config
 }
 
 // testEnvOption is a functional option for configuring testEnv.
@@ -167,6 +175,12 @@ func withSpecProcessor(sp scheduler.SpecProcessor) testEnvOption {
 func withMockEngine() testEnvOption {
 	return func(c *testEnvConfig) {
 		c.withMockEngine = true
+	}
+}
+
+func withSchedulerConfig(config *scheduler.Config) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.schedulerConfig = config
 	}
 }
 
@@ -191,6 +205,9 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	for _, opt := range opts {
 		opt(config)
 	}
+	if config.schedulerConfig == nil {
+		config.schedulerConfig = defaultConfig()
+	}
 
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
@@ -208,7 +225,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
 		t.Fatalf("failed to register core library: %v", err)
 	}
-	if err := registry.Register(newTestLibrary(logger, specProcessor)); err != nil {
+	if err := registry.Register(newTestLibraryWithConfig(logger, specProcessor, config.schedulerConfig)); err != nil {
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}
 
