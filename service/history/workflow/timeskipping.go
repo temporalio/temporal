@@ -25,14 +25,10 @@ import (
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
-) error {
+) {
 	initialSkip := timeSkippingStatePropagation.GetInitialSkippedDuration()
 	if config == nil && initialSkip == nil {
-		return nil
-	}
-
-	if ms.executionInfo.TimeSkippingInfo != nil {
-		return serviceerror.NewInternal("time skipping info already initialized")
+		return
 	}
 
 	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -45,22 +41,20 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
 
 	ms.timeSkippingInfoUpdated = true
-	return nil
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
-) error {
+) {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 	if tsi == nil {
-		return serviceerror.NewInternal("time skipping info not initialized when updating")
+		return
 	}
 	ms.executionInfo.TimeSkippingInfo.Config = config
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
 	tsi.SessionSkipCount = 0
 	tsi.DisableReason = persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_UNSPECIFIED
-	return nil
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
