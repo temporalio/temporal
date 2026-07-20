@@ -3650,6 +3650,20 @@ func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurr
 		require.Nil(t, info.GetNextAttemptScheduleTime())
 		require.Nil(t, info.GetCurrentRetryInterval())
 	})
+
+	// Paused while backing off before a retry: dispatch is suspended, so neither a next dispatch
+	// nor a current retry interval is reported (even though the attempt carries a stored interval).
+	t.Run("PausedDuringBackoff", func(t *testing.T) {
+		info := s.driveTrace(t, env, saaTrace{
+			trace:         []model.Event{saaPoll, saaFailRetryably, saaPause},
+			maxAttempts:   3,
+			retryInterval: saaDelayWindow,
+		}).describe(t).GetInfo()
+
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime())
+		require.Nil(t, info.GetCurrentRetryInterval())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
