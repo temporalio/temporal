@@ -3560,27 +3560,46 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+
+	// unset max_skip_count is populated from the per-namespace dynamic config default
+	config.WorkflowTimeSkippingDefaultMaxSkipCount = dc.GetIntPropertyFnFilteredByNamespace(200)
+	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(200), tsc.GetMaxSkipCount())
+
+	// an explicit max_skip_count is preserved
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipCount: 7}
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(7), tsc.GetMaxSkipCount())
+
+	// a non-positive dynamic-config default is floored to 1, so the skip-count bound is never removed
+	for _, dcValue := range []int{0, -5} {
+		config.WorkflowTimeSkippingDefaultMaxSkipCount = dc.GetIntPropertyFnFilteredByNamespace(dcValue)
+		tsc = &commonpb.TimeSkippingConfig{Enabled: true}
+		s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+		s.Require().Equal(int32(1), tsc.GetMaxSkipCount())
+	}
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
@@ -3588,7 +3607,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 // as a MultiOperationExecution error with the per-operation InvalidArgument at index 0.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	// Namespace lookup happens before operation validation.
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3636,7 +3655,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
@@ -3693,7 +3712,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled(
 // a StartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3716,7 +3735,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3741,7 +3760,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled
 // a SignalWithStartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3765,7 +3784,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // forwarded to the history client inside the request.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3791,7 +3810,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // a ResetWorkflowExecution request with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -3823,7 +3842,7 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 // is off, a batch reset with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -3863,7 +3882,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 // when the DC gate is off, a batch UpdateWorkflowOptions with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -4986,7 +5005,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 // off, UpdateWorkflowExecutionOptions rejects a request containing a TimeSkippingConfig.
 func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
