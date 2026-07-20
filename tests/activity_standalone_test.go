@@ -4826,6 +4826,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
+		require.Len(t, resp.GetExecutions(), 1)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED, resp.GetExecutions()[0].GetStatus())
 
 		var allResp *workflowservice.ListActivityExecutionsResponse
