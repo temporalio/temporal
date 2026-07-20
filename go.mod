@@ -66,11 +66,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
 	go.opentelemetry.io/otel/trace v1.44.0
-<<<<<<< HEAD
-	go.temporal.io/api v1.63.4-0.20260720155646-7a3ca3626ec2
-=======
-	go.temporal.io/api v1.63.4-0.20260719232400-f9e031effa8f
->>>>>>> a2793a9d5 (VTS: add TimeSkippingInfo to DescribeWorkflowExecution (#11144))
+	go.temporal.io/api v1.63.4-0.20260722170540-d887973f0ebc
 	go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee
 	go.temporal.io/sdk v1.41.1
 	go.uber.org/fx v1.24.0

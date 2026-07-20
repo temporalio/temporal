@@ -3686,27 +3686,55 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+
+	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
+	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
+	// value already set on the request is left untouched.
+	const otherNamespace = "other-namespace"
+	maxSkipClient := dc.StaticClient{
+		dc.WorkflowTimeSkippingEnabled.Key(): true,
+		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+			{Value: 42}, // per-cell (constraint-less) value
+			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
+		},
+	}
+	maxSkipWH := s.getWorkflowHandler(NewConfig(dc.NewCollection(maxSkipClient, log.NewNoopLogger()), numHistoryShards))
+
+	// namespace with a per-namespace override uses that value
+	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(7), tsc.GetMaxSkipPerSession())
+
+	// namespace without a per-namespace setting falls back to the per-cell value
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
+	s.Require().Equal(int32(42), tsc.GetMaxSkipPerSession())
+
+	// a value already on the request is preserved, not overwritten by dynamic config
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 999}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(999), tsc.GetMaxSkipPerSession())
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,

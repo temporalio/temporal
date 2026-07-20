@@ -3592,4 +3592,9 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
+	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
+		"frontend.WorkflowTimeSkippingMaxSkipPerSession",
+		200,
+		"WorkflowTimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
+	)
 )
