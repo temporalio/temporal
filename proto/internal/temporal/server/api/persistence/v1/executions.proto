@@ -342,6 +342,16 @@ message TimeSkippingInfo {
   // Tracks the number of times a time-skipping transition has occurred since time skipping
   // was most recently enabled. It is reset every time the skipping config is updated.
   int32 session_skip_count = 6;
+
+  // Reason time skipping was disabled internally by the server, if applicable.
+  TimeSkippingDisableReason disable_reason = 7;
+
+  enum TimeSkippingDisableReason {
+    // Default value. Time skipping has not been disabled internally by the server.
+    TIME_SKIPPING_DISABLE_REASON_UNSPECIFIED = 0;
+    TIME_SKIPPING_DISABLE_REASON_FAST_FORWARD_COMPLETION = 1;
+    TIME_SKIPPING_DISABLE_REASON_MAX_SKIP_PER_SESSION = 2;
+  }
 }
 
 message FastForwardInfo {

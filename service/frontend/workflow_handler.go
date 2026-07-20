@@ -714,6 +714,10 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 			ns.String(),
 		)
 	}
+	if tsc.GetMaxSkipPerSession() <= 0 {
+		// todo: add to dc
+		tsc.MaxSkipPerSession = 100
+	}
 
 	if !tsc.GetEnabled() {
 		if tsc.GetFastForward() != nil {

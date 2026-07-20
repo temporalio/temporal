@@ -38,10 +38,12 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkip,
+		SessionSkipCount:           timeSkippingStatePropagation.GetInitialSkipCount(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
+
 	ms.timeSkippingInfoUpdated = true
 	return nil
 }
@@ -56,6 +58,8 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	ms.executionInfo.TimeSkippingInfo.Config = config
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
+	tsi.SessionSkipCount = 0
+	tsi.DisableReason = persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_UNSPECIFIED
 	return nil
 }
 
@@ -490,7 +494,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
 	// todo: merge with chasm time skipping
-
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
@@ -514,6 +517,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
 		tsi.FastForwardInfo.HasReached = true
+		tsi.Config.Enabled = false
+		tsi.DisableReason = persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_FAST_FORWARD_COMPLETION
+	}
+
+	// update skip
+	tsi.SessionSkipCount += 1
+	if tsi.SessionSkipCount >= tsi.Config.GetMaxSkipPerSession() && tsi.Config.Enabled {
+		tsi.Config.Enabled = false
+		tsi.DisableReason = persistencespb.TimeSkippingInfo_TIME_SKIPPING_DISABLE_REASON_MAX_SKIP_PER_SESSION
 	}
 
 	ms.timeSkippingInfoUpdated = true
