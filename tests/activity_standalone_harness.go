@@ -23,8 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// saaInput is the activity input every driven activity is started with. Defined here (not in a
-// _test.go file) so this driver builds as part of the non-test package.
+// saaInput is the activity input every driven activity is started with.
 var saaInput = payloads.EncodeString("Input")
 
 // --- driver --------------------------------------------------------------------------------
@@ -123,14 +122,16 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 }
 
 // describe returns the DescribeActivityExecution response.
-func (a *saaHandle) describe() (*workflowservice.DescribeActivityExecutionResponse, error) {
-	return a.h.env.FrontendClient().DescribeActivityExecution(a.h.ctx, &workflowservice.DescribeActivityExecutionRequest{
+func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivityExecutionResponse {
+	resp, err := a.h.env.FrontendClient().DescribeActivityExecution(a.h.ctx, &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:          a.h.env.Namespace().String(),
 		ActivityId:         a.activityID,
 		RunId:              a.runID,
 		IncludeOutcome:     true,
 		IncludeLastFailure: true,
 	})
+	require.NoError(t, err)
+	return resp
 }
 
 // rpc performs the RPC for a non-Poll, non-wall-clock event and returns its error.
@@ -225,4 +226,5 @@ var (
 	saaPoll               = model.Event{Kind: model.Poll}
 	saaFailRetryably      = model.Event{Kind: model.RespondFailed, Retryable: true}
 	saaBackoffDelayElapse = model.Event{Kind: model.BackoffElapses}
+	saaComplete           = model.Event{Kind: model.RespondCompleted}
 )
