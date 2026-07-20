@@ -579,13 +579,17 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			)
 
 			// Create a rate limit interceptor.
-			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
+			rateLimiters := NamespaceRateLimitersProvider(
 				primitives.FrontendService,
 				&config,
-				mockRegistry,
 				serviceResolver,
-				metrics.NoopMetricsHandler,
 				log.NewTestLogger(),
+			)
+			rateLimitInterceptor := NamespaceRateLimitInterceptorProvider(
+				mockRegistry,
+				rateLimiters,
+				&config,
+				metrics.NoopMetricsHandler,
 			)
 
 			// Create a gRPC server for the fake workflow service.
