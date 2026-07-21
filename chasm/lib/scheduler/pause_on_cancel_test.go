@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestKnownIssue_CanceledWorkflowDoesNotPauseByDefault(t *testing.T) {
+func TestCanceledWorkflowDoesNotPauseByDefault(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 	sched.Schedule.Policies.PauseOnFailure = true
 	invoker := sched.Invoker.Get(ctx)
