@@ -247,6 +247,15 @@ func (i *Invoker) runningWorkflowID(requestID string) string {
 	return ""
 }
 
+func (i *Invoker) callbackAttachmentPending(requestID string) bool {
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetRequestId() == requestID {
+			return needsCallback(start)
+		}
+	}
+	return false
+}
+
 // recordCompletedAction updates Invoker metadata and kicks off tasks after
 // an action completes. It marks the BufferedStart as completed by setting
 // the Completed field.

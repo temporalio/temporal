@@ -69,9 +69,12 @@ type BufferedStart struct {
 	// True when a running BufferedStart is known to have a Nexus callback
 	// attached. False when a BufferedStart originated from a migrated V1
 	// workflow. Only used by CHASM scheduler, for migration from V1.
-	HasCallback   bool `protobuf:"varint,13,opt,name=has_callback,json=hasCallback,proto3" json:"has_callback,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HasCallback bool `protobuf:"varint,13,opt,name=has_callback,json=hasCallback,proto3" json:"has_callback,omitempty"`
+	// Identifies the workflow chain that owns this action. Populated while
+	// reconciling callbacks for workflows migrated from V1.
+	FirstExecutionRunId string `protobuf:"bytes,14,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *BufferedStart) Reset() {
@@ -193,6 +196,13 @@ func (x *BufferedStart) GetHasCallback() bool {
 		return x.HasCallback
 	}
 	return false
+}
+
+func (x *BufferedStart) GetFirstExecutionRunId() string {
+	if x != nil {
+		return x.FirstExecutionRunId
+	}
+	return ""
 }
 
 // Result when a workflow execution has completed.
@@ -1054,7 +1064,7 @@ var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\"\x95\x05\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\"\xca\x05\n" +
 	"\rBufferedStart\x12=\n" +
 	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
 	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -1073,7 +1083,8 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12N\n" +
 	"\tcompleted\x18\f \x01(\v20.temporal.server.api.schedule.v1.CompletedResultR\tcompleted\x12!\n" +
-	"\fhas_callback\x18\r \x01(\bR\vhasCallback\"\x94\x01\n" +
+	"\fhas_callback\x18\r \x01(\bR\vhasCallback\x123\n" +
+	"\x16first_execution_run_id\x18\x0e \x01(\tR\x13firstExecutionRunId\"\x94\x01\n" +
 	"\x0fCompletedResult\x12F\n" +
 	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x129\n" +
 	"\n" +

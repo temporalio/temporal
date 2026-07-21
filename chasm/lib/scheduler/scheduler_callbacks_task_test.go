@@ -10,36 +10,60 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	historyservice "go.temporal.io/server/api/historyservice/v1"
-	historyservicemock "go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	workflowservicemock "go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestWatchRunningStart_AttachesOnlyToDescribedChain(t *testing.T) {
+func TestWatchRunningStart_AttachesToCurrentRun(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
 	handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{
-		Config:        callbackTestConfig(),
-		HistoryClient: historyClient,
+		Config:         callbackTestConfig(),
+		HistoryClient:  historyClient,
+		FrontendClient: frontendClient,
+	})
+
+	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("first-run", "first-run"), nil)
+	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&workflowservice.StartWorkflowExecutionResponse{RunId: "first-run", FirstExecutionRunId: "first-run"}, nil)
+
+	result, err := handler.watchRunningStart(context.Background(), callbackTestScheduler(), &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}, []byte("scheduler-ref"))
+	require.NoError(t, err)
+	require.Nil(t, result.completed)
+	require.Equal(t, "first-run", result.firstExecutionRunID)
+}
+
+func TestWatchRunningStart_AttachesToSameChainSuccessor(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{
+		Config:         callbackTestConfig(),
+		HistoryClient:  historyClient,
+		FrontendClient: frontendClient,
 	})
 	scheduler := callbackTestScheduler()
 	start := &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}
 
-	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("successor-run", "first-run"), nil)
-	historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, request *historyservice.StartWorkflowExecutionRequest, _ ...any) (*historyservice.StartWorkflowExecutionResponse, error) {
-			require.Equal(t, "first-run", request.GetExpectedFirstExecutionRunId())
-			require.Equal(t, "workflow-id", request.GetStartRequest().GetWorkflowId())
-			return &historyservice.StartWorkflowExecutionResponse{RunId: "successor-run"}, nil
+	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("first-run", "first-run"), nil)
+	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...any) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			require.Equal(t, "workflow-id", request.GetWorkflowId())
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "successor-run", FirstExecutionRunId: "first-run"}, nil
 		},
 	)
 
 	result, err := handler.watchRunningStart(context.Background(), scheduler, start, []byte("scheduler-ref"))
 	require.NoError(t, err)
 	require.Nil(t, result.completed)
+	require.Equal(t, "first-run", result.firstExecutionRunID)
 }
 
 func TestWatchRunningStart_RecordsActualStatusAfterAttachRace(t *testing.T) {
@@ -52,10 +76,12 @@ func TestWatchRunningStart_RecordsActualStatusAfterAttachRace(t *testing.T) {
 		t.Run(status.String(), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-			handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{Config: callbackTestConfig(), HistoryClient: historyClient})
+			frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+			handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{Config: callbackTestConfig(), HistoryClient: historyClient, FrontendClient: frontendClient})
 
 			historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("first-run", "first-run"), nil)
-			historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, context.DeadlineExceeded)
+			frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&workflowservice.StartWorkflowExecutionResponse{RunId: "unrelated-run", FirstExecutionRunId: "unrelated-run"}, nil)
 			historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(closedDescribeResponse(status), nil)
 
 			result, err := handler.watchRunningStart(context.Background(), callbackTestScheduler(), &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}, []byte("scheduler-ref"))
@@ -65,14 +91,35 @@ func TestWatchRunningStart_RecordsActualStatusAfterAttachRace(t *testing.T) {
 	}
 }
 
-func TestWatchRunningStart_RefusesLegacyExecutionWithoutChainID(t *testing.T) {
+func TestWatchRunningStart_LegacyExecutionRequiresExactRun(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{Config: callbackTestConfig(), HistoryClient: historyClient})
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{Config: callbackTestConfig(), HistoryClient: historyClient, FrontendClient: frontendClient})
 	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("first-run", ""), nil)
+	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&workflowservice.StartWorkflowExecutionResponse{RunId: "first-run"}, nil)
 
-	_, err := handler.watchRunningStart(context.Background(), callbackTestScheduler(), &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}, []byte("scheduler-ref"))
-	require.Error(t, err)
+	result, err := handler.watchRunningStart(context.Background(), callbackTestScheduler(), &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}, []byte("scheduler-ref"))
+	require.NoError(t, err)
+	require.Nil(t, result.completed)
+}
+
+func TestWatchRunningStart_LegacyExecutionRejectsDifferentRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	handler := NewSchedulerCallbacksTaskHandler(SchedulerCallbacksTaskHandlerOptions{Config: callbackTestConfig(), HistoryClient: historyClient, FrontendClient: frontendClient})
+	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(runningDescribeResponse("first-run", ""), nil)
+	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&workflowservice.StartWorkflowExecutionResponse{RunId: "different-run"}, nil)
+	historyClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		closedDescribeResponse(enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED), nil)
+
+	result, err := handler.watchRunningStart(context.Background(), callbackTestScheduler(), &schedulespb.BufferedStart{WorkflowId: "workflow-id", RunId: "first-run", RequestId: "request-id"}, []byte("scheduler-ref"))
+	require.NoError(t, err)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, result.completed.GetStatus())
+	require.Empty(t, result.firstExecutionRunID)
 }
 
 func callbackTestConfig() *Config {

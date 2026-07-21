@@ -2103,11 +2103,10 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
 }
 
-// TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow verifies that the
-// V2 callback reconciler uses the FirstExecutionRunId captured from the V1
-// migration state. A closed migrated run must not attach its callback to a
-// later, unrelated execution that reused the same workflow ID.
-func TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow(t *testing.T) {
+// TestScheduleMigrationV1ToV2_DoesNotAssociateReusedWorkflow verifies that a
+// callback attached during a Describe-to-attach race cannot complete the
+// migrated action from an unrelated execution that reused its workflow ID.
+func TestScheduleMigrationV1ToV2_DoesNotAssociateReusedWorkflow(t *testing.T) {
 	env := newScheduleEnv(
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
@@ -2213,8 +2212,7 @@ func TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow(t *testing.T) {
 	require.NoError(t, reusedResult.err)
 	require.NotEmpty(t, reusedResult.runID)
 
-	// The V2 callback task must record the V1 run's TERMINATED status and leave the
-	// unrelated, reused execution untouched.
+	// The V2 callback task must record the V1 run's TERMINATED status.
 	require.Eventually(t, func() bool {
 		desc, describeErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
@@ -2231,15 +2229,45 @@ func TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow(t *testing.T) {
 		return false
 	}, 30*time.Second, 500*time.Millisecond)
 
-	reusedDesc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: nsID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: nsName,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: reusedResult.runID},
+	// Existing APIs cannot atomically fence callback attachment in History. The
+	// reconciler detects the mismatched chain from the Start response, and any
+	// callback that raced onto the reused run is quarantined from the migrated
+	// action. Complete the reused run and wait for that callback to be delivered.
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      reusedResult.runID,
 		},
+		SignalName: "finish",
 	})
 	require.NoError(t, err)
-	require.Empty(t, reusedDesc.GetCallbacks())
+	require.Eventually(t, func() bool {
+		reusedDesc, describeErr := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: nsID,
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: reusedResult.runID},
+			},
+		})
+		if describeErr != nil || reusedDesc.GetWorkflowExecutionInfo().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+			return false
+		}
+		for _, callback := range reusedDesc.GetCallbacks() {
+			if callback.GetState() == enumspb.CALLBACK_STATE_SUCCEEDED {
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 500*time.Millisecond)
+
+	desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId:     nsID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+	})
+	require.NoError(t, err)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		desc.GetFrontendResponse().GetInfo().GetRecentActions()[0].GetStartWorkflowStatus())
 }
 
 // TestScheduleMigrationRolloutPercent verifies that

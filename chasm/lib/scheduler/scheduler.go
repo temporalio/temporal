@@ -584,6 +584,10 @@ func (s *Scheduler) HandleNexusCompletion(
 	invoker := s.Invoker.Get(ctx)
 	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 
+	if invoker.callbackAttachmentPending(info.RequestId) {
+		return serviceerror.NewUnavailable("scheduler callback attachment is still being reconciled")
+	}
+
 	workflowID := invoker.runningWorkflowID(info.RequestId)
 	if workflowID == "" {
 		// If the request ID was removed, the request must have already been processed;

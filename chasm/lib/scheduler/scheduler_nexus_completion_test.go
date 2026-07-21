@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
@@ -103,12 +104,13 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					RequestId:  "req-1",
-					WorkflowId: "wf-1",
-					RunId:      "run-1",
-					Attempt:    1,
-					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
-					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+					RequestId:   "req-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					HasCallback: true,
+					Attempt:     1,
+					ActualTime:  timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:   timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
@@ -134,12 +136,13 @@ func TestHandleNexusCompletion_Failure(t *testing.T) {
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					RequestId:  "req-1",
-					WorkflowId: "wf-1",
-					RunId:      "run-1",
-					Attempt:    1,
-					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
-					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+					RequestId:   "req-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					HasCallback: true,
+					Attempt:     1,
+					ActualTime:  timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:   timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
@@ -167,12 +170,13 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					RequestId:  "req-1",
-					WorkflowId: "wf-1",
-					RunId:      "run-1",
-					Attempt:    1,
-					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
-					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+					RequestId:   "req-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					HasCallback: true,
+					Attempt:     1,
+					ActualTime:  timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:   timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
@@ -225,12 +229,13 @@ func TestHandleNexusCompletion_Canceled(t *testing.T) {
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					RequestId:  "req-1",
-					WorkflowId: "wf-1",
-					RunId:      "run-1",
-					Attempt:    1,
-					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
-					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+					RequestId:   "req-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					HasCallback: true,
+					Attempt:     1,
+					ActualTime:  timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:   timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
@@ -265,12 +270,13 @@ func TestHandleNexusCompletion_ReenablesDeferredStarts(t *testing.T) {
 		setupInvoker: func(invoker *scheduler.Invoker) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					RequestId:  "req-1",
-					WorkflowId: "wf-1",
-					RunId:      "run-1",
-					Attempt:    1,
-					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
-					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+					RequestId:   "req-1",
+					WorkflowId:  "wf-1",
+					RunId:       "run-1",
+					HasCallback: true,
+					Attempt:     1,
+					ActualTime:  timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:   timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 				{
 					RequestId:  "req-2",
@@ -340,4 +346,26 @@ func TestHandleNexusCompletion_CompletionBeforeStart(t *testing.T) {
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+func TestHandleNexusCompletion_RetriesWhileCallbackAttachmentPending(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+		{
+			RequestId:  "req-1",
+			WorkflowId: "wf-1",
+			RunId:      "run-1",
+		},
+	}
+
+	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Success{
+			Success: &commonpb.Payload{Data: []byte("unrelated-result")},
+		},
+		CloseTime: timestamppb.Now(),
+	})
+	var unavailable *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailable)
+	require.Nil(t, sched.Invoker.Get(ctx).BufferedStarts[0].GetCompleted())
 }

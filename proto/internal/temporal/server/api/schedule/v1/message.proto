@@ -53,6 +53,9 @@ message BufferedStart {
   // attached. False when a BufferedStart originated from a migrated V1
   // workflow. Only used by CHASM scheduler, for migration from V1.
   bool has_callback = 13;
+  // Identifies the workflow chain that owns this action. Populated while
+  // reconciling callbacks for workflows migrated from V1.
+  string first_execution_run_id = 14;
 }
 
 // Result when a workflow execution has completed.

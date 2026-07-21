@@ -123,23 +123,26 @@ func (r *SchedulerIdleTaskHandler) recordInvalidated(
 type SchedulerCallbacksTaskHandlerOptions struct {
 	fx.In
 
-	Config        *Config
-	HistoryClient resource.HistoryClient
-	TestHooks     testhooks.TestHooks
+	Config         *Config
+	HistoryClient  resource.HistoryClient
+	FrontendClient workflowservice.WorkflowServiceClient
+	TestHooks      testhooks.TestHooks
 }
 
 type SchedulerCallbacksTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*schedulerpb.SchedulerCallbacksTask]
-	config        *Config
-	historyClient resource.HistoryClient
-	testHooks     testhooks.TestHooks
+	config         *Config
+	historyClient  resource.HistoryClient
+	frontendClient workflowservice.WorkflowServiceClient
+	testHooks      testhooks.TestHooks
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
 	return &SchedulerCallbacksTaskHandler{
-		config:        opts.Config,
-		historyClient: opts.HistoryClient,
-		testHooks:     opts.TestHooks,
+		config:         opts.Config,
+		historyClient:  opts.HistoryClient,
+		frontendClient: opts.FrontendClient,
+		testHooks:      opts.TestHooks,
 	}
 }
 
@@ -147,7 +150,8 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 // A nil completed field means the callback was successfully attached and the
 // workflow is still running.
 type watchResult struct {
-	completed *schedulespb.CompletedResult
+	completed           *schedulespb.CompletedResult
+	firstExecutionRunID string
 }
 
 func (r *SchedulerCallbacksTaskHandler) Execute(
@@ -214,6 +218,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
 					start.HasCallback = true
+					start.FirstExecutionRunId = result.firstExecutionRunID
 					if result.completed != nil {
 						start.Completed = result.completed
 					}
@@ -221,7 +226,7 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 			}
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
-				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
+				fmt.Sprintf("reconciled callbacks for %d already-running workflow(s)", len(results)))
 
 			// Now that running workflow state has been refreshed, scheduler tasks can be
 			// fired.
@@ -279,16 +284,12 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 
 	if !wfProgressing {
 		return &watchResult{
+			firstExecutionRunID: firstExecutionRunID,
 			completed: &schedulespb.CompletedResult{
 				Status:    wfInfo.GetStatus(),
 				CloseTime: wfInfo.GetCloseTime(),
 			},
 		}, nil
-	}
-	if firstExecutionRunID == "" {
-		// Legacy executions without a persisted chain ID cannot be safely
-		// distinguished from a reused workflow ID after this Describe.
-		return nil, serviceerror.NewFailedPrecondition("cannot safely attach scheduler callback to workflow without first execution run ID")
 	}
 	testhooks.Call(r.testHooks, testhooks.SchedulerCallbackAttachmentAfterDescribe, namespace.ID(scheduler.NamespaceId))
 
@@ -305,7 +306,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		return nil, err
 	}
 
-	attachRequest := &workflowservice.StartWorkflowExecutionRequest{
+	attachResp, err := r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
 		WorkflowId:               start.WorkflowId,
 		RequestId:                start.RequestId,
@@ -319,25 +320,36 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 			AttachRequestId:           true,
 			AttachCompletionCallbacks: true,
 		},
-	}
-	attachHistoryRequest := common.CreateHistoryStartWorkflowRequest(scheduler.NamespaceId, attachRequest, nil, nil, time.Now().UTC())
-	attachHistoryRequest.ExpectedFirstExecutionRunId = firstExecutionRunID
-	_, err = r.historyClient.StartWorkflowExecution(ctx, attachHistoryRequest)
+	})
 	if err != nil {
 		// The workflow can close or be replaced after Describe and before this
-		// chain-fenced attach. Re-read the observed run to preserve its actual
+		// attach. Re-read the observed run to preserve its actual
 		// terminal status instead of synthesizing COMPLETED.
-		return r.describeCompletedStart(ctx, scheduler, start)
+		return r.describeCompletedStart(ctx, scheduler, start, firstExecutionRunID)
+	}
+	if !attachedToDescribedChain(wfInfo, attachResp) {
+		return r.describeCompletedStart(ctx, scheduler, start, firstExecutionRunID)
 	}
 
 	// Callback attached successfully.
-	return &watchResult{}, nil
+	return &watchResult{firstExecutionRunID: firstExecutionRunID}, nil
+}
+
+func attachedToDescribedChain(
+	wfInfo *workflowpb.WorkflowExecutionInfo,
+	attachResp *workflowservice.StartWorkflowExecutionResponse,
+) bool {
+	if describedFirstRunID, attachedFirstRunID := wfInfo.GetFirstRunId(), attachResp.GetFirstExecutionRunId(); describedFirstRunID != "" && attachedFirstRunID != "" {
+		return describedFirstRunID == attachedFirstRunID
+	}
+	return wfInfo.GetExecution().GetRunId() == attachResp.GetRunId()
 }
 
 func (r *SchedulerCallbacksTaskHandler) describeCompletedStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
+	firstExecutionRunID string,
 ) (*watchResult, error) {
 	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: scheduler.NamespaceId,
@@ -353,10 +365,13 @@ func (r *SchedulerCallbacksTaskHandler) describeCompletedStart(
 	if wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		return nil, serviceerror.NewUnavailable("workflow changed while attaching scheduler callback")
 	}
-	return &watchResult{completed: &schedulespb.CompletedResult{
-		Status:    wfInfo.GetStatus(),
-		CloseTime: wfInfo.GetCloseTime(),
-	}}, nil
+	return &watchResult{
+		firstExecutionRunID: firstExecutionRunID,
+		completed: &schedulespb.CompletedResult{
+			Status:    wfInfo.GetStatus(),
+			CloseTime: wfInfo.GetCloseTime(),
+		},
+	}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(
