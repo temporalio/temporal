@@ -100,7 +100,7 @@ func TestTimeSkippingPropagationTestSuite(t *testing.T) {
 //   - Wall-clock elapsed is nowhere near 5h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -232,7 +232,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 //   - Parent completes.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -364,7 +364,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_TwoChildren() {
 // Final state: C.accum == 4h (3h inherited + 1h own); P.accum == 4h; G.accum == 2h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -535,7 +535,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 	env := testcore.NewEnv(
 		s.T(),
 		testcore.WithHistoryTaskRecorder(),
-		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
 	)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
@@ -961,7 +961,7 @@ func (s *TimeSkippingPropagationTestSuite) firstWorkflowTaskCompletedEventID(
 // behavior so a future change would surface it.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -1105,7 +1105,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 //   - Wall-clock elapsed is nowhere near 3h of virtual time.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -1224,7 +1224,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 //     ContinuedExecutionRunId.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -1358,7 +1358,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 //     InitialSkippedDuration ≈ 50min, initiator=CRON_SCHEDULE.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -1492,7 +1492,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 //   - run2 history has exactly one transition, carrying DisabledAfterFastForward=true.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -1618,7 +1618,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 //     but InitialSkippedDuration == 1h.
 func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_PropagationDisabled() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 

@@ -1402,4 +1402,32 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		util := NewTimeSkippingInfoUtil(s.mutableState.executionInfo.TimeSkippingInfo)
 		s.True(util.IsEnabled())
 	})
+
+	s.Run("ToDescribeInfoNilTSI", func() {
+		s.Nil(NewTimeSkippingInfoUtil(nil).ToDescribeInfo(time.Now()))
+	})
+
+	s.Run("ToDescribeInfoEnabled", func() {
+		now := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		})
+		info := util.ToDescribeInfo(now)
+		s.NotNil(info)
+		s.True(info.GetIsRunning())
+		s.Equal(now, info.GetCurrentTime().AsTime())
+	})
+
+	s.Run("ToDescribeInfoDisabled", func() {
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+		})
+		msNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+		info := util.ToDescribeInfo(msNow)
+		s.NotNil(info)
+		s.False(info.GetIsRunning())
+		s.Equal(msNow, info.GetCurrentTime().AsTime())
+	})
+
 }

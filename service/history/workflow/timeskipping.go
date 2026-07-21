@@ -297,6 +297,16 @@ func (util *TimeSkippingInfoUtil) IsEnabled() bool {
 	return util.tsi.GetConfig().GetEnabled()
 }
 
+func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonpb.TimeSkippingInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	return &commonpb.TimeSkippingInfo{
+		CurrentTime: timestamppb.New(currentTime),
+		IsRunning:   util.IsEnabled(),
+	}
+}
+
 // =============================================================================
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================
@@ -479,6 +489,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
+	// todo: merge with chasm time skipping
 
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()

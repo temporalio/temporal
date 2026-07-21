@@ -76,7 +76,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	// B3 not fixed: fast-forward disable fires regardless of in-flight activity. Update this
 	// test when B3 lands so it asserts the disable is deferred to the next idle moment.
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -210,7 +210,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 // (a) skip-to-timer1 (DisabledAfterBound=false), (b) fast-forward-disable.
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
@@ -338,7 +338,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -392,7 +392,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeout() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	ctx := s.Context()
 
 	const (
@@ -445,7 +445,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTimerFiredDuringStartedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
