@@ -2,36 +2,19 @@
 //
 // We name 3 times in the lifecycle of an activity attempt:
 //
-// schedule_time - the time at which the activity entered SCHEDULED state
-// dispatch_time - the time at which the activity task is due to be dispatched to Matching (AddActivityTask)
-// start_time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
+// schedule time - the time at which the activity entered SCHEDULED state
+// dispatch time - the time at which the activity task will be dispatched to Matching (AddActivityTask)
+// start time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
 //
-// They are always ordered as: (schedule_time) <= (dispatch_time) < (start_time).
+// They are always ordered as: (schedule time) <= (dispatch time) < (start time).
 //
 // A ScheduleToStart timeout applies to the time between dispatch and start. If there is a delay
 // before dispatch (i.e. a start delay on the first attempt, or a backoff interval / next retry
-// delay on a second or subsequent attempt) then schedule_time < dispatch_time. Otherwise, they are
+// delay on a second or subsequent attempt) then schedule time < dispatch time. Otherwise, they are
 // equal.
 //
 // The main Activity struct has a.ScheduleTime which is the schedule time of the first
 // attempt; i.e. the time at which the activity was created. This is never changed.
-//
-
-// The naming situation is not perfectly clean:
-//
-// next_attempt_schedule_time
-// --------------------------
-
-// WFA pending activity has always returned a field named next_attempt_schedule_time, and SAA does
-// also. In this field, "schedule_time" actually refers to dispatch_time. Specifically,
-// next_attempt_schedule_time is the dispatch_time of the attempt that is currently being waited
-// for. It is null when paused or when an attempt is in progress, since in those states the dispatch
-// time of a future attempt is unknown: we do not even know if there will be a next attempt.
-//
-// For WFA, next_attempt_schedule_time is null prior to the first attempt since start delay is not
-// supported, hence the activity is due to be dispatched to Matching as soon as the activity is
-// created. But for SAA, if there's a start delay, then next_attempt_schedule_time is the
-// dispatch_time (non-null).
 
 package activity
 
@@ -1227,7 +1210,6 @@ func (a *Activity) resetImmediately(
 func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(ctx chasm.MutableContext, timeoutType enumspb.TimeoutType) error {
 	failure := &failurepb.Failure{
 		Message: fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
-		Cause:   a.priorAttemptFailure(ctx),
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 				TimeoutType:          timeoutType,
@@ -1282,13 +1264,6 @@ func (a *Activity) recordFailedAttempt(
 	return nil
 }
 
-// priorAttemptFailure returns the failure recorded for the most recent attempt, or nil if none. A
-// terminal timeout chains it as its Cause so the error that drove the retries survives to the client,
-// matching workflow activities (mutable_state_impl.go AddActivityTaskTimedOutEvent).
-func (a *Activity) priorAttemptFailure(ctx chasm.Context) *failurepb.Failure {
-	return a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
-}
-
 // tryReschedule attempts to reschedule the activity for retry. Returns true if rescheduled, false
 // if retry is not possible. It handles the cases of pause and reset requests that were received
 // while the last attempt was in progress. failureRetryable reports whether the failure itself
@@ -1336,16 +1311,6 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 	enoughAttempts := retryPolicy.GetMaximumAttempts() == 0 || attempt.GetCount() < retryPolicy.GetMaximumAttempts()
 	enoughTime, retryInterval := a.hasEnoughTimeForRetry(ctx, overridingRetryInterval)
 	return enoughAttempts && enoughTime, retryInterval
-}
-
-// timeoutRetryable reports whether a StartToClose or Heartbeat timeout may be retried under the retry
-// policy. Mirrors the workflow-activity rule (service/history/workflow/retry.go isRetryable): such a
-// timeout is retryable unless its TemporalTimeout: type is listed in NonRetryableErrorTypes.
-func (a *Activity) timeoutRetryable(timeoutType enumspb.TimeoutType) bool {
-	return !slices.Contains(
-		a.GetRetryPolicy().GetNonRetryableErrorTypes(),
-		retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-	)
 }
 
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
