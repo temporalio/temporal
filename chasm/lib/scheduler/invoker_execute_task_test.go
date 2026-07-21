@@ -356,14 +356,14 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 		},
 	}
 
-	// Fail both service calls.
+	// Fail both service calls with a retryable (transient) error.
 	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, serviceerror.NewInternal("internal failure"))
 
-	// Terminate and Cancel are both attempted only once. Regardless of the service
-	// call's outcome, they should have been removed from the Invoker's queue.
+	// A retryable failure must leave both targets in the Invoker's queue so the
+	// cancel/terminate is retried rather than silently dropped after one attempt.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
@@ -371,8 +371,8 @@ func TestExecuteTask_CancelTerminateFailure(t *testing.T) {
 		ExpectedBufferedStarts:     0,
 		ExpectedRunningWorkflows:   0,
 		ExpectedActionCount:        0,
-		ExpectedCancelWorkflows:    0,
-		ExpectedTerminateWorkflows: 0,
+		ExpectedCancelWorkflows:    1,
+		ExpectedTerminateWorkflows: 1,
 	})
 }
 

@@ -287,9 +287,15 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 			if err != nil {
 				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				if isRetryableError(err) {
+					// Leave the target in the durable pending list so the cancel is retried,
+					// rather than silently dropped after a transient/ambiguous failure.
+					return
+				}
 			}
 
-			// Cancels are only attempted once.
+			// Cancels are only marked completed once they either succeed or fail
+			// non-retryably; retryable failures remain pending for a later attempt.
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -325,9 +331,15 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 			if err != nil {
 				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				if isRetryableError(err) {
+					// Leave the target in the durable pending list so the terminate is retried,
+					// rather than silently dropped after a transient/ambiguous failure.
+					return
+				}
 			}
 
-			// Terminates are only attempted once.
+			// Terminates are only marked completed once they either succeed or fail
+			// non-retryably; retryable failures remain pending for a later attempt.
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
