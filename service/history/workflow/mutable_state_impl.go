@@ -8348,33 +8348,33 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 }
 
 func (ms *MutableStateImpl) cleanupTransaction() error {
-	ms.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
-	ms.deleteActivityInfos = make(map[int64]struct{})
-	ms.syncActivityTasks = make(map[int64]struct{})
+	clear(ms.updateActivityInfos)
+	clear(ms.deleteActivityInfos)
+	clear(ms.syncActivityTasks)
 
-	ms.updateTimerInfos = make(map[string]*persistencespb.TimerInfo)
-	ms.deleteTimerInfos = make(map[string]struct{})
+	clear(ms.updateTimerInfos)
+	clear(ms.deleteTimerInfos)
 
-	ms.updateChildExecutionInfos = make(map[int64]*persistencespb.ChildExecutionInfo)
-	ms.deleteChildExecutionInfos = make(map[int64]struct{})
+	clear(ms.updateChildExecutionInfos)
+	clear(ms.deleteChildExecutionInfos)
 
-	ms.updateRequestCancelInfos = make(map[int64]*persistencespb.RequestCancelInfo)
-	ms.deleteRequestCancelInfos = make(map[int64]struct{})
+	clear(ms.updateRequestCancelInfos)
+	clear(ms.deleteRequestCancelInfos)
 
-	ms.updateSignalInfos = make(map[int64]*persistencespb.SignalInfo)
-	ms.deleteSignalInfos = make(map[int64]struct{})
+	clear(ms.updateSignalInfos)
+	clear(ms.deleteSignalInfos)
 
-	ms.updateSignalRequestedIDs = make(map[string]struct{})
-	ms.deleteSignalRequestedIDs = make(map[string]struct{})
+	clear(ms.updateSignalRequestedIDs)
+	clear(ms.deleteSignalRequestedIDs)
 
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
-	ms.updateInfoUpdated = make(map[string]struct{})
-	ms.timerInfosUserDataUpdated = make(map[string]struct{})
-	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
+	clear(ms.updateInfoUpdated)
+	clear(ms.timerInfosUserDataUpdated)
+	clear(ms.activityInfosUserDataUpdated)
 	ms.reapplyEventsCandidate = nil
 	ms.subStateMachineDeleted = false
 	ms.replayEventBatchID = common.EmptyEventID
