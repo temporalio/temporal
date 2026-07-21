@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestKnownIssue_DefaultCapacityAllowsProgressWithTenBackfillers(t *testing.T) {
+func TestDefaultCapacityAllowsProgressWithTenBackfillers(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	request := &schedulepb.BackfillRequest{
