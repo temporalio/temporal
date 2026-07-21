@@ -117,7 +117,7 @@ func TestPatch_UnpauseBlockedDuringMigration(t *testing.T) {
 	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
 }
 
-func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
+func TestPatch_PauseRejectedDuringMigration(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
@@ -125,8 +125,10 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 		ScheduleId:  scheduleID,
 	})
 	require.NoError(t, err)
+	pausedBefore := sched.Schedule.State.Paused
 
-	// Pause with different notes should succeed.
+	// All patch mutations, including pause, are fenced behind the pending
+	// migration so nothing changes during the handoff.
 	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
@@ -137,8 +139,11 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 			},
 		},
 	})
-	require.NoError(t, err)
-	require.True(t, sched.Schedule.State.Paused)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+	require.Equal(t, pausedBefore, sched.Schedule.State.Paused,
+		"a rejected migration-pending pause must not mutate schedule state")
 }
 
 func TestUpdate_RejectedDuringMigration(t *testing.T) {
