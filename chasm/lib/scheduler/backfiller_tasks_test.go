@@ -205,11 +205,15 @@ func TestBackfillTask_BufferCompletelyFull(t *testing.T) {
 		EndTime:   timestamppb.New(endTime),
 	}
 	runBackfillTestCase(t, env, &backfillTestCase{
-		InitialBackfillRequest:    request,
-		ExpectedBufferedStarts:    1000,
-		ExpectedComplete:          false,
-		ExpectedAttempt:           1,
-		ExpectedLastProcessedTime: startTime,
+		InitialBackfillRequest: request,
+		ExpectedBufferedStarts: 1000,
+		ExpectedComplete:       false,
+		ExpectedAttempt:        1,
+		// A completely-full-buffer attempt backs off (Attempt increments) but records
+		// no progress: the range backfiller's high watermark stays unset, which
+		// surfaces as the Unix epoch through AsTime(). (Previously the watermark was
+		// seeded to creation time, which a retry then mistook for durable progress.)
+		ExpectedLastProcessedTime: time.Unix(0, 0),
 	})
 }
 
