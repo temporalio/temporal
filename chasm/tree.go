@@ -47,6 +47,15 @@ var (
 	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
 
+// IsAccessCheckFailedError reports whether err is the framework's access-check failure, returned when
+// a progress (write) operation targets a subtree that can no longer be written: an ancestor component
+// is closed, the node is terminated, or the root execution has completed. (During task validation only
+// — when checkPaused is set, which write operations never do — a paused component also yields it.) A
+// write caller can treat it as "the target execution is closed for writes."
+func IsAccessCheckFailedError(err error) bool {
+	return errors.Is(err, errAccessCheckFailed)
+}
+
 // valueState is an in-memory indicator of the dirtiness of a deserialized node value.
 // The dirtiness has two parts:
 //  1. If the data part of the value is in sync with the serializedNode field.

@@ -1314,6 +1314,12 @@ func (e *ChasmEngine) convertError(
 }
 
 func (e *ChasmEngine) convertNotFoundError(err error, ref chasm.ComponentRef) error {
+	// Preserve the closed-tree access-check failure so callers (e.g. the Nexus completion handler) can
+	// distinguish a closed execution from a genuinely missing component; re-labeling it as a generic
+	// "not found for ID" would erase that signal.
+	if chasm.IsAccessCheckFailedError(err) {
+		return err
+	}
 	archID, archErr := ref.ArchetypeID(e.registry)
 	if archErr != nil {
 		return err

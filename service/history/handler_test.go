@@ -216,12 +216,6 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			engine := chasm.NewMockEngine(ctrl)
 			tc.setupEngine(engine)
-			// On a NotFound the handler reads the current run to decide whether the caller workflow
-			// closed. None of these cases model a closed execution, so report "not closed" (an error
-			// read) and let the original error stand. AnyTimes since the success/non-NotFound cases
-			// never reach the read.
-			engine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any()).
-				Return(serviceerror.NewNotFound("execution not found")).AnyTimes()
 
 			h := &Handler{
 				logger:         log.NewNoopLogger(),
