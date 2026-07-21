@@ -63,6 +63,14 @@ type activityTerminalProjection struct {
 	FailureType string
 }
 
+// failureCause is the underlying failure a terminal timeout chains as its Cause, projected to the
+// discriminants both surfaces expose: the application-failure Type and Message. SAA reads it from
+// Outcome.Failure.Cause; WFA from the SDK TimeoutError's unwrapped ApplicationError.
+type failureCause struct {
+	Type    string
+	Message string
+}
+
 func projectWFA(p *workflowpb.PendingActivityInfo) activityInfoProjection {
 	return activityInfoProjection{
 		State:                  p.GetState(),
@@ -257,18 +265,18 @@ func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
 	}
 }
 
-// terminalCause reports the application-failure type chained beneath a terminal timeout (empty if
-// none) — the SDK surfaces a timeout's underlying failure via TimeoutError.Unwrap(). Parallel to
+// terminalCause reports the underlying failure a terminal timeout chains as its Cause, as the shared
+// failureCause (empty if none) — the SDK surfaces it via TimeoutError.Unwrap(). Parallel to
 // saaHandle.terminalCause.
-func (a *wfaHandle) terminalCause(_ require.TestingT) string {
+func (a *wfaHandle) terminalCause(_ require.TestingT) failureCause {
 	var toErr *temporal.TimeoutError
 	if errors.As(a.run.Get(a.h.ctx, nil), &toErr) {
 		var appErr *temporal.ApplicationError
 		if errors.As(toErr.Unwrap(), &appErr) {
-			return appErr.Type()
+			return failureCause{Type: appErr.Type(), Message: appErr.Message()}
 		}
 	}
-	return ""
+	return failureCause{}
 }
 
 func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
