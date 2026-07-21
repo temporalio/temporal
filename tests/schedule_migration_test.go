@@ -2102,6 +2102,115 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
 }
 
+// TestScheduleMigration_ClosedFailedWorkflowUsesCompletionTransition verifies
+// that reconciliation of a V1 running-action snapshot uses the V2 terminal
+// transition when the execution has already failed. In particular, the
+// PauseOnFailure policy must apply even though Describe supplies no failure
+// payload.
+func TestScheduleMigration_ClosedFailedWorkflowUsesCompletionTransition(t *testing.T) {
+	env := newScheduleEnv(
+		t,
+		testcore.WithWorkerService("scheduler operations"),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-closed-failed")
+	wid := testcore.RandomizeStr("sched-closed-failed-wf")
+	wt := testcore.RandomizeStr("sched-closed-failed-wt")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(workflow.Context) error {
+		return errors.New("expected failure")
+	}, workflow.RegisterOptions{Name: wt})
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    nsName,
+		WorkflowId:   wid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startResp.GetRunId()},
+		})
+		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}, 10*time.Second, 200*time.Millisecond)
+
+	now := time.Now().UTC()
+	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State: &schedulerpb.SchedulerMigrationState{
+				SchedulerState: &schedulerpb.SchedulerState{
+					Namespace:     nsName,
+					NamespaceId:   nsID,
+					ScheduleId:    sid,
+					ConflictToken: scheduler.InitialConflictToken,
+					Schedule: &schedulepb.Schedule{
+						Spec: &schedulepb.ScheduleSpec{
+							Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+						},
+						Action: &schedulepb.ScheduleAction{
+							Action: &schedulepb.ScheduleAction_StartWorkflow{
+								StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+									WorkflowId:   wid,
+									WorkflowType: &commonpb.WorkflowType{Name: wt},
+									TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+								},
+							},
+						},
+						Policies: &schedulepb.SchedulePolicies{PauseOnFailure: true},
+						State:    &schedulepb.ScheduleState{},
+					},
+					Info: &schedulepb.ScheduleInfo{},
+				},
+				GeneratorState: &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now)},
+				InvokerState: &schedulerpb.InvokerState{
+					LastProcessedTime: timestamppb.New(now),
+					BufferedStarts: []*schedulespb.BufferedStart{{
+						NominalTime: timestamppb.New(now),
+						ActualTime:  timestamppb.New(now),
+						StartTime:   timestamppb.New(now),
+						RequestId:   "sched-migrated-running-" + startResp.GetRunId(),
+						WorkflowId:  wid,
+						RunId:       startResp.GetRunId(),
+						Attempt:     1,
+					}},
+				},
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		if err != nil || !desc.GetFrontendResponse().GetSchedule().GetState().GetPaused() {
+			return false
+		}
+		for _, action := range desc.GetFrontendResponse().GetInfo().GetRecentActions() {
+			if action.GetStartWorkflowResult().GetRunId() == startResp.GetRunId() {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+			}
+		}
+		return false
+	}, 30*time.Second, 500*time.Millisecond,
+		"closed migrated failure must be recorded and pause the V2 schedule")
+}
+
 // TestScheduleMigrationRolloutPercent verifies that
 // CHASMSchedulerMigrationRolloutPercent gates per-schedule migration once
 // EnableCHASMSchedulerMigration is on: at 50%, two V1 schedules whose IDs

@@ -208,23 +208,32 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+			var completedRequestIDs []string
 
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
-					start.HasCallback = true
 					if result.completed != nil {
-						start.Completed = result.completed
+						completedRequestIDs = append(completedRequestIDs, start.RequestId)
+					} else {
+						start.HasCallback = true
 					}
 				}
+			}
+			for _, requestID := range completedRequestIDs {
+				s.completeAction(ctx, requestID, results[requestID].completed, nil, false)
 			}
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
 				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
-			// Now that running workflow state has been refreshed, scheduler tasks can be
-			// fired.
-			invoker.addTasks(ctx)
-			generator.Generate(ctx)
+			if len(completedRequestIDs) > 0 {
+				s.armCompletionTasks(ctx)
+			} else {
+				// Now that running workflow state has been refreshed, scheduler tasks can be
+				// fired.
+				invoker.addTasks(ctx)
+				generator.Generate(ctx)
+			}
 
 			return nil, nil
 		},
@@ -312,15 +321,10 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted: workflow completed between describe
-		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
+		// Do not infer a successful completion here: this is an attachment race,
+		// and reconciliation must be run/chain-fenced before recording it.
 		if isAlreadyStartedError(err) {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					CloseTime: timestamppb.Now(),
-				},
-			}, nil
+			return nil, err
 		}
 		return nil, err
 	}
