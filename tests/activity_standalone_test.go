@@ -14450,3 +14450,246 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		require.NoError(t, err)
 	})
 }
+
+// TestNextAttemptScheduleTimeAndCurrentRetryInterval drives an activity to each lifecycle state and
+// asserts the intended (contract-compliant, WFA-aligned) value of both fields:
+//
+//   - NextAttemptScheduleTime: the awaiting attempt's pending dispatch time while it is still in the
+//     future (schedule_time+start_delay for the first attempt, complete_time+interval for a retry);
+//     null once that time has passed, once running, and while paused.
+//   - CurrentRetryInterval: while backing off, the current interval; null while running, when the
+//     attempt is not a retry, and when paused/terminal — matching workflow activities
+//     (service/history/workflow/activity.go GetPendingActivityInfo populates it only while SCHEDULED).
+func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetryInterval() {
+	const (
+		retryInterval = 5 * time.Second // long enough to observe a backoff window before the retry dispatches
+		backoffSettle = 2 * time.Second // slack so a wait outlasts the backoff's firing instant
+		startDelay    = time.Hour       // keeps the first attempt pending dispatch for the whole test
+	)
+
+	// First attempt within its start delay: the dispatch is pending in the future, and this is not a retry.
+	s.Run("StartDelayPending", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Hour),
+			StartDelay:          durationpb.New(startDelay),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(retryInterval),
+				BackoffCoefficient: 1.0,
+				MaximumInterval:    durationpb.New(retryInterval),
+			},
+		})
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.Equal(t, info.GetExecutionTime().AsTime(), info.GetNextAttemptScheduleTime().AsTime(),
+			"during a start delay, NextAttemptScheduleTime is the pending dispatch time (schedule+delay)")
+		require.Nil(t, info.GetCurrentRetryInterval(), "the first attempt is not a retry")
+	})
+
+	// First attempt running: no pending next dispatch, and no retry interval reported while running.
+	s.Run("FirstAttemptRunning", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Hour),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(retryInterval),
+				BackoffCoefficient: 1.0,
+				MaximumInterval:    durationpb.New(retryInterval),
+				MaximumAttempts:    3,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
+	})
+
+	// Backing off before the retry dispatches: the next dispatch is in the future. Correct today; a
+	// regression guard, not a repro.
+	s.Run("BackingOffBeforeRetry", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Hour),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(retryInterval),
+				BackoffCoefficient: 1.0,
+				MaximumInterval:    durationpb.New(retryInterval),
+				MaximumAttempts:    3,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message:     "drive",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "drive", NonRetryable: false}},
+			},
+		})
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()), "future retry dispatch time")
+		require.Equal(t, retryInterval, info.GetCurrentRetryInterval().AsDuration(), "while backing off, the current interval")
+	})
+
+	// Retry attempt running with a further retry permitted.
+	s.Run("RetryAttemptRunning", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Hour),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(retryInterval),
+				BackoffCoefficient: 1.0,
+				MaximumInterval:    durationpb.New(retryInterval),
+				MaximumAttempts:    3,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message:     "drive",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "drive", NonRetryable: false}},
+			},
+		})
+		require.NoError(t, err)
+
+		time.Sleep(retryInterval + backoffSettle)
+		_, err = env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.EqualValues(t, 2, info.GetAttempt())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
+	})
+
+	// Final attempt running with no retry remaining.
+	s.Run("FinalAttemptRunning", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            defaultIdentity,
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Hour),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(retryInterval),
+				BackoffCoefficient: 1.0,
+				MaximumInterval:    durationpb.New(retryInterval),
+				MaximumAttempts:    2,
+			},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.GetTaskToken(),
+			Failure: &failurepb.Failure{
+				Message:     "drive",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "drive", NonRetryable: false}},
+			},
+		})
+		require.NoError(t, err)
+
+		time.Sleep(retryInterval + backoffSettle)
+		_, err = env.pollActivityTaskQueue(s.Context(), taskQueue)
+		require.NoError(t, err)
+
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.EqualValues(t, 2, info.GetAttempt())
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
+		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null when no retry remains")
+	})
+}
