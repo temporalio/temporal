@@ -1886,16 +1886,10 @@ func (s *standaloneActivityTestSuite) TestWFASAANextAttemptScheduleTimeAndCurren
 		})
 	})
 
-	// Paused while backing off: dispatch is suspended, so neither a next dispatch nor a current retry
-	// interval is reported (even though the attempt carries a stored interval).
+	// Paused while backing off. There is no next attempt set to occur, and it's not appropriate to
+	// report the current retry interval since dispatch will not occur while paused.
 	t.Run("PausedDuringBackoff", func(t *testing.T) {
-		info := s.driveTrace(t, env, saaTrace{
-			trace:         []model.Event{saaPoll, saaFailRetryably, saaPause},
-			maxAttempts:   3,
-			retryInterval: saaDelayWindow,
-		}).describe(t).GetInfo()
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, info.GetRunState())
-		require.Nil(t, info.GetNextAttemptScheduleTime())
-		require.Nil(t, info.GetCurrentRetryInterval())
+		both(t, 3, saaDelayWindow, []model.Event{saaPoll, saaFailRetryably, saaPause},
+			activityInfoProjection{State: enumspb.PENDING_ACTIVITY_STATE_PAUSED, Attempt: 2})
 	})
 }
