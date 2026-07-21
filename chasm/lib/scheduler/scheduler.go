@@ -736,9 +736,6 @@ func (s *Scheduler) HandleNexusCompletion(
 		)
 		return nil
 	}
-	workflowID := start.GetWorkflowId()
-	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
-
 	// Record how long it took for the callback to arrive after the action completed.
 	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
 	// and clamp to zero in case of clock skew.
@@ -754,49 +751,73 @@ func (s *Scheduler) HandleNexusCompletion(
 	switch outcome := info.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Failure:
 		wfStatus = executionStatusFromFailure(outcome.Failure)
-		if tracksCompletionResult {
-			previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-				Failure: outcome.Failure,
-				Success: previousResult.Success,
-			})
-		}
 	case *persistencespb.ChasmNexusCompletion_Success:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		if tracksCompletionResult {
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-				Success: outcome.Success,
-			})
-		}
 	default:
 		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	}
 
-	// Handle pause-on-failure.
-	if tracksCompletionResult && countsAsFailureForPause(wfStatus) &&
-		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = fmt.Sprintf(
-			"paused, workflow %s: %s",
-			strings.ToLower(wfStatus.String()),
-			workflowID,
-		)
-		s.updateConflictToken()
-	}
-
-	// Record the completed action in the Invoker.
 	completed := &schedulespb.CompletedResult{
 		Status:    wfStatus,
 		CloseTime: info.CloseTime,
 	}
-	invoker.recordCompletedAction(ctx, completed, info.RequestId)
-
-	// Generate immediately after recording completions, so that an idle task
-	// can be scheduled if no more actions are remaining. Necessary as
-	// additional events invalidate in-flight idle tasks.
-	s.Generator.Get(ctx).Generate(ctx)
+	s.completeAction(ctx, info.RequestId, completed, info, true)
 
 	return nil
+}
+
+// completeAction performs the terminal transition for a buffered start. When
+// outcome is nil, completion metadata came from Describe and payload-derived
+// last-completion state is deliberately left unchanged.
+func (s *Scheduler) completeAction(
+	ctx chasm.MutableContext,
+	requestID string,
+	completed *schedulespb.CompletedResult,
+	outcome *persistencespb.ChasmNexusCompletion,
+	armTasks bool,
+) bool {
+	invoker := s.Invoker.Get(ctx)
+	workflowID := invoker.runningWorkflowID(requestID)
+	if workflowID == "" {
+		return false
+	}
+	var start *schedulespb.BufferedStart
+	for _, bufferedStart := range invoker.BufferedStarts {
+		if bufferedStart.RequestId == requestID {
+			start = bufferedStart
+			break
+		}
+	}
+	if start == nil {
+		return false
+	}
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
+
+	// TODO - also record payload sizes once we have metrics wired into CHASM context.
+	if outcome != nil && tracksCompletionResult {
+		switch outcome := outcome.Outcome.(type) {
+		case *persistencespb.ChasmNexusCompletion_Failure:
+			previousResult := s.LastCompletionResult.Get(ctx)
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
+		case *persistencespb.ChasmNexusCompletion_Success:
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+		}
+	}
+	if tracksCompletionResult && countsAsFailureForPause(completed.Status) && s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = fmt.Sprintf("paused, workflow %s: %s", strings.ToLower(completed.Status.String()), workflowID)
+		s.updateConflictToken()
+	}
+	start.HasCallback = true
+	invoker.recordCompletedAction(ctx, completed, requestID)
+	if armTasks {
+		s.armCompletionTasks(ctx)
+	}
+	return true
+}
+
+func (s *Scheduler) armCompletionTasks(ctx chasm.MutableContext) {
+	s.Generator.Get(ctx).Generate(ctx)
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.
