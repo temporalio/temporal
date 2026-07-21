@@ -2946,14 +2946,26 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 }
 
 func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	// Hold all 100 backfillers alive through legitimate buffer backpressure rather
+	// than starvation. Backfillers are given a real (non-zero) share of an empty
+	// buffer, but each is pointed at a range far larger than the buffer under
+	// BUFFER_ALL with no worker registered: the first start runs forever (nothing
+	// completes it) and the rest fill the shared buffer, so every backfiller stalls
+	// with range still to process and none can finish and self-delete before the
+	// 101st patch is rejected. (Before the capacity fix this test passed only
+	// because all 100 backfillers were starved to zero capacity and never drained.)
+	tweakables := chasmscheduler.DefaultTweakables
+	tweakables.MaxBufferSize = 300
+	tweakables.GeneratorBufferReserveSize = 25
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(chasmscheduler.CurrentTweakables, tweakables))
+	s := newScheduleEnv(t, opts...)
 	sid := "sched-test-too-many-backfillers"
 	wt := "sched-test-too-many-backfillers-wt"
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
+				{Interval: durationpb.New(fastInterval)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -2984,9 +2996,11 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 		backfills := make([]*schedulepb.BackfillRequest, 50)
 		for j := range backfills {
 			backfills[j] = &schedulepb.BackfillRequest{
-				StartTime:     timestamppb.New(now),
-				EndTime:       timestamppb.New(now.Add(time.Minute)),
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				// A range far larger than the buffer (fastInterval fires over an hour)
+				// so no backfiller can finish processing it and self-delete.
+				StartTime:     timestamppb.New(now.Add(-time.Hour)),
+				EndTime:       timestamppb.New(now),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 			}
 		}
 		_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
@@ -3008,9 +3022,9 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 		Patch: &schedulepb.SchedulePatch{
 			BackfillRequest: []*schedulepb.BackfillRequest{
 				{
-					StartTime:     timestamppb.New(now),
-					EndTime:       timestamppb.New(now.Add(time.Minute)),
-					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					StartTime:     timestamppb.New(now.Add(-time.Hour)),
+					EndTime:       timestamppb.New(now),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 				},
 			},
 		},
