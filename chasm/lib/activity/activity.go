@@ -2,19 +2,22 @@
 //
 // We name 3 times in the lifecycle of an activity attempt:
 //
-// schedule time - the time at which the activity entered SCHEDULED state
-// dispatch time - the time at which the activity task will be dispatched to Matching (AddActivityTask)
-// start time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
+// schedule_time - the time at which the activity entered SCHEDULED state
+// dispatch_time - the time at which the activity task is due to be dispatched to Matching (AddActivityTask)
+// start_time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
 //
-// They are always ordered as: (schedule time) <= (dispatch time) < (start time).
+// They are always ordered as: (schedule_time) <= (dispatch_time) < (start_time).
 //
 // A ScheduleToStart timeout applies to the time between dispatch and start. If there is a delay
 // before dispatch (i.e. a start delay on the first attempt, or a backoff interval / next retry
-// delay on a second or subsequent attempt) then schedule time < dispatch time. Otherwise, they are
+// delay on a second or subsequent attempt) then schedule_time < dispatch_time. Otherwise, they are
 // equal.
 //
 // The main Activity struct has a.ScheduleTime which is the schedule time of the first
 // attempt; i.e. the time at which the activity was created. This is never changed.
+//
+// The naming situation is not perfectly clean. See e.g. the comment below on
+// nextAttemptDispatchTime (which is called next_attempt_schedule_time in the public API).
 
 package activity
 
@@ -350,6 +353,39 @@ func dispatchTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb
 	completeTime := attempt.GetCompleteTime()
 	if retryInterval != nil && retryInterval.AsDuration() > 0 && completeTime != nil {
 		return timestamppb.New(completeTime.AsTime().Add(retryInterval.AsDuration()))
+	}
+	return nil
+}
+
+// nextAttemptDispatchTime is the dispatch_time of the attempt that is currently being waited for.
+// It is null when the dispatch time has passed, in terminal states, and when paused or when an
+// attempt is in progress, since in those states the dispatch time of a future attempt is unknown:
+// we do not even know if there will be a next attempt.
+//
+// In the public Describe API response of SAA and WFA, this has the name next_attempt_schedule_time.
+// In that field name, the term "schedule_time" is actually a dispatch time; specifically, the
+// dispatch time defined by this method.
+//
+// For WFA, next_attempt_schedule_time is null prior to the first attempt since start delay is not
+// supported, hence the activity is due to be dispatched to Matching as soon as the activity is
+// created. But for SAA, if there's a start delay, then next_attempt_schedule_time is the
+// dispatch_time (non-null).
+func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	if a.hasAttemptInProgress() || a.isPaused() || a.isTerminal() {
+		return nil
+	}
+	if t := a.dispatchTimeForAttempt(attempt); t != nil {
+		if t.AsTime().After(ctx.Now(a)) {
+			return t
+		}
+	}
+	return nil
+}
+
+// currentRetryInterval is the retry interval if the activity is currently waiting for a retry; nil otherwise.
+func (a *Activity) currentRetryInterval(attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		return attempt.GetCurrentRetryInterval()
 	}
 	return nil
 }
@@ -1660,7 +1696,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
-		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
+		CurrentRetryInterval:    a.currentRetryInterval(attempt),
 		ExecutionDuration:       executionDuration,
 		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
@@ -1674,7 +1710,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
-		NextAttemptScheduleTime: dispatchTimeForRetry(attempt),
+		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,
