@@ -27,8 +27,9 @@ import (
 //   - NextAttemptScheduleTime: the awaiting attempt's pending dispatch time while it is still in the
 //     future (schedule_time+start_delay for the first attempt, complete_time+interval for a retry);
 //     null once that time has passed, once running, and while paused.
-//   - CurrentRetryInterval: while running, the next interval (or null if no retry remains); while
-//     backing off, the current interval; null when the attempt is not a retry.
+//   - CurrentRetryInterval: while backing off, the current interval; null while running, when the
+//     attempt is not a retry, and when paused/terminal — matching workflow activities
+//     (service/history/workflow/activity.go GetPendingActivityInfo populates it only while SCHEDULED).
 
 // saaActivity addresses one driven activity for follow-up RPCs.
 type saaActivity struct {
@@ -57,12 +58,12 @@ func (s *standaloneActivityTestSuite) TestDescribeRetrySchedulingMetadata() {
 		require.Nil(t, info.GetCurrentRetryInterval(), "the first attempt is not a retry")
 	})
 
-	// First attempt running: no pending next dispatch; the next interval applies if it fails.
+	// First attempt running: no pending next dispatch, and no retry interval reported while running.
 	t.Run("FirstAttemptRunning", func(t *testing.T) {
 		info := s.start_Poll(t, env, 3).GetInfo()
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
 		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
-		require.Equal(t, saaRetryInterval, info.GetCurrentRetryInterval().AsDuration(), "while running, the next interval")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
 	})
 
 	// Backing off before the retry dispatches: the next dispatch is in the future. Correct today; a
@@ -80,7 +81,7 @@ func (s *standaloneActivityTestSuite) TestDescribeRetrySchedulingMetadata() {
 		require.EqualValues(t, 2, info.GetAttempt())
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
 		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
-		require.Equal(t, saaRetryInterval, info.GetCurrentRetryInterval().AsDuration(), "while running, the next interval")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
 	})
 
 	// Final attempt running with no retry remaining.

@@ -379,24 +379,15 @@ func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activityp
 	return nil
 }
 
-// currentRetryInterval is the current or next retry interval.
-// - If the activity is currently running, this is the next retry interval in case the attempt fails.
-// - If activity is currently backing off between attempt, this represents the current retry interval.
-// - If there is no next retry allowed, this field will be null.
-func (a *Activity) currentRetryInterval(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
-	switch {
-	case a.hasAttemptInProgress():
-		// The interval a failure now would be retried with — exactly what the retry path decides — or
-		// null if it would not retry (attempts or schedule-to-close time exhausted).
-		if willRetry, interval := a.shouldRetry(ctx, 0); willRetry {
-			return durationpb.New(interval)
-		}
-		return nil
-	case a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+// currentRetryInterval is the retry interval for the awaiting attempt while it is backing off or
+// queued, and null otherwise. It matches workflow activities (service/history/workflow/activity.go
+// GetPendingActivityInfo, which only populates the field while the activity is SCHEDULED): null while
+// an attempt is running, paused, or terminal.
+func (a *Activity) currentRetryInterval(attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		return attempt.GetCurrentRetryInterval()
-	default:
-		return nil
 	}
+	return nil
 }
 
 // RecordCompleted applies the provided function to record activity completion.
@@ -1705,7 +1696,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
-		CurrentRetryInterval:    a.currentRetryInterval(ctx, attempt),
+		CurrentRetryInterval:    a.currentRetryInterval(attempt),
 		ExecutionDuration:       executionDuration,
 		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
