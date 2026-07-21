@@ -68,6 +68,7 @@ var scenarios = []omesScenario{
 		options: []string{
 			"internal-iterations=10",
 			"nexus-endpoint=" + nexusEndpoint,
+			"include-standalone-nexus=true",
 		},
 	},
 	{
@@ -128,11 +129,16 @@ func TestMixedBrain(t *testing.T) {
 	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 
+	dc := map[string]any{
+		"nexusoperation.enableStandalone": true,
+	}
+
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
 		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
-			SourceDir:   sourceRoot(),
-			Persistence: persistence,
+			SourceDir:           sourceRoot(),
+			Persistence:         persistence,
+			DynamicConfigValues: dc,
 		})
 
 		var err error
@@ -158,6 +164,7 @@ func TestMixedBrain(t *testing.T) {
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
+			DynamicConfigValues: dc,
 		})
 	})
 	if t.Failed() {
