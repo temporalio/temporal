@@ -1676,7 +1676,7 @@ func testScheduleRequestIDIdempotency(t *testing.T, newContext contextFactory) {
 	var runs atomic.Int32
 	registerCountingWorkflow(s, wt, &runs)
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcore.NewContext())
 
 	// Start paused with a long interval so nothing fires on its own; the trigger patch below is the
 	// only source of actions, keeping the run count deterministic.
