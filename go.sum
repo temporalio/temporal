@@ -481,6 +481,10 @@ go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0 h1:CQvJSldHRUN
 go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0/go.mod h1:xSQ+mEfJe/GjK1LXEyVOoSI1N9JV9ZI923X5kup43W4=
 go.temporal.io/api v1.63.4-0.20260717222957-a7fa39a3059e h1:C+TZVpBtNBXy/wrNbBfEuf7issm17e3u00fe9+c2AHI=
 go.temporal.io/api v1.63.4-0.20260717222957-a7fa39a3059e/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
+go.temporal.io/api v1.63.4-0.20260719230552-aa57c3fcca1f h1:0zzkFoXOLDG/0OVNtxFtPuXsrKtUAt36VCVQwQfm1/8=
+go.temporal.io/api v1.63.4-0.20260719230552-aa57c3fcca1f/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
+go.temporal.io/api v1.63.4-0.20260719232400-f9e031effa8f h1:TSvmg1+WUZ4qk4jvU+aDjwi5kQ5CkDqaaRFjtB9r8/M=
+go.temporal.io/api v1.63.4-0.20260719232400-f9e031effa8f/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee h1:y6A65Iml06cR3CpxW2Zn8FQLjniPDTnN4jtr69UZxXI=
 go.temporal.io/auto-scaled-workers v0.0.0-20260706201056-4320b34799ee/go.mod h1:hhHijO9XRPIkAflLJJHix61M9FzbRPqk8fSydkcLkqw=
 go.temporal.io/sdk v1.41.1 h1:yOpvsHyDD1lNuwlGBv/SUodCPhjv9nDeC9lLHW/fJUA=

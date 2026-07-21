@@ -37,7 +37,7 @@ func TestTimeSkippingReplicationSuite(t *testing.T) {
 
 func (s *timeSkippingReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TimeSkippingEnabled.Key(): true,
+		dynamicconfig.WorkflowTimeSkippingEnabled.Key(): true,
 	}
 	// Drive the state-based replication path so TimeSkippingInfo replicates via the
 	// generic ExecutionInfo merge and PartialRefresh re-stamps timer tasks on the standby.

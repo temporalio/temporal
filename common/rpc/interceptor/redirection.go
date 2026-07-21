@@ -83,6 +83,7 @@ var (
 		"ExecuteMultiOperation":              func() any { return &workflowservice.ExecuteMultiOperationResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
 		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
+		"PollWorkflowExecutionTimeSkipping":  func() any { return &workflowservice.PollWorkflowExecutionTimeSkippingResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
