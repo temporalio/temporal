@@ -173,7 +173,7 @@ func (s *ActivityParitySuite) TestPauseAtRetryLimit() {
 				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			})
 			s.NoError(err)
-			s.EqualValues(attempt, pollResp.Attempt)
+			s.Equal(attempt, pollResp.Attempt)
 
 			if attempt < maximumAttempts {
 				_, err = env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
