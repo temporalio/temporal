@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
@@ -32,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/multierr"
 )
 
@@ -178,7 +182,9 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write).
 	clusterName := params.Config.ClusterMetadata.CurrentClusterName
-	outputFile := fmt.Sprintf("/tmp/replication_stream_messages_%s.txt", clusterName)
+	outputDir := filepath.Join(testutils.GetRepoRootDirectory(), ".testoutput")
+	require.NoError(t, os.MkdirAll(outputDir, 0o755))
+	outputFile := filepath.Join(outputDir, fmt.Sprintf("replication_stream_messages_%s.txt", clusterName))
 	impl.replicationStreamRecorder.SetOutputFile(outputFile)
 
 	// Global defaults: applied without cleanup so they persist across cluster reuse.
