@@ -70,14 +70,26 @@ type (
 		onAuthorize  func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
 	}
 
+	// FrontendConfig is the config for the frontend service
+	FrontendConfig struct {
+		NumFrontendHosts int
+	}
+
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
 		NumHistoryShards int32
+		NumHistoryHosts  int
+	}
+
+	// MatchingConfig is the config for the matching service
+	MatchingConfig struct {
+		NumMatchingHosts int
 	}
 
 	// WorkerConfig is the config for the worker service
 	WorkerConfig struct {
-		DisableWorker bool
+		NumWorkers    int
+		DisableWorker bool // overrides NumWorkers
 	}
 
 	// temporalParams contains everything needed to bootstrap Temporal
@@ -216,6 +228,12 @@ func (c *temporalImpl) Start() error {
 	}
 	if !c.workerConfig.DisableWorker {
 		services = append(services, primitives.WorkerService)
+	}
+	for _, serviceName := range services {
+		numHosts := len(c.hostsByProtocolByService[grpcProtocol][serviceName].All)
+		if numHosts != 1 {
+			return fmt.Errorf("onebox requires exactly one %s service node, got %d", serviceName, numHosts)
+		}
 	}
 
 	// NewServer receives one config and one static host map for all enabled services,

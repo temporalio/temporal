@@ -63,7 +63,9 @@ type (
 		IsMasterCluster           bool
 		ClusterMetadata           cluster.Config
 		Persistence               persistencetests.TestBaseOptions
+		FrontendConfig            FrontendConfig
 		HistoryConfig             HistoryConfig
+		MatchingConfig            MatchingConfig
 		WorkerConfig              WorkerConfig
 		ESConfig                  *esclient.Config
 		MockAdminClient           map[string]adminservice.AdminServiceClient
@@ -142,17 +144,28 @@ func newClusterWithPersistenceTestBaseFactory(
 	logger log.Logger,
 	tbFactory persistenceTestBaseFactory,
 ) (*TestCluster, error) {
+	const minNodes = 1
+	clusterConfig.FrontendConfig.NumFrontendHosts = max(minNodes, clusterConfig.FrontendConfig.NumFrontendHosts)
+	clusterConfig.HistoryConfig.NumHistoryHosts = max(minNodes, clusterConfig.HistoryConfig.NumHistoryHosts)
+	clusterConfig.MatchingConfig.NumMatchingHosts = max(minNodes, clusterConfig.MatchingConfig.NumMatchingHosts)
+	clusterConfig.WorkerConfig.NumWorkers = max(minNodes, clusterConfig.WorkerConfig.NumWorkers)
+	workerHosts := clusterConfig.WorkerConfig.NumWorkers
+	if clusterConfig.WorkerConfig.DisableWorker {
+		clusterConfig.WorkerConfig.NumWorkers = 0
+		workerHosts = minNodes
+	}
+
 	// Allocate addresses for every service, including worker, since NewServer validates
 	// the full static host map even when a test opts out of starting worker.
 	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
 		grpcProtocol: {
-			primitives.FrontendService: {All: makeAddresses(1)},
-			primitives.MatchingService: {All: makeAddresses(1)},
-			primitives.HistoryService:  {All: makeAddresses(1)},
-			primitives.WorkerService:   {All: makeAddresses(1)},
+			primitives.FrontendService: {All: makeAddresses(clusterConfig.FrontendConfig.NumFrontendHosts)},
+			primitives.MatchingService: {All: makeAddresses(clusterConfig.MatchingConfig.NumMatchingHosts)},
+			primitives.HistoryService:  {All: makeAddresses(clusterConfig.HistoryConfig.NumHistoryHosts)},
+			primitives.WorkerService:   {All: makeAddresses(workerHosts)},
 		},
 		httpProtocol: {
-			primitives.FrontendService: {All: makeAddresses(1)},
+			primitives.FrontendService: {All: makeAddresses(clusterConfig.FrontendConfig.NumFrontendHosts)},
 		},
 	}
 
