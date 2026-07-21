@@ -570,8 +570,20 @@ func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExec
 		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
 	case *failurepb.Failure_TimeoutFailureInfo:
 		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+	case *failurepb.Failure_TerminatedFailureInfo:
+		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	default:
 		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}
+}
+
+func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
+	switch status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -628,7 +640,7 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 
 	// Handle pause-on-failure.
-	if wfStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED &&
+	if countsAsFailureForPause(wfStatus) &&
 		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = fmt.Sprintf(
