@@ -528,6 +528,9 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
+		// Lost the race with a concurrent load of the same partition. The unstarted
+		// newPM holds no external references (subscriptions etc. are only registered
+		// in Start), so it can simply be dropped and garbage collected.
 		return pm, false, nil
 	}
 

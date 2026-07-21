@@ -1485,11 +1485,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
-	// Directly override admin rate limits to simulate dynamic config at rateLimitManager.
-	mgr.GetRateLimitManager().SetAdminRateForTesting(25000.0)
-
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
+
+	// Directly override admin rate limits to simulate dynamic config at rateLimitManager.
+	// Must happen after Start, which registers the dynamic config subscriptions and
+	// initializes the admin rates from config.
+	mgr.GetRateLimitManager().SetAdminRateForTesting(25000.0)
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
