@@ -219,15 +219,6 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		// TODO: bump to RefreshBeforeMigrationCheck in a follow-up deploy, once
-		// this release is baked in cloud and is the version a rollback would land
-		// on. Activating a new version in the same deploy that introduces it is
-		// unsafe: workflows would record the new version in their history, and a
-		// rollback to the prior release -- which has no knowledge of it -- could
-		// not deterministically replay those histories, wedging the scheduler
-		// workflows ("locked out" of processing those schedules). This release
-		// only needs to *understand* the new version (constant + gated branch
-		// below) so it is a safe rollback target for the deploy that activates it.
 		Version: TriggerImmediatelyTimestamp,
 	}
 
