@@ -410,6 +410,45 @@ func TestExecuteTask_CancelTerminateSucceed(t *testing.T) {
 	})
 }
 
+// A non-retryable cancel/terminate failure (e.g. the target workflow is already
+// gone) must drop the target rather than retry it forever. This is the mirror of
+// TestExecuteTask_CancelTerminateFailure, which keeps retryable failures pending.
+func TestExecuteTask_CancelTerminateNonRetryableFailureDropped(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	cancelWorkflows := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: "wf",
+			RunId:      "run1",
+		},
+	}
+	terminateWorkflows := []*commonpb.WorkflowExecution{
+		{
+			WorkflowId: "wf",
+			RunId:      "run2",
+		},
+	}
+
+	// Fail both service calls with a non-retryable error (NotFound is on the
+	// non-transient denylist, so isRetryableError reports false).
+	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
+		Return(nil, serviceerror.NewNotFound("workflow not found"))
+	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
+		Return(nil, serviceerror.NewNotFound("workflow not found"))
+
+	// A non-retryable failure must remove both targets from the Invoker's queue:
+	// retrying a permanently-failing cancel/terminate would never succeed.
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:      nil,
+		InitialCancelWorkflows:     cancelWorkflows,
+		InitialTerminateWorkflows:  terminateWorkflows,
+		ExpectedBufferedStarts:     0,
+		ExpectedRunningWorkflows:   0,
+		ExpectedActionCount:        0,
+		ExpectedCancelWorkflows:    0,
+		ExpectedTerminateWorkflows: 0,
+	})
+}
+
 // Tests when the ExecuteTask should yield by completing and committing any
 // completed work.
 func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
