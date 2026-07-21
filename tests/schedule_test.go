@@ -312,7 +312,7 @@ const (
 // future runs.
 func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFactory, stop terminalStop) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-	ctx := newContext(s.Context())
+	ctx := newContext(testcore.NewContext())
 
 	sid := testcore.RandomizeStr("sched-pauseonfail")
 	wid := testcore.RandomizeStr("sched-pauseonfail-wf")
