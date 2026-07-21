@@ -467,9 +467,7 @@ func convertBackfillersCHASMToLegacy(
 	for _, backfiller := range backfillers {
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
-			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
-				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
-			}
+			backfill.StartTime = backfillCursorCHASMToLegacy(backfiller)
 			ongoing = append(ongoing, backfill)
 			continue
 		}
@@ -490,6 +488,18 @@ func convertBackfillersCHASMToLegacy(
 	}
 
 	return ongoing, triggerStarts
+}
+
+func backfillCursorCHASMToLegacy(backfiller *schedulerpb.BackfillerState) *timestamppb.Timestamp {
+	if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
+		return common.CloneProto(backfiller.GetLastProcessedTime())
+	}
+
+	startTime := backfiller.GetBackfillRequest().GetStartTime()
+	if startTime == nil {
+		return nil
+	}
+	return timestamppb.New(startTime.AsTime().Add(-time.Millisecond))
 }
 
 func convertLastCompletionCHASMToLegacy(

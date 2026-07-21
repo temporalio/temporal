@@ -148,9 +148,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
-// An unstarted CHASM backfiller must remain inclusive when it migrates to V1.
-// This is the inverse migration boundary of the exclusive V1 cursor restored above.
-func TestCHASMToLegacyBackfill_UnstartedRemainsInclusive(t *testing.T) {
+func TestCHASMToLegacyBackfill_UnstartedInclusiveStartBecomesExclusiveCursor(t *testing.T) {
 	start := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	backfillers := map[string]*schedulerpb.BackfillerState{
 		"bf-1": {
@@ -168,7 +166,70 @@ func TestCHASMToLegacyBackfill_UnstartedRemainsInclusive(t *testing.T) {
 
 	ongoing, _ := convertBackfillersCHASMToLegacy(backfillers, start)
 	require.Len(t, ongoing, 1)
-	require.Equal(t, start, ongoing[0].GetStartTime().AsTime())
+	require.Equal(t, start.Add(-time.Millisecond), ongoing[0].GetStartTime().AsTime())
+}
+
+func TestBackfillCursorMigrationRoundTrips(t *testing.T) {
+	start := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name             string
+		backfiller       *schedulerpb.BackfillerState
+		expectedV1Cursor time.Time
+	}{
+		{
+			name: "fresh inclusive start",
+			backfiller: &schedulerpb.BackfillerState{
+				BackfillId: "fresh",
+				Request: &schedulerpb.BackfillerState_BackfillRequest{
+					BackfillRequest: &schedulepb.BackfillRequest{
+						StartTime: timestamppb.New(start),
+						EndTime:   timestamppb.New(start.Add(2 * time.Hour)),
+					},
+				},
+			},
+			expectedV1Cursor: start.Add(-time.Millisecond),
+		},
+		{
+			name: "progressed exclusive cursor",
+			backfiller: &schedulerpb.BackfillerState{
+				BackfillId:        "progressed",
+				LastProcessedTime: timestamppb.New(start.Add(time.Hour)),
+				Attempt:           2,
+				Request: &schedulerpb.BackfillerState_BackfillRequest{
+					BackfillRequest: &schedulepb.BackfillRequest{
+						StartTime: timestamppb.New(start),
+						EndTime:   timestamppb.New(start.Add(2 * time.Hour)),
+					},
+				},
+			},
+			expectedV1Cursor: start.Add(time.Hour),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			legacy, _ := convertBackfillersCHASMToLegacy(
+				map[string]*schedulerpb.BackfillerState{test.backfiller.GetBackfillId(): test.backfiller},
+				start,
+			)
+			require.Len(t, legacy, 1)
+			require.Equal(t, test.expectedV1Cursor, legacy[0].GetStartTime().AsTime())
+
+			chasmBackfillers := convertBackfillsLegacyToCHASM(legacy)
+			require.Len(t, chasmBackfillers, 1)
+			for _, backfiller := range chasmBackfillers {
+				require.Equal(t, int64(1), backfiller.GetAttempt())
+				require.Equal(t, test.expectedV1Cursor, backfiller.GetLastProcessedTime().AsTime())
+
+				roundTripped, _ := convertBackfillersCHASMToLegacy(
+					map[string]*schedulerpb.BackfillerState{backfiller.GetBackfillId(): backfiller},
+					start,
+				)
+				require.Len(t, roundTripped, 1)
+				require.Equal(t, test.expectedV1Cursor, roundTripped[0].GetStartTime().AsTime())
+			}
+		})
+	}
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
