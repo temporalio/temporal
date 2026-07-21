@@ -35,6 +35,7 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 		"test-namespace",
 	)
 	rateLimitManager := newRateLimitManager(mockUserDataManager, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rateLimitManager.Start()
 	rateLimitManager.mu.Lock()
 	// Simulate the condition where fairnessKeyRateLimitDefault is nil
 	rateLimitManager.fairnessKeyRateLimitDefault = nil
@@ -144,6 +145,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetAPIConfigRPSForTesting(100.0)
@@ -162,6 +164,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetWorkerRPSForTesting(100.0)
@@ -197,6 +200,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 		},
 	}
 	rlm := newRateLimitManager(udm, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.UserDataChanged()
@@ -218,6 +222,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetAPIConfigRPSForTesting(100.0)

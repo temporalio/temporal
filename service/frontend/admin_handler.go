@@ -1711,7 +1711,7 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 		params.GetReason() == "" ||
 		params.GetNamespace() == "" ||
 		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: Operation/Reason/Namespace/Query or Executions")
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, Namespace, AND one of (Query OR Executions)")
 	}
 
 	if len(params.GetJobId()) == 0 {
