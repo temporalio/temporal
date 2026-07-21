@@ -1396,6 +1396,27 @@ func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
 	return append([]capturedTaskMatchDetails(nil), h.calls...)
 }
 
+// The matching engine drops an unstarted manager on the loser side of a concurrent
+// load of the same partition. Construction must therefore not register any dynamic
+// config subscriptions — otherwise the abandoned manager would stay reachable from
+// the dynamic config collection forever. Subscriptions are only registered in Start.
+func (s *PartitionManagerTestSuite) TestConstructionDoesNotRegisterDynamicConfigSubscriptions() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	s.Empty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Start()
+	s.NotEmpty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Stop()
+	s.Empty(pm.rateLimitManager.cancels)
+}
+
 // setupPartitionManagerWithTaskHookFactories creates a partition manager with the given task match hooks.
 func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(taskHookFactories []hooks.TaskHookFactory) (*taskQueuePartitionManagerImpl, func()) {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
