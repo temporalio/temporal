@@ -91,6 +91,12 @@ const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
 
+	// How many recent actions to surface on the ScheduleListInfo memo. Unlike
+	// Describe, the memo is persisted to visibility, so it must be hard-capped:
+	// recentActions() includes running starts, which aren't bounded by
+	// completed-action retention. Mirrors V1's RecentActionCountForList.
+	recentActionCountForList = 5
+
 	// Item limit per spec field on the ScheduleInfo memo.
 	listInfoSpecFieldLimit = 10
 
@@ -1040,12 +1046,22 @@ func (s *Scheduler) ListInfo(
 	generator := s.Generator.Get(ctx)
 	invoker := s.Invoker.Get(ctx)
 
+	// Hard-cap the memo's recent-action list. recentActions() includes running
+	// starts, which aren't subject to completed-action retention, so the raw
+	// projection can grow with live action count. Keep the most recently started
+	// actions so the persisted memo stays bounded.
+	recentActions := invoker.recentActions()
+	slices.SortFunc(recentActions, func(a, b *schedulepb.ScheduleActionResult) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	recentActions = util.SliceTail(recentActions, recentActionCountForList)
+
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     invoker.recentActions(),
+		RecentActions:     recentActions,
 		FutureActionTimes: generator.FutureActionTimes,
 	}
 }
