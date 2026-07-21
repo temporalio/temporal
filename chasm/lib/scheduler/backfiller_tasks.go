@@ -55,6 +55,9 @@ func (b *BackfillerTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
+	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err
