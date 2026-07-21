@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestKnownIssue_CompletedHistoryDoesNotConsumeBackfillCapacity(t *testing.T) {
+func TestCompletedHistoryDoesNotConsumeBackfillCapacity(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := env.MutableContext()
 	env.Scheduler.NewRangeBackfiller(ctx, &schedulepb.BackfillRequest{
