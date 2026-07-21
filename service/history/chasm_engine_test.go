@@ -981,6 +981,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDIdempotency() {
 	dupRef, err := update()
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
 	s.Nil(dupRef)
 	s.Equal(1, updateCount, "updateFn must not run again for a duplicate request ID")
 }

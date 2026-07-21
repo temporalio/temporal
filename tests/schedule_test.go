@@ -353,6 +353,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { t.Parallel(); testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
 	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { t.Parallel(); testListSchedulesReturnsWorkflowStatus(t, newContext) })
 	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { t.Parallel(); testUpdateIntervalTakesEffect(t, newContext) })
+	t.Run("TestRequestIDIdempotency", func(t *testing.T) { t.Parallel(); testScheduleRequestIDIdempotency(t, newContext) })
 	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { t.Parallel(); testListScheduleMatchingTimes(t, newContext) })
 	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { t.Parallel(); testLimitMemoSpecSize(t, newContext) })
 	t.Run("TestCountSchedules", func(t *testing.T) { t.Parallel(); testCountSchedules(t, newContext) })
@@ -1655,6 +1656,92 @@ func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 		500*time.Millisecond,
 		"expected at least 2 runs within 10s after updating interval to 1s",
 	)
+}
+
+// testScheduleRequestIDIdempotency verifies that reusing a request ID makes UpdateSchedule and
+// PatchSchedule idempotent: the retry succeeds (rather than erroring) and the operation is applied
+// only once. The request ID is deduped through the same mutable-state map on both backends - V1's
+// signal dedup and V2's chasm.WithRequestID - so this runs against both.
+//
+// The effects are polled via await/require.Never rather than asserted synchronously because V1
+// applies updates and patches asynchronously (they are signals to the scheduler workflow), so the
+// change only becomes observable after the workflow processes the signal.
+func testScheduleRequestIDIdempotency(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-reqid-idempotency")
+	wid := testcore.RandomizeStr("sched-reqid-idempotency-wf")
+	wt := testcore.RandomizeStr("sched-reqid-idempotency-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(s.Context())
+
+	// Start paused with a long interval so nothing fires on its own; the trigger patch below is the
+	// only source of actions, keeping the run count deterministic.
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(111 * time.Second),
+		State:  &schedulepb.ScheduleState{Paused: true},
+		Action: startWorkflowAction(s, wid, wt),
+	})
+
+	currentInterval := func() time.Duration {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil || len(desc.GetSchedule().GetSpec().GetInterval()) == 0 {
+			return 0
+		}
+		return desc.GetSchedule().GetSpec().GetInterval()[0].GetInterval().AsDuration()
+	}
+
+	// UpdateSchedule idempotency: the retry (same request ID) carries a different interval that must
+	// be dropped as a duplicate.
+	updateReqID := uuid.NewString()
+	updateInterval := func(every time.Duration) error {
+		_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule: &schedulepb.Schedule{
+				Spec:   intervalSpec(every),
+				State:  &schedulepb.ScheduleState{Paused: true},
+				Action: startWorkflowAction(s, wid, wt),
+			},
+			Identity:  "test",
+			RequestId: updateReqID,
+		})
+		return err
+	}
+	require.NoError(t, updateInterval(222*time.Second))
+	await.RequireTruef(t, func() bool { return currentInterval() == 222*time.Second },
+		awaitTimeout, pollInterval, "first update should set the 222s interval")
+
+	require.NoError(t, updateInterval(333*time.Second), "duplicate update must succeed, not error")
+	require.Never(t, func() bool { return currentInterval() == 333*time.Second },
+		neverWindow, pollInterval, "duplicate update request ID must be ignored")
+
+	// PatchSchedule idempotency: trigger an immediate action twice with the same request ID; only one
+	// run should fire.
+	patchReqID := uuid.NewString()
+	triggerOnce := func() error {
+		_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch:      triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL),
+			Identity:   "test",
+			RequestId:  patchReqID,
+		})
+		return err
+	}
+	require.NoError(t, triggerOnce())
+	await.RequireTruef(t, func() bool { return runs.Load() == 1 },
+		awaitTimeout, pollInterval, "first trigger patch should fire exactly one action")
+
+	require.NoError(t, triggerOnce(), "duplicate patch must succeed, not error")
+	require.Never(t, func() bool { return runs.Load() > 1 },
+		neverWindow, pollInterval, "duplicate patch request ID must not fire a second action")
 }
 
 func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
