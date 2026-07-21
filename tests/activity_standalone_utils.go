@@ -47,6 +47,9 @@ type saaHarness struct {
 	retryInterval time.Duration
 	// nextRetryDelay overrides the policy backoff via ApplicationFailureInfo.NextRetryDelay on RespondFailed.
 	nextRetryDelay time.Duration
+	// scheduleToClose, when >0, sets a finite ScheduleToCloseTimeout (overriding the long default) so a
+	// trace can make a retry fail to fit before the deadline.
+	scheduleToClose time.Duration
 	// positivePollTimeout bounds a "must dispatch" poll; 0 => 10s.
 	positivePollTimeout time.Duration
 	// customizeStart mutates the StartActivityExecutionRequest before it is sent — the seam for niche
@@ -184,7 +187,11 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 		req.StartDelay = durationpb.New(h.startDelay)
 	}
 	if h.cfg.HasScheduleToClose {
-		req.ScheduleToCloseTimeout = dur(model.ScheduleToCloseElapses)
+		if h.scheduleToClose > 0 {
+			req.ScheduleToCloseTimeout = durationpb.New(h.scheduleToClose)
+		} else {
+			req.ScheduleToCloseTimeout = dur(model.ScheduleToCloseElapses)
+		}
 	}
 	if h.cfg.HasScheduleToStart {
 		req.ScheduleToStartTimeout = dur(model.ScheduleToStartElapses)

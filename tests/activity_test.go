@@ -471,6 +471,29 @@ func (s *standaloneActivityTestSuite) TestWFASAATimeoutPreservesUnderlyingFailur
 	})
 }
 
+// TestWFASAATimeoutTypeOnRetryDeadline ports the HeartbeatWithScheduleToClose slice of
+// Test_ActivityTimeouts: a heartbeat timeout fires on a started attempt, but the retry interval
+// cannot fit before the schedule-to-close deadline, so retries are given up and the terminal timeout
+// is reported as ScheduleToClose — not Heartbeat. WorkflowActivity is the oracle (which has always
+// done this via timer_queue_active_task_executor.go); the StandaloneActivity subtest is red until the
+// SAA fix (fredtzeng/saa-timeout-on-retry) lands, since SAA currently reports the raw Heartbeat type.
+func (s *standaloneActivityTestSuite) TestWFASAATimeoutTypeOnRetryDeadline() {
+	env := s.newTestEnv()
+	trace := []model.Event{saaPoll, {Kind: model.HeartbeatElapses}}
+	// Heartbeat fires at ~2s; the 30s retry cannot fit before the 10s schedule-to-close deadline.
+	const retryInterval, scheduleToClose = 30 * time.Second, 10 * time.Second
+	want := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		h := &wfaHarness{env: env, ctx: testcontext.For(t), maxAttempts: 2, retryInterval: retryInterval, scheduleToClose: scheduleToClose, shortTimeout: saaTimeoutIn(trace)}
+		require.Equal(t, want, h.driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		h := &saaHarness{env: env, ctx: testcontext.For(t), idBase: testcore.RandomizeStr(t.Name()), cfg: model.Config{MaxAttempts: 2, HasHeartbeat: true, HasScheduleToClose: true}, retryInterval: retryInterval, scheduleToClose: scheduleToClose, shortTimeout: saaTimeoutIn(trace)}
+		require.Equal(t, want, h.driveTrace(t, trace).terminal(t))
+	})
+}
+
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	env := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-test"

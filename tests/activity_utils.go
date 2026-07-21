@@ -91,6 +91,9 @@ type wfaHarness struct {
 	// shortTimeout, when set to one of the four timeout *Elapses kinds, makes that timeout short at
 	// schedule time so a trace can trigger it (mirrors saaHarness.shortTimeout).
 	shortTimeout model.EventKind
+	// scheduleToClose, when >0, sets a finite ScheduleToClose deadline so a trace can make a retry fail
+	// to fit before it (mirrors saaHarness.scheduleToClose).
+	scheduleToClose time.Duration
 	// positivePollTimeout bounds a "must dispatch" poll; 0 => 10s.
 	positivePollTimeout time.Duration
 }
@@ -229,6 +232,9 @@ func (h *wfaHarness) start(t *testing.T) *wfaHandle {
 	}
 	if h.shortTimeout == model.HeartbeatElapses {
 		params.Heartbeat = saaShortTimeout
+	}
+	if h.scheduleToClose > 0 {
+		params.ScheduleToClose = h.scheduleToClose
 	}
 	wfID := testcore.RandomizeStr("wfa-run")
 	run, err := h.env.SdkClient().ExecuteWorkflow(h.ctx,
