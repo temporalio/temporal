@@ -291,6 +291,13 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		return nil, err
 	}
 
+	// Emit membership gauges on every refresh, not just when membership changes.
+	// refreshLocked runs on a periodic ~10s ticker (see refreshRingWorker) as well as
+	// on real membership changes, so tying emission to this call (rather than to the
+	// changed-event early return below) bounds gauge staleness to that refresh cadence
+	// instead of leaving the last value stuck indefinitely during stable periods.
+	r.emitMembershipGaugesFromHosts(hosts)
+
 	// if we found an add/remove event, schedule another refresh right at that time
 	r.scheduleRefresh(nextEvent)
 
@@ -308,8 +315,6 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 		hosts: newMembersMap,
 	})
 
-	r.emitMembershipGauges(newMembersMap)
-
 	addrs := util.MapSlice(hosts, func(h *hostInfo) string { return h.summary() })
 	slices.Sort(addrs)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
@@ -317,16 +322,19 @@ func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
 	return changedEvent, nil
 }
 
-// emitMembershipGauges records per-service gauges describing the current membership ring:
-// how many hosts are reachable, how many are available (accepting requests, i.e. not draining),
-// and how many are draining. This is observation-only and does not affect routing.
-func (r *serviceResolver) emitMembershipGauges(members map[string]*hostInfo) {
+// emitMembershipGaugesFromHosts records per-service gauges describing the current membership
+// ring: how many hosts are reachable, how many are available (accepting requests, i.e. not
+// draining), and how many are draining. This is observation-only and does not affect routing.
+// It is called on every refreshLocked invocation (not gated on a detected membership change)
+// so that gauge freshness tracks the periodic refresh cadence instead of going stale during
+// stable periods.
+func (r *serviceResolver) emitMembershipGaugesFromHosts(hosts []*hostInfo) {
 	if r.metricsHandler == nil {
 		return
 	}
-	reachable := len(members)
+	reachable := len(hosts)
 	available := 0
-	for _, host := range members {
+	for _, host := range hosts {
 		if !isDraining(host) {
 			available++
 		}

@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-// TestEmitMembershipGauges verifies that emitMembershipGauges records the
+// TestEmitMembershipGauges verifies that emitMembershipGaugesFromHosts records the
 // reachable/available/draining member counts, tagged with the service name.
 func TestEmitMembershipGauges(t *testing.T) {
 	r := require.New(t)
@@ -24,13 +24,13 @@ func TestEmitMembershipGauges(t *testing.T) {
 	}
 
 	// 3 reachable hosts: two accepting traffic, one draining.
-	members := map[string]*hostInfo{
-		"10.0.0.1:7234": newHostInfo("10.0.0.1:7234", map[string]string{}),
-		"10.0.0.2:7234": newHostInfo("10.0.0.2:7234", map[string]string{}),
-		"10.0.0.3:7234": newHostInfo("10.0.0.3:7234", map[string]string{drainingKey: "true"}),
+	hosts := []*hostInfo{
+		newHostInfo("10.0.0.1:7234", map[string]string{}),
+		newHostInfo("10.0.0.2:7234", map[string]string{}),
+		newHostInfo("10.0.0.3:7234", map[string]string{drainingKey: "true"}),
 	}
 
-	resolver.emitMembershipGauges(members)
+	resolver.emitMembershipGaugesFromHosts(hosts)
 
 	recordings := capture.Snapshot()
 
@@ -55,7 +55,7 @@ func TestEmitMembershipGaugesNilHandlerNoPanic(t *testing.T) {
 		service:        primitives.HistoryService,
 		metricsHandler: nil,
 	}
-	resolver.emitMembershipGauges(map[string]*hostInfo{
-		"10.0.0.1:7234": newHostInfo("10.0.0.1:7234", map[string]string{}),
+	resolver.emitMembershipGaugesFromHosts([]*hostInfo{
+		newHostInfo("10.0.0.1:7234", map[string]string{}),
 	})
 }
