@@ -13,6 +13,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -134,6 +135,9 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		require.Equal(t, id, backfiller.BackfillId)
 		require.NotNil(t, backfiller.GetBackfillRequest())
 		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
+		require.Equal(t, now.Add(-time.Hour), backfiller.GetLastProcessedTime().AsTime())
+		require.Equal(t, schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE, backfiller.GetProgress())
+		require.Zero(t, backfiller.GetAttempt())
 	}
 
 	// Last completion result
@@ -144,6 +148,44 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
+}
+
+func TestBackfillProgressPersists(t *testing.T) {
+	state := &schedulerpb.BackfillerState{
+		Progress: schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE,
+	}
+
+	data, err := proto.Marshal(state)
+	require.NoError(t, err)
+
+	var reloaded schedulerpb.BackfillerState
+	require.NoError(t, proto.Unmarshal(data, &reloaded))
+	require.Equal(t, schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE, reloaded.GetProgress())
+}
+
+// A CHASM backfiller that has retried before processing any actions must remain
+// inclusive when it migrates to V1. This is the inverse migration boundary of
+// the exclusive V1 cursor restored above.
+func TestCHASMToLegacyBackfill_FreshProgressRemainsInclusive(t *testing.T) {
+	start := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	backfillers := map[string]*schedulerpb.BackfillerState{
+		"bf-1": {
+			BackfillId:        "bf-1",
+			LastProcessedTime: timestamppb.New(start.Add(time.Hour)),
+			Attempt:           1,
+			Progress:          schedulerpb.BACKFILLER_PROGRESS_FRESH,
+			Request: &schedulerpb.BackfillerState_BackfillRequest{
+				BackfillRequest: &schedulepb.BackfillRequest{
+					StartTime: timestamppb.New(start),
+					EndTime:   timestamppb.New(start.Add(2 * time.Hour)),
+				},
+			},
+		},
+	}
+
+	ongoing, _ := convertBackfillersCHASMToLegacy(backfillers, start)
+	require.Len(t, ongoing, 1)
+	require.Equal(t, start, ongoing[0].GetStartTime().AsTime())
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {

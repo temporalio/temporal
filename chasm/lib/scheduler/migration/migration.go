@@ -366,8 +366,9 @@ func convertBackfillsLegacyToCHASM(
 				BackfillRequest: common.CloneProto(v1Backfill),
 			},
 			BackfillId:        backfillID,
-			LastProcessedTime: nil,
+			LastProcessedTime: common.CloneProto(v1Backfill.GetStartTime()),
 			Attempt:           0,
+			Progress:          schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE,
 		}
 	}
 
@@ -467,7 +468,9 @@ func convertBackfillersCHASMToLegacy(
 	for _, backfiller := range backfillers {
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
-			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
+			if backfiller.GetProgress() == schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE && backfiller.GetLastProcessedTime() != nil {
+				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
+			} else if backfiller.GetProgress() == schedulerpb.BACKFILLER_PROGRESS_UNSPECIFIED && backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
 				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
 			}
 			ongoing = append(ongoing, backfill)

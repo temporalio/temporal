@@ -138,6 +138,7 @@ func (b *BackfillerTaskHandler) Execute(
 
 	// Otherwise, update watermark and reschedule.
 	backfiller.LastProcessedTime = timestamppb.New(result.LastProcessedTime)
+	backfiller.Progress = schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE
 	b.rescheduleBackfill(ctx, backfiller)
 
 	return nil
@@ -157,15 +158,24 @@ func (b *BackfillerTaskHandler) processBackfill(
 ) (result backfillProgressResult, err error) {
 	request := backfiller.GetBackfillRequest()
 
-	// Restore high watermark if we've already started processing the backfill.
+	// Existing Backfillers did not persist a progress phase, so retain their
+	// attempt-based behavior. New Backfillers persist their phase independently
+	// from retry accounting.
 	var startTime time.Time
 	lastProcessed := backfiller.GetLastProcessedTime()
-	if backfiller.GetAttempt() > 0 {
+	switch backfiller.GetProgress() {
+	case schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE:
 		startTime = lastProcessed.AsTime()
-	} else {
-		// On the first attempt, the start time is set slightly behind in order to make
-		// the backfill start time inclusive.
+	case schedulerpb.BACKFILLER_PROGRESS_FRESH:
 		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
+	default:
+		if backfiller.GetAttempt() > 0 {
+			startTime = lastProcessed.AsTime()
+		} else {
+			// On the first attempt, the start time is set slightly behind in order to make
+			// the backfill start time inclusive.
+			startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
+		}
 	}
 	endTime := request.GetEndTime().AsTime()
 	specResult, err := b.specProcessor.ProcessTimeRange(

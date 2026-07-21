@@ -86,6 +86,18 @@ message InvokerState {
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
 // with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
+enum BackfillerProgress {
+  // Preserves the attempt-based interpretation used by Backfillers persisted
+  // before this field was added.
+  BACKFILLER_PROGRESS_UNSPECIFIED = 0;
+
+  // The request start is inclusive and no range progress has been persisted.
+  BACKFILLER_PROGRESS_FRESH = 1;
+
+  // last_processed_time is an exclusive cursor for the next range request.
+  BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE = 2;
+}
+
 message BackfillerState {
   oneof request {
     temporal.api.schedule.v1.BackfillRequest backfill_request = 1;
@@ -104,6 +116,9 @@ message BackfillerState {
   // Attempt count, incremented when the buffer is full and the Backfiller
   // needs to back off before retrying to fill.
   int64 attempt = 8;
+
+  // Whether the range request is fresh or resumes from an exclusive cursor.
+  BackfillerProgress progress = 9;
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both

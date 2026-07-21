@@ -2,6 +2,8 @@
 package schedulerpb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -336,4 +338,23 @@ func (this *Event) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	BackfillerProgress_shorthandValue = map[string]int32{
+		"Unspecified":     0,
+		"Fresh":           1,
+		"CursorExclusive": 2,
+	}
+)
+
+// BackfillerProgressFromString parses a BackfillerProgress value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to BackfillerProgress
+func BackfillerProgressFromString(s string) (BackfillerProgress, error) {
+	if v, ok := BackfillerProgress_value[s]; ok {
+		return BackfillerProgress(v), nil
+	} else if v, ok := BackfillerProgress_shorthandValue[s]; ok {
+		return BackfillerProgress(v), nil
+	}
+	return BackfillerProgress(0), fmt.Errorf("%s is not a valid BackfillerProgress", s)
 }
