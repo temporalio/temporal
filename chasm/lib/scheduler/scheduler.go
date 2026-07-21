@@ -367,7 +367,6 @@ func (s *Scheduler) NewRangeBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_BackfillRequest{
 		BackfillRequest: request,
 	}
-	backfiller.Progress = schedulerpb.BACKFILLER_PROGRESS_FRESH
 	return backfiller
 }
 

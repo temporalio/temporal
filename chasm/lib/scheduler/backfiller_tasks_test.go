@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -26,15 +25,6 @@ type backfillTestCase struct {
 
 	ValidateInvoker    func(t *testing.T, invoker *scheduler.Invoker)
 	ValidateBackfiller func(t *testing.T, backfiller *scheduler.Backfiller)
-}
-
-type retryPolicyRecorder struct {
-	attempts []int
-}
-
-func (p *retryPolicyRecorder) ComputeNextDelay(_ time.Duration, attempts int, _ error) time.Duration {
-	p.attempts = append(p.attempts, attempts)
-	return time.Second
 }
 
 func TestBackfillTask_Validate_MigrationPending(t *testing.T) {
@@ -227,66 +217,15 @@ func TestBackfillTask_MigratedExclusiveCursor(t *testing.T) {
 		StartTime: timestamppb.New(cursor),
 		EndTime:   timestamppb.New(cursor.Add(defaultInterval)),
 	})
-	// This is the persisted state produced by the V1-to-CHASM migration: V1's
-	// StartTime has already been buffered and is an exclusive cursor.
+	// V1's StartTime has already been buffered and is an exclusive cursor.
 	backfiller.LastProcessedTime = timestamppb.New(cursor)
-	backfiller.Attempt = 0
-	backfiller.Progress = schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE
+	backfiller.Attempt = 1
 
 	require.NoError(t, env.CloseTransaction())
 
 	invoker := sched.Invoker.Get(ctx)
 	require.Len(t, invoker.GetBufferedStarts(), 1)
 	require.True(t, cursor.Add(defaultInterval).Equal(invoker.GetBufferedStarts()[0].GetActualTime().AsTime()))
-}
-
-func TestBackfillTask_MigratedCursorDoesNotAdvanceRetryBackoff(t *testing.T) {
-	env := newTestEnv(t)
-	cursor := env.TimeSource.Now().Truncate(defaultInterval)
-
-	ctx := env.MutableContext()
-	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{})
-	require.NoError(t, err)
-	sched := schedComponent.(*scheduler.Scheduler)
-	invoker := sched.Invoker.Get(ctx)
-	for range scheduler.DefaultTweakables.MaxBufferSize {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{})
-	}
-	backfiller := sched.NewRangeBackfiller(ctx, &schedulepb.BackfillRequest{
-		StartTime: timestamppb.New(cursor),
-		EndTime:   timestamppb.New(cursor.Add(defaultInterval)),
-	})
-	backfiller.LastProcessedTime = timestamppb.New(cursor)
-	backfiller.Attempt = 0
-	backfiller.Progress = schedulerpb.BACKFILLER_PROGRESS_CURSOR_EXCLUSIVE
-	sched.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
-	require.NoError(t, env.CloseTransaction())
-
-	ctx = env.MutableContext()
-	schedComponent, err = env.Node.Component(ctx, chasm.ComponentRef{})
-	require.NoError(t, err)
-	sched = schedComponent.(*scheduler.Scheduler)
-	backfiller = sched.Backfillers[backfiller.BackfillId].Get(ctx)
-	sched.WorkflowMigration = nil
-
-	retryPolicy := &retryPolicyRecorder{}
-	handler := scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
-		Config: &scheduler.Config{
-			Tweakables:                      defaultConfig().Tweakables,
-			ServiceCallTimeout:              defaultConfig().ServiceCallTimeout,
-			EncodeInternalTokenWithEnvelope: defaultConfig().EncodeInternalTokenWithEnvelope,
-			RetryPolicy: func() backoff.RetryPolicy {
-				return retryPolicy
-			},
-		},
-		MetricsHandler: metrics.NoopMetricsHandler,
-		BaseLogger:     env.Logger,
-		SpecProcessor:  env.SpecProcessor,
-	})
-	require.NoError(t, handler.Execute(ctx, backfiller, chasm.TaskAttributes{}, &schedulerpb.BackfillerTask{}))
-
-	require.Equal(t, int64(1), backfiller.GetAttempt())
-	require.Equal(t, []int{1}, retryPolicy.attempts)
 }
 
 // When the buffer's completely full, the high watermark shouldn't advance and no
