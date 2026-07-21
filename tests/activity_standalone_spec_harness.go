@@ -333,8 +333,8 @@ func (a *saaHandle) applyPoll(cur model.AbstractState, out model.Outcome, final 
 		// Delayed dispatch: a start_delay or backoff is still pending, so the poll finds no task. Verify
 		// with a negative poll, but only when the delay outlasts a valid long poll (not under the
 		// fast-backoff configs, where the state comparison below suffices).
-		if dur := a.h.dispatchDelay(cur.Dispatchability); dur > saaNegativePollTimeout {
-			if resp := a.pollForTask(t, saaNegativePollTimeout); resp != nil {
+		if dur := a.h.dispatchDelay(cur.Dispatchability); dur > saaPollTimeout {
+			if resp := a.pollForTask(t, saaPollTimeout); resp != nil {
 				if final {
 					t.Errorf("%s: model expected no dispatch (%s pending) but a task WAS dispatched (attempt %d)\n%s",
 						a.edge(poll, cur.Status), cur.Dispatchability, resp.GetAttempt(), a.pathLine())
@@ -347,7 +347,7 @@ func (a *saaHandle) applyPoll(cur model.AbstractState, out model.Outcome, final 
 		// The only status where a spurious dispatch is possible, so the only place we pay the
 		// full long-poll wait; the timeout must exceed MinLongPollTimeout. TEMPORAL_SAASPEC_NO_NEGATIVE_POLL
 		// disables it — the state check below still confirms Paused/dispatch.
-		if resp := a.pollForTask(t, saaNegativePollTimeout); resp != nil {
+		if resp := a.pollForTask(t, saaPollTimeout); resp != nil {
 			if final {
 				t.Errorf("%s: model expected no advance but a task WAS dispatched\n%s",
 					a.edge(poll, cur.Status), a.pathLine())
