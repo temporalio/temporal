@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"fmt"
 	"maps"
 	"time"
 
@@ -216,20 +217,26 @@ func convertBufferedStartsLegacyToCHASM(
 		v2Start := common.CloneProto(v1Start)
 
 		if v2Start.RequestId == "" {
-			v2Start.RequestId = schedulescommon.GenerateRequestID(
-				namespaceID,
-				scheduleID,
-				conflictToken,
-				"migrated",
-				v1Start.GetNominalTime().AsTime(),
-				v1Start.GetActualTime().AsTime(),
+			v2Start.RequestId = fmt.Sprintf("%s-%d",
+				schedulescommon.GenerateRequestID(
+					namespaceID,
+					scheduleID,
+					conflictToken,
+					"migrated",
+					v1Start.GetNominalTime().AsTime(),
+					v1Start.GetActualTime().AsTime(),
+				),
+				i,
 			)
 		}
 
 		if v2Start.WorkflowId == "" {
-			v2Start.WorkflowId = schedulescommon.GenerateWorkflowID(
-				baseWorkflowID,
-				v1Start.GetNominalTime().AsTime(),
+			v2Start.WorkflowId = fmt.Sprintf("%s-%d",
+				schedulescommon.GenerateWorkflowID(
+					baseWorkflowID,
+					v1Start.GetNominalTime().AsTime(),
+				),
+				i,
 			)
 		}
 
