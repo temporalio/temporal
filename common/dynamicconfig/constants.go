@@ -1129,6 +1129,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		1,
 		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
 	)
+	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
+		"frontend.enableBatchOperationsForStandaloneActivities",
+		false,
+		`FrontendEnableBatchOperationsForStandaloneActivities controls whether the frontend accepts the batch cancel, terminate, and delete standalone activity operation fields`,
+	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",

@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -1115,6 +1116,118 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	s.NoError(err)
 
 	s.Equal(input1, returnedData)
+}
+
+// TestListBatchOperations starts several batch operations of different types and
+// verifies that both ListBatchOperations and DescribeBatchOperation report the
+// expected fields for each (job id, operation type, state, start time, and — for
+// Describe — the visibility query and reason).
+func (s *ClientMiscTestSuite) TestListBatchOperations() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("batch operations"),
+		// This test starts multiple batch operations in the same namespace; the
+		// default per-namespace limit is 1, so raise it to the functional-test limit.
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+	)
+	ctx := s.Context()
+
+	const reason = "list-describe-batch-ops-test"
+
+	type startedBatch struct {
+		jobID  string
+		query  string
+		opType enumspb.BatchOperationType
+	}
+
+	// Each operation uses a visibility query that matches no workflows. The batch
+	// operation is still created, recorded, and listable/describable with its
+	// fields — so we don't need real target workflows to assert metadata.
+	operations := []struct {
+		opType  enumspb.BatchOperationType
+		request *workflowservice.StartBatchOperationRequest
+	}{
+		{
+			enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			&workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+					TerminationOperation: &batchpb.BatchOperationTermination{},
+				},
+			},
+		},
+		{
+			enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			&workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+					SignalOperation: &batchpb.BatchOperationSignal{Signal: "my-signal"},
+				},
+			},
+		},
+		{
+			enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+			&workflowservice.StartBatchOperationRequest{
+				Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
+					CancellationOperation: &batchpb.BatchOperationCancellation{},
+				},
+			},
+		},
+	}
+
+	started := make([]startedBatch, 0, len(operations))
+	for _, op := range operations {
+		jobID := uuid.NewString()
+		query := fmt.Sprintf("WorkflowType = '%s'", testcore.RandomizeStr(s.T().Name()))
+		req := op.request
+		req.Namespace = env.Namespace().String()
+		req.VisibilityQuery = query
+		req.JobId = jobID
+		req.Reason = reason
+		_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, req)
+		s.NoError(err)
+		started = append(started, startedBatch{jobID: jobID, query: query, opType: op.opType})
+	}
+
+	// ListBatchOperations should eventually surface every started job. The batch
+	// operations are themselves workflows indexed in visibility, so allow a moment.
+	listed := make(map[string]*batchpb.BatchOperationInfo)
+	//nolint:forbidigo // for tests with waits
+	s.Eventually(func() bool {
+		resp, err := env.SdkClient().WorkflowService().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
+			Namespace: env.Namespace().String(),
+		})
+		if err != nil {
+			return false
+		}
+		clear(listed)
+		for _, op := range resp.GetOperationInfo() {
+			listed[op.GetJobId()] = op
+		}
+		for _, b := range started {
+			if _, ok := listed[b.jobID]; !ok {
+				return false
+			}
+		}
+		return true
+	}, 15*time.Second, 200*time.Millisecond)
+
+	for _, b := range started {
+		info := listed[b.jobID]
+		s.NotNil(info, "batch operation %s was not returned by ListBatchOperations", b.jobID)
+		s.Equal(b.jobID, info.GetJobId())
+		s.Equal(b.opType, info.GetOperationType(), "ListBatchOperations operation type for %s", b.jobID)
+		s.NotEqual(enumspb.BATCH_OPERATION_STATE_UNSPECIFIED, info.GetState(), "ListBatchOperations state for %s", b.jobID)
+		s.NotNil(info.GetStartTime(), "ListBatchOperations start time for %s", b.jobID)
+
+		desc, err := env.SdkClient().WorkflowService().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     b.jobID,
+		})
+		s.NoError(err)
+		s.Equal(b.jobID, desc.GetJobId())
+		s.Equal(b.opType, desc.GetOperationType(), "DescribeBatchOperation operation type for %s", b.jobID)
+		s.Equal(b.query, desc.GetQuery(), "DescribeBatchOperation visibility query for %s", b.jobID)
+		s.Equal(reason, desc.GetReason(), "DescribeBatchOperation reason for %s", b.jobID)
+		s.NotEqual(enumspb.BATCH_OPERATION_STATE_UNSPECIFIED, desc.GetState(), "DescribeBatchOperation state for %s", b.jobID)
+	}
 }
 
 func (s *ClientMiscTestSuite) TestBatchReset() {

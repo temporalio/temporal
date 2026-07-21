@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -255,7 +257,7 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	visibility.MergeCustomSearchAttributes(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()))
 	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, nil
@@ -877,7 +879,7 @@ func (s *Scheduler) Update(
 		oldVisibility := s.Visibility.Get(ctx)
 		oldMemo := oldVisibility.CustomMemo(ctx)
 
-		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
+		visibility := chasm.NewVisibilityWithData(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()), oldMemo)
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 
@@ -1055,4 +1057,15 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
+}
+
+func userCustomSearchAttributes(fields map[string]*commonpb.Payload) map[string]*commonpb.Payload {
+	if len(fields) == 0 {
+		return fields
+	}
+	out := maps.Clone(fields)
+	maps.DeleteFunc(out, func(k string, _ *commonpb.Payload) bool {
+		return sadefs.IsReserved(k)
+	})
+	return out
 }
