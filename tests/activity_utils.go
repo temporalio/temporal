@@ -16,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	apiactivitypb "go.temporal.io/api/activity/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -27,6 +29,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // --- shared observable projection ----------------------------------------------------------
@@ -268,8 +272,10 @@ func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 	return resp
 }
 
-// rpc performs the worker RPC for a non-Poll, non-wall-clock event and returns its error. Parallel to
-// saaHandle.rpc, minus the operator commands (which are out of scope for the equivalence work).
+// rpc performs the RPC for a non-Poll, non-wall-clock event and returns its error. Parallel to
+// saaHandle.rpc; the operator commands use the same *Execution frontend APIs, addressed to the
+// workflow (WorkflowId set) rather than a standalone activity. Cancel is the exception — a workflow
+// activity is cancelled by its workflow, not a direct RPC (see RequestCancel).
 func (a *wfaHandle) rpc(e model.Event) error {
 	fc := a.h.env.FrontendClient()
 	ns := a.h.env.Namespace().String()
@@ -302,9 +308,47 @@ func (a *wfaHandle) rpc(e model.Event) error {
 			return err
 		}
 		return a.waitForCancelRequested()
+	case model.Pause:
+		_, err := fc.PauseActivityExecution(a.h.ctx, &workflowservice.PauseActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: "op", Reason: "drive", RequestId: uuid.NewString(),
+		})
+		return err
+	case model.Unpause:
+		_, err := fc.UnpauseActivityExecution(a.h.ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: "op",
+			ResetAttempts: e.ResetAttempts, ResetHeartbeat: e.ResetHeartbeat,
+		})
+		return err
+	case model.Reset:
+		_, err := fc.ResetActivityExecution(a.h.ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: "op",
+			KeepPaused: e.KeepPaused, RestoreOriginalOptions: e.RestoreOriginal,
+		})
+		return err
+	case model.UpdateOptions:
+		return a.updateOptions(e)
 	default:
 		return fmt.Errorf("wfaHarness: unhandled event kind %v", e.Kind)
 	}
+}
+
+func (a *wfaHandle) updateOptions(e model.Event) error {
+	req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+		Namespace: a.h.env.Namespace().String(), WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: "op",
+	}
+	switch {
+	case e.RestoreOriginal:
+		req.RestoreOriginal = true
+	case e.SetsStartDelay:
+		req.ActivityOptions = &apiactivitypb.ActivityOptions{StartDelay: durationpb.New(time.Hour)}
+		req.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}}
+	default:
+		// A minimal, always-valid update: re-set the heartbeat timeout.
+		req.ActivityOptions = &apiactivitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)}
+		req.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}}
+	}
+	_, err := a.h.env.FrontendClient().UpdateActivityExecutionOptions(a.h.ctx, req)
+	return err
 }
 
 func (a *wfaHandle) waitForCancelRequested() error {
