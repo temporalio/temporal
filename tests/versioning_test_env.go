@@ -22,8 +22,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -1028,7 +1030,9 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 	).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.AssertionT().Errorf("%s", unexpectedTaskMessage)
+			if task != nil {
+				softassert.Fail(env.Logger, unexpectedTaskMessage, tag.NewStringTag("run-id", task.GetWorkflowExecution().GetRunId()))
+			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
@@ -1052,8 +1056,7 @@ func (env *VersioningTestEnv) idlePollActivity(
 		tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
-				env.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.AssertionT().Errorf("%s", unexpectedTaskMessage)
+				softassert.Fail(env.Logger, unexpectedTaskMessage, tag.NewStringTag("activity-id", task.GetActivityId()))
 			}
 			return nil, nil
 		},
@@ -1078,7 +1081,7 @@ func (env *VersioningTestEnv) idlePollNexus(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 			if task != nil {
-				s.AssertionT().Errorf("%s", unexpectedTaskMessage)
+				softassert.Fail(env.Logger, unexpectedTaskMessage, tag.NewStringTag("task-token", string(task.GetTaskToken())))
 			}
 			return nil, nil
 		},
