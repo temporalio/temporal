@@ -257,6 +257,20 @@ func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
 	}
 }
 
+// terminalCause reports the application-failure type chained beneath a terminal timeout (empty if
+// none) — the SDK surfaces a timeout's underlying failure via TimeoutError.Unwrap(). Parallel to
+// saaHandle.terminalCause.
+func (a *wfaHandle) terminalCause(_ require.TestingT) string {
+	var toErr *temporal.TimeoutError
+	if errors.As(a.run.Get(a.h.ctx, nil), &toErr) {
+		var appErr *temporal.ApplicationError
+		if errors.As(toErr.Unwrap(), &appErr) {
+			return appErr.Type()
+		}
+	}
+	return ""
+}
+
 func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
 	ctx, cancel := context.WithTimeout(a.h.ctx, timeout)
 	defer cancel()

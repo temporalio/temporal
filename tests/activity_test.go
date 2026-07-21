@@ -418,6 +418,44 @@ func (s *standaloneActivityTestSuite) TestWFASAAScheduleToCloseTimeout() {
 	})
 }
 
+// TestWFASAATimeoutPreservesUnderlyingFailureCause ports TestTimeoutPreservesUnderlyingFailureCause:
+// when retries are exhausted by a StartToClose timeout, or a schedule-to-close deadline closes a
+// backing-off activity, the terminal TimedOut failure chains the application failure that drove the
+// retries as its Cause (mutable_state_impl.go AddActivityTaskTimedOutEvent, temporalio/temporal#3667).
+// Both surfaces must agree; WorkflowActivity is the oracle.
+func (s *standaloneActivityTestSuite) TestWFASAATimeoutPreservesUnderlyingFailureCause() {
+	env := s.newTestEnv()
+
+	// assertCausePreserved drives the trace on both surfaces and asserts each ends TIMED_OUT with the
+	// given timeout type, chaining the "drive" application failure (from attempt 1) as its cause.
+	assertCausePreserved := func(t *testing.T, maxAttempts int32, trace []model.Event, timeoutType enumspb.TimeoutType) {
+		want := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: timeoutType.String()}
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			h := &wfaHarness{env: env, ctx: testcontext.For(t), maxAttempts: maxAttempts, retryInterval: 200 * time.Millisecond, shortTimeout: saaTimeoutIn(trace)}
+			a := h.driveTrace(t, trace)
+			require.Equal(t, want, a.terminal(t))
+			require.Equal(t, "drive", a.terminalCause(t), "the terminal timeout must chain the underlying application failure as its Cause")
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			cfg := model.Config{MaxAttempts: maxAttempts, HasScheduleToClose: timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE}
+			h := &saaHarness{env: env, ctx: testcontext.For(t), idBase: testcore.RandomizeStr(t.Name()), cfg: cfg, shortTimeout: saaTimeoutIn(trace)}
+			a := h.driveTrace(t, trace)
+			require.Equal(t, want, a.terminal(t))
+			require.Equal(t, "drive", a.terminalCause(t), "the terminal timeout must chain the underlying application failure as its Cause")
+		})
+	}
+
+	// Retries exhausted by a StartToClose timeout on the final attempt (attempt 1 failed retryably).
+	s.T().Run("StartToClose", func(t *testing.T) {
+		assertCausePreserved(t, 2, []model.Event{saaPoll, saaFailRetryably, saaPoll, {Kind: model.StartToCloseElapses}}, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	})
+	// Schedule-to-close deadline closes the activity while it backs off to retry — a distinct server
+	// code path that must also chain the cause.
+	s.T().Run("ScheduleToClose", func(t *testing.T) {
+		assertCausePreserved(t, 0, []model.Event{saaPoll, saaFailRetryably, {Kind: model.ScheduleToCloseElapses}}, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	})
+}
+
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	env := testcore.NewEnv(s.T())
 	id := "functional-heartbeat-test"

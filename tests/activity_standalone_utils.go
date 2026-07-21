@@ -230,6 +230,13 @@ func (a *saaHandle) terminal(t require.TestingT) activityTerminalProjection {
 	}
 }
 
+// terminalCause reports the application-failure Type chained as the Cause of the terminal failure
+// (empty if none) — e.g. the underlying error a terminal timeout preserves. Parallel to
+// wfaHandle.terminalCause.
+func (a *saaHandle) terminalCause(t require.TestingT) string {
+	return saaFailureType(a.describe(t).GetOutcome().GetFailure().GetCause())
+}
+
 // heartbeatDetails reports the last heartbeat checkpoint, as the first payload's raw bytes. Parallel
 // to wfaHandle.heartbeatDetails.
 func (a *saaHandle) heartbeatDetails(t require.TestingT) []byte {
