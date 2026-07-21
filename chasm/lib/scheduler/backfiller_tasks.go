@@ -257,5 +257,13 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 
 	// Give half the available buffer to backfillers, distributed evenly, minus
 	// Generator reserve space.
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize), nil
+	// Count only actionable (non-completed) starts. Completed actions are retained
+	// in the buffer for reporting/history and must not consume admission capacity.
+	pending := 0
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetCompleted() == nil {
+			pending++
+		}
+	}
+	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-pending-tweakables.GeneratorBufferReserveSize), nil
 }
