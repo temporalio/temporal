@@ -358,6 +358,29 @@ func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKind
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestPollNexusTaskQueue_EmptyLongPollReturnsNonNilResponse() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+
+	// An empty long poll: matching returns a response whose inner Response is nil. The handler
+	// must not surface that as a typed-nil pointer, which would panic downstream interceptors.
+	s.mockMatchingClient.EXPECT().
+		PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.PollNexusTaskQueueResponse{}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	resp, err := wh.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
 	rateLimiter := quotas.NewMockRequestRateLimiter(s.controller)
 	wh := &WorkflowHandler{
@@ -2589,6 +2612,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
@@ -2618,7 +2642,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminateWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2654,6 +2678,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
@@ -2683,7 +2708,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancelWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2720,6 +2745,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
@@ -2751,7 +2777,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignalWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2809,6 +2835,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			},
 		},
 	}
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
@@ -2828,8 +2855,16 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignalWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			// Started via Executions (no VisibilityQuery), so the query memo must be
+			// absent and the executions memo must carry the target executions.
+			s.NotContains(request.StartRequest.Memo.Fields, batcher.BatchOperationVisibilityQueryMemo)
+			var gotExecutions []*commonpb.Execution
+			s.NoError(payload.Decode(request.StartRequest.Memo.Fields[batcher.BatchOperationExecutionsMemo], &gotExecutions))
+			s.Equal([]*commonpb.Execution{
+				{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: executions[0].WorkflowId, RunId: executions[0].RunId},
+			}, gotExecutions)
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
@@ -2858,6 +2893,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET,
@@ -2889,7 +2925,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeResetWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2956,7 +2992,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeResetWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -3215,7 +3251,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeReset),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeResetWorkflows),
 							},
 						},
 						SearchAttributes: nil,
@@ -3256,7 +3292,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 								batcher.BatchOperationStatsMemo: statsPayload,
 							},
 						},
@@ -3275,7 +3311,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 		s.Equal(jobID, resp.GetJobId())
 		s.Equal(now, resp.GetStartTime())
 		s.Equal(now, resp.GetCloseTime())
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
 		s.Equal(int64(3), resp.GetTotalOperationCount())
 		s.Equal(int64(2), resp.GetCompleteOperationCount())
@@ -3314,7 +3350,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 					ExecutionTime: now,
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 						},
 					},
 					SearchAttributes: nil,
@@ -3337,7 +3373,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
 	s.Assert().Equal(int64(5), resp.TotalOperationCount)
 	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
@@ -3370,7 +3406,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 					ExecutionTime: now,
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 						},
 					},
 					SearchAttributes: nil,
@@ -3388,8 +3424,98 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_QueryAndExecutions() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	jobID := uuid.NewString()
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	now := timestamppb.New(time.Now())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+
+	s.Run("QueryAndExecutionsDecodedFromMemo", func() {
+		executions := []*commonpb.Execution{
+			{Type: enumspb.EXECUTION_TYPE_ACTIVITY, BusinessId: "activity-id", RunId: "run-id"},
+		}
+		executionsPayload, err := payload.Encode(executions)
+		s.Require().NoError(err)
+
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo:            payload.EncodeString(batcher.BatchTypeTerminateActivities),
+								batcher.BatchOperationVisibilityQueryMemo: payload.EncodeString("ActivityType='foo'"),
+								batcher.BatchOperationExecutionsMemo:      executionsPayload,
+							},
+						},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, resp.GetOperationType())
+		s.Equal("ActivityType='foo'", resp.GetQuery())
+		s.Equal(executions, resp.GetExecutions())
+	})
+
+	s.Run("MissingTypeQueryAndExecutionsMemo_DefaultToZeroValues", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:        now,
+						CloseTime:        now,
+						Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime:    now,
+						Memo:             &commonpb.Memo{},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED, resp.GetOperationType())
+		s.Empty(resp.GetQuery())
+		s.Empty(resp.GetExecutions())
+	})
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
@@ -3435,7 +3561,7 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 							},
 						},
 					},
@@ -4000,6 +4126,111 @@ func TestValidateRequestId(t *testing.T) {
 	err := validateRequestId(&req.RequestId, 100)
 	assert.Nil(t, err)
 	assert.Len(t, req.RequestId, 36) // new UUID length
+}
+
+// TestBatchOperationTypeMemoRoundTrip verifies that the batch operation type the
+// frontend assigns in StartBatchOperation survives the memo round-trip
+// (snakeCaseBatchType -> stored string -> batchOperationTypeFromString) used by
+// Describe/ListBatchOperations to report the operation type.
+func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    enumspb.BatchOperationType
+		memo     string
+		expected enumspb.BatchOperationType
+	}{
+		// Activity batch operations round-trip to their own enum values.
+		{"terminate activities", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, batcher.BatchTypeTerminateActivities, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY},
+		{"cancel activities", enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, batcher.BatchTypeCancelActivities, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY},
+		{"delete activities", enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, batcher.BatchTypeDeleteActivities, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY},
+		{"reset activities", enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, batcher.BatchTypeResetActivities, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY},
+		{"unpause activities", enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, batcher.BatchTypeUnpauseActivities, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY},
+		{"update activity options", enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, batcher.BatchTypeUpdateActivitiesOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS},
+		// The disambiguated _WORKFLOW enum variants retain the legacy persisted
+		// memo strings during rollout and read back as the non-deprecated type.
+		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		{"cancel workflows", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		{"signal workflows", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		{"delete workflows", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		{"reset workflows", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		{"update workflow options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
+		// The legacy (non-suffixed) enum values are deprecated but still accepted as
+		// input to snakeCaseBatchType: a caller on an older SDK/CLI that hasn't picked
+		// up the new *_WORKFLOW enum values yet may still populate BatchOperationInput
+		// with the legacy value. They map to the same memo string as their *_WORKFLOW
+		// counterpart, and round-trip to the non-deprecated *_WORKFLOW operation type.
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"terminate (legacy enum)", enumspb.BATCH_OPERATION_TYPE_TERMINATE, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"cancel (legacy enum)", enumspb.BATCH_OPERATION_TYPE_CANCEL, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"signal (legacy enum)", enumspb.BATCH_OPERATION_TYPE_SIGNAL, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"delete (legacy enum)", enumspb.BATCH_OPERATION_TYPE_DELETE, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"reset (legacy enum)", enumspb.BATCH_OPERATION_TYPE_RESET, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"update options (legacy enum)", enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			memo := snakeCaseBatchType(tc.input)
+			require.Equal(t, tc.memo, memo, "memo string")
+			require.Equal(t, tc.expected, batchOperationTypeFromString(memo), "round-tripped operation type")
+		})
+	}
+
+	// Legacy memo strings (written before the workflow/activity suffix split) must
+	// still resolve for backwards compatibility with in-flight/old batch operations,
+	// reported as the non-deprecated *_WORKFLOW operation type.
+	legacy := map[string]enumspb.BatchOperationType{
+		"terminate":      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel":         enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal":         enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete":         enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset":          enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	}
+	for memo, expected := range legacy {
+		t.Run("legacy "+memo, func(t *testing.T) {
+			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+
+	suffixed := map[string]enumspb.BatchOperationType{
+		"terminate_workflows":     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel_workflows":        enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal_workflows":        enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete_workflows":        enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset_workflows":         enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_workflow_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	}
+	for memo, expected := range suffixed {
+		t.Run("suffixed "+memo, func(t *testing.T) {
+			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+}
+
+func TestWorkflowBatchOperationMemoRollingUpgradeCompatibility(t *testing.T) {
+	cases := []struct {
+		name       string
+		batchType  enumspb.BatchOperationType
+		legacyMemo string
+	}{
+		{"terminate", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, "terminate"},
+		{"cancel", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, "cancel"},
+		{"signal", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, "signal"},
+		{"delete", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, "delete"},
+		{"reset", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, "reset"},
+		{"update options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, "update_options"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.legacyMemo, snakeCaseBatchType(tt.batchType),
+				"workflow batch memos written during a rolling upgrade must remain readable by pre-upgrade frontends")
+		})
+	}
 }
 
 func TestDedupLinksFromCallbacks(t *testing.T) {
