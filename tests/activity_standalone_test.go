@@ -1776,7 +1776,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 	t.Run("WorkerMustSendApplicationFailure", func(t *testing.T) {
 		env := s.newTestEnv()
 		// Make an SAA with an attempt in progress
-		a := s.runTrace(t, env, saaTrace{trace: []model.Event{saaPoll}, maxAttempts: 3})
+		a := s.driveTrace(t, env, saaTrace{trace: []model.Event{saaPoll}, maxAttempts: 3})
 		// Worker sends an invalid failure
 		_, err := env.FrontendClient().RespondActivityTaskFailed(testcontext.For(t), &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: env.Namespace().String(),
@@ -1795,7 +1795,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		env := s.newTestEnv()
 
 		// Start attempt, then fail non-retryably
-		a := s.runTrace(t, env, saaTrace{
+		a := s.driveTrace(t, env, saaTrace{
 			trace:       []model.Event{saaPoll, {Kind: model.StartToCloseElapses}},
 			maxAttempts: 3,
 			customizeStart: func(req *workflowservice.StartActivityExecutionRequest) {
@@ -1803,8 +1803,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}
 			},
 		})
-		desc, err := a.describe()
-		require.NoError(t, err)
+		desc := a.describe(t)
 		require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus(),
 			"a StartToClose timeout marked non-retryable must fail the activity, not retry it (got %s)", desc.GetInfo().GetStatus())
 	})
@@ -1814,7 +1813,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		env := s.newTestEnv()
 
 		// Start attempt, then fail non-retryably
-		a := s.runTrace(t, env, saaTrace{
+		a := s.driveTrace(t, env, saaTrace{
 			trace:       []model.Event{saaPoll, {Kind: model.HeartbeatElapses}},
 			maxAttempts: 3,
 			customizeStart: func(req *workflowservice.StartActivityExecutionRequest) {
@@ -1822,8 +1821,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 					retrypolicy.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}
 			},
 		})
-		desc, err := a.describe()
-		require.NoError(t, err)
+		desc := a.describe(t)
 		require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus(),
 			"a Heartbeat timeout marked non-retryable must fail the activity, not retry it (got %s)", desc.GetInfo().GetStatus())
 	})
@@ -1836,12 +1834,11 @@ func (s *standaloneActivityTestSuite) TestFail() {
 
 		// Attempt 1 fails with a retryable application error; attempt 2 hangs into a StartToClose
 		// timeout, exhausting retries. The terminal failure is the timeout; its Cause must be the app error.
-		a := s.runTrace(t, env, saaTrace{
+		a := s.driveTrace(t, env, saaTrace{
 			trace:       []model.Event{saaPoll, saaFailRetryably, saaPoll, {Kind: model.StartToCloseElapses}},
 			maxAttempts: 2,
 		})
-		desc, err := a.describe()
-		require.NoError(t, err)
+		desc := a.describe(t)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus())
 		failure := desc.GetOutcome().GetFailure()
 		require.NotNil(t, failure.GetTimeoutFailureInfo(), "terminal failure should be a timeout")
@@ -1857,11 +1854,10 @@ func (s *standaloneActivityTestSuite) TestFail() {
 
 		// Attempt 1 fails with a retryable application error; while it waits to retry, the
 		// schedule-to-close deadline elapses and closes the activity.
-		a := s.runTrace(t, env, saaTrace{
+		a := s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{saaPoll, saaFailRetryably, {Kind: model.ScheduleToCloseElapses}},
 		})
-		desc, err := a.describe()
-		require.NoError(t, err)
+		desc := a.describe(t)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, desc.GetInfo().GetStatus())
 		failure := desc.GetOutcome().GetFailure()
 		require.NotNil(t, failure.GetTimeoutFailureInfo(), "terminal failure should be a timeout")
@@ -3636,119 +3632,6 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 	require.NotNil(t, describeResp.GetInfo().GetCloseTime())
 	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType(),
 		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
-}
-
-// TestDescribeNextAttemptScheduleTimeAndCurrentRetryInterval
-//   - NextAttemptScheduleTime: the awaiting attempt's pending dispatch time while it is still in the
-//     future (schedule_time+start_delay for the first attempt, complete_time+interval for a retry);
-//     null once that time has passed, once running, and while paused/cancel-requested.
-//   - CurrentRetryInterval: while running, the next interval (or null if no retry remains); while
-//     backing off, the current interval; null when the attempt is not a retry.
-func (s *standaloneActivityTestSuite) TestDescribeNextAttemptScheduleTimeAndCurrentRetryInterval() {
-	testcontext.For(s.T(), testcontext.WithTimeout(saaTraceBudget()))
-	env := s.newTestEnv()
-	t := s.T()
-
-	// First attempt within its start delay: the dispatch is pending in the future, and this is not a retry.
-	t.Run("StartDelayPending", func(t *testing.T) {
-		desc, err := s.runTrace(t, env, saaTrace{trace: []model.Event{}, startDelayed: true}).describe()
-		require.NoError(t, err)
-		info := desc.GetInfo()
-
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
-			require.Equal(t, info.GetExecutionTime().AsTime(), info.GetNextAttemptScheduleTime().AsTime(),
-				"during a start delay, NextAttemptScheduleTime is the pending dispatch time (schedule+delay)")
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Nil(t, info.GetCurrentRetryInterval(),
-				"CurrentRetryInterval is null on the first attempt, which is not a retry (got %s)",
-				info.GetCurrentRetryInterval().AsDuration())
-		})
-	})
-
-	// First attempt running: no pending next dispatch; the next interval applies if it fails.
-	t.Run("FirstAttemptRunning", func(t *testing.T) {
-		desc, err := s.runTrace(t, env, saaTrace{trace: []model.Event{saaPoll}, maxAttempts: 3, retryInterval: saaDelayWindow}).describe()
-		require.NoError(t, err)
-		info := desc.GetInfo()
-
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime(),
-				"NextAttemptScheduleTime is null while running (got %s)", info.GetNextAttemptScheduleTime().AsTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration(),
-				"while running with a retry permitted, CurrentRetryInterval is the next interval")
-		})
-	})
-
-	// Backing off before the retry dispatches: the next dispatch is in the future. Correct today; this is a regression guard, not a repro.
-	t.Run("BackingOffBeforeRetry", func(t *testing.T) {
-		desc, err := s.runTrace(t, env, saaTrace{trace: []model.Event{saaPoll, saaFailRetryably}, maxAttempts: 3, retryInterval: saaDelayWindow}).describe()
-		require.NoError(t, err)
-		info := desc.GetInfo()
-
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
-			require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()),
-				"while backing off, NextAttemptScheduleTime is the future retry dispatch time")
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration(),
-				"while backing off, CurrentRetryInterval is the current interval")
-		})
-	})
-
-	// Retry attempt running with a further retry permitted.
-	t.Run("RetryAttemptRunning", func(t *testing.T) {
-		desc, err := s.runTrace(t, env, saaTrace{
-			trace:         []model.Event{saaPoll, saaFailRetryably, saaBackoffDelayElapse, saaPoll},
-			maxAttempts:   3,
-			retryInterval: saaDelayWindow,
-		}).describe()
-		require.NoError(t, err)
-		info := desc.GetInfo()
-
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.EqualValues(t, 2, info.GetAttempt())
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime(),
-				"NextAttemptScheduleTime is null while running (got %s)", info.GetNextAttemptScheduleTime().AsTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Equal(t, saaDelayWindow, info.GetCurrentRetryInterval().AsDuration(),
-				"while running with a retry permitted, CurrentRetryInterval is the next interval")
-		})
-	})
-
-	// Final attempt running with no retry remaining.
-	t.Run("FinalAttemptRunning", func(t *testing.T) {
-		desc, err := s.runTrace(t, env, saaTrace{
-			trace:         []model.Event{saaPoll, saaFailRetryably, saaBackoffDelayElapse, saaPoll},
-			maxAttempts:   2,
-			retryInterval: saaDelayWindow,
-		}).describe()
-		require.NoError(t, err)
-		info := desc.GetInfo()
-
-		t.Run("NextAttemptScheduleTime", func(t *testing.T) {
-			require.EqualValues(t, 2, info.GetAttempt())
-			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
-			require.Nil(t, info.GetNextAttemptScheduleTime(),
-				"NextAttemptScheduleTime is null while running (got %s)", info.GetNextAttemptScheduleTime().AsTime())
-		})
-
-		t.Run("CurrentRetryInterval", func(t *testing.T) {
-			require.Nil(t, info.GetCurrentRetryInterval(),
-				"CurrentRetryInterval is null when no retry remains (got %s)", info.GetCurrentRetryInterval().AsDuration())
-		})
-	})
 }
 
 func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
@@ -14677,11 +14560,11 @@ func saaTraceBudget() time.Duration {
 	return floor
 }
 
-// runTrace drives one declared trace on its own harness (a unique activity-id namespace via idBase),
-// making no behavioral assertions — see saaHarness.driveTrace — and returns a handle to the activity
-// at the reached state so the caller can issue further RPCs and assert on the outcome. Later steps
-// will add model-derived assertions during the drive itself.
-func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
+// driveTrace drives one declared trace on its own harness (a unique activity-id namespace via idBase)
+// and returns a handle at the reached state, so the caller can issue further RPCs and assert on the
+// outcome. It checks conformance to the model at every step unless a customizeStart hook injects
+// config the model cannot see.
+func (s *standaloneActivityTestSuite) driveTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
 	ctx := testcontext.For(t)
 	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(ctx)
 	require.NoError(t, err)
@@ -14694,7 +14577,7 @@ func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActi
 		shortTimeout: saaTimeoutIn(tr.trace),
 		// "Dispatchable" must mean "dispatches promptly", so bound the positive poll below the delay
 		// window — that is how a reset that discards a backoff (immediate) is told from still-delayed.
-		positivePollTimeout: saaNegativePollTimeout,
+		positivePollTimeout: saaPollTimeout,
 		customizeStart:      tr.customizeStart,
 	}
 	// A customizeStart hook injects start-time config the model cannot see, so conformance checking
@@ -14706,38 +14589,38 @@ func (s *standaloneActivityTestSuite) runTrace(t *testing.T, env *standaloneActi
 }
 
 // TestStartDelay_Declarative drives the start-delay scenarios, each an explicitly named subtest with
-// its trace declared inline. It only drives (no assertions yet); see runTrace / driveTrace.
+// its trace declared inline. It only drives (no assertions yet); see driveTrace.
 func (s *standaloneActivityTestSuite) TestStartDelay_Declarative() {
 	testcontext.For(s.T(), testcontext.WithTimeout(saaTraceBudget()))
 	env := s.newTestEnv()
 	t := s.T()
 
 	t.Run("start-delay/first-dispatch", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{saaPoll, saaStartDelayElapse, saaPoll},
 			startDelayed: true,
 		})
 	})
 	t.Run("start-delay/pause-then-unpause", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{{Kind: model.Pause}, {Kind: model.Unpause}, saaPoll, saaStartDelayElapse, saaPoll},
 			startDelayed: true,
 		})
 	})
 	t.Run("start-delay/reset", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{{Kind: model.Reset}, saaPoll, saaStartDelayElapse, saaPoll},
 			startDelayed: true,
 		})
 	})
 	t.Run("start-delay/update-while-paused", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{{Kind: model.Pause}, {Kind: model.UpdateOptions, SetsStartDelay: true}},
 			startDelayed: true,
 		})
 	})
 	t.Run("start-delay/update-then-restore-original", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{
 				{Kind: model.UpdateOptions, SetsStartDelay: true},
 				{Kind: model.UpdateOptions, RestoreOriginal: true},
@@ -14755,42 +14638,42 @@ func (s *standaloneActivityTestSuite) TestBackoff_Declarative() {
 	t := s.T()
 
 	t.Run("backoff/retry-dispatch", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:         []model.Event{saaPoll, saaFailRetryably, saaPoll, saaBackoffDelayElapse, saaPoll},
 			maxAttempts:   3,
 			retryInterval: saaDelayWindow,
 		})
 	})
 	t.Run("backoff/next-retry-delay-override", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:          []model.Event{saaPoll, saaFailRetryably, saaPoll, saaBackoffDelayElapse, saaPoll},
 			maxAttempts:    3,
 			nextRetryDelay: saaDelayWindow,
 		})
 	})
 	t.Run("backoff/pause-then-unpause", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:         []model.Event{saaPoll, saaFailRetryably, {Kind: model.Pause}, {Kind: model.Unpause}, saaPoll, saaBackoffDelayElapse, saaPoll},
 			maxAttempts:   3,
 			retryInterval: saaDelayWindow,
 		})
 	})
 	t.Run("backoff/pause-unpause-then-update", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:         []model.Event{saaPoll, saaFailRetryably, {Kind: model.Pause}, {Kind: model.Unpause}, {Kind: model.UpdateOptions}, saaPoll, saaBackoffDelayElapse, saaPoll},
 			maxAttempts:   3,
 			retryInterval: saaDelayWindow,
 		})
 	})
 	t.Run("backoff/next-retry-delay-override-then-update", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:          []model.Event{saaPoll, saaFailRetryably, {Kind: model.UpdateOptions}, saaPoll, saaBackoffDelayElapse, saaPoll},
 			maxAttempts:    3,
 			nextRetryDelay: saaDelayWindow,
 		})
 	})
 	t.Run("backoff/reset", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:         []model.Event{saaPoll, saaFailRetryably, {Kind: model.Reset}, saaPoll},
 			maxAttempts:   3,
 			retryInterval: saaDelayWindow,
@@ -14805,55 +14688,55 @@ func (s *standaloneActivityTestSuite) TestTimeout_Declarative() {
 	t := s.T()
 
 	t.Run("schedule-to-close/elapses-while-paused", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{{Kind: model.Pause}, {Kind: model.ScheduleToCloseElapses}},
 		})
 	})
 	t.Run("schedule-to-start/elapses-while-scheduled", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{{Kind: model.ScheduleToStartElapses}},
 		})
 	})
 	t.Run("schedule-to-start/elapses-while-paused", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{{Kind: model.Pause}, {Kind: model.ScheduleToStartElapses}},
 		})
 	})
 	t.Run("start-to-close/elapses-while-started/retries-remain", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{saaPoll, {Kind: model.StartToCloseElapses}},
 		})
 	})
 	t.Run("start-to-close/elapses-while-started/last-attempt", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:       []model.Event{saaPoll, {Kind: model.StartToCloseElapses}},
 			maxAttempts: 1,
 		})
 	})
 	t.Run("start-to-close/elapses-while-cancel-requested", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{saaPoll, {Kind: model.RequestCancel}, {Kind: model.StartToCloseElapses}},
 		})
 	})
 	t.Run("heartbeat/elapses-while-started/retries-remain", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace: []model.Event{saaPoll, {Kind: model.HeartbeatElapses}},
 		})
 	})
 	t.Run("heartbeat/elapses-while-started/last-attempt", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:       []model.Event{saaPoll, {Kind: model.HeartbeatElapses}},
 			maxAttempts: 1,
 		})
 	})
 	t.Run("schedule-to-start/elapses-within-start-delay", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{{Kind: model.ScheduleToStartElapses}},
 			startDelayed: true,
 		})
 	})
 	t.Run("schedule-to-close/elapses-within-start-delay", func(t *testing.T) {
-		s.runTrace(t, env, saaTrace{
+		s.driveTrace(t, env, saaTrace{
 			trace:        []model.Event{{Kind: model.ScheduleToCloseElapses}},
 			startDelayed: true,
 		})
