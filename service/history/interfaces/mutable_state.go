@@ -148,6 +148,9 @@ type (
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
 		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
+		// AttachChasmRequestID records a request ID attached by the CHASM framework for
+		// UpdateComponent idempotency. Such entries are sweepable (oldest-first) at transaction close.
+		AttachChasmRequestID(requestID string)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)

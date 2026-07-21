@@ -190,8 +190,12 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// WithRequestID sets the requestID used when creating a new execution.
-// This option only applies to StartExecution() and UpdateWithStartExecution().
+// WithRequestID sets the requestID for the transition.
+//
+// On StartExecution() and UpdateWithStartExecution() it is the request ID
+// recorded when creating a new execution. On UpdateComponent(), it is used for
+// execution-level idempotency, recording a request's ID on success, and failing
+// subsequent requests reusing a request ID by returning a FailedPrecondition error.
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -326,12 +330,14 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
 //
-// The only opts currently honored is [WithRefConsistencyLevel]; it selects the [RefConsistencyLevel] used to
-// resolve and validate the ref (see that type for the ladder of levels). Other options are ignored.
+// Two opts are honored: [WithRefConsistencyLevel] selects the [RefConsistencyLevel] used to resolve
+// and validate the ref (see that type for the ladder of levels); [WithRequestID] enables
+// execution-level idempotency, rejecting a repeated update that carries an already-recorded request
+// ID (see that option). Other options are ignored.
 //
 // It returns the result, along with the new component reference. The returned reference may be
 // nil when updateFn deletes the component in the same transaction and the component is not the
-// root component.
+// root component, or on the [WithRequestID] dedup rejection (along with a FailedPrecondition error).
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,

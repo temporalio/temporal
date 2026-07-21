@@ -202,7 +202,11 @@ type (
 		visibilityUpdated     bool
 		executionStateUpdated bool
 		workflowTaskUpdated   bool
-		updateInfoUpdated     map[string]struct{}
+		// chasmRequestIDsAdded is set when a CHASM request ID is attached in the current transaction
+		// (via AttachChasmRequestID). It gates the lazy request-ID sweep at transaction close so only
+		// transactions that added an ID pay for the scan.
+		chasmRequestIDsAdded bool
+		updateInfoUpdated    map[string]struct{}
 		// following xxxUserDataUpdated fields are for tracking if activity/timer user data updated.
 		// This help to determine if we need to update transition history: For
 		// user data change, we need to update transition history. No update for
@@ -2594,6 +2598,41 @@ func (ms *MutableStateImpl) AttachRequestID(
 	ms.approximateSize += ms.executionState.Size()
 }
 
+// AttachChasmRequestID records a request ID attached by the CHASM framework for UpdateComponent
+// idempotency. Unlike AttachRequestID (used for the create request ID and event-backed request IDs),
+// the entry carries a non-nil AttachTime, which marks it as CHASM-attached (and therefore sweepable)
+// and serves as the oldest-first ordering key for the lazy sweep at transaction close
+// (see closeTransactionSweepChasmRequestIDs). It never touches CreateRequestId.
+func (ms *MutableStateImpl) AttachChasmRequestID(requestID string) {
+	if requestID == "" {
+		return
+	}
+	// The caller (updateComponent) dedups via HasRequestID first, so an already-recorded ID here is a
+	// bug: the write below is unconditional and would overwrite the existing entry.
+	softassert.That(ms.logger, !ms.HasRequestID(requestID),
+		"AttachChasmRequestID called with an already-recorded request ID")
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	entry := &persistencespb.RequestIDInfo{
+		EventType:  enumspb.EVENT_TYPE_UNSPECIFIED,
+		EventId:    common.EmptyEventID,
+		AttachTime: timestamppb.New(ms.timeSource.Now()),
+	}
+	ms.executionState.RequestIds[requestID] = entry
+	ms.approximateSize += chasmRequestIDApproxSize(requestID, entry)
+	// Force the execution state blob to be persisted even if the CHASM tree made no other change,
+	// so the recorded request ID is durable. Also gate the lazy sweep on this transaction.
+	ms.executionStateUpdated = true
+	ms.chasmRequestIDsAdded = true
+}
+
+// chasmRequestIDApproxSize approximates a CHASM request-ID map entry's contribution to
+// approximateSize.
+func chasmRequestIDApproxSize(requestID string, info *persistencespb.RequestIDInfo) int {
+	return len(requestID) + info.Size()
+}
+
 func (ms *MutableStateImpl) HasRequestID(
 	requestID string,
 ) bool {
@@ -2602,6 +2641,55 @@ func (ms *MutableStateImpl) HasRequestID(
 	}
 	_, ok := ms.executionState.RequestIds[requestID]
 	return ok
+}
+
+// closeTransactionSweepChasmRequestIDs enforces the per-execution limit on CHASM-attached request
+// IDs (those recorded via AttachChasmRequestID) by evicting the oldest entries beyond the configured
+// limit. Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed
+// request IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when
+// a request ID has been added.
+func (ms *MutableStateImpl) closeTransactionSweepChasmRequestIDs(transactionPolicy historyi.TransactionPolicy) {
+	if !ms.chasmRequestIDsAdded || transactionPolicy != historyi.TransactionPolicyActive {
+		return
+	}
+
+	limit := ms.config.MaximumRequestIDsPerExecution(ms.namespaceEntry.Name().String())
+	if limit <= 0 {
+		return // sweeping disabled
+	}
+
+	// Convert the RequestIDs map into a sortable slice.
+	type sweepable struct {
+		id   string
+		info *persistencespb.RequestIDInfo
+	}
+	candidates := make([]sweepable, 0, len(ms.executionState.RequestIds))
+	for id, info := range ms.executionState.RequestIds {
+		if info.GetAttachTime() == nil {
+			continue
+		}
+		candidates = append(candidates, sweepable{id: id, info: info})
+	}
+	if len(candidates) <= limit {
+		return
+	}
+
+	// Oldest first, with request ID as a deterministic tie-break on equal attach time.
+	slices.SortFunc(candidates, func(a, b sweepable) int {
+		return cmp.Or(
+			a.info.GetAttachTime().AsTime().Compare(b.info.GetAttachTime().AsTime()),
+			cmp.Compare(a.id, b.id),
+		)
+	})
+
+	evicted := candidates[:len(candidates)-limit]
+	for _, c := range evicted {
+		delete(ms.executionState.RequestIds, c.id)
+		ms.approximateSize -= chasmRequestIDApproxSize(c.id, c.info)
+	}
+	metrics.CHASMRequestIDEvicted.With(
+		ms.metricsHandler.WithTags(metrics.NamespaceTag(ms.namespaceEntry.Name().String())),
+	).Record(int64(len(evicted)))
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -7738,6 +7826,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.chasmNodeSizes[nodePath] = newSize
 	}
 
+	// Enforce the CHASM request-ID limit before the executionState blob is captured into the
+	// mutation/snapshot below. Gating (active + attached-this-transaction) lives in the helper.
+	ms.closeTransactionSweepChasmRequestIDs(transactionPolicy)
+
 	if isStateDirty {
 		if err := ms.closeTransactionUpdateTransitionHistory(
 			transactionPolicy,
@@ -8369,6 +8461,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.visibilityUpdated = false
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
+	ms.chasmRequestIDsAdded = false
 	ms.isResetStateUpdated = false
 	ms.timeSkippingInfoUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
