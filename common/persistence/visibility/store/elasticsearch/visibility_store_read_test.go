@@ -949,7 +949,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	s.Error(err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
+	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
@@ -963,7 +963,21 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
+	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 500 (Internal Server Error)", unavailableErr.Message)
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			return nil, &elastic.Error{
+				Status: 429,
+				Details: &elastic.ErrorDetails{
+					Reason: "error reason",
+				},
+			}
+		})
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	s.ErrorAs(err, &resourceExhaustedErr)
+	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 429 (Too Many Requests)", resourceExhaustedErr.Message)
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
