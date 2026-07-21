@@ -27,6 +27,22 @@ type backfillTestCase struct {
 	ValidateBackfiller func(t *testing.T, backfiller *scheduler.Backfiller)
 }
 
+func TestBackfillTask_Validate_MigrationPending(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	backfiller := env.Scheduler.NewImmediateBackfiller(ctx, &schedulepb.TriggerImmediatelyRequest{})
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+	require.NoError(t, env.CloseTransaction())
+
+	ctx = env.MutableContext()
+	schedulerComponent, err := env.Node.Component(ctx, chasm.ComponentRef{})
+	require.NoError(t, err)
+	persistedScheduler := schedulerComponent.(*scheduler.Scheduler)
+	_, exists := persistedScheduler.Backfillers[backfiller.BackfillId].TryGet(ctx)
+	require.True(t, exists)
+	require.Empty(t, persistedScheduler.Invoker.Get(ctx).BufferedStarts)
+}
+
 func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 	ctx := env.MutableContext()
 	schedComponent, err := env.Node.Component(ctx, chasm.ComponentRef{})
