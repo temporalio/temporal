@@ -18,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/proxy"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
@@ -69,6 +70,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -2531,7 +2533,8 @@ func (h *Handler) StartNexusOperation(
 	response := &nexuspb.StartOperationResponse{}
 	switch r := result.(type) {
 	case interface{ ValueAsAny() any }:
-		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
+		resultValue := r.ValueAsAny()
+		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(resultValue)
 		if err != nil {
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
@@ -2539,6 +2542,15 @@ func (h *Handler) StartNexusOperation(
 		var payload *commonpb.Payload
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
+		}
+		// System Nexus results are serialized into an outer Payload. If a protobuf
+		// result contains nested user Payloads, serialization hides them in Data, so
+		// mark the outer Payload for downstream payload visitors.
+		if payload != nil && containsNestedPayload(ctx, resultValue) {
+			if payload.Metadata == nil {
+				payload.Metadata = make(map[string][]byte, 1)
+			}
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
 		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
@@ -2561,6 +2573,25 @@ func (h *Handler) StartNexusOperation(
 	return &historyservice.StartNexusOperationResponse{
 		Response: response,
 	}, nil
+}
+
+// containsNestedPayload reports whether v is a proto message that carries a
+// nested *commonpb.Payload/Payloads field. Non-proto values (e.g. plain Go
+// types returned by some system Nexus operations) can't carry one and are
+// treated as not containing a payload.
+func containsNestedPayload(ctx context.Context, v any) bool {
+	msg, ok := v.(proto.Message)
+	if !ok {
+		return false
+	}
+	found := false
+	_ = proxy.VisitPayloads(ctx, msg, proxy.VisitPayloadsOptions{
+		Visitor: func(_ *proxy.VisitPayloadsContext, payloads []*commonpb.Payload) ([]*commonpb.Payload, error) {
+			found = true
+			return payloads, nil
+		},
+	})
+	return found
 }
 
 func (h *Handler) CancelNexusOperation(

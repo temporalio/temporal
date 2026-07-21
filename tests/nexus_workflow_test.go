@@ -3230,6 +3230,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
+	// TestOperation's response type carries no nested Payload, so the system payload metadata flag
+	// must not be set.
+	_, hasFlag := result.GetMetadata()[commonnexus.SystemPayloadMetadataKey]
+	s.False(hasFlag)
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3252,6 +3256,85 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	var response string
 	s.NoError(run.Get(ctx, &response))
 	s.Equal("Hello, Temporal", response)
+}
+
+// NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
+// __temporal_system endpoint.
+func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadataFlag(chasmEnabled bool) {
+	env := s.newTestEnv(chasmEnabled)
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  commonnexus.SystemEndpoint,
+						Service:   "TestService",
+						Operation: "TestOperationWithPayload",
+						Input:     testcore.MustToPayload(s.T(), "Temporal"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll for the completion
+	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+
+	// Find the NexusOperationCompleted event
+	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
+	s.NotNil(result)
+	// TestOperationWithPayload's response embeds a nested Payload, so the system payload metadata
+	// flag must be set.
+	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+
+	// Complete the workflow
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: &commonpb.Payloads{
+							Payloads: []*commonpb.Payload{result},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	s.NoError(run.Get(s.Context(), nil))
 }
 
 func (s *NexusWorkflowTestSuite) mutateCompletionComponentRef(
