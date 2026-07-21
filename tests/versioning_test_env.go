@@ -1035,27 +1035,6 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 	)
 }
 
-func (env *VersioningTestEnv) idlePollUnversionedActivity(
-	s parallelsuite.Scope,
-	tv *testvars.TestVars,
-	timeout time.Duration,
-	unexpectedTaskMessage string,
-) {
-	poller := taskpoller.New(s.TB(), env.FrontendClient(), env.Namespace().String())
-	_, _ = poller.PollActivityTask(
-		&workflowservice.PollActivityTaskQueueRequest{}).HandleTask(
-		tv,
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			if task != nil {
-				env.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.Require().Fail(unexpectedTaskMessage)
-			}
-			return nil, nil
-		},
-		taskpoller.WithTimeout(timeout),
-	)
-}
-
 func (env *VersioningTestEnv) idlePollActivity(
 	s parallelsuite.Scope,
 	tv *testvars.TestVars,
