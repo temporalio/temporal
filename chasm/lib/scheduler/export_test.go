@@ -64,3 +64,11 @@ func (i *Invoker) RecordExecuteResult(
 		RetryableStarts: retryable,
 	})
 }
+
+func (b *BackfillerTaskHandler) ProcessBackfill(
+	scheduler *Scheduler,
+	backfiller *Backfiller,
+	limit int,
+) (backfillProgressResult, error) {
+	return b.processBackfill(nil, scheduler, backfiller, limit)
+}
