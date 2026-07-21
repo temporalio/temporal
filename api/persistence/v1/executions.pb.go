@@ -1440,7 +1440,8 @@ type WorkflowExecutionState struct {
 	// the workflow execution, request IDs that were attached to an existing running workflow
 	// execution via StartWorkflowExecutionRequest.OnConflictOptions, or (for CHASM executions) request
 	// IDs recorded for UpdateComponent idempotency - the latter are marked by RequestIDInfo.attach_time
-	// and are subject to the per-execution limit (history.maximumRequestIDsPerExecution).
+	// and are swept per-execution by count (history.maximumRequestIDsPerExecution) and age
+	// (history.requestIDMaxAge).
 	RequestIds map[string]*RequestIDInfo `protobuf:"bytes,7,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
 	// only for a first run; any continuation (continue-as-new, retry, cron, or reset)

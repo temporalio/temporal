@@ -927,7 +927,7 @@ var (
 	)
 	CHASMRequestIDEvicted = NewCounterDef(
 		"chasm_request_id_evicted",
-		WithDescription("The number of CHASM-attached request IDs swept from an execution's dedup map on exceeding history.maximumRequestIDsPerExecution."),
+		WithDescription("The number of CHASM-attached request IDs swept from an execution's dedup map for exceeding history.maximumRequestIDsPerExecution or history.requestIDMaxAge."),
 	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")

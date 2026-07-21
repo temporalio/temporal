@@ -2643,53 +2643,68 @@ func (ms *MutableStateImpl) HasRequestID(
 	return ok
 }
 
-// closeTransactionSweepChasmRequestIDs enforces the per-execution limit on CHASM-attached request
-// IDs (those recorded via AttachChasmRequestID) by evicting the oldest entries beyond the configured
-// limit. Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed
-// request IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when
-// a request ID has been added.
+// closeTransactionSweepChasmRequestIDs bounds the CHASM-attached request IDs (those recorded via
+// AttachChasmRequestID) retained per execution for UpdateComponent idempotency. It first evicts every
+// entry older than RequestIDMaxAge, then evicts the oldest of the survivors beyond the
+// MaximumRequestIDsPerExecution count cap. Sweeping by age first reclaims stale entries in a batch,
+// rather than a single oldest entry per transaction once at the cap.
+//
+// Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed request
+// IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when a request
+// ID has been added.
 func (ms *MutableStateImpl) closeTransactionSweepChasmRequestIDs(transactionPolicy historyi.TransactionPolicy) {
 	if !ms.chasmRequestIDsAdded || transactionPolicy != historyi.TransactionPolicyActive {
 		return
 	}
 
-	limit := ms.config.MaximumRequestIDsPerExecution(ms.namespaceEntry.Name().String())
-	if limit <= 0 {
-		return // sweeping disabled
+	nsName := ms.namespaceEntry.Name().String()
+	limit := ms.config.MaximumRequestIDsPerExecution(nsName)
+	maxAge := ms.config.RequestIDMaxAge(nsName)
+	if limit <= 0 && maxAge <= 0 {
+		return // both count cap and age sweep disabled
 	}
 
-	// Convert the RequestIDs map into a sortable slice.
+	evicted := 0
+	evict := func(id string, info *persistencespb.RequestIDInfo) {
+		delete(ms.executionState.RequestIds, id)
+		ms.approximateSize -= chasmRequestIDApproxSize(id, info)
+		evicted++
+	}
+
+	// First sweep entries older than maxAge; the rest are candidates for the count cap.
 	type sweepable struct {
 		id   string
 		info *persistencespb.RequestIDInfo
 	}
 	candidates := make([]sweepable, 0, len(ms.executionState.RequestIds))
+	cutoff := ms.timeSource.Now().Add(-maxAge)
 	for id, info := range ms.executionState.RequestIds {
 		if info.GetAttachTime() == nil {
+			continue // create and event-backed request IDs are never swept
+		}
+		if maxAge > 0 && info.GetAttachTime().AsTime().Before(cutoff) {
+			evict(id, info)
 			continue
 		}
 		candidates = append(candidates, sweepable{id: id, info: info})
 	}
-	if len(candidates) <= limit {
-		return
+
+	// Enforce hard length limit.
+	if limit > 0 && len(candidates) > limit {
+		slices.SortFunc(candidates, func(a, b sweepable) int {
+			return cmp.Or(
+				a.info.GetAttachTime().AsTime().Compare(b.info.GetAttachTime().AsTime()),
+				cmp.Compare(a.id, b.id),
+			)
+		})
+		for _, c := range candidates[:len(candidates)-limit] {
+			evict(c.id, c.info)
+		}
 	}
 
-	// Oldest first, with request ID as a deterministic tie-break on equal attach time.
-	slices.SortFunc(candidates, func(a, b sweepable) int {
-		return cmp.Or(
-			a.info.GetAttachTime().AsTime().Compare(b.info.GetAttachTime().AsTime()),
-			cmp.Compare(a.id, b.id),
-		)
-	})
-
-	evicted := candidates[:len(candidates)-limit]
-	for _, c := range evicted {
-		delete(ms.executionState.RequestIds, c.id)
-		ms.approximateSize -= chasmRequestIDApproxSize(c.id, c.info)
-	}
 	metrics.CHASMRequestIDEvicted.With(
-		ms.metricsHandler.WithTags(metrics.NamespaceTag(ms.namespaceEntry.Name().String())),
-	).Record(int64(len(evicted)))
+		ms.metricsHandler.WithTags(metrics.NamespaceTag(nsName)),
+	).Record(int64(evicted))
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
