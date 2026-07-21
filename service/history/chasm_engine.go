@@ -370,7 +370,10 @@ func (e *ChasmEngine) updateExecution(
 	actualRef := executionRef
 	actualRef.RunID = workflowKey.RunID
 
-	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn)
+	// UpdateWithStart's update-of-existing path does not dedup on the request ID, so
+	// it is always left empty here. Instead,  conflict policy decides which execution
+	// to update.
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, "")
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -417,6 +420,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	requestID string,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, err := chasmTreeFromMutableState(shardContext.GetLogger(), mutableState)
@@ -432,6 +436,12 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	if err := updateFn(mutableContext, component); err != nil {
 		return nil, err
+	}
+
+	// Record the accepted request ID so a later reuse is deduplicated (see AttachChasmRequestID).
+	// The dedup check itself runs earlier in updateComponent, before the lease work.
+	if requestID != "" {
+		mutableState.AttachChasmRequestID(requestID)
 	}
 
 	// TODO: Support WithSpeculative() TransitionOption.
@@ -516,7 +526,10 @@ func (e *ChasmEngine) startAndUpdateExecution(
 // UpdateComponent applies updateFn to the component identified by the supplied component reference,
 // returning the new component reference corresponding to the transition. An error is returned if
 // the state transition specified by the supplied component reference is inconsistent with execution
-// transition history. opts are currently ignored.
+// transition history.
+//
+// A request ID supplied via chasm.WithRequestID deduplicates the update (see that option); other
+// opts are ignored on this path.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -524,7 +537,18 @@ func (e *ChasmEngine) UpdateComponent(
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
-	result, err := e.updateComponent(ctx, ref, updateFn)
+
+	// constructTransitionOptions generates a RequestID for the benefit of
+	// traceability through logs, when none was supplied as part of the API request.
+	// Because this server-side RequestID isn't useful for idempotency, it isn't
+	// recorded as part of updateComponent, and so we only pass RequestID for recording
+	// when it comes from the client side.
+	var explicit chasm.TransitionOptions
+	for _, opt := range opts {
+		opt(&explicit)
+	}
+
+	result, err := e.updateComponent(ctx, ref, updateFn, explicit.RequestID)
 	return result, e.convertError(err, ref, options.RequestID)
 }
 
@@ -532,17 +556,26 @@ func (e *ChasmEngine) updateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
+	requestID string,
 ) (updatedRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 
+	// When a request ID has already been recorded, we know this is a retry of a successful call, so
+	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
+	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
+		executionLease.GetReleaseFn()(nil)
+		return nil, serviceerror.NewFailedPreconditionf(
+			"request ID %s has already been used for this execution", requestID)
+	}
+
 	defer func() {
 		executionLease.GetReleaseFn()(retError)
 	}()
 
-	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID)
 }
 
 // DeleteExecution deletes a CHASM execution. If the execution is still running on the active
