@@ -3,10 +3,12 @@ package interceptor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -27,7 +29,8 @@ type (
 		tokens map[string]int
 
 		sync.Mutex
-		activeTokensCount map[string]*pendingRequestCounter
+		activeTokensCount     map[string]*int32
+		pendingRequestMetrics map[string]*pendingRequestCounter
 	}
 
 	pendingRequestCounter struct {
@@ -65,8 +68,9 @@ func NewConcurrentRequestLimitInterceptor(
 			},
 			log.With(logger, tag.ComponentLongPollHandler, tag.ScopeNamespace),
 		),
-		tokens:            tokens,
-		activeTokensCount: make(map[string]*pendingRequestCounter),
+		tokens:                tokens,
+		activeTokensCount:     make(map[string]*int32),
+		pendingRequestMetrics: make(map[string]*pendingRequestCounter),
 	}
 }
 
@@ -93,6 +97,24 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	mh metrics.Handler,
 	req any,
 ) (func(), error) {
+	return ni.AllowWithMetricKey(
+		namespaceName,
+		methodName,
+		telemetryUnaryOverrideOperationTag(methodName, api.MethodName(methodName), req),
+		mh,
+		req,
+	)
+}
+
+// AllowWithMetricKey applies quota accounting by methodName while recording
+// pending requests under the operation-tag identity in metricKey.
+func (ni *ConcurrentRequestLimitInterceptor) AllowWithMetricKey(
+	namespaceName namespace.Name,
+	methodName string,
+	metricKey string,
+	mh metrics.Handler,
+	req any,
+) (func(), error) {
 	// token will default to 0
 	token := ni.tokens[methodName]
 
@@ -106,9 +128,14 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 		return func() {}, nil
 	}
 
-	counter := ni.counter(namespaceName, methodName)
-	count := counter.add(token, mh)
-	cleanup := func() { counter.add(-token, mh) }
+	tokenCounter := ni.counter(namespaceName, methodName)
+	count := atomic.AddInt32(tokenCounter, int32(token))
+	metricCounter := ni.metricCounter(namespaceName, metricKey)
+	metricCounter.add(token, mh)
+	cleanup := func() {
+		atomic.AddInt32(tokenCounter, -int32(token))
+		metricCounter.add(-token, mh)
+	}
 
 	// frontend.namespaceCount is applied per poller type temporarily to prevent
 	// one poller type to take all token waiting in the long poll.
@@ -121,16 +148,33 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 func (ni *ConcurrentRequestLimitInterceptor) counter(
 	namespace namespace.Name,
 	methodName string,
-) *pendingRequestCounter {
-	key := ni.getTokenKey(namespace, methodName)
+) *int32 {
+	key := ni.getCounterKey(namespace, methodName)
 
 	ni.Lock()
 	defer ni.Unlock()
 
 	counter, ok := ni.activeTokensCount[key]
 	if !ok {
-		counter = new(pendingRequestCounter)
+		counter = new(int32)
 		ni.activeTokensCount[key] = counter
+	}
+	return counter
+}
+
+func (ni *ConcurrentRequestLimitInterceptor) metricCounter(
+	namespace namespace.Name,
+	metricKey string,
+) *pendingRequestCounter {
+	key := ni.getCounterKey(namespace, metricKey)
+
+	ni.Lock()
+	defer ni.Unlock()
+
+	counter, ok := ni.pendingRequestMetrics[key]
+	if !ok {
+		counter = new(pendingRequestCounter)
+		ni.pendingRequestMetrics[key] = counter
 	}
 	return counter
 }
@@ -146,9 +190,9 @@ func (c *pendingRequestCounter) add(token int, mh metrics.Handler) int32 {
 	return c.count
 }
 
-func (ni *ConcurrentRequestLimitInterceptor) getTokenKey(
-	namespace namespace.Name,
-	methodName string,
+func (ni *ConcurrentRequestLimitInterceptor) getCounterKey(
+	namespaceName namespace.Name,
+	key string,
 ) string {
-	return namespace.String() + "/" + methodName
+	return namespaceName.String() + "/" + key
 }
