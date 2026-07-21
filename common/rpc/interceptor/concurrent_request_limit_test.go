@@ -5,9 +5,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
@@ -136,6 +139,83 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			t.Parallel()
 			tc.run(t)
 		})
+	}
+}
+
+func TestConcurrentRequestLimitInterceptor_AllowRecordsPendingRequestsOnCleanup(t *testing.T) {
+	t.Parallel()
+
+	const methodName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
+	newInterceptor := func() *ConcurrentRequestLimitInterceptor {
+		return NewConcurrentRequestLimitInterceptor(
+			nil,
+			quotastest.NewFakeMemberCounter(1),
+			log.NewNoopLogger(),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+			dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
+			map[string]int{methodName: 1},
+		)
+	}
+
+	t.Run("admitted request", func(t *testing.T) {
+		t.Parallel()
+
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+
+		cleanup, err := newInterceptor().Allow(
+			namespace.Name("test-namespace"),
+			methodName,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		cleanup()
+
+		requirePendingRequestRecordings(t, capture, 1, 0)
+	})
+
+	t.Run("rejected request", func(t *testing.T) {
+		t.Parallel()
+
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		interceptor := newInterceptor()
+
+		admittedCleanup, err := interceptor.Allow(
+			namespace.Name("test-namespace"),
+			methodName,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		rejectedCleanup, err := interceptor.Allow(
+			namespace.Name("test-namespace"),
+			methodName,
+			metricsHandler,
+			nil,
+		)
+		require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
+
+		rejectedCleanup()
+		requirePendingRequestRecordings(t, capture, 1, 2, 1)
+
+		admittedCleanup()
+		requirePendingRequestRecordings(t, capture, 1, 2, 1, 0)
+	})
+}
+
+func requirePendingRequestRecordings(t *testing.T, capture *metricstest.Capture, expected ...float64) {
+	t.Helper()
+
+	recordings := capture.Snapshot()[metrics.ServicePendingRequests.Name()]
+	require.Len(t, recordings, len(expected))
+	for i, expectedValue := range expected {
+		require.InDelta(t, expectedValue, recordings[i].Value, 0)
 	}
 }
 

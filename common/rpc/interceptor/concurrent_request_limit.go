@@ -104,7 +104,10 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 
 	counter := ni.counter(namespaceName, methodName)
 	count := atomic.AddInt32(counter, int32(token))
-	cleanup := func() { atomic.AddInt32(counter, -int32(token)) }
+	cleanup := func() {
+		count := atomic.AddInt32(counter, -int32(token))
+		mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
+	}
 
 	mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
 
