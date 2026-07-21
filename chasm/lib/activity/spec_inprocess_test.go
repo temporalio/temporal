@@ -259,31 +259,29 @@ func (a *inProcActivity) realize(e model.Event) error {
 		a.x.ts.Update(a.x.ts.Now().Add(backoffInterval + time.Second))
 		return nil
 	case e.Kind == model.StartToCloseElapses:
-		a.advancePastDeadline()
+		a.advanceTo(a.timerDeadline(e.Kind))
 		h, task := newStartToCloseTimeoutTaskHandler(), &activitypb.StartToCloseTimeoutTask{Stamp: a.stamp()}
-		return a.update(func(act *Activity, mc chasm.MutableContext) error {
-			if ok, err := h.Validate(mc, act, chasm.TaskInvocation{}, task); err != nil || !ok {
-				return err
-			}
+		return a.fireTimer(func(act *Activity, mc chasm.MutableContext) (bool, error) {
+			return h.Validate(mc, act, chasm.TaskInvocation{}, task)
+		}, func(act *Activity, mc chasm.MutableContext) error {
 			return h.Execute(mc, act, chasm.TaskAttributes{}, task)
 		})
 	case e.Kind == model.HeartbeatElapses:
-		a.advancePastDeadline()
+		deadline := a.timerDeadline(e.Kind)
+		a.advanceTo(deadline)
 		h, task := newHeartbeatTimeoutTaskHandler(), &activitypb.HeartbeatTimeoutTask{Stamp: a.stamp()}
-		return a.update(func(act *Activity, mc chasm.MutableContext) error {
-			if ok, err := h.Validate(mc, act, chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: mc.Now(act)}}, task); err != nil || !ok {
-				return err
-			}
+		return a.fireTimer(func(act *Activity, mc chasm.MutableContext) (bool, error) {
+			return h.Validate(mc, act, chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: deadline}}, task)
+		}, func(act *Activity, mc chasm.MutableContext) error {
 			return h.Execute(mc, act, chasm.TaskAttributes{}, task)
 		})
 	case e.Kind == model.ScheduleToCloseElapses:
-		a.advancePastDeadline()
+		a.advanceTo(a.timerDeadline(e.Kind))
 		stc := a.read(func(act *Activity, c chasm.Context) any { return act.GetScheduleToCloseStamp() }).(int32)
 		h, task := newScheduleToCloseTimeoutTaskHandler(), &activitypb.ScheduleToCloseTimeoutTask{Stamp: stc}
-		return a.update(func(act *Activity, mc chasm.MutableContext) error {
-			if ok, err := h.Validate(mc, act, chasm.TaskInvocation{}, task); err != nil || !ok {
-				return err
-			}
+		return a.fireTimer(func(act *Activity, mc chasm.MutableContext) (bool, error) {
+			return h.Validate(mc, act, chasm.TaskInvocation{}, task)
+		}, func(act *Activity, mc chasm.MutableContext) error {
 			return h.Execute(mc, act, chasm.TaskAttributes{}, task)
 		})
 	default:
@@ -291,9 +289,56 @@ func (a *inProcActivity) realize(e model.Event) error {
 	}
 }
 
-// advancePastDeadline moves the virtual clock past any configured timeout so a fired timer is due.
-func (a *inProcActivity) advancePastDeadline() {
-	a.x.ts.Update(a.x.ts.Now().Add(48 * time.Hour))
+// timerDeadline is the wall-clock instant the given timeout's timer is due, computed from current
+// state exactly as the transition that scheduled it did. Zero when the timer is not applicable in the
+// current state (e.g. a start/heartbeat timer while not started); firing then is a validated no-op.
+func (a *inProcActivity) timerDeadline(kind model.EventKind) time.Time {
+	return a.read(func(act *Activity, c chasm.Context) any {
+		attempt := act.LastAttempt.Get(c)
+		switch kind {
+		case model.StartToCloseElapses:
+			// Gate on the attempt being in progress, not merely on StartedTime being set: StartedTime is
+			// carried across a reschedule, so a backing-off attempt would otherwise yield a stale deadline
+			// and advance the clock for a timer that its own Validate then rejects.
+			if !act.hasAttemptInProgress() {
+				return time.Time{}
+			}
+			return attempt.GetStartedTime().AsTime().Add(act.GetStartToCloseTimeout().AsDuration())
+		case model.HeartbeatElapses:
+			if !act.hasAttemptInProgress() {
+				return time.Time{}
+			}
+			base := attempt.GetStartedTime().AsTime()
+			if lastHb, ok := act.LastHeartbeat.TryGet(c); ok && lastHb.GetRecordedTime() != nil {
+				if t := lastHb.GetRecordedTime().AsTime(); t.After(base) {
+					base = t
+				}
+			}
+			return base.Add(act.GetHeartbeatTimeout().AsDuration())
+		case model.ScheduleToCloseElapses:
+			return act.scheduleToCloseDeadline()
+		default:
+			return time.Time{}
+		}
+	}).(time.Time)
+}
+
+// advanceTo moves the virtual clock just past deadline, if that is in the future; a no-op otherwise so
+// an inapplicable timer is fired at the current instant (and rejected by its own Validate).
+func (a *inProcActivity) advanceTo(deadline time.Time) {
+	if !deadline.IsZero() && deadline.After(a.x.ts.Now()) {
+		a.x.ts.Update(deadline.Add(time.Second))
+	}
+}
+
+// fireTimer runs a pure timeout task handler (Validate then Execute) as the task processor would.
+func (a *inProcActivity) fireTimer(validate func(*Activity, chasm.MutableContext) (bool, error), execute func(*Activity, chasm.MutableContext) error) error {
+	return a.update(func(act *Activity, mc chasm.MutableContext) error {
+		if ok, err := validate(act, mc); err != nil || !ok {
+			return err
+		}
+		return execute(act, mc)
+	})
 }
 
 func rejectKind(err error) model.ErrorKind {
@@ -320,11 +365,9 @@ func rejectKind(err error) model.ErrorKind {
 // candidateEvents is the tier-2 event alphabet: the worker RPCs plus the wall-clock timeouts/backoff
 // that are prohibitively slow at tier 3 but instant here. Operator commands are left to tier 3.
 func (x *inProcExplorer) candidateEvents() []model.Event {
-	// The worker RPCs plus BackoffElapses (realized by advancing the virtual clock past the retry
-	// dispatch time). The timeout *Elapses events are a TODO: firing them faithfully needs the clock
-	// advanced to exactly each timer's deadline (not past every deadline at once), so hasEnoughTimeForRetry
-	// sees the right elapsed time; deferred rather than realized approximately.
-	return []model.Event{
+	// The worker RPCs plus the wall-clock events, all realized by advancing the virtual clock to the
+	// relevant deadline — including the timeouts, which are prohibitively slow to explore at tier 3.
+	events := []model.Event{
 		{Kind: model.Poll},
 		{Kind: model.Heartbeat},
 		{Kind: model.RespondCompleted},
@@ -332,7 +375,15 @@ func (x *inProcExplorer) candidateEvents() []model.Event {
 		{Kind: model.RespondFailed, Retryable: false},
 		{Kind: model.RespondCanceled},
 		{Kind: model.BackoffElapses},
+		{Kind: model.StartToCloseElapses},
 	}
+	if x.cfg.HasHeartbeat {
+		events = append(events, model.Event{Kind: model.HeartbeatElapses})
+	}
+	if x.cfg.HasScheduleToClose {
+		events = append(events, model.Event{Kind: model.ScheduleToCloseElapses})
+	}
+	return events
 }
 
 // verifyPath starts a fresh activity, replays path, and checks the final edge against the model. It
@@ -384,9 +435,18 @@ func (a *inProcActivity) applyEdge(e model.Event, cur model.AbstractState, out m
 		a.x.t.Errorf("%s from %s: state disagrees\n  observed=%s\n  model=   %s\n  path: %s",
 			model.EventLabel(e), cur.Status, model.Fingerprint(obs), model.Fingerprint(out.Next), pathString(a.path))
 	}
-	// TODO: task-invalidation conformance (out.AttemptTasksInvalidated / ScheduleToCloseTaskInvalidated)
-	// via the engine's captured tasks (MockNodeBackend.TasksByCategory) rather than persisted stamps,
-	// which the tier-3 driver reads at the RPC boundary; deferred.
+	// Task invalidation: the attempt / schedule-to-close stamp bumping is the mechanism by which an
+	// edge invalidates the prior attempt's tasks, so compare the stamp delta across this edge (refreshed
+	// by observed() above) to the model's per-transition invalidation bools — as the tier-3 driver does.
+	gotAttempt, gotSTC := a.curStamp != a.prevStamp, a.curSTCStamp != a.prevSTCStamp
+	if gotAttempt != out.AttemptTasksInvalidated {
+		a.x.t.Errorf("%s from %s: attempt-task invalidation disagrees — driver=%v model=%v\n  path: %s",
+			model.EventLabel(e), cur.Status, gotAttempt, out.AttemptTasksInvalidated, pathString(a.path))
+	}
+	if gotSTC != out.ScheduleToCloseTaskInvalidated {
+		a.x.t.Errorf("%s from %s: schedule-to-close-task invalidation disagrees — driver=%v model=%v\n  path: %s",
+			model.EventLabel(e), cur.Status, gotSTC, out.ScheduleToCloseTaskInvalidated, pathString(a.path))
+	}
 	st, rs, attempt := a.describe()
 	wantSt, wantRs := model.ExpectedDescribe(out.Next)
 	if st != wantSt || rs != wantRs || attempt != out.Next.Count {
@@ -455,15 +515,20 @@ func (x *inProcExplorer) traverse(maxDepth int) {
 // randomWalk drives one activity, picking a random applicable event each step and checking it against
 // the model; on reaching a terminal state it restarts, until the step budget is spent.
 func (x *inProcExplorer) randomWalk(rng *rand.Rand, steps int) {
-	a := x.start()
-	cur := model.Initial(x.cfg)
-	require.True(x.t, cur.SameObserved(a.observed()))
+	// freshWalk starts an activity and seeds the stamp-delta baseline via observed(), so the first edge's
+	// invalidation check measures that edge's change and not the start.
+	freshWalk := func() (*inProcActivity, model.AbstractState) {
+		a := x.start()
+		cur := model.Initial(x.cfg)
+		require.True(x.t, cur.SameObserved(a.observed()))
+		return a, cur
+	}
+	a, cur := freshWalk()
 	var trace []model.Event
 	seen := map[string]bool{model.Fingerprint(cur): true}
 	for range steps {
 		if cur.Status.Terminal() {
-			a = x.start()
-			cur = model.Initial(x.cfg)
+			a, cur = freshWalk()
 			trace = nil
 			continue
 		}
@@ -473,8 +538,7 @@ func (x *inProcExplorer) randomWalk(rng *rand.Rand, steps int) {
 		a.path = trace
 		out := model.Transition(x.cfg, cur, e)
 		if !a.applyEdge(e, cur, out, true) {
-			a = x.start() // diverged (already reported); restart from a known state
-			cur = model.Initial(x.cfg)
+			a, cur = freshWalk() // diverged (already reported); restart from a known state
 			trace = nil
 			continue
 		}
