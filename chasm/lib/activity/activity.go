@@ -1265,9 +1265,7 @@ func (a *Activity) recordFailedAttempt(
 	return nil
 }
 
-// priorAttemptFailure returns the failure recorded for the most recent attempt, or nil if none. A
-// terminal timeout chains it as its Cause so the error that drove the retries survives to the client,
-// matching workflow activities (mutable_state_impl.go AddActivityTaskTimedOutEvent).
+// priorAttemptFailure returns the failure recorded for the most recent attempt, or nil if none.
 func (a *Activity) priorAttemptFailure(ctx chasm.Context) *failurepb.Failure {
 	return a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
 }
