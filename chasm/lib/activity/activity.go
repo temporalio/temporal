@@ -2,19 +2,22 @@
 //
 // We name 3 times in the lifecycle of an activity attempt:
 //
-// schedule time - the time at which the activity entered SCHEDULED state
-// dispatch time - the time at which the activity task will be dispatched to Matching (AddActivityTask)
-// start time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
+// schedule_time - the time at which the activity entered SCHEDULED state
+// dispatch_time - the time at which the activity task is due to be dispatched to Matching (AddActivityTask)
+// start_time    - the time at which the activity enters STARTED state (Matching task picked up by poller)
 //
-// They are always ordered as: (schedule time) <= (dispatch time) < (start time).
+// They are always ordered as: (schedule_time) <= (dispatch_time) < (start_time).
 //
 // A ScheduleToStart timeout applies to the time between dispatch and start. If there is a delay
 // before dispatch (i.e. a start delay on the first attempt, or a backoff interval / next retry
-// delay on a second or subsequent attempt) then schedule time < dispatch time. Otherwise, they are
+// delay on a second or subsequent attempt) then schedule_time < dispatch_time. Otherwise, they are
 // equal.
 //
 // The main Activity struct has a.ScheduleTime which is the schedule time of the first
 // attempt; i.e. the time at which the activity was created. This is never changed.
+//
+// The naming situation is not perfectly clean. See e.g. the comment below on
+// nextAttemptDispatchTime (which is called next_attempt_schedule_time in the public API).
 
 package activity
 
@@ -379,10 +382,7 @@ func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activityp
 	return nil
 }
 
-// currentRetryInterval is the retry interval for the awaiting attempt while it is backing off or
-// queued, and null otherwise. It matches workflow activities (service/history/workflow/activity.go
-// GetPendingActivityInfo, which only populates the field while the activity is SCHEDULED): null while
-// an attempt is running, paused, or terminal.
+// currentRetryInterval is the retry interval if the activity is currently waiting for a retry; nil otherwise.
 func (a *Activity) currentRetryInterval(attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
 		return attempt.GetCurrentRetryInterval()
