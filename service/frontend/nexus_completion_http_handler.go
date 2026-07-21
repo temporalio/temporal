@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -255,6 +256,10 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 // original framework, the token is converted to the other framework and tried once more. Identity
 // is re-established by request ID, so the fallback only runs when the token carries one.
 //
+// The fallback is also skipped when the error is terminal (the workflow already completed or does
+// not exist): the operation can't be applied in either framework, so converting the token and
+// retrying would be a wasted round-trip.
+//
 // chasmEnabled gates the HSM->CHASM direction: a workflow in a CHASM-disabled namespace has no
 // CHASM tree, so converting to CHASM would be futile (and the CHASM engine would flag it).
 func (h *nexusCompletionHandler) completeOperation(
@@ -276,6 +281,11 @@ func (h *nexusCompletionHandler) completeOperation(
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
 		return err
 	}
+	// A terminal error means the workflow itself is gone, so the operation can't be completed in the
+	// other framework either; don't waste a round-trip converting the token and retrying.
+	if isTerminalCompletionError(err) {
+		return err
+	}
 	// Converting HSM -> CHASM is only meaningful when the namespace has CHASM enabled (and thus a
 	// CHASM tree); CHASM -> HSM is always safe since HSM is the legacy default.
 	if !isChasm && !chasmEnabled {
@@ -290,6 +300,21 @@ func (h *nexusCompletionHandler) completeOperation(
 		return h.completeHSMOperation(ctx, converted, successPayload, req, links)
 	}
 	return h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+}
+
+// isTerminalCompletionError reports whether err indicates the target workflow is gone — already
+// completed or nonexistent — so an async operation completion can never be applied in either
+// framework and there is no point retrying after a token conversion. Both cases arrive as a plain
+// serviceerror.NotFound over the history gRPC boundary (which does not preserve error identity), so
+// they are matched by message. A reset/rebuild that merely moved the operation to the other
+// framework surfaces a different NotFound (stale reference / component not found), which is retried.
+func isTerminalCompletionError(err error) bool {
+	var nfe *serviceerror.NotFound
+	if !errors.As(err, &nfe) {
+		return false
+	}
+	msg := nfe.Error()
+	return msg == consts.ErrWorkflowCompleted.Error() || msg == consts.ErrWorkflowExecutionNotFound.Error()
 }
 
 // convertCompletionToOtherFramework re-addresses a Nexus operation completion token to the
