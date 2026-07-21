@@ -122,8 +122,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 		// FastForward never cascades into children; the parent's 2h of own skipping
 		// stays under this budget so the parent's flow is unaffected by it.
 		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(3 * time.Hour),
+			Enabled:       true,
+			FastForward:   durationpb.New(3 * time.Hour),
+			FastForwardId: "ff-id",
 		},
 	})
 	s.NoError(err)
@@ -196,6 +197,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	s.NotNil(childCfg)
 	s.True(childCfg.GetEnabled(), "child TSC.Enabled propagated from parent")
 	s.Nil(childCfg.GetFastForward(), "MaxElapsedDuration never cascades into children")
+	s.Empty(childCfg.GetFastForwardId(), "fast_forward_id is per-execution and never cascades into children")
 	s.approxDuration(4*time.Hour, childTSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"child AccumulatedSkippedDuration == parent's accumulated at child-start (1h) + child's own skip for tc (3h) = 4h — exceeding the parent's 3h FastForward, possible only because the budget did not cascade")
 
@@ -209,6 +211,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_Basic() {
 	s.NotNil(initTSC, "initiated event should carry TimeSkippingConfig snapshot")
 	s.True(initTSC.GetEnabled(), "snapshot mirrors parent's Enabled flag")
 	s.Nil(initTSC.GetFastForward(), "initiated-event snapshot excludes the parent's MaxElapsedDuration")
+	s.Empty(initTSC.GetFastForwardId(), "initiated-event snapshot excludes the parent's fast_forward_id")
 	s.approxDuration(time.Hour, initAttrs.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"initiated event InitialSkippedDuration == parent's AccumulatedSkippedDuration at command time (1h)")
 }
@@ -1452,8 +1455,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		// FastForward is part of the inherited config: it caps the whole chain of attempts.
 		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(4 * time.Hour),
+			Enabled:       true,
+			FastForward:   durationpb.New(4 * time.Hour),
+			FastForwardId: "ff-id",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(time.Second),
@@ -1511,6 +1515,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.True(attempt2Cfg.GetEnabled(), "attempt 2 TSC.Enabled propagated from attempt 1's current config")
 	s.Equal(4*time.Hour, attempt2Cfg.GetFastForward().AsDuration(),
 		"attempt 2 inherits MaxElapsedDuration verbatim — the budget caps the whole chain, not each attempt")
+	s.Equal("ff-id", attempt2Cfg.GetFastForwardId(),
+		"attempt 2 inherits fast_forward_id — the fast-forward continues across the retry chain")
 	s.approxDuration(3*time.Hour, attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(),
 		"attempt 2 carries attempt 1's 1h in-flight skip forward plus its own 2h from t2 = 3h")
 	s.LessOrEqual(attempt2TSI.GetAccumulatedSkippedDuration().AsDuration(), 4*time.Hour,
@@ -1534,6 +1540,8 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.True(startedTSC.GetEnabled(), "started event TSC.Enabled mirrors attempt 1's current config")
 	s.Equal(4*time.Hour, startedTSC.GetFastForward().AsDuration(),
 		"started event carries the inherited MaxElapsedDuration — the snapshot of attempt 1's current config")
+	s.Equal("ff-id", startedTSC.GetFastForwardId(),
+		"started event carries the inherited fast_forward_id from attempt 1's current config")
 	s.approxDuration(time.Hour, startedAttr.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration(),
 		"started event InitialSkippedDuration carries attempt 1's in-flight accumulated skip (1h) at retry time")
 }
@@ -1578,6 +1586,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 		Enabled:           true,
 		FastForward:       durationpb.New(time.Hour),
 		MaxSkipPerSession: 50,
+		FastForwardId:     uuid.NewString(),
 	}
 
 	startWall := time.Now()
@@ -1720,8 +1729,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_BudgetCapOverChain() {
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(3 * time.Hour),
+			Enabled:       true,
+			FastForward:   durationpb.New(3 * time.Hour),
+			FastForwardId: "ff-id",
 		},
 	})
 	s.NoError(err)

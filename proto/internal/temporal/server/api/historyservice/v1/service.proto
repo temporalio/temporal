@@ -518,4 +518,8 @@ service HistoryService {
   rpc CancelNexusOperation(CancelNexusOperationRequest) returns (CancelNexusOperationResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
+
+  rpc PollWorkflowExecutionTimeSkipping(PollWorkflowExecutionTimeSkippingRequest) returns (PollWorkflowExecutionTimeSkippingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
 }

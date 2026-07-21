@@ -704,19 +704,28 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
+
 	if tsc == nil {
 		return nil
 	}
+
 	// if this feature is not enabled, we don't allow setting any related config
 	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
-		return serviceerror.NewUnimplementedf(
-			"The Time-Skipping feature is not enabled for namespace %s",
-			ns.String(),
-		)
+		return errWorkflowTimeSkippingNotEnabled
 	}
+
 	if tsc.GetMaxSkipPerSession() <= 0 {
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSkipPerSession = max(1, int32(defaultMaxSkipPerSession))
+	}
+
+	if ff := tsc.GetFastForward(); ff != nil {
+		if ff.AsDuration() < 0 {
+			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
+		}
+		if strings.TrimSpace(tsc.GetFastForwardId()) == "" {
+			return errTimeSkippingFastForwardIdNotSet
+		}
 	}
 
 	if !tsc.GetEnabled() {
@@ -725,10 +734,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		}
 		return nil
 	}
-	if ff := tsc.GetFastForward(); ff != nil && ff.AsDuration() < 0 {
-		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward must be positive")
-	}
-
 	return nil
 }
 
@@ -7524,6 +7529,34 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }
 
-func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(context.Context, *workflowservice.PollWorkflowExecutionTimeSkippingRequest) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
-	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionTimeSkipping not implemented")
+func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context, request *workflowservice.PollWorkflowExecutionTimeSkippingRequest) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	// todo: validate ns and execution key
+	// todo: how do we make sure the ns set by users is verified by authN/Z
+	if !wh.config.WorkflowTimeSkippingEnabled(request.Namespace) {
+		return nil, errWorkflowTimeSkippingNotEnabled
+	}
+	if strings.TrimSpace(request.GetFastForwardId()) == "" {
+		return nil, errTimeSkippingFastForwardIdNotSet
+	}
+	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)
+	defer cancel()
+
+	histResp, err := wh.historyClient.PollWorkflowExecutionTimeSkipping(
+		ctx,
+		&historyservice.PollWorkflowExecutionTimeSkippingRequest{
+			NamespaceId: nsID.String(),
+			Request:     request,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return histResp.GetResponse(), nil
 }

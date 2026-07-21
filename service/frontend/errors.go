@@ -112,4 +112,7 @@ var (
 	errWorkerVersioningWorkflowAPIsNotAllowed = serviceerror.NewPermissionDenied("Worker versioning in workflow progress APIs is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
+
+	errWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("Time skipping is not enabled for the current namespace.")
+	errTimeSkippingFastForwardIdNotSet = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
 )

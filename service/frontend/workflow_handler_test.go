@@ -3702,11 +3702,25 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	// config with enabled=true and dynamic config enabled is valid
 	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
+	// fast_forward set while enabled=false is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+		Enabled: false, FastForward: durationpb.New(time.Second * 10), FastForwardId: "ff-id"}, s.testNamespace), &invalidArgumentErr)
 
+	// negative fast_forward duration is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+		Enabled: true, FastForward: durationpb.New(time.Second * -10), FastForwardId: "ff-id"}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward set without a fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+
+	// a blank (whitespace-only) fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(time.Second * 10), FastForwardId: "  "}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward with a valid fast_forward_id is accepted
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForward: durationpb.New(time.Second * 10), FastForwardId: "ff-id"}, s.testNamespace))
 
 	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
 	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a

@@ -88,8 +88,9 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:       true,
+		FastForward:   durationpb.New(fastForward),
+		FastForwardId: "ff-id"}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -222,8 +223,9 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:       true,
+		FastForward:   durationpb.New(fastForward),
+		FastForwardId: "ff-id"}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -349,8 +351,9 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:       true,
+		FastForward:   durationpb.New(fastForward),
+		FastForwardId: "ff-id"}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -405,8 +408,9 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward),
+		Enabled:       true,
+		FastForward:   durationpb.New(fastForward),
+		FastForwardId: "ff-id",
 	}
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -454,7 +458,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTim
 		timer1Dur   = 45 * time.Second
 	)
 
-	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward)}
+	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward), FastForwardId: "ff-id"}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),

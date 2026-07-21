@@ -75,8 +75,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 
 	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:       true,
+		FastForward:   durationpb.New(time.Hour),
+		FastForwardId: "ff-id",
 	}
 
 	resp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -106,8 +107,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 
 	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:       true,
+		FastForward:   durationpb.New(time.Hour),
+		FastForwardId: "ff-id",
 	}
 
 	resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -139,8 +141,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 
 	// Request leaves MaxSkipPerSession empty; the frontend populates it from dynamic config.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(maxElapsedDuration),
+		Enabled:       true,
+		FastForward:   durationpb.New(maxElapsedDuration),
+		FastForwardId: "ff-id",
 	}
 
 	resp, err := env.FrontendClient().ExecuteMultiOperation(s.Context(), &workflowservice.ExecuteMultiOperationRequest{
@@ -239,8 +242,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// First update: enable with a max_elapsed_duration. MaxSkipPerSession is left empty and
 	// populated by the frontend from dynamic config; the persisted config and event carry it.
 	config1 := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:       true,
+		FastForward:   durationpb.New(time.Hour),
+		FastForwardId: "ff-id",
 	}
 	updateOptions(config1)
 	config1.MaxSkipPerSession = defaultMaxSkipPerSession
@@ -253,8 +257,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 
 	// Second update: change the max_elapsed_duration duration.
 	config2 := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(2 * time.Hour),
+		Enabled:       true,
+		FastForward:   durationpb.New(2 * time.Hour),
+		FastForwardId: "ff-id",
 	}
 	updateOptions(config2)
 	config2.MaxSkipPerSession = defaultMaxSkipPerSession
@@ -321,8 +326,9 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// Reset with PostResetOperations that sets TimeSkippingConfig.
 	inputConfig := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour)}
+		Enabled:       true,
+		FastForward:   durationpb.New(time.Hour),
+		FastForwardId: "ff-id"}
 	resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 env.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
