@@ -118,13 +118,6 @@ type operationIntentCtxKeyType struct{}
 
 var operationIntentCtxKey = operationIntentCtxKeyType{}
 
-func newContextWithOperationIntent(
-	ctx context.Context,
-	intent OperationIntent,
-) context.Context {
-	return context.WithValue(ctx, operationIntentCtxKey, intent)
-}
-
 // NewContextWithOperationIntent returns a child context carrying the given OperationIntent.
 // Callers use this to request OperationIntentProgress so that access to a component under a
 // closed ancestor is blocked and surfaces as a NotFound.
@@ -132,7 +125,7 @@ func NewContextWithOperationIntent(
 	ctx context.Context,
 	intent OperationIntent,
 ) context.Context {
-	return newContextWithOperationIntent(ctx, intent)
+	return context.WithValue(ctx, operationIntentCtxKey, intent)
 }
 
 func operationIntentFromContext(

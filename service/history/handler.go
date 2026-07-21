@@ -2203,6 +2203,14 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
 
+	// The current-run fallback below only applies to workflow-backed operations: only workflows are reset
+	// onto a new run (at least until CHASM executions get conflict resolution), so a standalone archetype
+	// has no other run to fall back to.
+	archetypeID, err := ref.ArchetypeID(h.chasmRegistry)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
 	// Access the component with progress intent so that the framework blocks access to a
 	// completion targeting an operation under a closed workflow and surfaces it as a
 	// NotFound. That NotFound is the signal to fall back to the current run below.
@@ -2220,7 +2228,8 @@ func (h *Handler) CompleteNexusOperationChasm(
 	if !handlerInvoked &&
 		isNotFound &&
 		completion.GetRequestId() != "" &&
-		ref.RunID != "" {
+		ref.RunID != "" &&
+		archetypeID == chasm.WorkflowArchetypeID {
 		_, err = h.applyChasmNexusCompletion(ctx, ref, completion, chasm.RefConsistencyLevelCurrentRun)
 	}
 	if err != nil {
