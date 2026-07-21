@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestKnownIssue_SameTimePendingStartsReceiveUniqueIdentities(t *testing.T) {
+func TestSameTimePendingStartsReceiveUniqueIdentities(t *testing.T) {
 	when := timestamppb.New(time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
 	starts := []*schedulespb.BufferedStart{
 		{NominalTime: when, ActualTime: when},
