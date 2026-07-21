@@ -354,6 +354,51 @@ func dispatchTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb
 	return nil
 }
 
+// nextAttemptDispatchTime is the dispatch_time of the attempt that is currently being waited for.
+// It is null when the dispatch time has passed, in terminal states, and when paused or when an
+// attempt is in progress, since in those states the dispatch time of a future attempt is unknown:
+// we do not even know if there will be a next attempt.
+//
+// In the public Describe API response of SAA and WFA, this has the name next_attempt_schedule_time.
+// In that field name, the term "schedule_time" is actually a dispatch time; specifically, the
+// dispatch time defined by this method.
+//
+// For WFA, next_attempt_schedule_time is null prior to the first attempt since start delay is not
+// supported, hence the activity is due to be dispatched to Matching as soon as the activity is
+// created. But for SAA, if there's a start delay, then next_attempt_schedule_time is the
+// dispatch_time (non-null).
+func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	if a.hasAttemptInProgress() || a.isPaused() || a.isTerminal() {
+		return nil
+	}
+	if t := a.dispatchTimeForAttempt(attempt); t != nil {
+		if t.AsTime().After(ctx.Now(a)) {
+			return t
+		}
+	}
+	return nil
+}
+
+// currentRetryInterval is the current or next retry interval.
+// - If the activity is currently running, this is the next retry interval in case the attempt fails.
+// - If activity is currently backing off between attempt, this represents the current retry interval.
+// - If there is no next retry allowed, this field will be null.
+func (a *Activity) currentRetryInterval(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
+	switch {
+	case a.hasAttemptInProgress():
+		// The interval a failure now would be retried with — exactly what the retry path decides — or
+		// null if it would not retry (attempts or schedule-to-close time exhausted).
+		if willRetry, interval := a.shouldRetry(ctx, 0); willRetry {
+			return durationpb.New(interval)
+		}
+		return nil
+	case a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		return attempt.GetCurrentRetryInterval()
+	default:
+		return nil
+	}
+}
+
 // RecordCompleted applies the provided function to record activity completion.
 // For standalone activities, it also triggers any registered completion callbacks.
 func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
@@ -1660,7 +1705,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
-		CurrentRetryInterval:    attempt.GetCurrentRetryInterval(),
+		CurrentRetryInterval:    a.currentRetryInterval(ctx, attempt),
 		ExecutionDuration:       executionDuration,
 		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
@@ -1674,7 +1719,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
 		SdkName:                 attempt.GetSdkName(),
 		SdkVersion:              attempt.GetSdkVersion(),
-		NextAttemptScheduleTime: dispatchTimeForRetry(attempt),
+		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,
