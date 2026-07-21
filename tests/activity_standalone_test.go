@@ -14511,22 +14511,17 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		return resp.GetInfo()
 	}
 
-	// startWithStartDelay starts an activity with a long start delay and describes it while it is
-	// still SCHEDULED and pending its first dispatch.
 	startWithStartDelay := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv) *activitypb.ActivityExecutionInfo {
 		activityID, _ := startActivity(s, t, env, 0, startDelay)
 		return describeActivity(s, t, env, activityID)
 	}
 
-	// start_Poll starts an activity, polls its first attempt into STARTED, and describes it.
 	start_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		pollTask(s, t, env, taskQueue)
 		return describeActivity(s, t, env, activityID)
 	}
 
-	// start_Poll_FailRetryably starts an activity, fails its first attempt retryably, and describes
-	// it while it is backing off before the retry dispatches (the interval is long enough to observe).
 	start_Poll_FailRetryably := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
@@ -14534,15 +14529,29 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		return describeActivity(s, t, env, activityID)
 	}
 
-	// start_Poll_FailRetryably_RetryBackoffElapse_Poll drives the activity through a full retry: the
-	// first attempt fails, the backoff elapses, and the second attempt is polled into STARTED.
-	// Describes it there.
 	start_Poll_FailRetryably_RetryBackoffElapse_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
 		respondFailedRetryably(s, t, env, token)
 		time.Sleep(retryInterval + backoffSettle)
 		pollTask(s, t, env, taskQueue)
+		return describeActivity(s, t, env, activityID)
+	}
+
+	start_Poll_FailWithNextRetryDelay := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32, nextRetryDelay time.Duration) *activitypb.ActivityExecutionInfo {
+		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
+		token := pollTask(s, t, env, taskQueue)
+		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: token,
+			Failure: &failurepb.Failure{
+				Message: "drive",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type: "drive", NonRetryable: false, NextRetryDelay: durationpb.New(nextRetryDelay),
+				}},
+			},
+		})
+		require.NoError(t, err)
 		return describeActivity(s, t, env, activityID)
 	}
 
@@ -14569,8 +14578,7 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
 	})
 
-	// Backing off before the retry dispatches: the next dispatch is in the future. Correct today; a
-	// regression guard, not a repro.
+	// Backing off before the retry dispatches: the next dispatch is in the future.
 	s.Run("BackingOffBeforeRetry", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
@@ -14579,6 +14587,20 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
 		require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()), "future retry dispatch time")
 		require.Equal(t, retryInterval, info.GetCurrentRetryInterval().AsDuration(), "while backing off, the current interval")
+	})
+
+	// Backing off after a worker-supplied next_retry_delay: the reported interval is the worker's
+	// override, not the policy's InitialInterval.
+	s.Run("BackingOffAfterNextRetryDelayOverride", func(s *standaloneActivityTestSuite) {
+		t := s.T()
+		env := s.newTestEnv()
+
+		const override = 10 * time.Second // distinct from the policy interval so the two can't be confused
+		info := start_Poll_FailWithNextRetryDelay(s, t, env, 3, override)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
+		require.True(t, info.GetNextAttemptScheduleTime().AsTime().After(time.Now()), "future retry dispatch time")
+		require.Equal(t, override, info.GetCurrentRetryInterval().AsDuration(),
+			"while backing off, the current interval is the worker's next_retry_delay override")
 	})
 
 	// Retry attempt running with a further retry permitted.
@@ -14602,6 +14624,6 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		require.EqualValues(t, 2, info.GetAttempt())
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, info.GetRunState())
 		require.Nil(t, info.GetNextAttemptScheduleTime(), "null while running")
-		require.Nil(t, info.GetCurrentRetryInterval(), "null when no retry remains")
+		require.Nil(t, info.GetCurrentRetryInterval(), "null while running")
 	})
 }
