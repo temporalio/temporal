@@ -1661,7 +1661,7 @@ func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
 			Query:     "GROUP BY Endpoint",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.ErrorContains(err, "'GROUP BY' clause is not supported for this search attribute")
 	})
 
 	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {

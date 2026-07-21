@@ -756,10 +756,17 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	queryParams.QueryExpr = elastic.NewBoolQuery().Filter(
+	// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
+	// with no other filter, which suppresses the default namespace division
+	// filter). Avoid adding a nil clause to the bool query, which would panic on
+	// serialization.
+	namespaceFilter := elastic.NewBoolQuery().Filter(
 		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
-		queryParams.QueryExpr,
 	)
+	if queryParams.QueryExpr != nil {
+		namespaceFilter.Filter(queryParams.QueryExpr)
+	}
+	queryParams.QueryExpr = namespaceFilter
 
 	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
 	for _, orderByExpr := range queryParams.OrderBy {

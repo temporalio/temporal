@@ -121,6 +121,17 @@ func TestQueryConverter_Convert(t *testing.T) {
 		},
 
 		{
+			// Grouping by TemporalNamespaceDivision must suppress the default
+			// namespace division filter so that results span all divisions.
+			// mockNamespaceDivisionExpr is false, so the default filter is not
+			// applied and SeenNamespaceDivision() is expected to be true.
+			name:                  "success group by TemporalNamespaceDivision suppresses default filter",
+			in:                    "group by TemporalNamespaceDivision",
+			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndRes:  nil,
+		},
+
+		{
 			name: "success with namespace division",
 			in:   "AliasForKeyword01 = 'foo' and TemporalNamespaceDivision = 'bar'",
 			inExpr: &sqlparser.AndExpr{
@@ -493,10 +504,24 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 		},
 
 		{
+			name: "success group by TemporalNamespaceDivision",
+			in:   "select * from t group by TemporalNamespaceDivision",
+			out: &QueryParams[sqlparser.Expr]{
+				GroupBy: []*SAColumn{
+					NewSAColumn(
+						sadefs.TemporalNamespaceDivision,
+						sadefs.TemporalNamespaceDivision,
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+			},
+		},
+
+		{
 			name: "fail not supported group by field",
 			in:   "select * from t group by RunId",
 			err: fmt.Sprintf(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for this search attribute",
 				NotSupportedErrMessage,
 			),
 		},

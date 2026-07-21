@@ -78,6 +78,7 @@ type (
 var (
 	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+		sadefs.TemporalNamespaceDivision,
 	}
 
 	groupByFieldPrefixAllowlist = []string{
@@ -281,7 +282,7 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		}
 		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for this search attribute",
 				NotSupportedErrMessage,
 			)
 		}
