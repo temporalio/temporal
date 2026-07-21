@@ -1013,7 +1013,6 @@ func (env *VersioningTestEnv) doPollActivityAndHandleErr(
 	return err
 }
 
-//nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollWorkflow(
 	s parallelsuite.Scope,
 	tv *testvars.TestVars,
@@ -1082,7 +1081,6 @@ func (env *VersioningTestEnv) idlePollActivity(
 	)
 }
 
-//nolint:revive // Polling helpers consistently take the environment assertion context first.
 func (env *VersioningTestEnv) idlePollNexus(
 	s parallelsuite.Scope,
 	tv *testvars.TestVars,
