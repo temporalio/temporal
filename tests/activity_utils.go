@@ -83,11 +83,13 @@ func projectWFA(p *workflowpb.PendingActivityInfo) activityInfoProjection {
 // --- driver --------------------------------------------------------------------------------
 
 type wfaHarness struct {
-	env            *standaloneActivityEnv
-	ctx            context.Context
-	maxAttempts    int32         // RetryPolicy MaximumAttempts (0 = unlimited)
-	retryInterval  time.Duration // RetryPolicy interval; how long the driver waits for BackoffElapses
-	nextRetryDelay time.Duration // ApplicationFailureInfo.NextRetryDelay injected into RespondFailed
+	env                *standaloneActivityEnv
+	ctx                context.Context
+	maxAttempts        int32         // RetryPolicy MaximumAttempts (0 = unlimited)
+	retryInterval      time.Duration // RetryPolicy InitialInterval; how long the driver waits for BackoffElapses
+	backoffCoefficient float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
+	maxRetryInterval   time.Duration // RetryPolicy MaximumInterval; 0 => retryInterval
+	nextRetryDelay     time.Duration // ApplicationFailureInfo.NextRetryDelay injected into RespondFailed
 	// shortTimeout, when set to one of the four timeout *Elapses kinds, makes that timeout short at
 	// schedule time so a trace can trigger it (mirrors saaHarness.shortTimeout).
 	shortTimeout model.EventKind
@@ -111,14 +113,16 @@ type wfaHandle struct {
 }
 
 type wfaActivityParams struct {
-	ActivityTQ      string
-	ActivityID      string
-	StartToClose    time.Duration
-	ScheduleToClose time.Duration // 0 = unset
-	ScheduleToStart time.Duration // 0 = unset
-	Heartbeat       time.Duration // 0 = unset
-	RetryInterval   time.Duration
-	MaxAttempts     int32
+	ActivityTQ         string
+	ActivityID         string
+	StartToClose       time.Duration
+	ScheduleToClose    time.Duration // 0 = unset
+	ScheduleToStart    time.Duration // 0 = unset
+	Heartbeat          time.Duration // 0 = unset
+	RetryInterval      time.Duration
+	BackoffCoefficient float64       // 0 = 1.0 (constant interval)
+	MaxInterval        time.Duration // 0 = RetryInterval (no growth)
+	MaxAttempts        int32
 }
 
 // wfaCancelSignal, when sent to the helper workflow, makes it cancel the activity — the WFA analog of
@@ -132,6 +136,14 @@ const wfaCancelSignal = "cancel"
 // signal cancels the activity; WaitForCancellation makes the workflow wait for the worker's
 // RespondActivityTaskCanceled so the activity actually reaches CANCELED before the workflow closes.
 func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
+	coefficient := p.BackoffCoefficient
+	if coefficient == 0 {
+		coefficient = 1.0
+	}
+	maxInterval := p.MaxInterval
+	if maxInterval == 0 {
+		maxInterval = p.RetryInterval
+	}
 	actCtx, cancelActivity := workflow.WithCancel(ctx)
 	actCtx = workflow.WithActivityOptions(actCtx, workflow.ActivityOptions{
 		TaskQueue:              p.ActivityTQ,
@@ -144,8 +156,8 @@ func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 		WaitForCancellation:    true,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    p.RetryInterval,
-			BackoffCoefficient: 1.0,
-			MaximumInterval:    p.RetryInterval,
+			BackoffCoefficient: coefficient,
+			MaximumInterval:    maxInterval,
 			MaximumAttempts:    p.MaxAttempts,
 		},
 	})
@@ -222,7 +234,8 @@ func (h *wfaHarness) start(t *testing.T) *wfaHandle {
 	params := wfaActivityParams{
 		ActivityTQ: actTQ, ActivityID: actID,
 		StartToClose:  dur(model.StartToCloseElapses),
-		RetryInterval: h.retryInterval, MaxAttempts: h.maxAttempts,
+		RetryInterval: h.retryInterval, BackoffCoefficient: h.backoffCoefficient, MaxInterval: h.maxRetryInterval,
+		MaxAttempts: h.maxAttempts,
 	}
 	if h.shortTimeout == model.ScheduleToCloseElapses {
 		params.ScheduleToClose = saaShortTimeout

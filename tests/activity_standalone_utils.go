@@ -45,6 +45,10 @@ type saaHarness struct {
 	startDelay   time.Duration // StartActivityExecutionRequest.StartDelay
 	// retryInterval is the RetryPolicy InitialInterval; 0 => a short default backoff.
 	retryInterval time.Duration
+	// backoffCoefficient is the RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval).
+	backoffCoefficient float64
+	// maxRetryInterval is the RetryPolicy MaximumInterval; 0 => the InitialInterval.
+	maxRetryInterval time.Duration
 	// nextRetryDelay overrides the policy backoff via ApplicationFailureInfo.NextRetryDelay on RespondFailed.
 	nextRetryDelay time.Duration
 	// scheduleToClose, when >0, sets a finite ScheduleToCloseTimeout (overriding the long default) so a
@@ -167,6 +171,14 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 	if h.retryInterval > 0 {
 		interval = h.retryInterval
 	}
+	coefficient := 1.0
+	if h.backoffCoefficient > 0 {
+		coefficient = h.backoffCoefficient
+	}
+	maxInterval := interval
+	if h.maxRetryInterval > 0 {
+		maxInterval = h.maxRetryInterval
+	}
 	req := &workflowservice.StartActivityExecutionRequest{
 		Namespace:           h.env.Namespace().String(),
 		ActivityId:          activityID,
@@ -177,8 +189,8 @@ func (h *saaHarness) startRequest(activityID, taskQueue string) *workflowservice
 		StartToCloseTimeout: dur(model.StartToCloseElapses),
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:    durationpb.New(interval),
-			BackoffCoefficient: 1.0,
-			MaximumInterval:    durationpb.New(interval),
+			BackoffCoefficient: coefficient,
+			MaximumInterval:    durationpb.New(maxInterval),
 			MaximumAttempts:    h.cfg.MaxAttempts,
 		},
 		RequestId: uuid.NewString(),
