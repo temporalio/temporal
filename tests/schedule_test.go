@@ -435,8 +435,14 @@ func TestScheduleCHASM(t *testing.T) {
 		t.Run("BackfillDrains", func(t *testing.T) { t.Parallel(); testBackfillOnPausedSchedule(t, newContext) })
 	})
 	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { t.Parallel(); testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
-	t.Run("PauseOnFailure_CancelDoesNotPause", func(t *testing.T) { t.Parallel(); testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByCancel) })
-	t.Run("PauseOnFailure_TerminateDoesNotPause", func(t *testing.T) { t.Parallel(); testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate) })
+	t.Run("PauseOnFailure_CancelDoesNotPause", func(t *testing.T) {
+		t.Parallel()
+		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByCancel)
+	})
+	t.Run("PauseOnFailure_TerminateDoesNotPause", func(t *testing.T) {
+		t.Parallel()
+		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
+	})
 }
 
 func TestScheduleV1(t *testing.T) {
