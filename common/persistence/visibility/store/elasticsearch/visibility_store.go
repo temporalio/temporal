@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -1299,10 +1298,11 @@ func ConvertElasticsearchClientError(message string, err error, logger log.Logge
 			// Returning InvalidArgument error will prevent retry on a caller side.
 			return serviceerror.NewInvalidArgument(errMessage)
 		case http.StatusTooManyRequests:
-			return serviceerror.NewResourceExhausted(
-				enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-				errMessage,
-			)
+			return &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: errMessage,
+			}
 		}
 		return serviceerror.NewUnavailable(errMessage)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
@@ -1315,7 +1315,7 @@ func ConvertElasticsearchClientError(message string, err error, logger log.Logge
 func shortErrorMessage(err error) string {
 	if elasticErr, ok := errors.AsType[*elastic.Error](err); ok {
 		msg := fmt.Sprintf(
-			"Elasticsearch: Error %d (%s)",
+			"VisibilityStore: Error %d (%s)",
 			elasticErr.Status,
 			http.StatusText(elasticErr.Status),
 		)
@@ -1326,27 +1326,6 @@ func shortErrorMessage(err error) string {
 		return msg
 	}
 	return err.Error()
-}
-
-func detailedErrorMessage(err error) string {
-	var elasticErr *elastic.Error
-	if !errors.As(err, &elasticErr) ||
-		elasticErr.Details == nil ||
-		len(elasticErr.Details.RootCause) == 0 ||
-		(len(elasticErr.Details.RootCause) == 1 && elasticErr.Details.RootCause[0].Reason == elasticErr.Details.Reason) {
-		return err.Error()
-	}
-
-	var sb strings.Builder
-	sb.WriteString(elasticErr.Error())
-	sb.WriteString(", root causes:")
-	for i, rootCause := range elasticErr.Details.RootCause {
-		if i > 0 {
-			sb.WriteRune(',')
-		}
-		fmt.Fprintf(&sb, " %s [type=%s]", rootCause.Reason, rootCause.Type)
-	}
-	return sb.String()
 }
 
 func isDefaultSorter(sorter []elastic.Sorter) bool {

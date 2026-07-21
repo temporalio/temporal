@@ -949,7 +949,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	s.Error(err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
@@ -963,7 +963,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
-	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 500 (Internal Server Error)", unavailableErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 500 (Internal Server Error)", unavailableErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
@@ -977,7 +977,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(err, &resourceExhaustedErr)
-	s.Equal("ListWorkflowExecutions failed: Elasticsearch: Error 429 (Too Many Requests)", resourceExhaustedErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 429 (Too Many Requests)", resourceExhaustedErr.Message)
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
@@ -1456,59 +1456,6 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
 	s.Contains(err.Error(), "GetWorkflowExecution failed")
-}
-
-func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
-	err := errors.New("test message")
-	s.Equal("test message", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error)", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some type",
-					Reason: "some reason",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some other type1",
-					Reason: "some other reason1",
-				},
-				{
-					Type:   "some other type2",
-					Reason: "some other reason2",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
 }
 
 func (s *ESVisibilitySuite) TestProcessPageToken() {
