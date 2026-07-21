@@ -708,7 +708,7 @@ func (wh *WorkflowHandler) validateTimeSkippingConfig(
 		return nil
 	}
 	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.TimeSkippingEnabled(ns.String()) {
+	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
 		return serviceerror.NewUnimplementedf(
 			"The Time-Skipping feature is not enabled for namespace %s",
 			ns.String(),
@@ -7518,4 +7518,24 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	}
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityExecution(context.Context, *workflowservice.PauseActivityExecutionRequest) (*workflowservice.PauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PauseActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityExecution(context.Context, *workflowservice.ResetActivityExecutionRequest) (*workflowservice.ResetActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ResetActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityExecution(context.Context, *workflowservice.UnpauseActivityExecutionRequest) (*workflowservice.UnpauseActivityExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UnpauseActivityExecution not implemented")
+}
+
+func (wh *WorkflowHandler) UpdateActivityExecutionOptions(context.Context, *workflowservice.UpdateActivityExecutionOptionsRequest) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateActivityExecutionOptions not implemented")
+}
+
+func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(context.Context, *workflowservice.PollWorkflowExecutionTimeSkippingRequest) (*workflowservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PollWorkflowExecutionTimeSkipping not implemented")
 }
