@@ -188,6 +188,7 @@ type completeEvent struct {
 // TransitionCompleted transitions to Completed status.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -199,6 +200,12 @@ var TransitionCompleted = chasm.NewTransition(
 			req := event.req.GetCompleteRequest()
 
 			attempt := a.LastAttempt.Get(ctx)
+			if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+				attempt.StartedTime = timestamppb.New(ctx.Now(a))
+				if a.FirstAttemptStartedTime == nil {
+					a.FirstAttemptStartedTime = attempt.StartedTime
+				}
+			}
 			attempt.CompleteTime = timestamppb.New(ctx.Now(a))
 			attempt.LastWorkerIdentity = req.GetIdentity()
 			outcome := a.Outcome.Get(ctx)
