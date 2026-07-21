@@ -6797,6 +6797,30 @@ func (ms *MutableStateImpl) RetryActivity(
 		ActivityMatchWorkflowRules(ms, ms.timeSource, ms.logger, ai)
 	}
 
+	retryMaxInterval := ai.RetryMaximumInterval
+	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
+	delay := nextRetryDelayFrom(activityFailure)
+	if delay != nil {
+		retryMaxInterval = durationpb.New(*delay)
+	}
+
+	now := ms.timeSource.Now().In(time.UTC)
+	retryBackoff, retryState := nextBackoffInterval(
+		now,
+		ai.Attempt,
+		ai.RetryMaximumAttempts,
+		ai.RetryInitialInterval,
+		retryMaxInterval,
+		ai.RetryExpirationTime,
+		ai.RetryBackoffCoefficient,
+		backoff.MakeBackoffAlgorithm(delay),
+	)
+	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		// Retry budget exhausted (or expired): terminate regardless of a pending or active
+		// pause, matching Standalone Activity Execution behavior.
+		return retryState, nil
+	}
+
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
@@ -6815,28 +6839,6 @@ func (ms *MutableStateImpl) RetryActivity(
 		// TODO: uncomment once RETRY_STATE_PAUSED is supported
 		// return enumspb.RETRY_STATE_PAUSED, nil
 		return enumspb.RETRY_STATE_IN_PROGRESS, nil
-	}
-
-	retryMaxInterval := ai.RetryMaximumInterval
-	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
-	delay := nextRetryDelayFrom(activityFailure)
-	if delay != nil {
-		retryMaxInterval = durationpb.New(*delay)
-	}
-
-	now := ms.timeSource.Now().In(time.UTC)
-	retryBackoff, retryState := nextBackoffInterval(
-		ms.timeSource.Now().In(time.UTC),
-		ai.Attempt,
-		ai.RetryMaximumAttempts,
-		ai.RetryInitialInterval,
-		retryMaxInterval,
-		ai.RetryExpirationTime,
-		ai.RetryBackoffCoefficient,
-		backoff.MakeBackoffAlgorithm(delay),
-	)
-	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-		return retryState, nil
 	}
 
 	err := ms.updateActivityInfoForRetries(ai,
