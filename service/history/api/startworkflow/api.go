@@ -708,10 +708,6 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 			workflowKey,
 			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 				mutableState := workflowLease.GetMutableState()
-				if expectedFirstExecutionRunID := s.request.GetExpectedFirstExecutionRunId(); expectedFirstExecutionRunID != "" &&
-					mutableState.GetExecutionInfo().GetFirstExecutionRunId() != expectedFirstExecutionRunID {
-					return nil, consts.ErrWorkflowExecutionNotFound
-				}
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
