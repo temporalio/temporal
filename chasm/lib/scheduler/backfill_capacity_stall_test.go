@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TestKnownIssue_BackfillCapacityStallDoesNotSkipRange pins that a backfill whose
+// TestBackfillCapacityStallDoesNotSkipRange pins that a backfill whose
 // first attempt is stalled by a full buffer still reprocesses its complete range
 // on retry, rather than skipping the earlier part.
 //
@@ -23,7 +23,7 @@ import (
 // watermark's presence, not on Attempt: keying on Attempt (the original bug)
 // treated the stall as durable progress and resumed from the backfiller's
 // creation-time default, skipping the earlier part of the requested range.
-func TestKnownIssue_BackfillCapacityStallDoesNotSkipRange(t *testing.T) {
+func TestBackfillCapacityStallDoesNotSkipRange(t *testing.T) {
 	env := newTestEnv(t)
 	fixedNow := env.TimeSource.Now().Truncate(defaultInterval)
 	env.TimeSource.Update(fixedNow)
