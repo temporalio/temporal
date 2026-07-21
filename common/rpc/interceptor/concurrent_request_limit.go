@@ -3,7 +3,6 @@ package interceptor
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -28,7 +27,12 @@ type (
 		tokens map[string]int
 
 		sync.Mutex
-		activeTokensCount map[string]*int32
+		activeTokensCount map[string]*pendingRequestCounter
+	}
+
+	pendingRequestCounter struct {
+		sync.Mutex
+		count int32
 	}
 )
 
@@ -62,7 +66,7 @@ func NewConcurrentRequestLimitInterceptor(
 			log.With(logger, tag.ComponentLongPollHandler, tag.ScopeNamespace),
 		),
 		tokens:            tokens,
-		activeTokensCount: make(map[string]*int32),
+		activeTokensCount: make(map[string]*pendingRequestCounter),
 	}
 }
 
@@ -103,13 +107,8 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	}
 
 	counter := ni.counter(namespaceName, methodName)
-	count := atomic.AddInt32(counter, int32(token))
-	cleanup := func() {
-		count := atomic.AddInt32(counter, -int32(token))
-		mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
-	}
-
-	mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
+	count := counter.add(token, mh)
+	cleanup := func() { counter.add(-token, mh) }
 
 	// frontend.namespaceCount is applied per poller type temporarily to prevent
 	// one poller type to take all token waiting in the long poll.
@@ -122,7 +121,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 func (ni *ConcurrentRequestLimitInterceptor) counter(
 	namespace namespace.Name,
 	methodName string,
-) *int32 {
+) *pendingRequestCounter {
 	key := ni.getTokenKey(namespace, methodName)
 
 	ni.Lock()
@@ -130,10 +129,21 @@ func (ni *ConcurrentRequestLimitInterceptor) counter(
 
 	counter, ok := ni.activeTokensCount[key]
 	if !ok {
-		counter = new(int32)
+		counter = new(pendingRequestCounter)
 		ni.activeTokensCount[key] = counter
 	}
 	return counter
+}
+
+func (c *pendingRequestCounter) add(token int, mh metrics.Handler) int32 {
+	c.Lock()
+	defer c.Unlock()
+
+	// Keep the transition and recording ordered so concurrent updates cannot
+	// emit a stale value last.
+	c.count += int32(token)
+	mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(c.count))
+	return c.count
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) getTokenKey(
