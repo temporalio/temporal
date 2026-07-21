@@ -8,7 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestKnownIssue_TransientCancelFailureRemainsPending(t *testing.T) {
+func TestTransientCancelFailureRemainsPending(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	target := &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: "run"}
 	env.mockHistoryClient.EXPECT().
@@ -21,7 +21,7 @@ func TestKnownIssue_TransientCancelFailureRemainsPending(t *testing.T) {
 	})
 }
 
-func TestKnownIssue_TransientTerminateFailureRemainsPending(t *testing.T) {
+func TestTransientTerminateFailureRemainsPending(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	target := &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: "run"}
 	env.mockHistoryClient.EXPECT().
