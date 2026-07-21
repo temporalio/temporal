@@ -179,7 +179,7 @@ func (ni *ConcurrentRequestLimitInterceptor) metricCounter(
 	return counter
 }
 
-func (c *pendingRequestCounter) add(token int, mh metrics.Handler) int32 {
+func (c *pendingRequestCounter) add(token int, mh metrics.Handler) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -187,7 +187,6 @@ func (c *pendingRequestCounter) add(token int, mh metrics.Handler) int32 {
 	// emit a stale value last.
 	c.count += int32(token)
 	mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(c.count))
-	return c.count
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) getCounterKey(
