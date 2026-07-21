@@ -577,13 +577,6 @@ func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExec
 	}
 }
 
-// countsAsFailureForPause reports whether a completed workflow's status should
-// trip a PauseOnFailure schedule. Cancellation and termination are excluded by
-// default, matching the V1 scheduler's behavior when
-// CanceledTerminatedCountAsFailures is false (its default). Honoring that
-// tweakable when set true requires threading namespace config into the
-// component, which HandleNexusCompletion (a framework-invoked interface method)
-// does not currently have access to; that is left as a follow-up.
 func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
