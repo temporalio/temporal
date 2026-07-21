@@ -6501,7 +6501,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 		if s.mutableState.executionState.RequestIds == nil {
 			s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			s.mutableState.executionState.RequestIds[fmt.Sprintf("prior-%02d", i)] = &persistencespb.RequestIDInfo{
 				AttachTime: timestamppb.New(baseTime.Add(time.Duration(i) * time.Second)),
 			}
@@ -6590,7 +6590,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		// cutoff = now(baseTime+1h) - 30m: the priors are older and swept even though we're far under
 		// the count cap; current-req is younger and kept.
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6607,7 +6607,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		// overLimit=7-3=4, aged=6; max(4,6)=6 evicts the whole aged batch, leaving 1 (below the cap).
 		// This is the point of the age knob: headroom, not one-at-a-time eviction while pinned at the cap.
-		for i := 0; i < 6; i++ {
+		for i := range 6 {
 			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6645,7 +6645,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6660,7 +6660,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6675,7 +6675,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6689,7 +6689,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyPassive)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 		s.True(s.mutableState.HasRequestID("current-req"))
@@ -6702,7 +6702,7 @@ func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
 
 		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
 
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
 		}
 	})
