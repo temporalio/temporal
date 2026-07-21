@@ -1024,7 +1024,8 @@ func (env *VersioningTestEnv) idlePollWorkflow(
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(
+		},
+	).HandleTask(
 		tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.AssertionT().Errorf("%s", unexpectedTaskMessage)
@@ -1046,7 +1047,8 @@ func (env *VersioningTestEnv) idlePollActivity(
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(
+		},
+	).HandleTask(
 		tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
@@ -1071,7 +1073,8 @@ func (env *VersioningTestEnv) idlePollNexus(
 	_, _ = poller.PollNexusTask(
 		&workflowservice.PollNexusTaskQueueRequest{
 			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
-		}).HandleTask(
+		},
+	).HandleTask(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
 			if task != nil {
