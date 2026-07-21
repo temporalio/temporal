@@ -121,6 +121,10 @@ func (pm *taskQueuePartitionManagerImpl) GetCache(key any) any {
 
 var _ taskQueuePartitionManager = (*taskQueuePartitionManagerImpl)(nil)
 
+// newTaskQueuePartitionManager must only allocate: the matching engine may drop the
+// result without starting it when it loses the race with a concurrent load of the same
+// partition, so acquiring external references here (e.g. dynamic config subscriptions)
+// would leak. Anything that registers the manager elsewhere belongs in Start.
 func newTaskQueuePartitionManager(
 	e *matchingEngineImpl,
 	ns *namespace.Namespace,
@@ -292,6 +296,7 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 func (pm *taskQueuePartitionManagerImpl) Start() {
 	pm.loadTime = time.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
+	pm.rateLimitManager.Start()
 	pm.userDataManager.Start()
 	for _, hook := range pm.taskHooks {
 		hook.Start()
