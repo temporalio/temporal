@@ -202,8 +202,12 @@ type StartWorkflowExecutionRequest struct {
 	// WorkflowExecutionStartedEvent.
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,17,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
 	TimeSkippingStatePropagation *v14.TimeSkippingStatePropagation `protobuf:"bytes,19,opt,name=time_skipping_state_propagation,json=timeSkippingStatePropagation,proto3" json:"time_skipping_state_propagation,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	// When set with USE_EXISTING, History only applies on-conflict options to an
+	// execution in this workflow chain. This is an internal fence for callers
+	// that reconciled a previously observed execution.
+	ExpectedFirstExecutionRunId string `protobuf:"bytes,20,opt,name=expected_first_execution_run_id,json=expectedFirstExecutionRunId,proto3" json:"expected_first_execution_run_id,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionRequest) Reset() {
@@ -360,6 +364,13 @@ func (x *StartWorkflowExecutionRequest) GetTimeSkippingStatePropagation() *v14.T
 		return x.TimeSkippingStatePropagation
 	}
 	return nil
+}
+
+func (x *StartWorkflowExecutionRequest) GetExpectedFirstExecutionRunId() string {
+	if x != nil {
+		return x.ExpectedFirstExecutionRunId
+	}
+	return ""
 }
 
 type StartWorkflowExecutionResponse struct {
@@ -10617,7 +10628,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"task_token\x18\x06 \x01(\tR\ttaskToken\x12\x1d\n" +
 	"\n" +
 	"task_infos\x18\a \x01(\tR\ttaskInfos\x12.\n" +
-	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\x84\r\n" +
+	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\xca\r\n" +
 	"\x1dStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\rstart_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartWorkflowExecutionRequestR\fstartRequest\x12h\n" +
@@ -10637,7 +10648,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion\x12s\n" +
 	"\x1binherited_auto_upgrade_info\x18\x10 \x01(\v24.temporal.api.deployment.v1.InheritedAutoUpgradeInfoR\x18inheritedAutoUpgradeInfo\x12|\n" +
 	"\x1fdeclined_target_version_upgrade\x18\x11 \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12{\n" +
-	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v24.temporal.api.common.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xb1\x03\n" +
+	"\x1ftime_skipping_state_propagation\x18\x13 \x01(\v24.temporal.api.common.v1.TimeSkippingStatePropagationR\x1ctimeSkippingStatePropagation\x12D\n" +
+	"\x1fexpected_first_execution_run_id\x18\x14 \x01(\tR\x1bexpectedFirstExecutionRunId:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_idJ\x04\b\x12\x10\x13\"\xb1\x03\n" +
 	"\x1eStartWorkflowExecutionResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12?\n" +
 	"\x05clock\x18\x02 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12n\n" +

@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -2100,6 +2101,145 @@ func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	// under SKIP overlap policy.
 	require.Equal(t, int64(0), lastDesc.GetFrontendResponse().GetInfo().GetOverlapSkipped(),
 		"stale running entry must not cause the pending start to be dropped under SKIP overlap policy")
+}
+
+// TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow verifies that the
+// V2 callback reconciler uses the FirstExecutionRunId captured from the V1
+// migration state. A closed migrated run must not attach its callback to a
+// later, unrelated execution that reused the same workflow ID.
+func TestScheduleMigrationV1ToV2_DoesNotAttachToReusedWorkflow(t *testing.T) {
+	env := newScheduleEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-reused-workflow")
+	wid := testcore.RandomizeStr("sched-migrate-reused-workflow-wf")
+	sourceWT := testcore.RandomizeStr("sched-migrate-reused-workflow-source")
+	runningWT := testcore.RandomizeStr("sched-migrate-reused-workflow-running")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		workflow.GetSignalChannel(ctx, "finish-source").Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: sourceWT})
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		workflow.GetSignalChannel(ctx, "finish").Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: runningWT})
+
+	startSource, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    nsName,
+		WorkflowId:   wid,
+		WorkflowType: &commonpb.WorkflowType{Name: sourceWT},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		desc, describeErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startSource.GetRunId()},
+		})
+		return describeErr == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}, 10*time.Second, 200*time.Millisecond)
+
+	type reuseResult struct {
+		runID string
+		err   error
+	}
+	reused := make(chan reuseResult, 1)
+	removeHook := env.InjectHook(testhooks.NewHook(testhooks.SchedulerCallbackAttachmentAfterDescribe, func() {
+		_, terminateErr := env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         nsName,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: startSource.GetRunId()},
+			Identity:          "test",
+		})
+		if terminateErr != nil {
+			reused <- reuseResult{err: terminateErr}
+			return
+		}
+		startReused, startErr := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:             nsName,
+			WorkflowId:            wid,
+			WorkflowType:          &commonpb.WorkflowType{Name: runningWT},
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:              "test",
+			RequestId:             uuid.NewString(),
+			WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		})
+		reused <- reuseResult{runID: startReused.GetRunId(), err: startErr}
+	}))
+	defer removeHook()
+
+	now := time.Now().UTC()
+	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(ctx, &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: nsID,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState: &schedulerpb.SchedulerState{
+				Namespace: nsName, NamespaceId: nsID, ScheduleId: sid,
+				Schedule: &schedulepb.Schedule{
+					Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}}},
+					Action: &schedulepb.ScheduleAction{Action: &schedulepb.ScheduleAction_StartWorkflow{
+						StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+							WorkflowId: wid, WorkflowType: &commonpb.WorkflowType{Name: sourceWT},
+							TaskQueue: &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						},
+					}},
+					Policies: &schedulepb.SchedulePolicies{},
+					State:    &schedulepb.ScheduleState{},
+				},
+				Info:          &schedulepb.ScheduleInfo{},
+				ConflictToken: scheduler.InitialConflictToken,
+			},
+			GeneratorState: &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now)},
+			InvokerState: &schedulerpb.InvokerState{LastProcessedTime: timestamppb.New(now), BufferedStarts: []*schedulespb.BufferedStart{{
+				NominalTime: timestamppb.New(now), ActualTime: timestamppb.New(now), StartTime: timestamppb.New(now),
+				RequestId: "sched-migrated-reused-" + startSource.GetRunId(), WorkflowId: wid, RunId: startSource.GetRunId(), Attempt: 1,
+			}}},
+		},
+	})
+	require.NoError(t, err)
+
+	var reusedResult reuseResult
+	select {
+	case reusedResult = <-reused:
+	case <-time.After(30 * time.Second):
+		require.Fail(t, "callback attachment test hook was not called")
+	}
+	require.NoError(t, reusedResult.err)
+	require.NotEmpty(t, reusedResult.runID)
+
+	// The V2 callback task must record the V1 run's TERMINATED status and leave the
+	// unrelated, reused execution untouched.
+	require.Eventually(t, func() bool {
+		desc, describeErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		})
+		if describeErr != nil {
+			return false
+		}
+		for _, action := range desc.GetFrontendResponse().GetInfo().GetRecentActions() {
+			if action.GetStartWorkflowResult().GetRunId() == startSource.GetRunId() {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+			}
+		}
+		return false
+	}, 30*time.Second, 500*time.Millisecond)
+
+	reusedDesc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: nsID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: reusedResult.runID},
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, reusedDesc.GetCallbacks())
 }
 
 // TestScheduleMigrationRolloutPercent verifies that

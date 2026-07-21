@@ -20,7 +20,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -121,23 +123,23 @@ func (r *SchedulerIdleTaskHandler) recordInvalidated(
 type SchedulerCallbacksTaskHandlerOptions struct {
 	fx.In
 
-	Config         *Config
-	HistoryClient  resource.HistoryClient
-	FrontendClient workflowservice.WorkflowServiceClient
+	Config        *Config
+	HistoryClient resource.HistoryClient
+	TestHooks     testhooks.TestHooks
 }
 
 type SchedulerCallbacksTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*schedulerpb.SchedulerCallbacksTask]
-	config         *Config
-	historyClient  resource.HistoryClient
-	frontendClient workflowservice.WorkflowServiceClient
+	config        *Config
+	historyClient resource.HistoryClient
+	testHooks     testhooks.TestHooks
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
 	return &SchedulerCallbacksTaskHandler{
-		config:         opts.Config,
-		historyClient:  opts.HistoryClient,
-		frontendClient: opts.FrontendClient,
+		config:        opts.Config,
+		historyClient: opts.HistoryClient,
+		testHooks:     opts.TestHooks,
 	}
 }
 
@@ -271,6 +273,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	}
 
 	wfInfo := descResp.GetWorkflowExecutionInfo()
+	firstExecutionRunID := wfInfo.GetFirstRunId()
 	wfProgressing := wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
 		wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
 
@@ -282,6 +285,12 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 			},
 		}, nil
 	}
+	if firstExecutionRunID == "" {
+		// Legacy executions without a persisted chain ID cannot be safely
+		// distinguished from a reused workflow ID after this Describe.
+		return nil, serviceerror.NewFailedPrecondition("cannot safely attach scheduler callback to workflow without first execution run ID")
+	}
+	testhooks.Call(r.testHooks, testhooks.SchedulerCallbackAttachmentAfterDescribe, namespace.ID(scheduler.NamespaceId))
 
 	// Workflow is still running. Attach a Nexus completion callback by issuing
 	// a StartWorkflowExecution with USE_EXISTING conflict policy. REJECT_DUPLICATE
@@ -296,7 +305,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		return nil, err
 	}
 
-	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	attachRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
 		WorkflowId:               start.WorkflowId,
 		RequestId:                start.RequestId,
@@ -310,23 +319,44 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 			AttachRequestId:           true,
 			AttachCompletionCallbacks: true,
 		},
-	})
+	}
+	attachHistoryRequest := common.CreateHistoryStartWorkflowRequest(scheduler.NamespaceId, attachRequest, nil, nil, time.Now().UTC())
+	attachHistoryRequest.ExpectedFirstExecutionRunId = firstExecutionRunID
+	_, err = r.historyClient.StartWorkflowExecution(ctx, attachHistoryRequest)
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted: workflow completed between describe
-		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
-		if isAlreadyStartedError(err) {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					CloseTime: timestamppb.Now(),
-				},
-			}, nil
-		}
-		return nil, err
+		// The workflow can close or be replaced after Describe and before this
+		// chain-fenced attach. Re-read the observed run to preserve its actual
+		// terminal status instead of synthesizing COMPLETED.
+		return r.describeCompletedStart(ctx, scheduler, start)
 	}
 
 	// Callback attached successfully.
 	return &watchResult{}, nil
+}
+
+func (r *SchedulerCallbacksTaskHandler) describeCompletedStart(
+	ctx context.Context,
+	scheduler *Scheduler,
+	start *schedulespb.BufferedStart,
+) (*watchResult, error) {
+	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: scheduler.NamespaceId,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: scheduler.Namespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: start.WorkflowId, RunId: start.RunId},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	wfInfo := descResp.GetWorkflowExecutionInfo()
+	if wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return nil, serviceerror.NewUnavailable("workflow changed while attaching scheduler callback")
+	}
+	return &watchResult{completed: &schedulespb.CompletedResult{
+		Status:    wfInfo.GetStatus(),
+		CloseTime: wfInfo.GetCloseTime(),
+	}}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(

@@ -20,6 +20,7 @@ var (
 	MatchingLBForceWritePartition            = newKey[int, namespace.ID]()
 	UpdateWithStartInBetweenLockAndStart     = newKey[func(), namespace.ID]()
 	UpdateWithStartOnClosingWorkflowRetry    = newKey[func(), namespace.ID]()
+	SchedulerCallbackAttachmentAfterDescribe = newKey[func(), namespace.ID]()
 	TaskQueuesInDeploymentSyncBatchSize      = newKey[int, global]()
 	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
