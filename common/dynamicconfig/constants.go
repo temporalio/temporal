@@ -3498,6 +3498,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerEnableHistoryRateLimiter decides whether to generate migration tasks with history length rate limiter.`,
 	)
+	WorkerDryRunMode = NewGlobalBoolSetting(
+		"worker.dryRunMode",
+		false,
+		`WorkerDryRunMode causes XDC system workflows (force-replication, namespace-handover) to complete immediately without doing real work. Use for testing.`,
+	)
 	MaxUserMetadataSummarySize = NewNamespaceIntSetting(
 		"limit.userMetadataSummarySize",
 		400,
