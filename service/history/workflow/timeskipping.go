@@ -531,9 +531,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
 	}
 	// update enabled state
-	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.FastForwardInfo.HasReached = true
+		tsi.GetFastForwardInfo().HasReached = true
 		tsi.Config.Enabled = false
 	}
 	// update skip

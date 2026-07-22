@@ -3589,7 +3589,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	)
 	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
 		"frontend.WorkflowTimeSkippingMaxSkipPerSession",
-		100,
-		"WorkflowTimeSkippingMaxSkipPerSession limits the skip number allowed since time-skipping was most recently enabled.",
+		200,
+		"WorkflowTimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
 	)
 )

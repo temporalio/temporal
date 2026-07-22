@@ -35,7 +35,7 @@ import (
 // defaultMaxSkipPerSession mirrors the compiled default of
 // dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession. The frontend populates a request's
 // unset MaxSkipPerSession with this value, so tests that leave it empty expect it back.
-const defaultMaxSkipPerSession = 100
+const defaultMaxSkipPerSession = 200
 
 type TimeSkippingTestSuite struct {
 	parallelsuite.Suite[*TimeSkippingTestSuite]
