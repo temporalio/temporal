@@ -80,3 +80,7 @@ In addition, Queries are implemented via Query Tasks, which are similar to Workf
 - Internal Workers Service
 - [Workflow lifecycle sequence diagrams](./workflow-lifecycle.md)
 - [SDK Workers](https://github.com/temporalio/sdk-core/blob/master/ARCHITECTURE.md)
+
+**Subsystems**
+
+- [Visibility](./visibility.md) — the queryable index behind list/count/search APIs (including `ListSchedules`, `ListBatchOperations`, and more)
