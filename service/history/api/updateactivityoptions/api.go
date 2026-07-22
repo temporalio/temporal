@@ -190,10 +190,11 @@ func processActivityOptionsUpdate(
 		HeartbeatTimeout:       ai.HeartbeatTimeout,
 		Priority:               common.CloneProto(ai.Priority),
 		RetryPolicy: &commonpb.RetryPolicy{
-			BackoffCoefficient: ai.RetryBackoffCoefficient,
-			InitialInterval:    ai.RetryInitialInterval,
-			MaximumInterval:    ai.RetryMaximumInterval,
-			MaximumAttempts:    ai.RetryMaximumAttempts,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			InitialInterval:        ai.RetryInitialInterval,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
 		},
 	}
 
@@ -286,6 +287,7 @@ func updateActivityOptions(
 		activityInfo.RetryBackoffCoefficient = activityOptions.RetryPolicy.BackoffCoefficient
 		activityInfo.RetryInitialInterval = activityOptions.RetryPolicy.InitialInterval
 		activityInfo.RetryMaximumAttempts = activityOptions.RetryPolicy.MaximumAttempts
+		activityInfo.RetryNonRetryableErrorTypes = activityOptions.RetryPolicy.NonRetryableErrorTypes
 
 		// move forward activity version
 		activityInfo.Stamp++

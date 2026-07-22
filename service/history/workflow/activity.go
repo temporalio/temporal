@@ -211,10 +211,11 @@ func GetPendingActivityInfo(
 		Priority:               ai.Priority,
 
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    ai.RetryInitialInterval,
-			BackoffCoefficient: ai.RetryBackoffCoefficient,
-			MaximumInterval:    ai.RetryMaximumInterval,
-			MaximumAttempts:    ai.RetryMaximumAttempts,
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
 		},
 	}
 
