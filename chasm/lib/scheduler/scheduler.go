@@ -1046,10 +1046,8 @@ func (s *Scheduler) ListInfo(
 	generator := s.Generator.Get(ctx)
 	invoker := s.Invoker.Get(ctx)
 
-	// Hard-cap the memo's recent-action list. recentActions() includes running
-	// starts, which aren't subject to completed-action retention, so the raw
-	// projection can grow with live action count. Keep the most recently started
-	// actions so the persisted memo stays bounded.
+	// Hard-cap the memo's recent-action list by length after sorting by actual time
+	// (ascending towards most recent).
 	recentActions := invoker.recentActions()
 	slices.SortFunc(recentActions, func(a, b *schedulepb.ScheduleActionResult) int {
 		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
