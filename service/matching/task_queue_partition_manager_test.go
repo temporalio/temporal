@@ -1819,6 +1819,98 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksN
 	s.Require().Empty(hook.getCalls())
 }
 
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_Backlog() {
+	// A task with no poller available is spooled to the backlog. tasks_added should be emitted
+	// once, tagged with task_add_result=backlog and forwarded=false.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+	s.Require().Len(recs, 1)
+	s.Equal(metrics.TaskAddResultBacklog, recs[0].Tags["task_add_result"])
+	s.Equal("false", recs[0].Tags["forwarded"])
+}
+
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_SyncMatch() {
+	// A task that sync-matches a waiting poller should emit tasks_added once, tagged with
+	// task_add_result=sync_match and forwarded=false (matched locally, not forwarded).
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+	s.Require().Len(recs, 1)
+	s.Equal(metrics.TaskAddResultSyncMatch, recs[0].Tags["task_add_result"])
+	s.Equal("false", recs[0].Tags["forwarded"])
+}
+
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_NotEmittedForForwardedAdd() {
+	// tasks_added is emitted only on the origin (child) partition. A task forwarded to and
+	// sync-matched on this (parent) partition must not emit it, to avoid double counting.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	s.Require().Empty(capture.Snapshot()[metrics.TasksAddedCounter.Name()])
+}
+
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	hook1 := &capturingTaskMatchHook{}
 	hook2 := &capturingTaskMatchHook{}

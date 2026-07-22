@@ -1258,7 +1258,7 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TasksAddedCounter                                 = NewCounterDef(
 		"tasks_added",
-		WithDescription("Number of tasks arriving at a physical task queue, broken down by add result, forwarding, and versioning behavior"),
+		WithDescription("Number of tasks added at their origin partition, broken down by add result, forwarding, and versioning behavior"),
 	)
 	TaskWriteThrottlePerTaskQueueCounter = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue         = NewTimerDef("task_write_latency")

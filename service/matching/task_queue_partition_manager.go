@@ -612,26 +612,25 @@ reredirectTask:
 	}
 
 	behavior := directive.GetBehavior()
-	forwarded := params.forwardInfo != nil
 
 	var outcome syncMatchOutcome
+	// forwardedForSyncMatch reports whether the origin partition forwarded this task onward to
+	// attempt a remote sync match; it tags the tasks_added metric. False if we never got as far
+	// as attempting a sync match (e.g. not active in this cluster).
+	var forwardedForSyncMatch bool
 	if isActive {
-		outcome, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
+		outcome, forwardedForSyncMatch, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		syncMatched = outcome == syncMatchSuccess
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
-			// Only fire hooks for non-forwarded tasks. Forwarded tasks already had hooks fired
-			// on the child partition that originally received the task.
-			if !forwarded {
+			// Only fire hooks and record the add for non-forwarded tasks. Forwarded tasks already
+			// had hooks fired and the add recorded on the origin partition that received the task,
+			// so we avoid double counting here.
+			if params.forwardInfo == nil {
 				// We should not use targetVersion because targetVersion is always routing-config-deriven.
 				// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
 				pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
+				syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatch, forwardedForSyncMatch, behavior)
 			}
-
-			syncMatchResult := metrics.TaskAddResultSyncMatch
-			if err != nil {
-				syncMatchResult = taskAddErrResult(err)
-			}
-			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -647,8 +646,8 @@ reredirectTask:
 	}
 
 	if spoolQueue == nil {
-		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
-		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
+		// This means the task is being forwarded. The origin partition will record the add and
+		// persist the task when sync match fails.
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -660,7 +659,6 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
 		// We should not use targetVersion because targetVersion is always routing-config-deriven.
 		// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
 		// Also, note that we use syncMatchQueue's version, and not spoolQueue's version. This is
@@ -668,8 +666,7 @@ reredirectTask:
 		// Unpinned tasks are written to the default queue for late binding, in case target version
 		// changes by the time they can be dispatched.
 		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
-	} else {
-		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwardedForSyncMatch, behavior)
 	}
 
 	return assignedBuildId, false, err
@@ -697,14 +694,6 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 			SyncMatchOutcome:  hookOutcome,
 		})
 	}
-}
-
-func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
-		return metrics.TaskAddResultThrottled
-	}
-	return metrics.TaskAddResultFailure
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
