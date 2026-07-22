@@ -6,13 +6,14 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/ffnotifier"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -21,7 +22,7 @@ func Invoke(
 	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	ffNotifier ffnotifier.Notifier,
+	ffNotifier notification.FastForwardNotifier,
 ) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
 	if err := api.ValidateNamespaceUUID(namespace.ID(req.GetNamespaceId())); err != nil {
 		return nil, err
@@ -35,7 +36,7 @@ func Invoke(
 
 	// Subscribe before reading current state so any fast-forward update persisted
 	// after our read still delivers a wake-up on the channel (no lost notification).
-	watchKey := ffnotifier.NewKey(req.GetNamespaceId(), execution.GetWorkflowId())
+	watchKey := notification.NewKey(req.GetNamespaceId(), execution.GetWorkflowId())
 	subscriberID, channel, err := ffNotifier.Watch(watchKey)
 	if err != nil {
 		return nil, err
@@ -51,10 +52,11 @@ func Invoke(
 		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND), nil
 	}
 	if ffinfo.GetHasCompleted() {
-		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION), nil
+		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED), nil
 	}
-	if wfClosed && !ffinfo.GetHasCompleted() {
-		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND), nil
+	// The run ended before the fast-forward completed: it never will.
+	if wfClosed {
+		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION), nil
 	}
 
 	// Fast-forward is pending and matches the request: long-poll for a change.
@@ -99,7 +101,7 @@ func readFastForwardInfo(
 // time; it is returned unchanged on timeout so the caller can re-poll.
 func waitFastForwardNotification(
 	ctx context.Context,
-	channel <-chan *ffnotifier.Notification,
+	channel <-chan *notification.FastForwardNotification,
 	softTimeout time.Duration,
 	requestedFFID string,
 	pending *commonpb.TimeSkippingFastForwardInfo,
@@ -109,8 +111,8 @@ func waitFastForwardNotification(
 
 	for {
 		select {
-		case notification := <-channel:
-			ffinfo := notification.FastForwardInfo
+		case notif := <-channel:
+			ffinfo := notif.FastForwardInfo
 			if ffinfo.GetHasCompleted() {
 				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED
 			}
@@ -118,9 +120,9 @@ func waitFastForwardNotification(
 				// A new fast-forward replaced the one being polled.
 				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_OVERRIDDEN
 			}
-			if notification.Closed {
+			if notif.Closed {
 				// The run ended without completing the fast-forward: it never will.
-				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND
+				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION
 			}
 			// Same pending fast-forward (no meaningful change); keep waiting.
 		case <-stCtx.Done():

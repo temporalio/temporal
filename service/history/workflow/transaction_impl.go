@@ -6,6 +6,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -16,9 +18,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/ffnotifier"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"go.temporal.io/server/service/history/notification"
 )
 
 type (
@@ -644,8 +645,8 @@ func notifyFastForwardUpdate(
 	// is empty only when there is no successor run — retry / cron / CaN set it.
 	closed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
 		executionInfo.GetNewExecutionRunId() == ""
-	engine.NotifyFastForwardUpdate(&ffnotifier.Notification{
-		Key:             ffnotifier.NewKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId()),
+	key := notification.NewKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
+	engine.NotifyFastForwardUpdate(key, &notification.FastForwardNotification{
 		FastForwardInfo: ffInfo,
 		Closed:          closed,
 	})

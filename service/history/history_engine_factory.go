@@ -2,6 +2,8 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -16,14 +18,13 @@ import (
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/ffnotifier"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"go.uber.org/fx"
 )
 
 type (
@@ -34,7 +35,7 @@ type (
 		MatchingClient                  resource.MatchingClient
 		SdkClientFactory                sdk.ClientFactory
 		EventNotifier                   events.Notifier
-		FastForwardNotifier             ffnotifier.Notifier
+		FastForwardNotifier             notification.FastForwardNotifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache

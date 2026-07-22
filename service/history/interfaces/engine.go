@@ -8,6 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -18,8 +19,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/ffnotifier"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -104,7 +105,7 @@ type (
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte)
-		NotifyFastForwardUpdate(notification *ffnotifier.Notification)
+		NotifyFastForwardUpdate(key definition.WorkflowKey, notification *notification.FastForwardNotification)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
 		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
 

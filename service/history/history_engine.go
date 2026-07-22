@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -90,10 +91,10 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/ffnotifier"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
@@ -119,7 +120,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
-		fastForwardNotifier        ffnotifier.Notifier
+		fastForwardNotifier        notification.FastForwardNotifier
 		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
@@ -161,7 +162,7 @@ func NewEngineWithShardContext(
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
-	fastForwardNotifier ffnotifier.Notifier,
+	fastForwardNotifier notification.FastForwardNotifier,
 	config *configs.Config,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	workerDeploymentClient workerdeployment.Client,
@@ -891,10 +892,11 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyFastForwardUpdate(
-	notification *ffnotifier.Notification,
+	key definition.WorkflowKey,
+	notification *notification.FastForwardNotification,
 ) {
 
-	e.fastForwardNotifier.NotifyFastForwardUpdate(notification)
+	e.fastForwardNotifier.Notify(key, notification)
 }
 
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {

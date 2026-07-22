@@ -5,6 +5,10 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -46,16 +50,13 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/ffnotifier"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(
@@ -486,8 +487,8 @@ func EventNotifierProvider(
 
 func FastForwardNotifierProvider(
 	config *configs.Config,
-) ffnotifier.Notifier {
-	return ffnotifier.NewNotifier(config.GetShardID)
+) notification.FastForwardNotifier {
+	return notification.NewFastForwardNotifier(config.GetShardID)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

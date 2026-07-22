@@ -16,6 +16,8 @@ import (
 
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
+	gomock "go.uber.org/mock/gomock"
+
 	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
@@ -26,10 +28,9 @@ import (
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
-	ffnotifier "go.temporal.io/server/service/history/ffnotifier"
 	hsm "go.temporal.io/server/service/history/hsm"
+	notification "go.temporal.io/server/service/history/notification"
 	tasks "go.temporal.io/server/service/history/tasks"
-	gomock "go.uber.org/mock/gomock"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -428,15 +429,15 @@ func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRe
 }
 
 // NotifyFastForwardUpdate mocks base method.
-func (m *MockEngine) NotifyFastForwardUpdate(notification *ffnotifier.Notification) {
+func (m *MockEngine) NotifyFastForwardUpdate(key definition.WorkflowKey, arg1 *notification.FastForwardNotification) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyFastForwardUpdate", notification)
+	m.ctrl.Call(m, "NotifyFastForwardUpdate", key, arg1)
 }
 
 // NotifyFastForwardUpdate indicates an expected call of NotifyFastForwardUpdate.
-func (mr *MockEngineMockRecorder) NotifyFastForwardUpdate(notification any) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyFastForwardUpdate(key, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyFastForwardUpdate", reflect.TypeOf((*MockEngine)(nil).NotifyFastForwardUpdate), notification)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyFastForwardUpdate", reflect.TypeOf((*MockEngine)(nil).NotifyFastForwardUpdate), key, arg1)
 }
 
 // NotifyNewHistoryEvent mocks base method.
