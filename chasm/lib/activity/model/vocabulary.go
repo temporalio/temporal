@@ -25,6 +25,105 @@ const (
 	ResetRequested
 )
 
+// Dispatchability says whether a SCHEDULED attempt's next dispatch is available now, or still delayed
+// by a start_delay or retry backoff.
+type Dispatchability int
+
+const (
+	Dispatchable Dispatchability = iota // pollable now
+	StartDelayPending
+	BackoffPending
+)
+
+// AbstractState is the projection of observable internal state that the model predicts.
+type AbstractState struct {
+	Status              Status
+	AttemptCount        int32
+	FirstAttemptStarted bool
+	Dispatchability     Dispatchability
+	DispatchTimeSet     bool
+
+	// Flags supporting deferred reset/update
+	ResetKeepPaused     bool
+	ResetHeartbeats     bool
+	ResetRestoreOptions bool
+}
+
+// Config captures the start-time options that change transition behavior.
+type Config struct {
+	HasScheduleToClose bool
+	HasScheduleToStart bool
+	HasHeartbeat       bool
+	HasStartDelay      bool
+	MaxAttempts        int32 // 0 = unlimited
+}
+
+// EventKind enumerates the events the model covers.
+type EventKind int
+
+const (
+	Poll EventKind = iota
+	Heartbeat
+	RespondCompleted
+	RespondFailed
+	RespondCanceled
+	RequestCancel
+	Terminate
+	Pause
+	Unpause
+	Reset
+	UpdateOptions
+
+	// Timeout deadlines elapsing: the configured deadline window has passed in wall-clock (a timer
+	// may or may not have actually fired)
+	ScheduleToStartElapses
+	ScheduleToCloseElapses
+	StartToCloseElapses
+	HeartbeatElapses
+
+	// Dispatch-delay clocks elapsing. On elapse the delayed dispatch becomes available
+	// (Dispatchability -> Dispatchable).
+	StartDelayElapses
+	BackoffElapses
+)
+
+// Event carries the variant flags that affect the outcome.
+type Event struct {
+	Kind EventKind
+
+	Retryable       bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on cfg.MaxAttempts and s.AttemptCount.
+	KeepPaused      bool // Reset
+	RestoreOriginal bool // Reset / UpdateOptions
+	ResetHeartbeat  bool // Unpause
+	ResetAttempts   bool // Unpause
+	SameRequestID   bool // Pause / Terminate / RequestCancel: repeat of the previous op's request id
+	SetsStartDelay  bool // UpdateOptions
+}
+
+// ErrorKind is the API-level outcome the model expects for a rejected or no-op call.
+type ErrorKind int
+
+const (
+	NoError ErrorKind = iota
+	FailedPrecondition
+	NotFound
+	InvalidArgument
+)
+
+// Observed is the internal state the harness reads back via ReadComponent. The reader
+// returns Status as the internal proto enum; Abstract maps it onto the model's Status.
+type Observed struct {
+	Status               activitypb.ActivityExecutionStatus
+	Count                int32
+	Stamp                int32
+	ScheduleToCloseStamp int32
+	ResetKeepPaused      bool
+	ResetHeartbeats      bool
+	ResetRestoreOptions  bool
+	FirstAttemptStarted  bool
+	DispatchTimeSet      bool
+}
+
 func (s Status) String() string {
 	switch s {
 	case Unspecified:
@@ -66,16 +165,6 @@ func (s Status) Terminal() bool {
 	}
 }
 
-// Dispatchability says whether a SCHEDULED attempt's next dispatch is available now, or still delayed
-// by a start_delay or retry backoff.
-type Dispatchability int
-
-const (
-	Dispatchable Dispatchability = iota // pollable now
-	StartDelayPending
-	BackoffPending
-)
-
 func (d Dispatchability) String() string {
 	switch d {
 	case Dispatchable:
@@ -87,20 +176,6 @@ func (d Dispatchability) String() string {
 	default:
 		return "Dispatchability(?)"
 	}
-}
-
-// AbstractState is the projection of observable internal state that the model predicts.
-type AbstractState struct {
-	Status              Status
-	AttemptCount        int32
-	FirstAttemptStarted bool
-	Dispatchability     Dispatchability
-	DispatchTimeSet     bool
-
-	// Flags supporting deferred reset/update
-	ResetKeepPaused     bool
-	ResetHeartbeats     bool
-	ResetRestoreOptions bool
 }
 
 // SameObserved reports whether two states agree on every ReadComponent-readable field that is live in
@@ -120,83 +195,6 @@ func (s AbstractState) mask() AbstractState {
 		s.ResetKeepPaused, s.ResetHeartbeats, s.ResetRestoreOptions = false, false, false
 	}
 	return s
-}
-
-// Config captures the start-time options that change transition behavior.
-type Config struct {
-	HasScheduleToClose bool
-	HasScheduleToStart bool
-	HasHeartbeat       bool
-	HasStartDelay      bool
-	MaxAttempts        int32 // 0 = unlimited
-}
-
-// EventKind enumerates the events the model covers.
-type EventKind int
-
-const (
-	Poll EventKind = iota // worker poll that transitions Scheduled -> Started
-	Heartbeat
-	RespondCompleted
-	RespondFailed
-	RespondCanceled
-	RequestCancel
-	Terminate
-	Pause
-	Unpause
-	Reset
-	UpdateOptions
-
-	// Timeout deadlines elapsing. The event means the configured deadline window has passed in
-	// wall-clock, not that the timer fired; the effect per status is decided by the transition rules.
-	// The harness triggers one by configuring the timeout short and waiting.
-	ScheduleToStartElapses
-	ScheduleToCloseElapses
-	StartToCloseElapses
-	HeartbeatElapses
-
-	// Dispatch-delay clocks elapsing. When elapsed the delayed dispatch becomes available
-	// (Dispatchability -> Dispatchable); status is unchanged, so the only observable is a subsequent
-	// Poll returning a task. The harness triggers one by configuring the delay/backoff short and waiting.
-	StartDelayElapses
-	BackoffElapses
-)
-
-// Event carries the variant flags that affect the outcome. Leave irrelevant flags zero.
-type Event struct {
-	Kind EventKind
-
-	Retryable       bool // RespondFailed: the failure is retryable. Whether it actually retries also depends on cfg.MaxAttempts and s.Count.
-	KeepPaused      bool // Reset
-	RestoreOriginal bool // Reset / UpdateOptions
-	ResetHeartbeat  bool // Unpause
-	ResetAttempts   bool // Unpause
-	SameRequestID   bool // Pause / Terminate / RequestCancel: repeat of the previous op's request id
-	SetsStartDelay  bool // UpdateOptions: the update changes start_delay
-}
-
-// ErrorKind is the API-level outcome the model expects for a rejected or no-op call.
-type ErrorKind int
-
-const (
-	NoError ErrorKind = iota
-	FailedPrecondition
-	NotFound
-	InvalidArgument
-)
-
-// Observed is the internal state the harness reads back via ReadComponent. The reader
-// returns Status as the internal proto enum; Abstract maps it onto the model's Status.
-type Observed struct {
-	Status               activitypb.ActivityExecutionStatus
-	Count                int32
-	Stamp                int32
-	ScheduleToCloseStamp int32
-	ResetKeepPaused      bool
-	ResetHeartbeats      bool
-	ResetRestoreOptions  bool
-	FirstAttemptStarted  bool
-	DispatchTimeSet      bool
 }
 
 // Abstract maps an observed internal snapshot onto the model's AbstractState.
