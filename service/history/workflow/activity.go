@@ -121,16 +121,14 @@ func GetPendingActivityInfo(
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			scheduledTime := ai.ScheduledTime.AsTime()
 			if now.Before(scheduledTime) {
-				// in this case activity is waiting for a retry
+				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
 				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
 				p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
 			} else {
-				// in this case activity is at least scheduled
+				// retry has been dispatched to Matching
 				p.NextAttemptScheduleTime = nil
-				// we rely on the fact that ExponentialBackoffAlgorithm is deterministic, and  there's no random jitter
-				interval := backoff.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
-				p.CurrentRetryInterval = durationpb.New(interval)
+				p.CurrentRetryInterval = nil
 			}
 		}
 	}
