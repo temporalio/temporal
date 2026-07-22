@@ -102,6 +102,7 @@ func TestPartitionScaling_Down(t *testing.T) {
 	})
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
 	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
@@ -178,6 +179,7 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 	})
 
 	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
 	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
