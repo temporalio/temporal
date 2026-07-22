@@ -13,6 +13,7 @@ import (
 var testStart = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func TestTransitionLifecycle(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	state := model.State{}
 
@@ -49,6 +50,7 @@ func TestTransitionLifecycle(t *testing.T) {
 }
 
 func TestTransitionAdvanceAndCatchup(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	created := transition(t, config, model.State{}, model.Create{})
 
@@ -66,6 +68,7 @@ func TestTransitionAdvanceAndCatchup(t *testing.T) {
 }
 
 func TestTransitionPausedAdvanceSkipsElapsedActions(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	created := transition(t, config, model.State{}, model.Create{Paused: true})
 
@@ -84,6 +87,7 @@ func TestTransitionPausedAdvanceSkipsElapsedActions(t *testing.T) {
 }
 
 func TestTransitionErrorsPreserveInput(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	running := transition(t, config, model.State{}, model.Create{}).State
 	closed := transition(t, config, running, model.Delete{}).State
@@ -115,6 +119,7 @@ func TestTransitionErrorsPreserveInput(t *testing.T) {
 }
 
 func TestTransitionDoesNotMutateInput(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	state := model.State{
 		Now:       testStart,

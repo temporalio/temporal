@@ -85,6 +85,7 @@ func (schedulerRPCProfiles) migrationTerminal() rpcgen.Behavior[*historyservice.
 }
 
 func TestSchedulerRPCProfilesUseExplicitScriptExpectations(t *testing.T) {
+	t.Parallel()
 	var contract rpctest.RPCContract
 	schedulerRPCProfiles{}.startRetryable().Expect(&contract, "StartWorkflowExecution", "retry", func(request *workflowservice.StartWorkflowExecutionRequest) bool {
 		return request.GetRequestId() == "retry"

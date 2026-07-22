@@ -290,9 +290,9 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 			if err != nil {
 				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				return
 			}
 
-			// Cancels are only attempted once.
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -328,9 +328,9 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 			if err != nil {
 				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				return
 			}
 
-			// Terminates are only attempted once.
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}

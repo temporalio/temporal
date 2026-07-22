@@ -11,6 +11,7 @@ import (
 )
 
 func TestTransitionRapidTraces(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		config := testConfig()
 		config.Interval = time.Duration(rapid.IntRange(1, 5).Draw(t, "interval-minutes")) * time.Minute

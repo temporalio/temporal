@@ -10,6 +10,7 @@ import (
 )
 
 func TestTransitionBoundedExplorer(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	type node struct {
 		state model.State

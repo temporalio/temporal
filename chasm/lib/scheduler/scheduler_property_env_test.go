@@ -61,8 +61,10 @@ type schedulerServiceScripts struct {
 	Terminate rpctest.RPCContract
 	Migrate   rpctest.RPCContract
 
-	mu         sync.Mutex
-	startCalls []schedulerStartCall
+	mu             sync.Mutex
+	startCalls     []schedulerStartCall
+	cancelCalls    int
+	terminateCalls int
 }
 
 type schedulerStartCall struct {
@@ -197,6 +199,18 @@ func (s *schedulerServiceScripts) StartCalls() []schedulerStartCall {
 	return append([]schedulerStartCall(nil), s.startCalls...)
 }
 
+func (s *schedulerServiceScripts) CancelCallCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cancelCalls
+}
+
+func (s *schedulerServiceScripts) TerminateCallCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.terminateCalls
+}
+
 func (e *schedulerPropertyEnv) describeWorkflow(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.DescribeWorkflowExecutionResponse, error) {
 	if e.services.Describe.Matches(ctx, describeWorkflowMethod, request) {
 		value, err := e.services.Describe.Invoke(ctx, describeWorkflowMethod, request)
@@ -209,6 +223,9 @@ func (e *schedulerPropertyEnv) describeWorkflow(ctx context.Context, request *hi
 }
 
 func (e *schedulerPropertyEnv) cancelWorkflow(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
+	e.services.mu.Lock()
+	e.services.cancelCalls++
+	e.services.mu.Unlock()
 	if e.services.Cancel.Matches(ctx, cancelWorkflowMethod, request) {
 		value, err := e.services.Cancel.Invoke(ctx, cancelWorkflowMethod, request)
 		if value == nil {
@@ -220,6 +237,9 @@ func (e *schedulerPropertyEnv) cancelWorkflow(ctx context.Context, request *hist
 }
 
 func (e *schedulerPropertyEnv) terminateWorkflow(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+	e.services.mu.Lock()
+	e.services.terminateCalls++
+	e.services.mu.Unlock()
 	if e.services.Terminate.Matches(ctx, terminateWorkflowMethod, request) {
 		value, err := e.services.Terminate.Invoke(ctx, terminateWorkflowMethod, request)
 		if value == nil {
@@ -324,6 +344,7 @@ func (e *schedulerPropertyEnv) assertScripts(t schedulerPropertyTestingT) {
 }
 
 func TestSchedulerPropertyEnvironmentUsesDeliveryRefs(t *testing.T) {
+	t.Parallel()
 	env := newSchedulerPropertyEnv(t, false)
 	env.drain(t, 20)
 	env.trigger(t)

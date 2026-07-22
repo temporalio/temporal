@@ -120,6 +120,7 @@ func schedulerConflictToken(token []byte) int64 {
 }
 
 func TestSchedulerModelConformanceProperty(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		runner := newSchedulerConformance(t, rapid.Bool().Draw(t, "initially-paused"))
 		triggerID := 0

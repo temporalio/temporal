@@ -10,6 +10,7 @@ import (
 )
 
 func TestTransitionOverlapPolicies(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		policy     enumspb.ScheduleOverlapPolicy
@@ -54,6 +55,7 @@ func TestTransitionOverlapPolicies(t *testing.T) {
 }
 
 func TestTransitionStartFailureClasses(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	config.Interval = time.Hour
 	state := transition(t, config, model.State{}, model.Create{}).State
@@ -79,6 +81,7 @@ func TestTransitionStartFailureClasses(t *testing.T) {
 }
 
 func TestTransitionLimitedActionsDoNotLimitManualTrigger(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	config.LimitedActions = true
 	config.RemainingActions = 2
@@ -94,6 +97,7 @@ func TestTransitionLimitedActionsDoNotLimitManualTrigger(t *testing.T) {
 }
 
 func TestTransitionBackfillIncludesBoundsAfterDeferral(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	state := transition(t, config, model.State{}, model.Create{}).State
 	start := testStart.Add(-3 * time.Minute)
@@ -103,6 +107,7 @@ func TestTransitionBackfillIncludesBoundsAfterDeferral(t *testing.T) {
 }
 
 func TestTransitionUpdate(t *testing.T) {
+	t.Parallel()
 	config := testConfig()
 	state := transition(t, config, model.State{}, model.Create{}).State
 	outcome := transition(t, config, state, model.Update{

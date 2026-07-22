@@ -22,6 +22,7 @@ type schedulerDurableTrace struct {
 }
 
 func TestSchedulerDurableTraceCorpus(t *testing.T) {
+	t.Parallel()
 	paths, err := filepath.Glob("testdata/durable_traces/*.json")
 	require.NoError(t, err)
 	require.NotEmpty(t, paths)
@@ -41,6 +42,7 @@ func TestSchedulerDurableTraceCorpus(t *testing.T) {
 // TestSchedulerDurableTraceRapid uses the same runner as the fixed corpus so
 // generated campaigns and minimized regressions share one trace vocabulary.
 func TestSchedulerDurableTraceRapid(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		t.Repeat(map[string]func(*rapid.T){
 			"durable trace": func(t *rapid.T) {

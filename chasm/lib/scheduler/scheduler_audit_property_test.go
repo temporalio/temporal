@@ -23,6 +23,7 @@ import (
 )
 
 func TestSchedulerInitialPatchPauseStateAudit(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		initiallyPaused bool
@@ -44,6 +45,7 @@ func TestSchedulerInitialPatchPauseStateAudit(t *testing.T) {
 }
 
 func TestSchedulerCapacityDeferredBackfillRetainsStartAudit(t *testing.T) {
+	t.Parallel()
 	modelConfig := model.Config{StartTime: schedulerPropertyStartTime, Interval: defaultInterval, OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL}
 	created, err := model.Transition(modelConfig, model.State{}, model.Create{})
 	require.NoError(t, err)
@@ -80,6 +82,7 @@ func TestSchedulerCapacityDeferredBackfillRetainsStartAudit(t *testing.T) {
 }
 
 func TestSchedulerConcurrentBackfillsMakeProgressAudit(t *testing.T) {
+	t.Parallel()
 	env := newSchedulerPropertyEnv(t, false)
 	env.drain(t, schedulerConformanceDrainLimit)
 	start := schedulerPropertyStartTime.Add(-defaultInterval)
@@ -96,7 +99,26 @@ func TestSchedulerConcurrentBackfillsMakeProgressAudit(t *testing.T) {
 	require.NotEmpty(t, env.services.StartCalls())
 }
 
+func TestSchedulerBackfillRedeliveryReplacesPriorTaskAudit(t *testing.T) {
+	t.Parallel()
+	env := newSchedulerPropertyEnv(t, false)
+	env.drain(t, schedulerConformanceDrainLimit)
+	env.backfill(t, schedulerPropertyStartTime.Add(-20*defaultInterval), schedulerPropertyStartTime, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL)
+	runnable, err := env.engine.RunnableTasks(env.ref)
+	require.NoError(t, err)
+	require.Len(t, runnable, 1)
+	priorTask := runnable[0]
+	_, err = env.engine.ExecuteTask(t.Context(), env.ref, priorTask)
+	require.NoError(t, err)
+
+	env.timeSource.Update(nextSchedulerTaskTime(t, env))
+	redelivery, err := env.engine.ExecuteTask(t.Context(), env.ref, priorTask)
+	require.NoError(t, err)
+	require.Equal(t, 1, redelivery.Executed)
+}
+
 func TestSchedulerGeneratedBackfillModelConformance(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		count := rapid.IntRange(1, 4).Draw(t, "backfill intervals")
 		deferForCapacity := rapid.Bool().Draw(t, "defer for capacity")
@@ -155,6 +177,7 @@ func nextSchedulerTaskTime(t schedulerPropertyTestingT, env *schedulerPropertyEn
 }
 
 func TestSchedulerPauseOnFailureInvalidatesConflictTokenAudit(t *testing.T) {
+	t.Parallel()
 	env := newSchedulerPropertyEnv(t, false)
 	_, err := env.engine.UpdateComponent(env.engineCtx, env.ref, func(ctx chasm.MutableContext, component chasm.Component) error {
 		component.(*scheduler.Scheduler).Schedule.Policies.PauseOnFailure = true

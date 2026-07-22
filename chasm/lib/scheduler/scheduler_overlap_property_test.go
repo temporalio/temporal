@@ -8,6 +8,7 @@ import (
 )
 
 func TestSchedulerOverlapPoliciesProperty(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name             string
 		policy           enumspb.ScheduleOverlapPolicy

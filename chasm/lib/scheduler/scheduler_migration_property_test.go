@@ -13,6 +13,7 @@ import (
 )
 
 func TestSchedulerMigrationFailureReloadAndRetryProperty(t *testing.T) {
+	t.Parallel()
 	env := newSchedulerPropertyEnv(t, false)
 	env.drain(t, schedulerConformanceDrainLimit)
 	schedulerRPCProfiles{}.migrationRetryable().Expect(&env.services.Migrate, migrateWorkflowMethod, "first migration", nil)
@@ -40,6 +41,7 @@ func TestSchedulerMigrationFailureReloadAndRetryProperty(t *testing.T) {
 }
 
 func TestSchedulerCallbackRecoveryUsesGeneratedClientsProperty(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		env := newSchedulerPropertyEnv(t, false)
 		profiles := schedulerRPCProfiles{}
@@ -85,6 +87,7 @@ func TestSchedulerCallbackRecoveryUsesGeneratedClientsProperty(t *testing.T) {
 }
 
 func TestSchedulerMigrationTerminalFailureRestoresScheduleProperty(t *testing.T) {
+	t.Parallel()
 	env := newSchedulerPropertyEnv(t, false)
 	env.drain(t, schedulerConformanceDrainLimit)
 	schedulerRPCProfiles{}.migrationTerminal().Expect(&env.services.Migrate, migrateWorkflowMethod, "terminal migration", nil)

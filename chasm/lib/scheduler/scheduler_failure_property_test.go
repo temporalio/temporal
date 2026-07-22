@@ -13,6 +13,7 @@ import (
 )
 
 func TestSchedulerStartFailureRetryAndRedeliveryProperty(t *testing.T) {
+	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		env := newSchedulerPropertyEnv(t, false)
 		env.drain(t, schedulerConformanceDrainLimit)
