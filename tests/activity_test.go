@@ -502,20 +502,34 @@ func (s *standaloneActivityTestSuite) TestWFASAATimeoutTypeOnRetryDeadline() {
 // the oracle; the StandaloneActivity subtest is red until SAA recomputes (or nulls) the interval in
 // the queued window — CurrentRetryInterval is the sole diverging field (state, attempt, and
 // next-attempt-schedule all agree).
+
 func (s *standaloneActivityTestSuite) TestWFASAAQueuedRetryInterval() {
 	env := s.newTestEnv()
-	// After [poll, fail], attempt 2 backs off the InitialInterval (5s); backoffElapse waits it out, so
-	// attempt 2 is queued (SCHEDULED, not started) when we observe.
 	trace := []model.Event{saaPoll, saaFailRetryably, saaBackoffDelayElapse}
 	const initialInterval, maxInterval = 5 * time.Second, 30 * time.Second
 	want := activityInfoProjection{State: enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, Attempt: 2}
 
 	s.T().Run("WorkflowActivity", func(t *testing.T) {
-		h := &wfaHarness{env: env, ctx: testcontext.For(t), maxAttempts: 3, retryInterval: initialInterval, backoffCoefficient: 2.0, maxRetryInterval: maxInterval}
+		h := &wfaHarness{
+			env:                env,
+			ctx:                testcontext.For(t),
+			maxAttempts:        3,
+			retryInterval:      initialInterval,
+			backoffCoefficient: 2.0,
+			maxRetryInterval:   maxInterval,
+		}
 		require.Equal(t, want, h.driveTrace(t, trace).projection(t))
 	})
 	s.T().Run("StandaloneActivity", func(t *testing.T) {
-		h := &saaHarness{env: env, ctx: testcontext.For(t), idBase: testcore.RandomizeStr(t.Name()), cfg: model.Config{MaxAttempts: 3}, retryInterval: initialInterval, backoffCoefficient: 2.0, maxRetryInterval: maxInterval}
+		h := &saaHarness{
+			env:                env,
+			ctx:                testcontext.For(t),
+			idBase:             testcore.RandomizeStr(t.Name()),
+			cfg:                model.Config{MaxAttempts: 3},
+			retryInterval:      initialInterval,
+			backoffCoefficient: 2.0,
+			maxRetryInterval:   maxInterval,
+		}
 		require.Equal(t, want, h.driveTrace(t, trace).projection(t))
 	})
 }
