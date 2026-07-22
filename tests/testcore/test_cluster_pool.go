@@ -16,7 +16,7 @@ import (
 var testClusterRouter *clusterRouter
 
 func init() {
-	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
+	sharedSize := 1
 	if v := os.Getenv("TEMPORAL_TEST_SHARED_CLUSTERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
@@ -235,9 +235,11 @@ type clusterRequest struct {
 }
 
 // mustBeFresh reports whether the request requires a brand-new cluster that
-// cannot be reused.
+// cannot be reused. needWorkerService deliberately does not force this: shared
+// (and suite-scoped) clusters run the worker service by default, so a test that
+// needs it can reuse the shared cluster instead of requiring a fresh one.
 func (r clusterRequest) mustBeFresh() bool {
-	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
@@ -337,8 +339,11 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 
 func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *FunctionalTestBase {
 	req.kind = clusterKindDedicated
-	if req.mustBeFresh() {
-		// Custom config or fx options require a fresh cluster (can't reuse).
+	if req.mustBeFresh() || req.needWorkerService {
+		// Always create a new cluster in the following cases:
+		// - custom configs are set, since they can't be shared across tests
+		// - worker service is needed, since goroutines (system workers, matching partition managers) don't clean up between
+		//   tests and would accumulate in a long-lived pooled cluster.
 		p.dedicated.reserveSlot(t)
 		cluster := p.createCluster(t, req)
 
@@ -352,7 +357,7 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *Function
 		return cluster
 	}
 
-	// If no custom config is provided, reuse an existing cluster.
+	// If no custom config or worker service is needed, reuse an existing cluster.
 	return p.dedicated.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, req)
 	})
@@ -362,8 +367,11 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// The worker service is off unless the request explicitly needs it.
-	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
+	// Keep the worker service off unless explicitly enabled via WithWorkerService.
+	// Shared (and suite-scoped) clusters always run it, though, so tests that need
+	// it can reuse the shared cluster instead of requiring a dedicated one.
+	needWorkerService := req.needWorkerService || req.kind != clusterKindDedicated
+	opts := []TestClusterOption{withWorkerService(needWorkerService)}
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}

@@ -31,7 +31,7 @@ type (
 )
 
 func TestNamespaceSuite(t *testing.T) {
-	parallelsuite.RunLegacySequential(t, &namespaceTestSuite{}) //nolint:staticcheck // SA1019: namespace deletion tests use dedicated worker-service clusters.
+	parallelsuite.Run(t, &namespaceTestSuite{})
 }
 
 func (s *namespaceTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {

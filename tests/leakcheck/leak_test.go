@@ -154,7 +154,12 @@ func buildRunTeardownCluster(t *testing.T, leakCheck *objectleak.ObjectLeakCheck
 	t.Run("cluster", func(t *testing.T) {
 		env := testcore.NewEnv(t,
 			testcore.WithDedicatedCluster(),
-			testcore.WithWorkerService("leak regression test"))
+			testcore.WithWorkerService("leak checker needs worker service to exercise full server path"),
+		)
+
+		// Doing a no-op global metric capture to satisfy the dedicated cluster guard, otherwise
+		// we'll trigger a cluster misuse fatal.
+		env.StartGlobalMetricCapture()
 
 		env.SdkWorker().RegisterWorkflow(smokeWorkflow)
 		run, err := env.SdkClient().ExecuteWorkflow(

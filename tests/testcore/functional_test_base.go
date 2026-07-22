@@ -607,6 +607,20 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 	return err
 }
 
+// DeleteNamespaceRecord physically removes nsName's row from persistence, bypassing
+// DeleteNamespaceWorkflow/ReclaimResourcesWorkflow entirely - mirroring the same
+// direct-persistence bypass RegisterNamespace already uses for creation. Those workflows exist
+// to safely paginate through and delete potentially large amounts of *production* execution
+// data before removing the namespace record; test namespaces are backed by an ephemeral
+// per-run persistence store and typically own zero or a handful of executions, so that
+// machinery (and its cost of routing every cleanup through the shared cluster's one system
+// worker) isn't needed here.
+func (s *FunctionalTestBase) DeleteNamespaceRecord(nsName namespace.Name) error {
+	return s.testCluster.testBase.MetadataManager.DeleteNamespaceByName(context.Background(), &persistence.DeleteNamespaceByNameRequest{
+		Name: nsName.String(),
+	})
+}
+
 func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
 		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{

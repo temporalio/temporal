@@ -87,13 +87,30 @@ func sendUpdateInternal(
 ) <-chan updateResponseErr {
 	s.T().Helper()
 
-	updateResultCh := make(chan updateResponseErr)
+	// updateResultCh is buffered so the goroutine below never blocks on sending to it,
+	// regardless of whether (or when) the caller reads it.
+	updateResultCh := make(chan updateResponseErr, 1)
+	done := make(chan struct{})
+	// Block this test's cleanup phase until the goroutine below has finished, so its
+	// s.T().Errorf call (if any) always happens while the test is still active. Without this,
+	// a slow UpdateWorkflowExecution call can still be in flight when the test itself returns,
+	// and failing from a goroutine after the test has completed panics the whole process -
+	// this used to be masked by how long namespace deletion took to become fully effective,
+	// but isn't safe to rely on.
+	s.T().Cleanup(func() { //nolint:staticcheck // SA1019: s is a generic testcore.Env here, not a suite, so T() is the only way to get *testing.T.
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			s.T().Logf("sendUpdateInternal: background UpdateWorkflowExecution for update %s did not finish before cleanup timeout", tv.UpdateID()) //nolint:staticcheck // SA1019: same as above.
+		}
+	})
 	go func() {
 		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
 		if requireNoError && updateErr != nil {
 			s.T().Errorf("Update failed: %v", updateErr)
 		}
 		updateResultCh <- updateResponseErr{response: updateResp, err: updateErr}
+		close(done)
 	}()
 	waitUpdateAdmitted(s, tv)
 	return updateResultCh
