@@ -2121,6 +2121,163 @@ func (s *PauseWorkflowExecutionSuite) TestResetWhilePaused() {
 	})
 }
 
+// TestStartDelayPaused_UnpauseBeforeDelayElapses_HonorsRemainingDelay asserts
+// that pausing a workflow before it has ever run a workflow task (i.e. while it
+// is still sitting in its start_delay window) and then unpausing well before
+// that delay elapses does not skip the remaining delay: the first workflow task
+// is not scheduled until the original wall-clock target (StartTime+StartDelay)
+// is reached, mirroring how standalone activities honor start_delay across
+// pause/unpause (see chasm/lib/activity's dispatchTimeRespectingStartDelay).
+func (s *PauseWorkflowExecutionSuite) TestStartDelayPaused_UnpauseBeforeDelayElapses_HonorsRemainingDelay() {
+	env := s.newTestEnv()
+
+	const startDelay = 6 * time.Second
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:         testcore.RandomizeStr("pause-start-delay-wf-" + s.T().Name()),
+		TaskQueue:  env.WorkerTaskQueue(),
+		StartDelay: startDelay,
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	descBeforePause, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	delayTarget := descBeforePause.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(startDelay)
+
+	// Pause immediately, well before the start_delay elapses. The workflow has
+	// not run a workflow task yet, so this must succeed even though the
+	// underlying run is still in the CREATED run-state.
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	s.Greater(time.Until(delayTarget), 2*time.Second, "test setup too slow relative to startDelay; increase startDelay")
+
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Sleep until shortly before the original wall-clock target. The remaining
+	// start_delay must still be honored even though the workflow is unpaused:
+	// no workflow task should be scheduled yet.
+	remaining := time.Until(delayTarget)
+	s.NoError(util.InterruptibleSleep(s.Context(), remaining-time.Second))
+
+	descBeforeTarget, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Empty(descBeforeTarget.PendingActivities, "activity must not be scheduled before the honored start_delay target")
+	// History must contain exactly start/pause/unpause: no workflow task (or
+	// anything else) has been scheduled yet.
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowExecutionPaused
+  3 WorkflowExecutionUnpaused`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	}))
+
+	// Once the original target passes, the first workflow task fires normally.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.NotEmpty(desc.PendingActivities, "activity should be scheduled once the honored start_delay elapses")
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Let the workflow complete.
+	env.SendToChannel(env.activityCompletedCh)
+	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// TestStartDelayPaused_UnpauseAfterDelayElapses_DispatchesImmediately asserts
+// that if a paused, not-yet-started workflow's start_delay window fully elapses
+// while it is still paused, unpausing dispatches the first workflow task
+// immediately rather than replaying the (already-expired) delay. This mirrors
+// standalone activity behavior in the same situation.
+func (s *PauseWorkflowExecutionSuite) TestStartDelayPaused_UnpauseAfterDelayElapses_DispatchesImmediately() {
+	env := s.newTestEnv()
+
+	const startDelay = 3 * time.Second
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:         testcore.RandomizeStr("pause-start-delay-elapsed-wf-" + s.T().Name()),
+		TaskQueue:  env.WorkerTaskQueue(),
+		StartDelay: startDelay,
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowFn)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Stay paused past the original start_delay window.
+	s.NoError(util.InterruptibleSleep(s.Context(), startDelay+time.Second))
+
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(s.Context(), &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// The delay expired while paused,  the first workflow task dispatches immediately
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.NotEmpty(desc.PendingActivities, "activity should be scheduled immediately since start_delay already elapsed while paused")
+	}, 3*time.Second, 100*time.Millisecond)
+
+	env.SendToChannel(env.activityCompletedCh)
+	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 // TestActivityRetryDeferredWhilePaused validates that pausing a workflow while
 // one of its activities is retrying defers the activity's retries: the pending
 // activity's attempt count stops increasing for the duration of the pause and

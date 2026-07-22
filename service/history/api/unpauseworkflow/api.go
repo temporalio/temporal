@@ -71,9 +71,23 @@ func Invoke(
 				return nil, err
 			}
 
+			// If the workflow is still in start_delay/cron/retry backoff, the original
+			// WorkflowBackoffTimerTask is untouched by pause and will fire on its own once the
+			// workflow is running again. Forcing a workflow task now would skip
+			// the remaining delay, so only force one immediately if that target
+			// has already elapsed (in which case the backoff timer already fired,
+			// found the workflow paused, and did nothing).
+			createWorkflowTask := true
+			if !mutableState.HadOrHasWorkflowTask() {
+				executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
+				if shard.GetTimeSource().Now().Before(executionTime) {
+					createWorkflowTask = false
+				}
+			}
+
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
-				CreateWorkflowTask: true, // Create workflow task when unpausing
+				CreateWorkflowTask: createWorkflowTask,
 			}, nil
 		},
 		nil,
