@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 const maxFailures = 5
@@ -118,6 +120,92 @@ func FormatMessageForDebug(report *FailureReport) string {
 	fmt.Fprintf(&sb, "Failed jobs (%d/%d): %s\n", len(report.FailedJobs), report.TotalJobs, strings.Join(failedJobNames, ", "))
 	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()
+}
+
+// maxDataRaceDetail caps the race detector output included per race so a single
+// alert cannot blow past Slack's 3000-char-per-text-block limit.
+const maxDataRaceDetail = 2500
+
+// BuildDataRaceMessage creates a Slack message announcing data races on main.
+func BuildDataRaceMessage(report *DataRaceReport) *SlackMessage {
+	commitURL := github.CommitURL(temporalRepository, report.Run.HeadSHA)
+
+	headerBlock := SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: ":rotating_light: *Data Race Detected on Main Branch* :rotating_light:",
+		},
+	}
+
+	contextBlock := SlackBlock{
+		Type: "section",
+		Fields: []SlackText{
+			{Type: "mrkdwn", Text: fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Run.ShortSHA())},
+			{Type: "mrkdwn", Text: fmt.Sprintf("*Author:*\n%s", orUnknown(report.Author))},
+		},
+	}
+
+	blocks := []SlackBlock{headerBlock, contextBlock}
+	if report.Title != "" {
+		blocks = append(blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{Type: "mrkdwn", Text: fmt.Sprintf("*Commit message:*\n%s", report.Title)},
+		})
+	}
+
+	for _, race := range report.DataRaces {
+		var sb strings.Builder
+		if race.Location != "" {
+			fmt.Fprintf(&sb, "*%s*\n", race.Location)
+		}
+		if race.Details != "" {
+			fmt.Fprintf(&sb, "```%s```", truncate(race.Details, maxDataRaceDetail))
+		}
+		blocks = append(blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{Type: "mrkdwn", Text: sb.String()},
+		})
+	}
+
+	blocks = append(blocks, SlackBlock{
+		Type: "section",
+		Text: &SlackText{Type: "mrkdwn", Text: fmt.Sprintf("<%s|View Run>", report.Run.URL)},
+	})
+
+	return &SlackMessage{
+		Text:   fmt.Sprintf("Data Race Detected on Main (%d)", len(report.DataRaces)),
+		Blocks: blocks,
+	}
+}
+
+// FormatDataRaceForDebug formats the data race report for console output.
+func FormatDataRaceForDebug(report *DataRaceReport) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "🏁 Data Race Detected on Main Branch (%d) 🏁\n\n", len(report.DataRaces))
+	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Run.ShortSHA(), orUnknown(report.Author))
+	if report.Title != "" {
+		fmt.Fprintf(&sb, "Commit message: %s\n", report.Title)
+	}
+	for i, race := range report.DataRaces {
+		fmt.Fprintf(&sb, "\n[%d] %s\n%s\n", i+1, race.Location, truncate(race.Details, maxDataRaceDetail))
+	}
+	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
+	return sb.String()
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "Unknown"
+	}
+	return s
+}
+
+func truncate(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	return s[:limit] + "\n… (truncated — see full output in job logs)"
 }
 
 // SendSlackMessage sends the message to Slack webhook

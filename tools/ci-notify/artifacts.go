@@ -19,6 +19,7 @@ const (
 	summaryArtifactPrefix = "test-summary-json--"
 	summaryFileSuffix     = "test-summary.json"
 	summaryKindOOM        = "OOM"
+	summaryKindDataRace   = "DATA RACE"
 )
 
 var trailingFailureSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
@@ -28,27 +29,31 @@ type testSummary struct {
 }
 
 type summaryRow struct {
-	Kind  string `json:"kind"`
-	Name  string `json:"name"`
-	Final bool   `json:"final"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Details string `json:"details"`
+	Final   bool   `json:"final"`
 }
 
-func getFailures(ctx context.Context, runID int64) ([]string, error) {
+// forEachSummaryZip downloads every test-summary artifact for the run and
+// invokes fn with the local path of each downloaded zip. Artifacts that fail to
+// download are skipped. All downloads share a single temp dir that is removed
+// when the function returns.
+func forEachSummaryZip(ctx context.Context, runID int64, fn func(zipPath string)) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	artifacts, err := github.ListRunArtifacts(ctx, temporalRepository, runID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	tempDir, err := os.MkdirTemp("", "ci-notify-artifacts-*")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	var failures []string
 	for _, artifact := range artifacts {
 		if artifact.Expired || !strings.HasPrefix(artifact.Name, summaryArtifactPrefix) {
 			continue
@@ -58,40 +63,58 @@ func getFailures(ctx context.Context, runID int64) ([]string, error) {
 		if err != nil {
 			continue
 		}
-
-		artifactFailures, err := failuresFromZip(zipPath)
-		if err != nil {
-			continue
-		}
-		failures = append(failures, artifactFailures...)
+		fn(zipPath)
 	}
 
+	return nil
+}
+
+func getFailures(ctx context.Context, runID int64) ([]string, error) {
+	var failures []string
+	err := forEachSummaryZip(ctx, runID, func(zipPath string) {
+		artifactFailures, err := failuresFromZip(zipPath)
+		if err != nil {
+			return
+		}
+		failures = append(failures, artifactFailures...)
+	})
+	if err != nil {
+		return nil, err
+	}
 	return uniqueSorted(failures), nil
 }
 
 func failuresFromZip(zipPath string) ([]string, error) {
+	rows, err := summaryRowsFromZip(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	return reportableFailures(rows), nil
+}
+
+func summaryRowsFromZip(zipPath string) ([]summaryRow, error) {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open artifact zip %s: %w", zipPath, err)
 	}
 	defer func() { _ = reader.Close() }()
 
-	var failures []string
+	var rows []summaryRow
 	for _, file := range reader.File {
 		if file.FileInfo().IsDir() || !strings.HasSuffix(file.Name, summaryFileSuffix) {
 			continue
 		}
 
-		fileFailures, err := failuresFromZipFile(file)
+		fileRows, err := summaryRowsFromZipFile(file)
 		if err != nil {
 			continue
 		}
-		failures = append(failures, fileFailures...)
+		rows = append(rows, fileRows...)
 	}
-	return failures, nil
+	return rows, nil
 }
 
-func failuresFromZipFile(file *zip.File) ([]string, error) {
+func summaryRowsFromZipFile(file *zip.File) ([]summaryRow, error) {
 	rc, err := file.Open()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s in artifact zip: %w", file.Name, err)
@@ -102,7 +125,7 @@ func failuresFromZipFile(file *zip.File) ([]string, error) {
 	if err := json.NewDecoder(rc).Decode(&summary); err != nil {
 		return nil, fmt.Errorf("failed to parse %s in artifact zip: %w", file.Name, err)
 	}
-	return reportableFailures(summary.Rows), nil
+	return summary.Rows, nil
 }
 
 func reportableFailures(rows []summaryRow) []string {
