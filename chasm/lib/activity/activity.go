@@ -1909,7 +1909,12 @@ func (a *Activity) validateActivityTaskToken(
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
 		return serviceerror.NewNotFound("activity task not found")
 	}
-	if token.GetActivityAttemptStamp() != 0 && token.GetActivityAttemptStamp() != a.LastAttempt.Get(ctx).GetStartedStamp() {
+	tokenStamp := token.GetActivityAttemptStamp()
+	startedStamp := a.LastAttempt.Get(ctx).GetStartedStamp()
+	// Matching versions without stamped tokens leave tokenStamp zero;
+	// History versions without StartedStamp persistence leave startedStamp zero.
+	requiresLegacyStampCompatibility := tokenStamp == 0 || startedStamp == 0
+	if !requiresLegacyStampCompatibility && tokenStamp != startedStamp {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 
