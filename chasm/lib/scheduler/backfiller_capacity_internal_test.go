@@ -21,8 +21,8 @@ import (
 //     Generator (which produces the schedule's automatic actions), taken once so
 //     backfillers cannot starve regular scheduling.
 //   - backfillerCount:     number of concurrently active backfillers; the
-//     remaining capacity is split evenly across them (clamped to >= 1 so an empty
-//     set of backfillers does not divide by zero).
+//     remaining capacity is split evenly across them (clamped to >= 1 when calculating
+//     the allowed backfill capacity).
 //
 // Formula:
 //
