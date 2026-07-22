@@ -1543,9 +1543,7 @@ type RequestIDInfo struct {
 	EventType v11.EventType          `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=temporal.api.enums.v1.EventType" json:"event_type,omitempty"`
 	EventId   int64                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
-	// A non-nil value marks the entry as CHASM-attached (and thus sweepable) and is the oldest-first
-	// ordering key for lazy eviction. Event-backed and create request IDs leave this nil and are
-	// never swept.
+	// Used as an ordering key for lazy eviction when set.
 	AttachTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=attach_time,json=attachTime,proto3" json:"attach_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
