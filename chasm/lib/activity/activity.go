@@ -383,9 +383,13 @@ func (a *Activity) nextAttemptDispatchTime(ctx chasm.Context, attempt *activityp
 }
 
 // currentRetryInterval is the retry interval if the activity is currently waiting for a retry; nil otherwise.
-func (a *Activity) currentRetryInterval(attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
+func (a *Activity) currentRetryInterval(ctx chasm.Context, attempt *activitypb.ActivityAttemptState) *durationpb.Duration {
 	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		return attempt.GetCurrentRetryInterval()
+		if t := a.dispatchTimeForAttempt(attempt); t != nil {
+			if t.AsTime().After(ctx.Now(a)) {
+				return attempt.GetCurrentRetryInterval()
+			}
+		}
 	}
 	return nil
 }
@@ -1708,7 +1712,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		Attempt:                 attempt.GetCount(),
 		CanceledReason:          a.CancelState.GetReason(),
 		CloseTime:               closeTime,
-		CurrentRetryInterval:    a.currentRetryInterval(attempt),
+		CurrentRetryInterval:    a.currentRetryInterval(ctx, attempt),
 		ExecutionDuration:       executionDuration,
 		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:          expirationTime,
