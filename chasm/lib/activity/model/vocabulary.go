@@ -1,22 +1,13 @@
-// Package model is a test-only behavioral model of the CHASM activity archetype: an abstract,
-// implementation-independent description of how an activity should behave, against which a driver
-// checks a real activity. It is not runtime code and must never be imported by the server binary.
+// Package model is an implementation-independent model of how a CHASM activity should behave.
 //
-// This file defines the model's vocabulary: the event alphabet (Event/EventKind), the start-time
-// Config, and the observable-state projection (AbstractState, plus Observed as read back via
-// ReadComponent, mapped onto AbstractState by Abstract).
-//
-// The model is archetype-level, not tied to one product surface: the current driver realizes each
-// event via frontend RPCs, but a mid-level driver, or a workflow-activity driver, could realize the
-// same events differently and be checked against this one shared model.
+// Drivers can be written that realize these events for Standalone Activity or for Workflow
+// Activity.
 package model
 
 import (
 	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 )
 
-// Status mirrors activitypb.ActivityExecutionStatus but is defined locally so the model reads
-// independently of the proto. Abstract maps the observed enum onto it.
 type Status int
 
 const (
@@ -65,7 +56,7 @@ func (s Status) String() string {
 	}
 }
 
-// Terminal reports whether the activity has reached an absorbing state.
+// Terminal reports whether the activity has reached a terminal state.
 func (s Status) Terminal() bool {
 	switch s {
 	case Completed, Failed, Canceled, Terminated, TimedOut:
@@ -76,16 +67,13 @@ func (s Status) Terminal() bool {
 }
 
 // Dispatchability says whether a SCHEDULED attempt's next dispatch is available now, or still delayed
-// by a start_delay or retry backoff. Not readable via ReadComponent (dispatch_time looks identical
-// before and after it elapses), so it is excluded from SameObserved and verified by polling. Its zero
-// value Dispatchable is also the value for any non-SCHEDULED status. Distinct from a "deferred"
-// pause/reset (an operator command applied when the attempt ends; see ResetKeepPaused).
+// by a start_delay or retry backoff.
 type Dispatchability int
 
 const (
-	Dispatchable      Dispatchability = iota // pollable now: a worker poll returns a task
-	StartDelayPending                        // first dispatch delayed until schedule_time + start_delay
-	BackoffPending                           // retry dispatch delayed until complete_time + retry interval
+	Dispatchable Dispatchability = iota // pollable now
+	StartDelayPending
+	BackoffPending
 )
 
 func (d Dispatchability) String() string {
@@ -101,24 +89,18 @@ func (d Dispatchability) String() string {
 	}
 }
 
-// AbstractState is the exact projection of observable internal state the model predicts. Every field
-// is replay-deterministic and readable via ReadComponent, so the oracle is exact equality. Keep every
-// field a scalar so that `n := s` is an independent copy.
+// AbstractState is the projection of observable internal state that the model predicts.
 type AbstractState struct {
 	Status              Status
 	AttemptCount        int32
 	FirstAttemptStarted bool
+	Dispatchability     Dispatchability
+	DispatchTimeSet     bool
+
+	// Flags supporting deferred reset/update
 	ResetKeepPaused     bool
 	ResetHeartbeats     bool
 	ResetRestoreOptions bool
-	FirstAttemptStarted bool
-	// DispatchTimeSet is whether a dispatch time is recorded (attempt.dispatch_time != nil): the
-	// existence of a dispatch, observable via ReadComponent. Distinct from Dispatchability, its readiness.
-	DispatchTimeSet bool
-
-	// Dispatchability is latent (poll-observable, not ReadComponent-observable), excluded from
-	// SameObserved and verified by polling.
-	Dispatchability Dispatchability
 }
 
 // SameObserved reports whether two states agree on every ReadComponent-readable field that is live in
