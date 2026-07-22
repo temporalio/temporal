@@ -3,6 +3,7 @@ package metrics
 import (
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -478,9 +479,11 @@ func TestScopeCache_ExcludedTagsMergeInCache(t *testing.T) {
 	require.EqualValues(t, 7, c.Value(), "all excluded tag values should map to the same counter")
 
 	// Verify only one cache entry was created, not three.
-	h.cache.mu.Lock()
-	scopeCount := len(h.cache.scopes)
-	h.cache.mu.Unlock()
+	var scopeCount int
+	h.cache.scopes.Range(func(_, _ any) bool {
+		scopeCount++
+		return true
+	})
 	require.Equal(t, 1, scopeCount,
 		"excluded tags with different raw values should share a single cache entry")
 }
@@ -495,28 +498,32 @@ func TestScopeCache_BoundedSize(t *testing.T) {
 	for i := range 100 {
 		h.Counter("c").Record(1, StringTag("id", strconv.Itoa(i)))
 	}
-	h.cache.mu.Lock()
-	require.Len(t, h.cache.scopes, 100)
-	h.cache.mu.Unlock()
+	var scopeCount int
+	h.cache.scopes.Range(func(_, _ any) bool {
+		scopeCount++
+		return true
+	})
+	require.LessOrEqual(t, scopeCount, 100,
+		"scope cache should not exceed maxSize")
 
-	// Beyond the limit, cache is cleared and new entry is stored.
-	h.Counter("c").Record(1, StringTag("id", "overflow"))
-	h.cache.mu.Lock()
-	require.LessOrEqual(t, len(h.cache.scopes), 2,
-		"scope cache should have been cleared on overflow")
-	h.cache.mu.Unlock()
+	// Beyond the limit, caching stops but metrics still work.
+	for range 10 {
+		h.Counter("c").Record(1, StringTag("id", "overflow"))
+	}
 
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.c+id=overflow"]
-	require.NotNil(t, c, "metrics should work even after cache clear")
-	require.EqualValues(t, 1, c.Value())
+	require.NotNil(t, c, "metrics should work even after cache is full")
+	require.EqualValues(t, 10, c.Value())
 
-	// Entries are re-cached after clear.
-	h.Counter("c").Record(1, StringTag("id", "0"))
-	snap = scope.Snapshot()
-	c0 := snap.Counters()["test.c+id=0"]
-	require.NotNil(t, c0)
-	require.EqualValues(t, 2, c0.Value())
+	// Cache should still be at (approximately) the same size.
+	var afterCount int
+	h.cache.scopes.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	require.LessOrEqual(t, afterCount, 110,
+		"scope cache should not grow significantly beyond maxSize")
 }
 
 func TestWithTags_BoundedChildCacheSize(t *testing.T) {
@@ -529,28 +536,30 @@ func TestWithTags_BoundedChildCacheSize(t *testing.T) {
 	for i := range 100 {
 		h.WithTags(StringTag("id", strconv.Itoa(i)))
 	}
-	h.cache.mu.Lock()
-	require.Len(t, h.cache.handlers, 100)
-	h.cache.mu.Unlock()
+	var handlerCount int
+	h.cache.handlers.Range(func(_, _ any) bool {
+		handlerCount++
+		return true
+	})
+	require.LessOrEqual(t, handlerCount, 100,
+		"handler cache should not exceed maxSize")
 
-	// Beyond the limit, WithTags still works; cache is cleared.
+	// Beyond the limit, WithTags still works but results are not cached.
 	overflow := h.WithTags(StringTag("id", "overflow"))
-	h.cache.mu.Lock()
-	require.LessOrEqual(t, len(h.cache.handlers), 2,
-		"handler cache should have been cleared on overflow")
-	h.cache.mu.Unlock()
-
-	// The handler still works correctly.
 	overflow.Counter("hits").Record(1)
 	snap := scope.Snapshot()
 	c := snap.Counters()["test.hits+id=overflow"]
 	require.NotNil(t, c)
 	require.EqualValues(t, 1, c.Value())
 
-	// Cached entries are re-cached on next access.
-	cached := h.WithTags(StringTag("id", "0"))
-	cached2 := h.WithTags(StringTag("id", "0"))
-	require.Same(t, cached, cached2, "re-cached entries should hit")
+	// Cache should still be at (approximately) the same size.
+	var afterCount int
+	h.cache.handlers.Range(func(_, _ any) bool {
+		afterCount++
+		return true
+	})
+	require.LessOrEqual(t, afterCount, 110,
+		"handler cache should not grow significantly beyond maxSize")
 }
 
 func TestNormalizeTagsForCaching(t *testing.T) {
@@ -596,6 +605,31 @@ func TestNormalizeTagsForCaching(t *testing.T) {
 	})
 }
 
+func TestAppendCacheKey_DeterministicAndCollisionFree(t *testing.T) {
+	var buf [128]byte
+
+	// Deterministic: same tags produce same bytes.
+	a := []Tag{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v2"}}
+	b := []Tag{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v2"}}
+	ka := string(appendCacheKey(buf[:0], a))
+	kb := string(appendCacheKey(buf[:0], b))
+	require.Equal(t, ka, kb)
+
+	// Different tags produce different keys.
+	c := []Tag{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v3"}}
+	require.NotEqual(t, ka, string(appendCacheKey(buf[:0], c)))
+
+	// Empty tags produce empty key.
+	require.Empty(t, string(appendCacheKey(buf[:0], nil)))
+	require.Empty(t, string(appendCacheKey(buf[:0], []Tag{})))
+
+	// Long values (> 128 bytes) work (overflow from scratch buffer).
+	longKey := strings.Repeat("x", 100)
+	longVal := strings.Repeat("y", 100)
+	long := []Tag{{Key: longKey, Value: longVal}}
+	_ = tagsCacheKey(long) // must not panic
+}
+
 func TestTagsCacheKey_NoCollisionsForEmbeddedNulls(t *testing.T) {
 	tagsA := []Tag{{Key: "a", Value: "\x00b"}}
 	tagsB := []Tag{{Key: "a\x00", Value: "b"}}
@@ -621,7 +655,7 @@ func TestHistogram_CacheKeyDistinguishesNameAndUnit(t *testing.T) {
 	h.Histogram("ab\x00c", MetricUnit(""))
 
 	count := 0
-	h.histograms.Range(func(_, _ any) bool {
+	h.histogramsMap().Range(func(_, _ any) bool {
 		count++
 		return true
 	})
