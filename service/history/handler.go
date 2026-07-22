@@ -495,7 +495,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	return resp, nil
 }
 
-// RespondActivityTaskCanceled - records failure of an activity task
+// RespondActivityTaskCanceled - records cancellation of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
 	if err != nil {

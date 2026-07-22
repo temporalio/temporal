@@ -93,6 +93,8 @@ const (
 
 	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
 	FailureReasonActivityTimeout = "activity %v timeout"
+	// FailureReasonActivityRetryScheduleToCloseTimeout is failureReason for when an activity retry cannot be scheduled before its schedule-to-close timeout.
+	FailureReasonActivityRetryScheduleToCloseTimeout = "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
