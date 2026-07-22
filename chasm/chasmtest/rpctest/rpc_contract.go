@@ -1,6 +1,6 @@
-// Package rpctest provides a small, concurrency-safe RPC scenario script.
-// It deliberately does not impose a global call order: each invocation must
-// match exactly one outstanding expectation.
+// Package rpctest provides concurrency-safe RPC interaction contracts.
+// An RPC contract deliberately does not impose a global call order: each invocation
+// must match exactly one outstanding expectation.
 package rpctest
 
 import (
@@ -15,8 +15,8 @@ type Matcher func(request any) bool
 // ContextMatcher decides whether an expectation accepts an RPC context and request.
 type ContextMatcher func(context.Context, any) bool
 
-// Responder supplies the scripted RPC outcome. It is always called after the
-// script mutex has been released.
+// Responder supplies the contracted RPC outcome. It is always called after the
+// contract mutex has been released.
 type Responder func(context.Context, any) (any, error)
 
 // Call is one observed invocation, ordered by invocation sequence rather than
@@ -27,8 +27,8 @@ type Call struct {
 	Request  any
 }
 
-// Script matches calls to outstanding expectations and records invocations.
-type Script struct {
+// RPCContract matches calls to outstanding expectations and records invocations.
+type RPCContract struct {
 	mu           sync.Mutex
 	expectations []*expectation
 	calls        []Call
@@ -44,14 +44,14 @@ type expectation struct {
 }
 
 // Expect adds an expectation whose matcher does not inspect the RPC context.
-func (s *Script) Expect(method, describe string, match Matcher, respond func(any) (any, error)) {
+func (c *RPCContract) Expect(method, describe string, match Matcher, respond func(any) (any, error)) {
 	if match == nil {
 		match = func(any) bool { return true }
 	}
 	if respond == nil {
 		respond = func(any) (any, error) { return nil, nil }
 	}
-	s.ExpectContext(method, describe, func(_ context.Context, request any) bool {
+	c.ExpectContext(method, describe, func(_ context.Context, request any) bool {
 		return match(request)
 	}, func(_ context.Context, request any) (any, error) {
 		return respond(request)
@@ -59,16 +59,16 @@ func (s *Script) Expect(method, describe string, match Matcher, respond func(any
 }
 
 // ExpectContext adds an expectation that may inspect the RPC context.
-func (s *Script) ExpectContext(method, describe string, match ContextMatcher, respond Responder) {
+func (c *RPCContract) ExpectContext(method, describe string, match ContextMatcher, respond Responder) {
 	if match == nil {
 		match = func(context.Context, any) bool { return true }
 	}
 	if respond == nil {
 		respond = func(context.Context, any) (any, error) { return nil, nil }
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.expectations = append(s.expectations, &expectation{
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.expectations = append(c.expectations, &expectation{
 		method:   method,
 		describe: describe,
 		match:    match,
@@ -77,45 +77,60 @@ func (s *Script) ExpectContext(method, describe string, match ContextMatcher, re
 }
 
 // Invoke records and matches one RPC call. Unmatched and ambiguous calls are
-// returned as errors with the complete outstanding-script diagnostic.
-func (s *Script) Invoke(ctx context.Context, method string, request any) (any, error) {
-	s.mu.Lock()
-	s.nextSequence++
-	call := Call{Sequence: s.nextSequence, Method: method, Request: request}
-	s.calls = append(s.calls, call)
+// returned as errors with the complete outstanding-contract diagnostic.
+func (c *RPCContract) Invoke(ctx context.Context, method string, request any) (any, error) {
+	c.mu.Lock()
+	c.nextSequence++
+	call := Call{Sequence: c.nextSequence, Method: method, Request: request}
+	c.calls = append(c.calls, call)
 
 	var matches []*expectation
-	for _, expectation := range s.expectations {
+	for _, expectation := range c.expectations {
 		if !expectation.consumed && expectation.method == method && expectation.match(ctx, request) {
 			matches = append(matches, expectation)
 		}
 	}
 	if len(matches) != 1 {
-		diagnostic := s.diagnosticLocked(method, len(matches))
-		s.mu.Unlock()
+		diagnostic := c.diagnosticLocked(method, len(matches))
+		c.mu.Unlock()
 		return nil, fmt.Errorf("rpctest: %s", diagnostic)
 	}
 	selected := matches[0]
 	selected.consumed = true
 	responder := selected.respond
-	s.mu.Unlock()
+	c.mu.Unlock()
 
 	return responder(ctx, request)
 }
 
 // Calls returns a snapshot of calls in invocation order.
-func (s *Script) Calls() []Call {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]Call(nil), s.calls...)
+func (c *RPCContract) Calls() []Call {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]Call(nil), c.calls...)
 }
 
-// AssertExhausted reports every expectation that was not invoked.
-func (s *Script) AssertExhausted() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// Pending returns the number of expectations that have not been consumed.
+// Test harnesses can use this to choose an explicitly configured profile over
+// their own deterministic fixture default.
+func (c *RPCContract) Pending() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	remaining := 0
+	for _, expectation := range c.expectations {
+		if !expectation.consumed {
+			remaining++
+		}
+	}
+	return remaining
+}
+
+// AssertSatisfied reports every expectation that was not invoked.
+func (c *RPCContract) AssertSatisfied() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var remaining []string
-	for _, expectation := range s.expectations {
+	for _, expectation := range c.expectations {
 		if !expectation.consumed {
 			remaining = append(remaining, expectation.description())
 		}
@@ -126,9 +141,9 @@ func (s *Script) AssertExhausted() error {
 	return fmt.Errorf("rpctest: %d unmatched expectation(s): %v", len(remaining), remaining)
 }
 
-func (s *Script) diagnosticLocked(method string, matches int) string {
+func (c *RPCContract) diagnosticLocked(method string, matches int) string {
 	var outstanding []string
-	for _, expectation := range s.expectations {
+	for _, expectation := range c.expectations {
 		if !expectation.consumed {
 			outstanding = append(outstanding, expectation.description())
 		}
@@ -156,7 +171,7 @@ func MatchType[T any](predicate func(T) bool) Matcher {
 }
 
 // RespondType builds a typed responder without exposing type assertions at
-// each scenario call site. A wrong request type is a test-script invariant.
+// each contract call site. A wrong request type is a test-contract invariant.
 func RespondType[Request, Response any](responder func(context.Context, Request) (Response, error)) Responder {
 	return func(ctx context.Context, request any) (any, error) {
 		typed, ok := request.(Request)

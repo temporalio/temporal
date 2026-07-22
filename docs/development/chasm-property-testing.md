@@ -112,7 +112,7 @@ Where production behavior is pure and reusable, extract it to a production-owned
 - Keep Rapid-specific execution orchestration scheduler-local until a second CHASM library needs the same API; retain only generic operations with two demonstrated consumers or an essential generic contract.
 - Remove public operation-history access and arbitrary retained-delivery limits unless they materially improve minimized failures.
 - Replace the unrestricted `WithNodeBackendDecorator` escape hatch with the narrowest explicit backend capability needed by consumers, or document why a generic backend factory is necessary.
-- Simplify `rpctest.Script` to the concurrency and recording semantics exercised by real consumers. Do not retain in-flight ordering machinery solely for hypothetical concurrency.
+- Simplify `rpctest.RPCContract` to the concurrency and recording semantics exercised by real consumers. Do not retain in-flight ordering machinery solely for hypothetical concurrency.
 - Remove trivial scheduler helpers where direct standard-library or local expressions are clearer. Preserve scheduler API helpers that form the test vocabulary, such as describe, update, trigger, backfill, completion, and migration.
 - Keep the scheduler model limited to observable semantics. It must not mirror CHASM component layout, task payloads, or internal helper algorithms.
 
@@ -434,7 +434,7 @@ At ten times the default generated load, CPU and memory scale primarily with com
 2. Implement transactional cloning, transition commit/abort behavior, and physical pure-task deletion.
 3. Implement deterministic task inspection, execution, redelivery, draining, and reload.
 4. Add the synthetic CHASM library and task-driver contract tests.
-5. Add minimal typed `rpctest.Script` support and bind it to a generated unary client mock in its contract tests.
+5. Add minimal typed `rpctest.RPCContract` support and bind it to a generated unary client mock in its contract tests.
 6. Keep Rapid orchestration consumer-local; extract only an unchanged capability demonstrated by a second consumer.
 7. Run focused tests with `-tags test_dep`, then formatting and `make lint-code`.
 
@@ -544,30 +544,15 @@ The environment owns its small Rapid-facing delivery, retained-redelivery, time-
 
 ### External-service doubles
 
-Scheduler uses the generated frontend and history client mocks. Scheduler-owned setup connects the relevant methods to Phase 1 typed scripts:
+Scheduler uses the generated frontend and history client mocks. Scheduler-owned setup connects the relevant methods to matcher-based RPC contracts:
 
 ```go
-type schedulerServiceScripts struct {
-	Start rpctest.Script[
-		*workflowservice.StartWorkflowExecutionRequest,
-		*workflowservice.StartWorkflowExecutionResponse,
-	]
-	Describe rpctest.Script[
-		*historyservice.DescribeWorkflowExecutionRequest,
-		*historyservice.DescribeWorkflowExecutionResponse,
-	]
-	Cancel rpctest.Script[
-		*historyservice.RequestCancelWorkflowExecutionRequest,
-		*historyservice.RequestCancelWorkflowExecutionResponse,
-	]
-	Terminate rpctest.Script[
-		*historyservice.TerminateWorkflowExecutionRequest,
-		*historyservice.TerminateWorkflowExecutionResponse,
-	]
-	Migrate rpctest.Script[
-		*historyservice.StartWorkflowExecutionRequest,
-		*historyservice.StartWorkflowExecutionResponse,
-	]
+type schedulerServiceContracts struct {
+	Start     rpctest.RPCContract
+	Describe  rpctest.RPCContract
+	Cancel    rpctest.RPCContract
+	Terminate rpctest.RPCContract
+	Migrate   rpctest.RPCContract
 }
 ```
 
@@ -1160,7 +1145,7 @@ For an in-memory SAA consumer, the real dispatch task handler would call a gener
 
 This would validate request construction, dispatch retry, stale or duplicate delivery, attempt-stamp invalidation, and reload around dispatch. It would not claim to validate matching partitioning, persistence, forwarding, synchronous matching, or long-poll behavior; those require the onebox layer.
 
-No activity model, activity driver, matching queue, or SAA property is delivered in Phase 1 or Phase 2. Framework work for completeness is limited to generic contract tests such as binding `rpctest.Script` to a generated unary client mock. Any SAA-specific implementation is deferred to its own phase.
+No activity model, activity driver, matching queue, or SAA property is delivered in Phase 1 or Phase 2. Framework work for completeness is limited to generic contract tests such as binding `rpctest.RPCContract` to a generated unary client mock. Any SAA-specific implementation is deferred to its own phase.
 
 ### Acceptance criteria
 

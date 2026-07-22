@@ -508,15 +508,20 @@ build-tests:
 CHASM_SCHEDULER_PROPERTY_CHECKS ?= 250
 CHASM_SCHEDULER_PROPERTY_STEPS ?= 100
 
-.PHONY: chasm-scheduler-durable-property-test
-chasm-scheduler-durable-property-test:
-	@printf $(COLOR) "Run CHASM scheduler durable trace corpus and property campaign..."
+.PHONY: chasm-scheduler-property-test chasm-scheduler-durable-property-test
+chasm-scheduler-property-test:
+	@printf $(COLOR) "Run CHASM scheduler model, durable trace, and property campaigns..."
+	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler/model \
+		-count=1 -rapid.checks=$(CHASM_SCHEDULER_PROPERTY_CHECKS) \
+		-rapid.steps=$(CHASM_SCHEDULER_PROPERTY_STEPS)
 	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
 		-count=1 -run '^TestSchedulerDurableTraceCorpus$$' -rapid.checks=1
 	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
-		-count=1 -run '^TestSchedulerDurableTraceRapid$$' \
+		-count=1 -run '^(TestScheduler.*Property.*|TestSchedulerRPCProfilesUseExplicitScriptExpectations|TestSchedulerDurableTraceRapid)$$' \
 		-rapid.checks=$(CHASM_SCHEDULER_PROPERTY_CHECKS) \
 		-rapid.steps=$(CHASM_SCHEDULER_PROPERTY_STEPS)
+
+chasm-scheduler-durable-property-test: chasm-scheduler-property-test
 
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
