@@ -316,6 +316,66 @@ func TestExecuteTask_AlreadyStarted(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_ReconcilesAlreadyStartedWithMatchingRequestID(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        false,
+			RequestId:     "req",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		},
+	}
+
+	// The first request committed, but its response was lost. Retrying with the
+	// same request ID returns the run that must be tracked as the one start.
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("workflow already started", "req", "run"))
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:    bufferedStarts,
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, "run", invoker.BufferedStarts[0].GetRunId())
+		},
+	})
+}
+
+func TestExecuteTask_DoesNotReconcileAlreadyStartedForDifferentRequestID(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "req",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		},
+	}
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("workflow already started", "other-request", "run"))
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:    bufferedStarts,
+		ExpectedBufferedStarts:   0,
+		ExpectedRunningWorkflows: 0,
+		ExpectedActionCount:      0,
+	})
+}
+
 // A buffered start fails from having exceeded its maximum retry limit.
 func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
