@@ -14516,37 +14516,39 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		return describeActivity(s, t, env, activityID)
 	}
 
-	start_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
+	// The driver closures below are named for the sequence of steps they run, delimited by
+	// underscores; ST1003 is silenced on each declaration to keep those names.
+	start_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo { //nolint:staticcheck // ST1003: underscores delimit the driver step sequence
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		pollTask(s, t, env, taskQueue)
 		return describeActivity(s, t, env, activityID)
 	}
 
-	start_Poll_FailRetryably := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
+	start_Poll_FailRetryably := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo { //nolint:staticcheck // ST1003: underscores delimit the driver step sequence
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
 		respondFailedRetryably(s, t, env, token)
 		return describeActivity(s, t, env, activityID)
 	}
 
-	start_Poll_FailRetryably_RetryBackoffElapse := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
+	start_Poll_FailRetryably_RetryBackoffElapse := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo { //nolint:staticcheck // ST1003: underscores delimit the driver step sequence
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
 		respondFailedRetryably(s, t, env, token)
-		time.Sleep(retryInterval + backoffSettle)
+		time.Sleep(retryInterval + backoffSettle) //nolint:forbidigo
 		return describeActivity(s, t, env, activityID)
 	}
 
-	start_Poll_FailRetryably_RetryBackoffElapse_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
+	start_Poll_FailRetryably_RetryBackoffElapse_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo { //nolint:staticcheck // ST1003: underscores delimit the driver step sequence
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
 		respondFailedRetryably(s, t, env, token)
-		time.Sleep(retryInterval + backoffSettle)
+		time.Sleep(retryInterval + backoffSettle) //nolint:forbidigo
 		pollTask(s, t, env, taskQueue)
 		return describeActivity(s, t, env, activityID)
 	}
 
-	start_Poll_FailWithNextRetryDelay := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32, nextRetryDelay time.Duration) *activitypb.ActivityExecutionInfo {
+	start_Poll_FailWithNextRetryDelay := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32, nextRetryDelay time.Duration) *activitypb.ActivityExecutionInfo { //nolint:staticcheck // ST1003: underscores delimit the driver step sequence
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
 		_, err := env.FrontendClient().RespondActivityTaskFailed(s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
