@@ -137,7 +137,8 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 		requestID   string
 		// setupEngine wires the mock's UpdateComponent behavior and asserts call count.
 		setupEngine func(engine *chasm.MockEngine)
-		wantErr     bool
+		// wantErrContains is the substring the returned error must contain; empty means no error.
+		wantErrContains string
 	}{
 		{
 			name:        "falls back to current run on NotFound",
@@ -154,7 +155,7 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 						Return(nil, nil),
 				)
 			},
-			wantErr: false,
+			wantErrContains: "",
 		},
 		{
 			name:        "no fallback for non-workflow archetype",
@@ -167,7 +168,7 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 				engine.EXPECT().UpdateComponent(gomock.Any(), matchRunID(refRunID), gomock.Any(), gomock.Any()).
 					Return(nil, notFound)
 			},
-			wantErr: true,
+			wantErrContains: "operation not found",
 		},
 		{
 			name:        "no fallback once the completion handler was invoked",
@@ -183,7 +184,7 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 						return nil, err
 					})
 			},
-			wantErr: true,
+			wantErrContains: "operation not found",
 		},
 		{
 			name:        "no fallback on non-NotFound error",
@@ -194,18 +195,7 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 				engine.EXPECT().UpdateComponent(gomock.Any(), matchRunID(refRunID), gomock.Any(), gomock.Any()).
 					Return(nil, internalErr)
 			},
-			wantErr: true,
-		},
-		{
-			name:        "no fallback when the ref carries no run ID",
-			archetypeID: chasm.WorkflowArchetypeID,
-			runID:       "",
-			requestID:   requestID,
-			setupEngine: func(engine *chasm.MockEngine) {
-				engine.EXPECT().UpdateComponent(gomock.Any(), matchRunID(""), gomock.Any(), gomock.Any()).
-					Return(nil, notFound)
-			},
-			wantErr: true,
+			wantErrContains: "boom",
 		},
 		{
 			name:        "no fallback when the completion has no request ID",
@@ -216,12 +206,13 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 				engine.EXPECT().UpdateComponent(gomock.Any(), matchRunID(refRunID), gomock.Any(), gomock.Any()).
 					Return(nil, notFound)
 			},
-			wantErr: true,
+			wantErrContains: "operation not found",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctrl := gomock.NewController(t)
 			engine := chasm.NewMockEngine(ctrl)
 			tc.setupEngine(engine)
@@ -233,10 +224,10 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 			ctx := chasm.NewEngineContext(context.Background(), engine)
 
 			_, err := h.CompleteNexusOperationChasm(ctx, newCompleteNexusOperationChasmRequest(t, tc.archetypeID, tc.runID, tc.requestID))
-			if tc.wantErr {
-				require.Error(t, err)
-			} else {
+			if tc.wantErrContains == "" {
 				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.wantErrContains)
 			}
 		})
 	}

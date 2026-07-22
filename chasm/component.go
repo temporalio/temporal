@@ -100,12 +100,20 @@ func (s LifecycleState) String() string {
 	}
 }
 
+// OperationIntent declares how a caller intends to access a component.
+// Set it with NewContextWithOperationIntent.
 type OperationIntent int
 
 const (
+	// OperationIntentProgress means the caller intends to modify the component.
+	// Rejected for closed executions.
 	OperationIntentProgress OperationIntent = 1 << iota
+
+	// OperationIntentObserve means the caller only intends to read the component.
+	// Allowed for closed executions.
 	OperationIntentObserve
 
+	// OperationIntentUnspecified is the zero value and is treated like observe.
 	OperationIntentUnspecified = OperationIntent(0)
 )
 
@@ -118,11 +126,8 @@ type operationIntentCtxKeyType struct{}
 
 var operationIntentCtxKey = operationIntentCtxKeyType{}
 
-// NewContextWithOperationIntent returns a child context carrying the given OperationIntent, which
-// validateAccess reads back from the context (see operationIntentFromContext). Callers request
-// OperationIntentProgress so that a write targeting a component whose ancestor is closed (or whose
-// root execution has completed) is rejected with errAccessCheckFailed — a NotFound — instead of
-// silently mutating a closed tree. See the "closed" cases in tree_test.go's validateAccess tests.
+// NewContextWithOperationIntent returns a child context carrying the given OperationIntent.
+// See OperationIntent for the access semantics.
 func NewContextWithOperationIntent(
 	ctx context.Context,
 	intent OperationIntent,
