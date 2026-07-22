@@ -401,10 +401,10 @@ func (c *clientImpl) pollNexusTaskQueue(
 
 // resolvePartition parses the input task queue partition and decides how it should be routed.
 // It returns the parsed partition and whether the load balancer should choose the final
-// partition among the task queue's partitions (true only for a non-forwarded root normal
-// partition; otherwise the returned partition is routed to directly).
+// partition among the task queue's partitions (true only for a non-forwarded root partition
+// that supports partitions; otherwise the returned partition is routed to directly).
 func (c *clientImpl) resolvePartition(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, bool) {
-	partition, err := tqid.PartitionFromProto(proto, nsid, taskType)
+	p, err := tqid.PartitionFromProto(proto, nsid, taskType)
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
@@ -412,9 +412,8 @@ func (c *clientImpl) resolvePartition(proto *taskqueuepb.TaskQueue, nsid string,
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), false
 	}
-
-	np, ok := partition.(*tqid.NormalPartition)
-	return partition, ok && np.IsRoot() && forwardedFrom == ""
+	loadBalance := p.SupportsPartitions() && p.IsRoot() && forwardedFrom == ""
+	return p, loadBalance
 }
 
 // pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
