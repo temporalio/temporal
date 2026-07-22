@@ -255,14 +255,25 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 		}
 	}
 
-	// Prevents a division by 0.
-	backfillerCount = max(1, backfillerCount)
+	return backfillerBufferCapacity(
+		len(invoker.GetBufferedStarts()),
+		recentActionCount,
+		tweakables.MaxBufferSize,
+		tweakables.GeneratorBufferReserveSize,
+		backfillerCount,
+	), nil
+}
 
-	// Discount retained completed history (kept in the buffer for reporting, up to
-	// recentActionCount) so it doesn't consume admission capacity, reserve the
-	// generator space from the shared pool once (not per backfiller), then split
-	// the remaining half-buffer evenly across active backfillers.
-	pending := max(0, len(invoker.GetBufferedStarts())-recentActionCount)
-	available := max(0, (tweakables.MaxBufferSize/2)-pending-tweakables.GeneratorBufferReserveSize)
-	return available / backfillerCount, nil
+// backfillerBufferCapacity returns how many BufferedStarts a single backfiller
+// may admit. Retained completed history (up to retainedActionCount entries kept
+// in the buffer for reporting) is discounted so it doesn't consume admission
+// capacity; the generator reserve is taken from the shared half-buffer once (not
+// per backfiller); and the remainder is split evenly across the active
+// backfillers. backfillerCount is clamped to a minimum of 1 to avoid dividing by
+// zero when there are no active backfillers.
+func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
+	backfillerCount = max(1, backfillerCount)
+	pending := max(0, bufferedCount-retainedActionCount)
+	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
+	return available / backfillerCount
 }
