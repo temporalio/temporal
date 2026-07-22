@@ -276,7 +276,7 @@ func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() 
 		}},
 	}
 	s.NoError(wfCtx.AppendTaskCompletionPage(10, 1, page))
-	s.Greater(limiter.Used(), int64(0))
+	s.Positive(limiter.Used())
 
 	// Unpin the entry so it is eligible for eviction.
 	release(nil)
