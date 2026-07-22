@@ -30,7 +30,7 @@ var (
 
 	StartDelayEnabled = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.startDelayEnabled",
-		true,
+		false,
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
 

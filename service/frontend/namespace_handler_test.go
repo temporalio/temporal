@@ -386,7 +386,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.ReportedProblemsSearchAttribute)
 	s.True(resp.NamespaceInfo.Capabilities.WorkerHeartbeats)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivities)
-	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
+	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivityBatchOperations)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneNexusOperation)
