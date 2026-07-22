@@ -128,17 +128,21 @@ func NewHostLevelCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
-			if item.finalizer == nil {
-				return // should only happen in unit tests
+			if item.finalizer != nil {
+				wfKey := item.wfContext.GetWorkflowKey()
+				err := item.finalizer.Deregister(wfKey.String())
+				if err != nil {
+					// debug level since this is very common: the cache item was registered with a finalizer
+					// that has been finalized since then and is therefore no longer accepting any calls
+					logger.Debug("cache failed to de-register callback in finalizer",
+						tag.Error(err), tag.ShardID(item.shardId))
+					return
+				}
 			}
-			wfKey := item.wfContext.GetWorkflowKey()
-			err := item.finalizer.Deregister(wfKey.String())
-			if err != nil {
-				// debug level since this is very common: the cache item was registered with a finalizer
-				// that has been finalized since then and is therefore no longer accepting any calls
-				logger.Debug("cache failed to de-register callback in finalizer",
-					tag.Error(err), tag.ShardID(item.shardId))
-			}
+			// We removed the finalizer callback before it ran, so this eviction now owns clearing
+			// the context. Without this, resources it holds, for example the bytes it reserved on the
+			// shared pagination buffer limiter would leak until process restart.
+			item.wfContext.Clear()
 		},
 	}
 
