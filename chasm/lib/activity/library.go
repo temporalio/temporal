@@ -140,6 +140,7 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"heartbeatTimer",
 			l.heartbeatTimeoutTaskHandler,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace),
 		),
 	}
 }
