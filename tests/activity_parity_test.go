@@ -122,8 +122,10 @@ func (s *activityParityTestSuite) TestSAA_RetryPolicyUpdate_PersistsNonRetryable
 	defer cancel()
 
 	env := testcore.NewEnv(t)
-	defer env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)()
-	defer env.OverrideDynamicConfig(activity.Enabled, true)()
+	cleanupChasm := env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	defer cleanupChasm()
+	cleanupActivity := env.OverrideDynamicConfig(activity.Enabled, true)
+	defer cleanupActivity()
 
 	activityID := testcore.RandomizeStr(t.Name())
 	taskQueue := testcore.RandomizeStr(t.Name())
