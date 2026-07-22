@@ -5,10 +5,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -57,6 +53,9 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(

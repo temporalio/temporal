@@ -5,18 +5,17 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-// FastForwardNotification is delivered to PollWorkflowExecutionTimeSkipping waiters.
-// Closed is true when the run reached a terminal state without a continuation (no
-// retry / cron / continue-as-new), meaning a pending fast-forward can no longer
-// complete.
 type FastForwardNotification struct {
-	FastForwardInfo *commonpb.TimeSkippingFastForwardInfo
-	Closed          bool
+	FastForwardInfo            *commonpb.TimeSkippingFastForwardInfo
+	WorkflowExecutionCompleted bool
 }
 
-// FastForwardNotifier wakes fast-forward long polls keyed on namespace + workflowID.
 type FastForwardNotifier = PubSubNotifier[*FastForwardNotification]
 
+const maxFastForwardWaitersPerExecution = 5
+
 func NewFastForwardNotifier(workflowIDToShardID func(namespace.ID, string) int32) FastForwardNotifier {
-	return NewPubSubNotifier[*FastForwardNotification](workflowIDToShardID)
+	return NewPubSubNotifier[*FastForwardNotification](workflowIDToShardID, maxFastForwardWaitersPerExecution)
 }
+
+var NoopFastForwardNotifier FastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()

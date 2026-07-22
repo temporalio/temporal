@@ -2,8 +2,6 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -25,6 +23,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.uber.org/fx"
 )
 
 type (

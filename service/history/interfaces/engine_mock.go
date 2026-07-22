@@ -16,8 +16,6 @@ import (
 
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
-	gomock "go.uber.org/mock/gomock"
-
 	history0 "go.temporal.io/server/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
@@ -31,6 +29,7 @@ import (
 	hsm "go.temporal.io/server/service/history/hsm"
 	notification "go.temporal.io/server/service/history/notification"
 	tasks "go.temporal.io/server/service/history/tasks"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockEngine is a mock of Engine interface.

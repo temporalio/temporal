@@ -6,8 +6,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -20,6 +18,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/notification"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -601,7 +600,7 @@ func NotifyOnExecutionSnapshot(
 			RunID:       workflowSnapshot.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState)
+	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState, workflowSnapshot.NotifyFastForward)
 }
 
 func NotifyOnExecutionMutation(
@@ -620,35 +619,26 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState)
+	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState, workflowMutation.NotifyFastForward)
 }
 
-// notifyFastForwardUpdate wakes any PollWorkflowExecutionTimeSkipping waiters for
-// this execution whenever a persisted transaction carries fast-forward state.
-// It fires on every persist that has fast-forward info (not only on change); the
-// waiter re-evaluates the delivered info and keeps waiting on a no-op wake.
-//
-// When the run has closed without a continuation (no retry / cron / CaN, i.e.
-// terminal state and no NewExecutionRunId), the notification is flagged Closed so
-// waiters return instead of blocking on a fast-forward that can no longer complete.
 func notifyFastForwardUpdate(
 	engine historyi.Engine,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
+	notify bool,
 ) {
-	ffInfo := NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).ToFastForwardInfo()
-	if ffInfo == nil {
+	if !notify {
 		return
 	}
-	// STATE_COMPLETED means the run is closed (any terminal status: completed,
-	// failed, canceled, terminated, timed-out), not "succeeded". NewExecutionRunId
-	// is empty only when there is no successor run — retry / cron / CaN set it.
-	closed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
+	ffInfo := NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).ToFastForwardInfo()
+	// we only set completed when the whole chain of runs completes
+	completed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
 		executionInfo.GetNewExecutionRunId() == ""
 	key := notification.NewKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
 	engine.NotifyFastForwardUpdate(key, &notification.FastForwardNotification{
-		FastForwardInfo: ffInfo,
-		Closed:          closed,
+		FastForwardInfo:            ffInfo,
+		WorkflowExecutionCompleted: completed,
 	})
 }
 

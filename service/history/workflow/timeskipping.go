@@ -39,7 +39,6 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
 	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
-
 	ms.timeSkippingInfoUpdated = true
 }
 
@@ -338,9 +337,10 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 	}
 	config := util.tsi.GetConfig()
 	return &commonpb.TimeSkippingFastForwardInfo{
-		TargetTime:    common.CloneProto(ff.GetTargetTime()),
-		HasCompleted:  ff.GetHasReached(),
-		FastForwardId: config.GetFastForwardId(),
+		TargetTime:          common.CloneProto(ff.GetTargetTime()),
+		HasCompleted:        ff.GetHasReached(),
+		FastForwardId:       config.GetFastForwardId(),
+		FastForwardDuration: config.GetFastForward(),
 	}
 }
 

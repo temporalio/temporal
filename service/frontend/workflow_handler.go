@@ -704,16 +704,13 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
-
 	if tsc == nil {
 		return nil
 	}
-
 	// if this feature is not enabled, we don't allow setting any related config
 	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
 		return errWorkflowTimeSkippingNotEnabled
 	}
-
 	if tsc.GetMaxSkipPerSession() <= 0 {
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSkipPerSession = max(1, int32(defaultMaxSkipPerSession))

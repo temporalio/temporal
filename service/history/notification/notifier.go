@@ -7,27 +7,19 @@ package notification
 
 import (
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 )
 
-// PubSubNotifier is a keyed pub/sub over payloads of type T. Fan-out is synchronous
-// and non-blocking (buffered-1 channels); a value is dropped when a waiter already
-// has one pending, which is safe for callers that re-read authoritative state on wake.
-//
-// TODO: unify with service/history/events.Notifier, which is the same keyed
-// Watch/Unwatch/Notify pattern. events.Notifier cannot be reused directly here:
-//   - its payload is a fixed concrete *events.Notification (history-event fields),
-//     not a generic type;
-//   - it keys on the full WorkflowKey (incl. RunID); we key on namespace + workflowID;
-//   - it runs an async fan-out daemon (Start/Stop, buffered channel, metrics) that
-//     this synchronous notifier does not need.
-// The intended direction is to make this generic the shared core and have
-// events.Notifier instantiate PubSubNotifier[*events.Notification], keeping its
-// daemon/metrics as a decorator.
+// PubSubNotifier is a keyed pub/sub over payloads of type T. Notify fans out
+// synchronously on the publisher's goroutine (the one producing the change, not the
+// waiter's) with non-blocking sends over buffered-1 channels: a value is dropped when a
+// waiter already has one pending, which is safe for callers that re-read authoritative
+// state on wake. Watch rejects a new subscriber once a key already has the configured
+// maximum, bounding the number of concurrent waiters per key.
 type PubSubNotifier[T any] interface {
 	Notify(key definition.WorkflowKey, value T)
 	Watch(key definition.WorkflowKey) (subscriberID string, channel <-chan T, err error)
@@ -35,7 +27,8 @@ type PubSubNotifier[T any] interface {
 }
 
 type pubSubNotifierImpl[T any] struct {
-	workflowIDToShardID func(namespace.ID, string) int32
+	workflowIDToShardID  func(namespace.ID, string) int32
+	maxSubscribersPerKey int
 	// key: definition.WorkflowKey, value: map[subscriberID]chan T. The inner map is
 	// not thread-safe on its own; every access is guarded by the ConcurrentTxMap's
 	// per-key action callbacks. Subscribers per key are expected to be few.
@@ -48,7 +41,29 @@ func NewKey(namespaceID string, workflowID string) definition.WorkflowKey {
 	return definition.NewWorkflowKey(namespaceID, workflowID, "")
 }
 
-func NewPubSubNotifier[T any](workflowIDToShardID func(namespace.ID, string) int32) PubSubNotifier[T] {
+// noopNotifier drops every notification and registers no subscribers.
+type noopNotifier[T any] struct{}
+
+// NewNoopNotifier returns a PubSubNotifier for components (and tests) that never
+// participate in the long poll: publishing is a no-op and watching returns an already
+// closed channel so an accidental waiter wakes immediately instead of blocking forever.
+func NewNoopNotifier[T any]() PubSubNotifier[T] {
+	return noopNotifier[T]{}
+}
+
+func (noopNotifier[T]) Notify(definition.WorkflowKey, T) {}
+
+func (noopNotifier[T]) Watch(definition.WorkflowKey) (string, <-chan T, error) {
+	ch := make(chan T)
+	close(ch)
+	return "", ch, nil
+}
+
+func (noopNotifier[T]) Unwatch(definition.WorkflowKey, string) error { return nil }
+
+// NewPubSubNotifier creates a notifier that admits at most maxSubscribersPerKey
+// concurrent waiters per key; Watch beyond that returns a ResourceExhausted error.
+func NewPubSubNotifier[T any](workflowIDToShardID func(namespace.ID, string) int32, maxSubscribersPerKey int) PubSubNotifier[T] {
 	hashFn := func(key any) uint32 {
 		wk, ok := key.(definition.WorkflowKey)
 		if !ok {
@@ -57,8 +72,9 @@ func NewPubSubNotifier[T any](workflowIDToShardID func(namespace.ID, string) int
 		return uint32(workflowIDToShardID(namespace.ID(wk.NamespaceID), wk.WorkflowID))
 	}
 	return &pubSubNotifierImpl[T]{
-		workflowIDToShardID: workflowIDToShardID,
-		subscriptions:       collection.NewShardedConcurrentTxMap(1024, hashFn),
+		workflowIDToShardID:  workflowIDToShardID,
+		maxSubscribersPerKey: maxSubscribersPerKey,
+		subscriptions:        collection.NewShardedConcurrentTxMap(1024, hashFn),
 	}
 }
 
@@ -71,6 +87,11 @@ func (n *pubSubNotifierImpl[T]) Watch(key definition.WorkflowKey) (string, <-cha
 		existing, ok := value.(map[string]chan T)
 		if !ok {
 			return serviceerror.NewInternal("unexpected subscription value type")
+		}
+		if len(existing) >= n.maxSubscribersPerKey {
+			return serviceerror.NewResourceExhaustedf(
+				enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+				"too many concurrent waiters (limit %d) for this execution", n.maxSubscribersPerKey)
 		}
 		if _, ok := existing[subscriberID]; ok {
 			return serviceerror.NewUnavailable("unable to watch execution")

@@ -8,7 +8,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -895,7 +894,15 @@ func (e *historyEngineImpl) NotifyFastForwardUpdate(
 	key definition.WorkflowKey,
 	notification *notification.FastForwardNotification,
 ) {
-
+	if e.fastForwardNotifier == nil {
+		// Always injected in production via fx; a nil here means a misconfigured engine.
+		// Fast-forward notification is best-effort (waiters re-poll on timeout), so log and
+		// skip rather than panic.
+		e.logger.Warn("fastForwardNotifier is not configured; skipping fast-forward notification",
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowID(key.WorkflowID))
+		return
+	}
 	e.fastForwardNotifier.Notify(key, notification)
 }
 

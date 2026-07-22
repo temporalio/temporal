@@ -113,6 +113,6 @@ var (
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 
-	errWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("Time skipping is not enabled for the current namespace.")
+	errWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("The Time-Skipping feature is not enabled for namespace.")
 	errTimeSkippingFastForwardIdNotSet = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
 )
