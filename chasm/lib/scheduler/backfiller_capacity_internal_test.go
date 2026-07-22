@@ -45,6 +45,17 @@ func TestBackfillerBufferCapacity(t *testing.T) {
 		{"buffered one past retained costs one slot", 11, 10, 1000, 0, 1, 499},
 		{"buffered well past retained costs 1:1", 60, 10, 1000, 0, 1, 450},
 
+		// bufferedCount filling the available half-buffer: the boundary where
+		// admission capacity is exhausted (retained=0 here, so pending==bufferedCount).
+		{"buffered one below the half-buffer leaves one slot", 49, 0, 100, 0, 1, 1},
+		{"buffered at the half-buffer exhausts capacity", 50, 0, 100, 0, 1, 0},
+		{"buffered past the half-buffer stays exhausted", 60, 0, 100, 0, 1, 0},
+		// the retained-history discount pushes that fill point out by retainedActionCount.
+		{"discount lets the buffer fill to half plus retained", 59, 10, 100, 0, 1, 1},
+		{"buffer at half plus retained exhausts capacity", 60, 10, 100, 0, 1, 0},
+		// the generator reserve pulls that fill point in by generatorReserve.
+		{"reserve lowers the fill point that exhausts capacity", 40, 0, 100, 10, 1, 0},
+
 		// retainedActionCount: no discount vs. over-discount clamp.
 		{"zero retained means no discount", 20, 0, 1000, 0, 1, 480},
 		{"retained equal to buffered discounts all", 20, 20, 1000, 0, 1, 500},
