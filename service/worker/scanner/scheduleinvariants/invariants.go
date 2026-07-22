@@ -239,13 +239,17 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 	return nil
 }
 
-// ListAllNamespaces returns the names of every namespace active in the current cluster,
+// ListAllNamespaces returns the names of every registered namespace in the current cluster,
 // from the namespace registry's in-memory snapshot. The snapshot may lag persistence by
 // up to the registry's refresh interval, which is acceptable for a best-effort scanner.
+//
+// Only namespaces in the REGISTERED (active) state are returned; namespaces being
+// deprecated, deleted, or in any other state are skipped, since scanning them for
+// schedule invariants is not meaningful.
 func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
-		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+		if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED {
 			continue
 		}
 		names = append(names, ns.Name().String())
