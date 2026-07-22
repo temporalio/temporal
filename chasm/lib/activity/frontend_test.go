@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -16,6 +17,82 @@ import (
 
 type hasRequestID interface {
 	GetRequestId() string
+}
+
+func TestStandaloneActivityOperatorCommandsDisabled(t *testing.T) {
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:                       defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:                        defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy:               dynamicconfig.GetTypedPropertyFnFilteredByNamespace(getDefaultRetrySettings("")),
+			Enabled:                                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			EnableStandaloneActivityOperatorCommands: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			MaxIDLengthLimit:                         func() int { return defaultMaxIDLengthLimit },
+		},
+		logger: log.NewNoopLogger(),
+	}
+
+	tests := []struct {
+		name       string
+		standalone func() error
+		workflow   func() error
+	}{
+		{
+			name: "pause",
+			standalone: func() error {
+				_, err := h.PauseActivityExecution(t.Context(), &workflowservice.PauseActivityExecutionRequest{Namespace: defaultNamespaceID})
+				return err
+			},
+			workflow: func() error {
+				_, err := h.PauseActivityExecution(t.Context(), &workflowservice.PauseActivityExecutionRequest{Namespace: defaultNamespaceID, WorkflowId: "workflow-id"})
+				return err
+			},
+		},
+		{
+			name: "unpause",
+			standalone: func() error {
+				_, err := h.UnpauseActivityExecution(t.Context(), &workflowservice.UnpauseActivityExecutionRequest{Namespace: defaultNamespaceID})
+				return err
+			},
+			workflow: func() error {
+				_, err := h.UnpauseActivityExecution(t.Context(), &workflowservice.UnpauseActivityExecutionRequest{Namespace: defaultNamespaceID, WorkflowId: "workflow-id"})
+				return err
+			},
+		},
+		{
+			name: "reset",
+			standalone: func() error {
+				_, err := h.ResetActivityExecution(t.Context(), &workflowservice.ResetActivityExecutionRequest{Namespace: defaultNamespaceID})
+				return err
+			},
+			workflow: func() error {
+				_, err := h.ResetActivityExecution(t.Context(), &workflowservice.ResetActivityExecutionRequest{Namespace: defaultNamespaceID, WorkflowId: "workflow-id"})
+				return err
+			},
+		},
+		{
+			name: "update options",
+			standalone: func() error {
+				_, err := h.UpdateActivityExecutionOptions(t.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{Namespace: defaultNamespaceID})
+				return err
+			},
+			workflow: func() error {
+				_, err := h.UpdateActivityExecutionOptions(t.Context(), &workflowservice.UpdateActivityExecutionOptionsRequest{Namespace: defaultNamespaceID, WorkflowId: "workflow-id"})
+				return err
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h.config.EnableStandaloneActivityOperatorCommands = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+			require.ErrorIs(t, test.standalone(), ErrStandaloneActivityOperatorCommandsDisabled)
+
+			h.config.EnableStandaloneActivityOperatorCommands = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+			require.ErrorContains(t, test.standalone(), "activity ID is required")
+			require.ErrorContains(t, test.workflow(), "activity ID is required")
+		})
+	}
 }
 
 // TestRequestIdStableAcrossRetries verifies that a request ID is re-used
