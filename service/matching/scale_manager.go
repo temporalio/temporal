@@ -33,18 +33,18 @@ import (
 // scaleState needs no lock. AddedTasks talks to the worker only via the atomic
 // batch counter and the wakeup channel, so it never blocks.
 type scaleManager struct {
-	partition          tqid.Partition
-	logger             log.Logger
-	metricsHandler     metrics.Handler
-	userDataManager    userDataManager
-	matchingClient     matchingservice.MatchingServiceClient
-	partitionScaler    PartitionScaler
-	batchSize          int64 // fixed at creation time
-	settings           dynamicconfig.TypedPropertyFn[dynamicconfig.PartitionScaleManagerSettings]
-	getWritePartitions dynamicconfig.IntPropertyFn
-	emitGaugeMetrics   dynamicconfig.BoolPropertyFn
-	timeSource         clock.TimeSource
-	background         *goro.Handle
+	partition              tqid.Partition
+	logger                 log.Logger
+	metricsHandler         metrics.Handler
+	userDataManager        userDataManager
+	matchingClient         matchingservice.MatchingServiceClient
+	partitionScaler        PartitionScaler
+	batchSize              int64 // fixed at creation time
+	settings               dynamicconfig.TypedPropertyFn[dynamicconfig.PartitionScaleManagerSettings]
+	getWritePartitions     dynamicconfig.IntPropertyFn
+	shouldEmitGaugeMetrics dynamicconfig.BoolPropertyFn
+	timeSource             clock.TimeSource
+	background             *goro.Handle
 
 	// owned by the worker goroutine after Start starts it
 	scaleState       *persistencespb.PartitionScaleState
@@ -77,19 +77,19 @@ func newScaleManager(
 	emitGaugeMetrics dynamicconfig.BoolPropertyFn,
 ) *scaleManager {
 	return &scaleManager{
-		partition:          partition,
-		logger:             log.With(logger, tag.ComponentPartitionScaler),
-		metricsHandler:     metricsHandler,
-		userDataManager:    userDataManager,
-		matchingClient:     matchingClient,
-		partitionScaler:    partitionScaler,
-		batchSize:          int64(settings().BatchSize),
-		settings:           settings,
-		getWritePartitions: getWritePartitions,
-		emitGaugeMetrics:   emitGaugeMetrics,
-		timeSource:         timeSource,
-		background:         goro.NewHandle(baseCtx),
-		wakeup:             make(chan struct{}, 1),
+		partition:              partition,
+		logger:                 log.With(logger, tag.ComponentPartitionScaler),
+		metricsHandler:         metricsHandler,
+		userDataManager:        userDataManager,
+		matchingClient:         matchingClient,
+		partitionScaler:        partitionScaler,
+		batchSize:              int64(settings().BatchSize),
+		settings:               settings,
+		getWritePartitions:     getWritePartitions,
+		shouldEmitGaugeMetrics: emitGaugeMetrics,
+		timeSource:             timeSource,
+		background:             goro.NewHandle(baseCtx),
+		wakeup:                 make(chan struct{}, 1),
 	}
 }
 
@@ -99,12 +99,8 @@ func (sm *scaleManager) Stop() {
 	}
 	sm.background.Cancel()
 	sm.partitionScaler.Stop()
-	if sm.emitGaugeMetrics() {
-		// this is unfortunate but at least allows max() across pods to get the right value
-		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(-1))
-		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(-1))
-		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(-1))
-	}
+	// this is unfortunate but at least allows max() across pods to get the right value
+	sm.emitGaugeMetricsIfEnabled(-1, -1, -1)
 }
 
 // Start is called when the root partitions's default queue has loaded its metadata.
@@ -234,13 +230,9 @@ func (sm *scaleManager) callScaler() {
 			metrics.PartitionScaleEvents.With(metricsHandlerWithShadowTag).Record(1)
 			return
 		}
-		if sm.emitGaugeMetrics() {
-			// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
-			// Emit only when the target decision changed (like in real mode).
-			metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(0))
-			metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(0))
-			metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(target))
-		}
+		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
+		// Emit only when the target decision changed (like in real mode).
+		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
 		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowTarget = target
 	} else {
@@ -262,6 +254,14 @@ func (sm *scaleManager) callScaler() {
 		tag.Int32("max-target", newState.MaxTarget),
 		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	metrics.PartitionScaleEvents.With(metricsHandlerWithShadowTag).Record(1)
+}
+
+func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
+	if sm.shouldEmitGaugeMetrics() {
+		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(read)
+		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(write)
+		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(target)
+	}
 }
 
 // releaseManagedState relinquishes a previously-applied managed scale target back
@@ -309,10 +309,8 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 		sm.userDataManager.SetPartitionScale(newInfo)
 	}
 
-	if sm.emitGaugeMetrics() && settings.ShadowModeLogInterval <= 0 {
-		metrics.PartitionScaleRead.With(sm.metricsHandler).Record(float64(newInfo.Read))
-		metrics.PartitionScaleWrite.With(sm.metricsHandler).Record(float64(newInfo.Write))
-		metrics.PartitionScaleTarget.With(sm.metricsHandler).Record(float64(sm.scaleState.GetTarget()))
+	if settings.ShadowModeLogInterval <= 0 {
+		sm.emitGaugeMetricsIfEnabled(float64(newInfo.Read), float64(newInfo.Write), float64(sm.scaleState.GetTarget()))
 	}
 }
 
