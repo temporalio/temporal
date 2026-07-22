@@ -66,6 +66,10 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// reconcile running-workflow status before evaluating CHASM migration
+	// eligibility, so an actively-firing schedule can observe an empty
+	// RunningWorkflows window and migrate instead of deferring forever
+	RefreshBeforeMigrationCheck = 13
 )
 
 const (
@@ -215,7 +219,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           RefreshBeforeMigrationCheck,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -332,6 +336,25 @@ func (s *scheduler) run() error {
 				false,
 				nil,
 			)
+		}
+
+		// Reconcile running-workflow status before evaluating migration
+		// eligibility. processTimeRange (above) sets NeedRefresh when it buffers a
+		// new action, but the refresh itself only runs inside processBuffer, which
+		// is after this check and also starts the replacement action. Without this,
+		// an actively-firing schedule's RunningWorkflows is stale-non-empty here
+		// every iteration (the just-completed action is never pruned in time), so
+		// len(RunningWorkflows)==0 is never observed and, with the default
+		// MigrateWithRunningWorkflows=false guard, migration is deferred forever.
+		// Refreshing here lets the check see the genuine post-completion window and
+		// migrate before the next action is started. Version-gated because
+		// refreshWorkflows issues (recorded) local activities: reordering it would
+		// otherwise break replay of pre-existing histories.
+		if s.hasMinVersion(RefreshBeforeMigrationCheck) &&
+			s.tweakables.EnableCHASMMigration && !s.State.PendingMigration &&
+			s.State.NeedRefresh {
+			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
+			s.State.NeedRefresh = false
 		}
 
 		if !s.State.PendingMigration && s.tweakables.EnableCHASMMigration &&
