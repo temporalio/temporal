@@ -811,17 +811,17 @@ func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer()
 	processLimit := int64(s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit())
 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
-	page0_size := s.workflowContext.taskCompletionBuffer.totalSize
-	s.Greater(page0_size, int64(0))
+	page0Size := s.workflowContext.taskCompletionBuffer.totalSize
+	s.Positive(page0Size)
 
-	ok, _ := budget.TryReserve("filler", processLimit-page0_size, 0, 0)
+	ok, _ := budget.TryReserve("filler", processLimit-page0Size, 0, 0)
 	s.True(ok)
 
 	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1"))
 	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
 	s.ErrorAs(err, &bufferLost)
 	s.Nil(s.workflowContext.taskCompletionBuffer)
-	s.Equal(processLimit-page0_size, budget.Used())
+	s.Equal(processLimit-page0Size, budget.Used())
 }
 
 // TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear verifies the process counter
@@ -835,7 +835,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() 
 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1")))
-	s.Greater(budget.Used(), int64(0))
+	s.Positive(budget.Used())
 
 	_, err := s.workflowContext.GetMergedTaskCompletionPages(10, 1, finalPage(2, nil))
 	s.NoError(err)
@@ -843,7 +843,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() 
 
 	// And after Clear() of a fresh buffer.
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
-	s.Greater(budget.Used(), int64(0))
+	s.Positive(budget.Used())
 	s.workflowContext.Clear()
 	s.Equal(int64(0), budget.Used())
 }

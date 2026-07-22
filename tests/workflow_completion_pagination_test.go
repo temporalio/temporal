@@ -444,7 +444,7 @@ func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	bufferMarkerPage := func(page int32) error {
-		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace:        env.Namespace().String(),
 			TaskToken:        taskToken,
 			Commands:         makeMarkerCommands(1),
@@ -473,7 +473,7 @@ func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
 
 	// Both pages buffered; the final page completes the workflow.
 	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{{
