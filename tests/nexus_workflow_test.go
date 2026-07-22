@@ -2060,19 +2060,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 	s.RequireHistoryEvent(resetHist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 }
 
-// TestNexusOperationAsyncCompletionAfterFrameworkFlip asserts that an async completion whose
-// callback token was minted for one framework (HSM or CHASM) still completes the operation after a
-// rebuild re-created it in the other framework.
-//
-// A rebuild picks the framework by the nexusoperation.enableChasmWorkflowOperations flag at rebuild
-// time (an intentional escape hatch to roll operations back to HSM or forward to CHASM). The
-// callback token, minted at schedule time, then addresses the wrong framework: the completion
-// dispatcher tries the token's framework, gets NotFound, converts the token to the other framework,
-// and completes there. If the conversion did not happen the operation would never complete and the
-// reset run would hang — so the NexusOperationCompleted assertion is load-bearing.
-//
-// This exercises the reset rebuild's cross-tree routing, so like TestNexusOperationSurvivesResetCrossTree
-// it drives the flag explicitly and runs once via the HSM suite.
+// TestNexusOperationAsyncCompletionAfterFrameworkFlip verifies that a stale
+// callback token still completes after reset rebuilds the operation in the
+// other framework.
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFrameworkFlip(chasmEnabled bool) {
 	if chasmEnabled {
 		s.T().Skip("framework-flip test controls the flag explicitly; run once via the HSM suite")
@@ -2080,9 +2070,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 
 	testCases := []struct {
 		name string
-		// enableChasmWorkflowOperations value at schedule time (true -> operation minted under CHASM,
-		// false -> under HSM). The flag is flipped before the reset so the rebuild re-creates the
-		// operation in the other framework, leaving the callback token addressing the original one.
+		// enableChasmAtSchedule selects the framework used when the callback token is minted.
 		enableChasmAtSchedule bool
 	}{
 		{name: "ChasmTokenCompletesHsmOpAfterDowngrade", enableChasmAtSchedule: true},
@@ -2122,8 +2110,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 			s.NoError(err)
 			wfExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 
-			// Wait for the NexusOperationStarted event (captures the callback token) and find the WFT
-			// completed after it to use as the reset point.
+			// Use the WFT after NexusOperationStarted as the reset point.
 			var wftCompletedEventID int64
 			s.EventuallyWithT(func(t *assert.CollectT) {
 				hr := historyrequire.New(t)
@@ -2139,8 +2126,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 				wftCompletedEventID = hist[wftCompletedIdx].EventId
 			}, time.Second*10, time.Millisecond*200)
 
-			// Flip the framework flag, then reset: the rebuild re-creates the operation in the other
-			// framework, so the callback token captured above now addresses the wrong one.
+			// Flip the framework before reset so rebuild moves the operation.
 			env.OverrideDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, !tc.enableChasmAtSchedule)
 
 			resetResp, err := env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -2155,8 +2141,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 			resetExec := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resetResp.RunId}
 			s.RequireHistoryEvent(env.GetHistory(env.Namespace().String(), resetExec), enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
-			// Deliver the stale completion. The dispatcher tries the token's original framework, gets
-			// NotFound (the operation now lives in the other framework), converts the token, and completes.
+			// Deliver the stale completion and expect the dispatcher to convert it.
 			completion := nexusrpc.CompleteOperationOptions{
 				Result: testcore.MustToPayload(s.T(), "result"),
 				Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},

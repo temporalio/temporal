@@ -249,19 +249,9 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	return commonnexus.ConvertGRPCError(err, false)
 }
 
-// completeOperation dispatches the completion to the framework its token targets (CHASM when a
-// ComponentRef is present, otherwise HSM). A rebuild (reset or conflict resolution) can flip an
-// operation between HSM and CHASM by dynamic config after the callback token was minted, so the
-// token's framework may no longer match the operation. If the operation was not found in its
-// original framework, the token is converted to the other framework and tried once more. Identity
-// is re-established by request ID, so the fallback only runs when the token carries one.
-//
-// The fallback is also skipped when the error is terminal (the workflow already completed or does
-// not exist): the operation can't be applied in either framework, so converting the token and
-// retrying would be a wasted round-trip.
-//
-// chasmEnabled gates the HSM->CHASM direction: a workflow in a CHASM-disabled namespace has no
-// CHASM tree, so converting to CHASM would be futile (and the CHASM engine would flag it).
+// completeOperation dispatches the completion to the framework named by its
+// token. If that framework no longer has the operation, the token is converted
+// to the other framework and retried once.
 func (h *nexusCompletionHandler) completeOperation(
 	ctx context.Context,
 	logger log.Logger,
@@ -281,13 +271,11 @@ func (h *nexusCompletionHandler) completeOperation(
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
 		return err
 	}
-	// A terminal error means the workflow itself is gone, so the operation can't be completed in the
-	// other framework either; don't waste a round-trip converting the token and retrying.
+	// If the workflow itself is gone, the operation cannot exist in either framework.
 	if isTerminalCompletionError(err) {
 		return err
 	}
-	// Converting HSM -> CHASM is only meaningful when the namespace has CHASM enabled (and thus a
-	// CHASM tree); CHASM -> HSM is always safe since HSM is the legacy default.
+	// Only try HSM -> CHASM when this namespace can have CHASM workflow state.
 	if !isChasm && !chasmEnabled {
 		return err
 	}
@@ -302,12 +290,8 @@ func (h *nexusCompletionHandler) completeOperation(
 	return h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
 }
 
-// isTerminalCompletionError reports whether err indicates the target workflow is gone — already
-// completed or nonexistent — so an async operation completion can never be applied in either
-// framework and there is no point retrying after a token conversion. Both cases arrive as a plain
-// serviceerror.NotFound over the history gRPC boundary (which does not preserve error identity), so
-// they are matched by message. A reset/rebuild that merely moved the operation to the other
-// framework surfaces a different NotFound (stale reference / component not found), which is retried.
+// isTerminalCompletionError reports whether err means the workflow is already
+// completed or does not exist. These arrive as NotFound errors from history.
 func isTerminalCompletionError(err error) bool {
 	var nfe *serviceerror.NotFound
 	if !errors.As(err, &nfe) {
@@ -317,13 +301,8 @@ func isTerminalCompletionError(err error) bool {
 	return msg == consts.ErrWorkflowCompleted.Error() || msg == consts.ErrWorkflowExecutionNotFound.Error()
 }
 
-// convertCompletionToOtherFramework re-addresses a Nexus operation completion token to the
-// framework opposite the one it currently targets (HSM <-> CHASM).
-//
-// A rebuild (reset or conflict resolution) can re-create an operation under the other framework by
-// dynamic config after its callback token was minted — the intentional escape hatch to roll
-// operations back to HSM or forward to CHASM. The token then addresses the framework the operation
-// no longer lives in; converting it lets the completion be retried against the current one.
+// convertCompletionToOtherFramework converts a workflow Nexus completion token
+// between HSM and CHASM forms.
 func convertCompletionToOtherFramework(completion *tokenspb.NexusOperationCompletion) (*tokenspb.NexusOperationCompletion, error) {
 	if len(completion.GetComponentRef()) > 0 {
 		return nexusworkflowref.CHASMRefToHSMRef(completion)

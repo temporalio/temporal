@@ -22,8 +22,7 @@ import (
 
 const convTestRequestID = "request-id"
 
-// hsmCompletionToken builds a minimal HSM-shaped token; chasmCompletionToken derives the CHASM-shaped
-// token from it via nexusworkflowref, so only the HSM ref layout is spelled out here.
+// hsmCompletionToken builds the HSM token used by these conversion tests.
 func hsmCompletionToken() *tokenspb.NexusOperationCompletion {
 	return &tokenspb.NexusOperationCompletion{
 		NamespaceId: "namespace-id",
@@ -49,14 +48,14 @@ func chasmCompletionToken(t *testing.T) *tokenspb.NexusOperationCompletion {
 func TestConvertCompletionToOtherFramework(t *testing.T) {
 	t.Parallel()
 
-	// HSM token converts to a CHASM-shaped token (ComponentRef, no HSM ref).
+	// HSM -> CHASM.
 	toChasm, err := convertCompletionToOtherFramework(hsmCompletionToken())
 	require.NoError(t, err)
 	require.NotEmpty(t, toChasm.GetComponentRef())
 	require.Nil(t, toChasm.GetRef())
 	require.Equal(t, convTestRequestID, toChasm.GetRequestId())
 
-	// CHASM token converts to an HSM-shaped token (ref, no ComponentRef).
+	// CHASM -> HSM.
 	toHSM, err := convertCompletionToOtherFramework(chasmCompletionToken(t))
 	require.NoError(t, err)
 	require.NotNil(t, toHSM.GetRef())
@@ -72,7 +71,7 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		// chasmDisabled models a CHASM-disabled namespace; it suppresses the HSM->CHASM fallback.
+		// chasmDisabled suppresses the HSM -> CHASM fallback.
 		chasmDisabled bool
 		token         func(t *testing.T) *tokenspb.NexusOperationCompletion
 		setupClient   func(t *testing.T, client *historyservicemock.MockHistoryServiceClient)
