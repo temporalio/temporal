@@ -7533,18 +7533,21 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	// todo: validate ns and execution key
-	// todo: how do we make sure the ns set by users is verified by authN/Z
+	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
+		return nil, err
+	}
+	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
 	if !wh.config.WorkflowTimeSkippingEnabled(request.Namespace) {
 		return nil, errWorkflowTimeSkippingNotEnabled
 	}
 	if strings.TrimSpace(request.GetFastForwardId()) == "" {
 		return nil, errTimeSkippingFastForwardIdNotSet
 	}
-	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
+
 	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)
 	defer cancel()
 

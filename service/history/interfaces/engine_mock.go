@@ -495,6 +495,21 @@ func (mr *MockEngineMockRecorder) PollMutableState(ctx, request any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockEngine)(nil).PollMutableState), ctx, request)
 }
 
+// PollWorkflowExecutionTimeSkipping mocks base method.
+func (m *MockEngine) PollWorkflowExecutionTimeSkipping(ctx context.Context, request *historyservice.PollWorkflowExecutionTimeSkippingRequest) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionTimeSkipping", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionTimeSkipping indicates an expected call of PollWorkflowExecutionTimeSkipping.
+func (mr *MockEngineMockRecorder) PollWorkflowExecutionTimeSkipping(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionTimeSkipping", reflect.TypeOf((*MockEngine)(nil).PollWorkflowExecutionTimeSkipping), ctx, request)
+}
+
 // PollWorkflowExecutionUpdate mocks base method.
 func (m *MockEngine) PollWorkflowExecutionUpdate(ctx context.Context, request *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	m.ctrl.T.Helper()

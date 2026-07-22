@@ -328,6 +328,22 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 	}
 }
 
+func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFastForwardInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil {
+		return nil
+	}
+	config := util.tsi.GetConfig()
+	return &commonpb.TimeSkippingFastForwardInfo{
+		TargetTime:    common.CloneProto(ff.GetTargetTime()),
+		HasCompleted:  ff.GetHasReached(),
+		FastForwardId: config.GetFastForwardId(),
+	}
+}
+
 // =============================================================================
 // Time Skipping Runtime Methods for Workflow-based Executions
 // =============================================================================

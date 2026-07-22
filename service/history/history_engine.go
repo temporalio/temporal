@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pauseactivity"
 	"go.temporal.io/server/service/history/api/pauseworkflow"
+	"go.temporal.io/server/service/history/api/polltimeskipping"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -679,6 +680,13 @@ func (e *historyEngineImpl) PollWorkflowExecutionUpdate(
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
 	return pollupdate.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	return polltimeskipping.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
