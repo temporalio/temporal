@@ -118,9 +118,11 @@ type operationIntentCtxKeyType struct{}
 
 var operationIntentCtxKey = operationIntentCtxKeyType{}
 
-// NewContextWithOperationIntent returns a child context carrying the given OperationIntent.
-// Callers use this to request OperationIntentProgress so that access to a component under a
-// closed ancestor is blocked and surfaces as a NotFound.
+// NewContextWithOperationIntent returns a child context carrying the given OperationIntent, which
+// validateAccess reads back from the context (see operationIntentFromContext). Callers request
+// OperationIntentProgress so that a write targeting a component whose ancestor is closed (or whose
+// root execution has completed) is rejected with errAccessCheckFailed — a NotFound — instead of
+// silently mutating a closed tree. See the "closed" cases in tree_test.go's validateAccess tests.
 func NewContextWithOperationIntent(
 	ctx context.Context,
 	intent OperationIntent,

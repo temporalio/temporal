@@ -2203,9 +2203,8 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
 
-	// The current-run fallback below only applies to workflow-backed operations: only workflows are reset
-	// onto a new run (at least until CHASM executions get conflict resolution), so a standalone archetype
-	// has no other run to fall back to.
+	// Resolve the archetype up front; the current-run fallback below is gated on it
+	// (see shouldFallBackToCurrentRun).
 	archetypeID, err := ref.ArchetypeID(h.chasmRegistry)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2220,16 +2219,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// (a completion may carry a ref from before a reset/rebuild rewrote transition history) while still guaranteeing
 	// the loaded state knows about the operation; identity is enforced by request ID in the handler.
 	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, ref, completion, chasm.RefConsistencyLevelComponentCreation)
-	// A workflow reset creates a new run that carries the same scheduled operation (and request ID). When the ref's
-	// run can no longer be resolved, retry once on the current run at CurrentRun, which drops the run ID and every
-	// versioned transition. Only retry when the completion handler was not invoked; a completion that reached the
-	// operation and was rejected there (e.g. a request-ID mismatch or an already-terminal operation) is definitive.
-	_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
-	if !handlerInvoked &&
-		isNotFound &&
-		completion.GetRequestId() != "" &&
-		ref.RunID != "" &&
-		archetypeID == chasm.WorkflowArchetypeID {
+	if shouldFallBackToCurrentRun(handlerInvoked, err, completion, ref, archetypeID) {
 		_, err = h.applyChasmNexusCompletion(ctx, ref, completion, chasm.RefConsistencyLevelCurrentRun)
 	}
 	if err != nil {
@@ -2237,6 +2227,36 @@ func (h *Handler) CompleteNexusOperationChasm(
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+// shouldFallBackToCurrentRun reports whether a failed first completion attempt should be retried
+// against the current run at RefConsistencyLevelCurrentRun. A workflow reset creates a new run that
+// carries the same scheduled operation (and request ID), so a completion whose ref names the reset
+// (old) run must be re-resolved to the current run. All of the following must hold:
+//
+//   - handlerInvoked is false: the failure came from run lookup or the closed-ancestor access check,
+//     not from the operation itself. A completion that reached the operation and was rejected there
+//     (e.g. a request-ID mismatch or an already-terminal operation) is definitive — never retry it.
+//   - err is a NotFound: only an unresolvable run/component is worth re-resolving.
+//   - the completion carries a request ID: CurrentRun drops the run ID and every versioned transition,
+//     so the handler re-establishes identity by request ID; without one we can't safely match a run.
+//   - the ref names a run: if it doesn't, the first attempt already targeted the current run, so a
+//     CurrentRun retry would be identical.
+//   - the ref addresses a workflow: only workflows are reset onto a new run (until CHASM executions
+//     get conflict resolution), so a standalone archetype has no other run to fall back to.
+func shouldFallBackToCurrentRun(
+	handlerInvoked bool,
+	err error,
+	completion *persistencespb.ChasmNexusCompletion,
+	ref chasm.ComponentRef,
+	archetypeID chasm.ArchetypeID,
+) bool {
+	_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+	return !handlerInvoked &&
+		isNotFound &&
+		completion.GetRequestId() != "" &&
+		ref.RunID != "" &&
+		archetypeID == chasm.WorkflowArchetypeID
 }
 
 // applyChasmNexusCompletion applies an async Nexus operation completion to the component addressed by ref

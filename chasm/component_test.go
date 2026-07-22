@@ -10,11 +10,18 @@ import (
 func TestNewContextWithOperationIntent(t *testing.T) {
 	t.Parallel()
 
-	// A bare context carries no intent.
-	require.Equal(t, OperationIntentUnspecified, operationIntentFromContext(context.Background()))
+	t.Run("bare context carries no intent", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, OperationIntentUnspecified, operationIntentFromContext(context.Background()))
+	})
 
-	// The exported helper sets the intent that validateAccess reads back from the context,
-	// which is how the completion RPC handler requests OperationIntentProgress.
-	ctx := NewContextWithOperationIntent(context.Background(), OperationIntentProgress)
-	require.Equal(t, OperationIntentProgress, operationIntentFromContext(ctx))
+	t.Run("round-trips the intent read back by validateAccess", func(t *testing.T) {
+		t.Parallel()
+		// This is how the completion RPC handler requests OperationIntentProgress; validateAccess
+		// reads it back via operationIntentFromContext. The downstream effect — a progress write to a
+		// closed tree failing with errAccessCheckFailed (NotFound) — is covered by the "closed" cases
+		// in tree_test.go's validateAccess tests.
+		ctx := NewContextWithOperationIntent(context.Background(), OperationIntentProgress)
+		require.Equal(t, OperationIntentProgress, operationIntentFromContext(ctx))
+	})
 }
