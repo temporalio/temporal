@@ -1,17 +1,19 @@
 module go.temporal.io/server/tests/mixedbrain
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/siderolabs/grpc-proxy v0.5.2
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/omes v0.0.0-20260528212322-14460bcc246f
+	github.com/temporalio/omes v0.0.0-20260722022749-0bfd1b16c74f
 	go.temporal.io/api v1.63.4-0.20260720155646-7a3ca3626ec2
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 )
+
+replace github.com/temporalio/omes => github.com/chaptersix/omes v0.0.0-20260722022749-0bfd1b16c74f
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

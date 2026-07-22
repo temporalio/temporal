@@ -497,13 +497,9 @@ jobs:
         if: always()
         run: cat .testoutput/memory/memory-snapshot.txt || true
 
-      - name: Print current server logs
+      - name: Print server logs
         if: always()
-        run: cat .testoutput/mixedbrain_process-current.log || true
-
-      - name: Print release server logs
-        if: always()
-        run: cat .testoutput/mixedbrain_process-release.log || true
+        run: cat .testoutput/mixedbrain_process-*.log || true
 
       - name: Print Omes logs
         if: always()

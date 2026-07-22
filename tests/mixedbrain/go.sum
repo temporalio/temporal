@@ -2,6 +2,8 @@ github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/chaptersix/omes v0.0.0-20260722022749-0bfd1b16c74f h1:A5eAVBKJgN//QlUXD3blAlyR3cYtGdlF1flgMf0t+58=
+github.com/chaptersix/omes v0.0.0-20260722022749-0bfd1b16c74f/go.mod h1:aDF6zJA/6dff4iXMsYYkCjShCFGtU3o+nZNvf/QOuPM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fullstorydev/grpchan v1.1.1 h1:heQqIJlAv5Cnks9a70GRL2EJke6QQoUB25VGR6TZQas=
@@ -41,8 +43,6 @@ github.com/siderolabs/grpc-proxy v0.5.2 h1:o34tS02IxbX3qeXe0MM99zE2XhfWHuvdBtSWW
 github.com/siderolabs/grpc-proxy v0.5.2/go.mod h1:ygf+gqFxWdymAXuP4qMHTa+j6SvasdcFg3XkhpvUvDw=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/temporalio/omes v0.0.0-20260528212322-14460bcc246f h1:gLnuQgnw6SF4k0J4kMVAWY4h17tt/IhbzZr74D0Tbgc=
-github.com/temporalio/omes v0.0.0-20260528212322-14460bcc246f/go.mod h1:ruo0wxNH1LFUvJ5pcPzf2r3t56X9Joq9lW0/l0efDpk=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/otel v1.44.0 h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=
