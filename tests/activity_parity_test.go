@@ -410,5 +410,7 @@ func (s *activityParityTestSuite) TestCompleteByID_BeforeAnyWorkerStarts() {
 		})
 		s.NoError(err)
 		s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descAfter.GetInfo().GetStatus())
+		s.NotNil(descAfter.GetInfo().GetLastStartedTime(),
+			"a force-completed activity must still record a started time, even though no worker ever started it")
 	})
 }
