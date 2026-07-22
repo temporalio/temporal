@@ -155,8 +155,8 @@ func printSkeleton(tier int, cfgs []model.Config) {
 }
 
 // eventsFor is the event alphabet an explorer tier drives for a given config, mirroring the
-// candidate-event sets in the tier-2 (chasm/lib/activity/spec_inprocess_test.go) and tier-3
-// (tests/activity_standalone_spec_harness.go) explorers. The tier-2 timeout events must be gated on
+// candidate-event sets in the tier-2 (chasm/lib/activity/activity_conformance_test.go) and tier-3
+// (tests/activity_standalone_conformance.go) explorers. The tier-2 timeout events must be gated on
 // config: the model's timeout functions drive to TimedOut unconditionally, so the explorers exclude
 // an unconfigured timeout's event rather than let it fire.
 func eventsFor(tier int, cfg model.Config) []model.Event {
@@ -208,7 +208,7 @@ func tier3Events() []model.Event {
 }
 
 // tierConfigs is the config set each tier's explorer sweeps: tier-3 mirrors saaTraversalConfigs
-// (tests/activity_standalone_spec_test.go), tier-2 the in-process configs (spec_inprocess_test.go).
+// (tests/activity_standalone_conformance_test.go), tier-2 the in-process configs (activity_conformance_test.go).
 func tierConfigs(tier int) ([]model.Config, bool) {
 	switch tier {
 	case 2:

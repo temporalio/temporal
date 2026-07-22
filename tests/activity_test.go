@@ -1804,8 +1804,8 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 // --- CHASM-activity (SAA) vs workflow-activity (WFA) equivalence ----------------------------
 //
 // For each behavior at the intersection of the two products, a test drives the same trace through both
-// drivers as subtests: "WorkflowActivity" uses the workflow-activity driver (activity_utils.go) and
-// "StandaloneActivity" uses the standalone-activity driver (activity_standalone_utils.go). Both assert
+// drivers as subtests: "WorkflowActivity" uses the workflow-activity driver (activity_workflow_driver.go) and
+// "StandaloneActivity" uses the standalone-activity driver (activity_standalone_driver.go). Both assert
 // the same expected public activity info (activityInfoProjection). WFA is the oracle: the
 // WorkflowActivity subtest passing blesses the expectation, and the StandaloneActivity subtest passing
 // proves the CHASM activity matches it. These live on standaloneActivityTestSuite because its env

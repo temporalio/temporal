@@ -117,7 +117,7 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
-	// The RPC graph traversal and random walk (TestSpec) replay hundreds of activities, each on its
+	// The RPC graph traversal and random walk (TestConformance) replay hundreds of activities, each on its
 	// own task queue; with the default 4 partitions the burst of task-queue creation trips matching's
 	// rate/persistence limiters. Collapse each task queue to a single partition.
 	cluster.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, nsValues(1))

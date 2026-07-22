@@ -1,7 +1,7 @@
 package tests
 
 // Driver for workflow-activity (WFA) tests, parallel to the standalone-activity driver in
-// activity_standalone_utils.go. It drives an activity scheduled by a workflow through a scripted
+// activity_standalone_driver.go. It drives an activity scheduled by a workflow through a scripted
 // sequence of events (the same event DSL), realizing each event as the corresponding worker RPC /
 // poll / wall-clock wait, and observes it via DescribeWorkflowExecution. Its purpose is to prove the
 // standalone (CHASM) activity behaves like the workflow activity at their intersection: drive the same
@@ -36,7 +36,7 @@ import (
 // --- shared observable projection ----------------------------------------------------------
 //
 // activityInfoProjection is the retry-scheduling contract both surfaces expose — SAA's
-// ActivityExecutionInfo (see projectSAA in activity_standalone_utils.go) and WFA's PendingActivityInfo
+// ActivityExecutionInfo (see projectSAA in activity_standalone_driver.go) and WFA's PendingActivityInfo
 // (see projectWFA) — and that users depend on. It is the part of the contract SAA GA locks and must
 // match WFA. CurrentRetryInterval is rounded to the second: WFA derives it by subtracting two stored
 // timestamps (a few µs of noise) while SAA stores it exactly, so an unrounded compare would flag a

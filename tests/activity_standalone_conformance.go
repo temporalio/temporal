@@ -1,12 +1,12 @@
 package tests
 
-// Model-checking engine for the standalone-activity spec. It builds on the model-free driver in
-// activity_standalone_utils.go: for each event it drives the corresponding action against a real
+// Model-conformance engine for the standalone-activity surface. It builds on the model-free driver in
+// activity_standalone_driver.go: for each event it drives the corresponding action against a real
 // onebox server (via the driver) and checks the result against model.Transition(). The graph
 // traversal, the random-walk explorer, and the per-step trace checker live here, along with the
 // tuning knobs; below the "helpers" divider are fingerprints, event enumeration, error
 // classification, and failure formatting. The editable configs and test entry points are in
-// activity_standalone_spec_test.go.
+// activity_standalone_conformance_test.go.
 
 import (
 	"errors"
@@ -399,7 +399,7 @@ func (a *saaHandle) applyWallClock(t require.TestingT, e model.Event, cur model.
 	return saaMismatch
 }
 
-// The trace drivers live in activity_standalone_utils.go: driveTrace applies each event model-free,
+// The trace drivers live in activity_standalone_driver.go: driveTrace applies each event model-free,
 // and driveTraceWithModelConformanceChecking drives each event through apply (below), checking it against the
 // model. runTrace picks between them by whether a customizeStart hook injects config the model cannot
 // see.

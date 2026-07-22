@@ -555,7 +555,7 @@ func (x *inProcExplorer) randomWalk(rng *rand.Rand, steps int) {
 	x.t.Logf("cfg %+v: random walk covered %d distinct states, in-process", x.cfg, len(keys))
 }
 
-func TestInProcessSpec(t *testing.T) {
+func TestConformance(t *testing.T) {
 	configs := []model.Config{
 		{MaxAttempts: 3},
 		{MaxAttempts: 2, HasScheduleToClose: true, HasHeartbeat: true},

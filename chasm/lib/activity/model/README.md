@@ -13,16 +13,17 @@ model will let the two be checked for equivalence.
   response predictors.
 - `explore.go` — pure graph helpers shared by the explorers (`Fingerprint`, `Reachable`, `CellKey`,
   `NeedsToken`, `KindName`, `EventLabel`).
-- `conformance/` — static checks of the model against the product state-machine code, no server.
+- `validate/` — static checks *validating the model* against the product state-machine code, no
+  server. (Distinct from conformance testing below, which checks a running server against the model.)
 
-The model is exercised at three tiers, cheapest first. All three check the real behavior against the
-*same* model.
+The model is exercised at three tiers, cheapest first. Tiers 2 and 3 are conformance testing (a
+running implementation vs the model); tier 1 is static model validation. All three use the *same* model.
 
-## Tier 1 — no server (~1s): model unit tests + static conformance
+## Tier 1 — no server (~1s): model unit tests + static model validation
 
 `model_test.go` smoke tests (including the dispatch-delay requirements for start_delay and retry
-backoff), `conformance.TestModelDecisionCoverage` (`Transition` is total over the RPC domain — no
-unexpected panics), and `conformance.TestModelEdgesReachableInCode` (every status change the model
+backoff), `validate.TestModelDecisionCoverage` (`Transition` is total over the RPC domain — no
+unexpected panics), and `validate.TestModelEdgesReachableInCode` (every status change the model
 accepts is reachable via the code's declared transitions).
 
 ```bash
@@ -31,7 +32,7 @@ go test ./chasm/lib/activity/model/...
 
 ## Tier 2 — in-process (~1s): model-conformance explorers over a real in-memory engine
 
-`TestInProcessSpec` (in package `activity`, `spec_inprocess_test.go`) runs the BFS graph traversal and
+`TestConformance` (in package `activity`, `activity_conformance_test.go`) runs the BFS graph traversal and
 random walk against a real in-memory CHASM engine (`chasm/chasmtest`) with a virtual clock
 (`clock.EventTimeSource`). Each event is realized by the production component method its worker RPC
 invokes (`HandleStarted`/`HandleFailed`/`HandleCompleted`/`HandleCanceled`/`RecordHeartbeat`) via
@@ -44,20 +45,20 @@ wall-clock behavior that is prohibitively slow to explore at tier 3. Operator co
 (pause/cancel/terminate/unpause/reset/update-options) are explored at tier 3.
 
 ```bash
-go test -run TestInProcessSpec -count=1 -v ./chasm/lib/activity/
+go test -run TestConformance -count=1 -v ./chasm/lib/activity/
 ```
 
 ## Tier 3 — onebox (real server, real timers)
 
 In the commands below, `-count=1` skips the test cache and `-v` shows per-subtest logs. Prefix with
 `TEMPORAL_TEST_LOG_LEVEL=ERROR TEMPORAL_TEST_LOG_STACKTRACE_LEVEL=off` to quiet logger noise. The SAA
-driver and model-checking engine live in `tests/` (`activity_standalone_utils.go`,
-`activity_standalone_spec_harness.go`, `activity_standalone_spec_test.go`,
+driver and model-conformance engine live in `tests/` (`activity_standalone_driver.go`,
+`activity_standalone_conformance.go`, `activity_standalone_conformance_test.go`,
 `activity_standalone_test.go`).
 
 ### RPC graph traversal + random walk
 
-`TestSpec` walks the model's reachable states against a real server over the full event alphabet,
+`TestConformance` walks the model's reachable states against a real server over the full event alphabet,
 including the operator commands. `RPCGraphTraversal` is a breadth-first walk of every decided edge
 (deduped by fingerprint, depth-bounded); `RandomWalk` drives one activity forward through randomly
 chosen events, reaching deep interaction sequences the bounded traversal never visits. Both check the
@@ -65,7 +66,7 @@ internal state, reject kind, heartbeat flags, Describe projection, and task-inva
 against the model at every step.
 
 ```bash
-go test -tags test_dep -run 'TestStandaloneActivityTestSuite/TestSpec' -count=1 -v ./tests/
+go test -tags test_dep -run 'TestStandaloneActivityTestSuite/TestConformance' -count=1 -v ./tests/
 ```
 
 Tunable via env vars:

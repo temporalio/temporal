@@ -1,4 +1,4 @@
-package conformance
+package validate
 
 import (
 	"fmt"

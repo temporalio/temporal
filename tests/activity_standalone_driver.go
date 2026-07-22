@@ -260,7 +260,7 @@ func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivi
 }
 
 // projection reads the activity's public info back as the shared activityInfoProjection (defined in
-// activity_utils.go). Parallel to wfaHandle.projection.
+// activity_workflow_driver.go). Parallel to wfaHandle.projection.
 func (a *saaHandle) projection(t require.TestingT) activityInfoProjection {
 	return projectSAA(a.describe(t).GetInfo())
 }
