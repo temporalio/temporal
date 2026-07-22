@@ -264,13 +264,6 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	), nil
 }
 
-// backfillerBufferCapacity returns how many BufferedStarts a single backfiller
-// may admit. Retained completed history (up to retainedActionCount entries kept
-// in the buffer for reporting) is discounted so it doesn't consume admission
-// capacity; the generator reserve is taken from the shared half-buffer once (not
-// per backfiller); and the remainder is split evenly across the active
-// backfillers. backfillerCount is clamped to a minimum of 1 to avoid dividing by
-// zero when there are no active backfillers.
 func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
 	backfillerCount = max(1, backfillerCount)
 	pending := max(0, bufferedCount-retainedActionCount)
