@@ -14529,6 +14529,14 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 		return describeActivity(s, t, env, activityID)
 	}
 
+	start_Poll_FailRetryably_RetryBackoffElapse := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
+		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
+		token := pollTask(s, t, env, taskQueue)
+		respondFailedRetryably(s, t, env, token)
+		time.Sleep(retryInterval + backoffSettle)
+		return describeActivity(s, t, env, activityID)
+	}
+
 	start_Poll_FailRetryably_RetryBackoffElapse_Poll := func(s *standaloneActivityTestSuite, t *testing.T, env *standaloneActivityEnv, maxAttempts int32) *activitypb.ActivityExecutionInfo {
 		activityID, taskQueue := startActivity(s, t, env, maxAttempts, 0)
 		token := pollTask(s, t, env, taskQueue)
@@ -14579,7 +14587,7 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 	})
 
 	// Backing off before the retry dispatches: the next dispatch is in the future.
-	s.Run("BackingOffBeforeRetry", func(s *standaloneActivityTestSuite) {
+	s.Run("BackingOffBeforeDispatch", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
 
@@ -14591,34 +14599,10 @@ func (s *standaloneActivityTestSuite) TestNextAttemptScheduleTimeAndCurrentRetry
 
 	// Retry queued in matching but not yet started. Both next_attempt_schedule_time and
 	// current_retry_interval are null.
-	s.Run("BackingOffRetryQueued", func(s *standaloneActivityTestSuite) {
+	s.Run("BackingOffAfterDispatch", func(s *standaloneActivityTestSuite) {
 		t := s.T()
 		env := s.newTestEnv()
-
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
-			Namespace:           env.Namespace().String(),
-			ActivityId:          activityID,
-			ActivityType:        env.Tv().ActivityType(),
-			Identity:            defaultIdentity,
-			Input:               defaultInput,
-			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-			StartToCloseTimeout: durationpb.New(time.Hour),
-			RetryPolicy: &commonpb.RetryPolicy{
-				InitialInterval:    durationpb.New(retryInterval),
-				BackoffCoefficient: 2.0,
-				MaximumInterval:    durationpb.New(30 * time.Second),
-				MaximumAttempts:    3,
-			},
-		})
-		require.NoError(t, err)
-
-		token := pollTask(s, t, env, taskQueue)
-		respondFailedRetryably(s, t, env, token)
-		time.Sleep(retryInterval + backoffSettle)
-		info := describeActivity(s, t, env, activityID)
-
+		info := start_Poll_FailRetryably_RetryBackoffElapse(s, t, env, 3)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, info.GetRunState())
 		require.EqualValues(t, 2, info.GetAttempt())
 		require.Nil(t, info.GetNextAttemptScheduleTime())
