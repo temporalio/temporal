@@ -294,6 +294,36 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(ai.RetryMaximumAttempts, pi.ActivityOptions.RetryPolicy.MaximumAttempts)
 }
 
+func (s *activitySuite) TestGetPendingActivityInfoNextAttemptScheduleTimeAndCurrentRetryInterval() {
+	now := s.mockShard.GetTimeSource().Now().UTC()
+	activityType := commonpb.ActivityType{
+		Name: "activityType",
+	}
+	ai := &persistencespb.ActivityInfo{
+		StartedEventId:          common.EmptyEventID,
+		LastAttemptCompleteTime: timestamppb.New(now),
+		HasRetryPolicy:          true,
+	}
+	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(2)
+
+	// Before dispatch to Matching: waiting for the retry, so we report when the next attempt is
+	// scheduled and the interval until then.
+	ai.ScheduledTime = timestamppb.New(now.Add(5 * time.Second))
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	s.NoError(err)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
+	s.Equal(ai.ScheduledTime, pi.NextAttemptScheduleTime)
+	s.Equal(durationpb.New(5*time.Second), pi.CurrentRetryInterval)
+
+	// After dispatch to Matching: no next attempt schedule time or current retry interval.
+	ai.ScheduledTime = timestamppb.New(now.Add(-1 * time.Minute))
+	pi, err = GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	s.NoError(err)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
+	s.Nil(pi.NextAttemptScheduleTime)
+	s.Nil(pi.CurrentRetryInterval)
+}
+
 func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
 	activityId := "activity-id"
 	activityScheduledEvent := &historypb.HistoryEvent{
