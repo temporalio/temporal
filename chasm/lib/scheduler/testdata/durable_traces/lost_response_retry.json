@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "lost-response-stale-redelivery-reload-retry",
+  "steps": [
+    "trigger",
+    "deliver_execute",
+    "stale_redelivery",
+    "reload",
+    "advance_retry",
+    "verify"
+  ]
+}

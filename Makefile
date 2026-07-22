@@ -505,6 +505,19 @@ build-tests:
 	@printf $(COLOR) "Build tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
+CHASM_SCHEDULER_PROPERTY_CHECKS ?= 250
+CHASM_SCHEDULER_PROPERTY_STEPS ?= 100
+
+.PHONY: chasm-scheduler-durable-property-test
+chasm-scheduler-durable-property-test:
+	@printf $(COLOR) "Run CHASM scheduler durable trace corpus and property campaign..."
+	@CGO_ENABLED=$(CGO_ENABLED) go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
+		-count=1 -run '^TestSchedulerDurableTraceCorpus$$' -rapid.checks=1
+	@CGO_ENABLED=$(CGO_ENABLED) go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
+		-count=1 -run '^TestSchedulerDurableTraceRapid$$' \
+		-rapid.checks=$(CHASM_SCHEDULER_PROPERTY_CHECKS) \
+		-rapid.steps=$(CHASM_SCHEDULER_PROPERTY_STEPS)
+
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
