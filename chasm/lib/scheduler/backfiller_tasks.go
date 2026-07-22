@@ -55,6 +55,9 @@ func (b *BackfillerTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
+	if backfiller.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err
@@ -255,8 +258,11 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
-	// Reserve the generator space from the shared pool once (not per backfiller),
-	// then split the remaining half-buffer evenly across active backfillers.
-	available := max(0, (tweakables.MaxBufferSize/2)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize)
+	// Discount retained completed history (kept in the buffer for reporting, up to
+	// recentActionCount) so it doesn't consume admission capacity, reserve the
+	// generator space from the shared pool once (not per backfiller), then split
+	// the remaining half-buffer evenly across active backfillers.
+	pending := max(0, len(invoker.GetBufferedStarts())-recentActionCount)
+	available := max(0, (tweakables.MaxBufferSize/2)-pending-tweakables.GeneratorBufferReserveSize)
 	return available / backfillerCount, nil
 }

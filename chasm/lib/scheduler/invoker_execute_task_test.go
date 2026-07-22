@@ -649,6 +649,18 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
 }
 
+func TestExecuteTask_Validate_MigrationPending(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "ready", Attempt: 1}}
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
+}
+
 // Validate must skip Execute when no work is ready.
 func TestExecuteTask_Validate(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
