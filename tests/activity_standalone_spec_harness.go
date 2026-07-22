@@ -75,7 +75,7 @@ func (h *saaHarness) traverse(t *testing.T) {
 		state model.AbstractState
 	}
 	start := model.Initial(h.cfg)
-	visited := map[string]bool{saaFingerprint(start): true}
+	visited := map[string]bool{model.Fingerprint(start): true}
 	frontier := []node{{nil, start}}
 
 	verifiedCells := map[saaCell]bool{}
@@ -98,7 +98,7 @@ func (h *saaHarness) traverse(t *testing.T) {
 				res, reached := h.verifyPath(t, path)
 				if reached {
 					c := saaCell{nd.state.Status, e.Kind}
-					key := saaCellKey(nd.state, e.Kind)
+					key := model.CellKey(nd.state, e.Kind)
 					if res == saaSkippedNoToken {
 						skippedCells[c] = true
 						skippedFine[key] = true
@@ -110,7 +110,7 @@ func (h *saaHarness) traverse(t *testing.T) {
 				if out.Reject != model.NoError {
 					continue // rejected/no-op: no new state to extend from
 				}
-				fp := saaFingerprint(out.Next)
+				fp := model.Fingerprint(out.Next)
 				if !visited[fp] {
 					visited[fp] = true
 					states++
@@ -132,7 +132,7 @@ func (h *saaHarness) traverse(t *testing.T) {
 		var unexercised []string
 		for c := range skippedCells {
 			if !verifiedCells[c] {
-				unexercised = append(unexercised, fmt.Sprintf("%s/%s", c.status, saaKindName(c.kind)))
+				unexercised = append(unexercised, fmt.Sprintf("%s/%s", c.status, model.KindName(c.kind)))
 			}
 		}
 		sort.Strings(unexercised)
@@ -153,7 +153,7 @@ func (h *saaHarness) checkCompleteness(t *testing.T, verifiedFine, skippedFine m
 		return
 	}
 	var gaps []string
-	for key := range saaModelReachable(h.cfg) {
+	for key := range model.Reachable(h.cfg, saaCandidateEvents()) {
 		if verifiedFine[key] || skippedFine[key] {
 			continue
 		}
@@ -230,11 +230,11 @@ func (a *saaHandle) apply(t require.TestingT, e model.Event, cur model.AbstractS
 	// Worker RPCs need a task token, held only after a poll. On a never-polled path there is no token,
 	// and an empty token yields a different error than the spec's NotFound, so the edge is not drivable
 	// here; the ledger records the skip.
-	if saaNeedsToken(e.Kind) && a.token == nil {
+	if model.NeedsToken(e.Kind) && a.token == nil {
 		return saaSkippedNoToken
 	}
 	err := a.rpc(e)
-	if saaCarriesReqID(e.Kind) && out.Reject == model.NoError && out.Next.Status != cur.Status {
+	if model.CarriesReqID(e.Kind) && out.Reject == model.NoError && out.Next.Status != cur.Status {
 		// This request established a new state; its id is the one a later SameRequestID reuses for the
 		// server's request-id idempotency. An intervening rejected/no-op request must not overwrite it.
 		a.establishedReqID[e.Kind] = a.lastReqID
@@ -428,7 +428,7 @@ func (h *saaHarness) randomWalk(t *testing.T, rng *rand.Rand, maxSteps int) {
 
 	a, cur := h.walkStart(t)
 	var trace []model.Event // events driven since the last (re)start, so a divergence prints its path
-	seen[saaFingerprint(cur)] = true
+	seen[model.Fingerprint(cur)] = true
 	walks++
 	if verbose {
 		t.Logf("cfg %d walk %d: start %s", h.cfgIdx, walks, cur.Status)
@@ -438,7 +438,7 @@ func (h *saaHarness) randomWalk(t *testing.T, rng *rand.Rand, maxSteps int) {
 		if cur.Status.Terminal() {
 			a, cur = h.walkStart(t)
 			trace = nil
-			seen[saaFingerprint(cur)] = true
+			seen[model.Fingerprint(cur)] = true
 			walks++
 			if verbose {
 				t.Logf("cfg %d walk %d: start %s (restart after terminal)", h.cfgIdx, walks, cur.Status)
@@ -456,7 +456,7 @@ func (h *saaHarness) randomWalk(t *testing.T, rng *rand.Rand, maxSteps int) {
 		switch res {
 		case saaVerified:
 			cur = out.Next
-			seen[saaFingerprint(cur)] = true
+			seen[model.Fingerprint(cur)] = true
 		case saaSkippedNoToken:
 			trace = trace[:len(trace)-1] // event not driven; drop it from the segment trace
 		case saaMismatch:
@@ -492,7 +492,7 @@ func (h *saaHarness) walkStart(t *testing.T) (*saaHandle, model.AbstractState) {
 func (h *saaHarness) pickWalkEvent(rng *rand.Rand, a *saaHandle, cur model.AbstractState) model.Event {
 	var applicable, changing, deep []model.Event
 	for _, e := range saaCandidateEvents() {
-		if saaNeedsToken(e.Kind) && a.token == nil {
+		if model.NeedsToken(e.Kind) && a.token == nil {
 			continue
 		}
 		applicable = append(applicable, e)
@@ -520,7 +520,7 @@ func (h *saaHarness) pickWalkEvent(rng *rand.Rand, a *saaHandle, cur model.Abstr
 // saaStepDesc renders one walk step as "FromStatus --Event--> ToStatus", annotated with the reject
 // kind or a no-token skip.
 func saaStepDesc(cur model.AbstractState, e model.Event, out model.Outcome, res saaApply) string {
-	desc := fmt.Sprintf("%s --%s--> %s", cur.Status, saaEventLabel(e), out.Next.Status)
+	desc := fmt.Sprintf("%s --%s--> %s", cur.Status, model.EventLabel(e), out.Next.Status)
 	switch {
 	case res == saaSkippedNoToken:
 		desc += "  [skipped: no token]"
@@ -528,68 +528,6 @@ func saaStepDesc(cur model.AbstractState, e model.Event, out model.Outcome, res 
 		desc += "  [" + saaRejectKindName(out.Reject) + "]"
 	}
 	return desc
-}
-
-func saaNeedsToken(k model.EventKind) bool {
-	switch k {
-	case model.Heartbeat, model.RespondCompleted, model.RespondFailed, model.RespondCanceled:
-		return true
-	default:
-		return false
-	}
-}
-
-// saaCarriesReqID reports whether an operator command carries a request id whose server-side
-// idempotency is keyed on it (RequestCancel/Terminate/Pause).
-func saaCarriesReqID(k model.EventKind) bool {
-	switch k {
-	case model.RequestCancel, model.Terminate, model.Pause:
-		return true
-	default:
-		return false
-	}
-}
-
-func saaFingerprint(s model.AbstractState) string {
-	count := min(s.AttemptCount, 3)
-	return fmt.Sprintf("%v|%d|%v|%v|%v|%v|%v|%v",
-		s.Status, count, s.ResetKeepPaused, s.ResetHeartbeats,
-		s.ResetRestoreOptions, s.FirstAttemptStarted, s.DispatchTimeSet, s.Dispatchability)
-}
-
-// saaCellKey identifies a (state, event kind) cell at fingerprint granularity — the unit the
-// completeness check and the coverage ledger reason about.
-func saaCellKey(s model.AbstractState, kind model.EventKind) string {
-	return saaFingerprint(s) + " / " + saaKindName(kind)
-}
-
-// saaModelReachable computes, purely from Model() (no server), every (state, event) cell reachable
-// from Initial(cfg) by following non-reject edges to fixpoint (states deduped by fingerprint). This
-// is the reference set the traversal's coverage is checked against, independent of any depth bound.
-func saaModelReachable(cfg model.Config) map[string]bool {
-	cells := map[string]bool{}
-	start := model.Initial(cfg)
-	visited := map[string]bool{saaFingerprint(start): true}
-	frontier := []model.AbstractState{start}
-	for len(frontier) > 0 {
-		var next []model.AbstractState
-		for _, s := range frontier {
-			for _, e := range saaCandidateEvents() {
-				out := model.Transition(cfg, s, e)
-				cells[saaCellKey(s, e.Kind)] = true
-				if out.Reject != model.NoError {
-					continue // no state change; nothing new to reach
-				}
-				fp := saaFingerprint(out.Next)
-				if !visited[fp] {
-					visited[fp] = true
-					next = append(next, out.Next)
-				}
-			}
-		}
-		frontier = next
-	}
-	return cells
 }
 
 func saaCandidateEvents() []model.Event {
@@ -656,7 +594,7 @@ func saaRejectKind(err error) model.ErrorKind {
 // edge names the event and the status it was driven from, e.g. "RespondFailed[retryable=true] from
 // Started".
 func (a *saaHandle) edge(e model.Event, src model.Status) string {
-	return fmt.Sprintf("%s from %s", saaEventLabel(e), src)
+	return fmt.Sprintf("%s from %s", model.EventLabel(e), src)
 }
 
 func (a *saaHandle) pathLine() string {
@@ -698,38 +636,9 @@ func saaPathString(path []model.Event) string {
 	parts := make([]string, 0, len(path)+1)
 	parts = append(parts, "Schedule")
 	for _, e := range path {
-		parts = append(parts, saaEventLabel(e))
+		parts = append(parts, model.EventLabel(e))
 	}
 	return strings.Join(parts, " → ")
-}
-
-// saaEventLabel names an event and appends the flags that affect its outcome.
-func saaEventLabel(e model.Event) string {
-	var flags []string
-	add := func(cond bool, name string) {
-		if cond {
-			flags = append(flags, name)
-		}
-	}
-	switch e.Kind {
-	case model.RespondFailed:
-		flags = append(flags, fmt.Sprintf("retryable=%v", e.Retryable))
-	case model.Reset:
-		add(e.KeepPaused, "keepPaused")
-		add(e.RestoreOriginal, "restoreOriginal")
-	case model.Unpause:
-		add(e.ResetAttempts, "resetAttempts")
-		add(e.ResetHeartbeat, "resetHeartbeat")
-	case model.Pause, model.Terminate, model.RequestCancel:
-		add(e.SameRequestID, "sameRequestID")
-	case model.UpdateOptions:
-		add(e.SetsStartDelay, "setsStartDelay")
-		add(e.RestoreOriginal, "restoreOriginal")
-	}
-	if len(flags) == 0 {
-		return saaKindName(e.Kind)
-	}
-	return fmt.Sprintf("%s[%s]", saaKindName(e.Kind), strings.Join(flags, ","))
 }
 
 // saaStateDiff renders the AbstractState fields that differ in aligned columns, with the agreeing
@@ -809,46 +718,5 @@ func saaRejectKindName(k model.ErrorKind) string {
 		return "InvalidArgument"
 	default:
 		return fmt.Sprintf("unrecognized(%d)", int(k))
-	}
-}
-
-func saaKindName(k model.EventKind) string {
-	switch k {
-	case model.Poll:
-		return "Poll"
-	case model.Heartbeat:
-		return "Heartbeat"
-	case model.RespondCompleted:
-		return "RespondCompleted"
-	case model.RespondFailed:
-		return "RespondFailed"
-	case model.RespondCanceled:
-		return "RespondCanceled"
-	case model.RequestCancel:
-		return "RequestCancel"
-	case model.Terminate:
-		return "Terminate"
-	case model.Pause:
-		return "Pause"
-	case model.Unpause:
-		return "Unpause"
-	case model.Reset:
-		return "Reset"
-	case model.UpdateOptions:
-		return "UpdateOptions"
-	case model.ScheduleToStartElapses:
-		return "ScheduleToStartElapses"
-	case model.ScheduleToCloseElapses:
-		return "ScheduleToCloseElapses"
-	case model.StartToCloseElapses:
-		return "StartToCloseElapses"
-	case model.HeartbeatElapses:
-		return "HeartbeatElapses"
-	case model.StartDelayElapses:
-		return "StartDelayElapses"
-	case model.BackoffElapses:
-		return "BackoffElapses"
-	default:
-		return fmt.Sprintf("EventKind(%d)", k)
 	}
 }
