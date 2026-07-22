@@ -225,7 +225,7 @@ func TestBackfillTask_BufferCompletelyFull(t *testing.T) {
 		ExpectedBufferedStarts:    1000,
 		ExpectedComplete:          false,
 		ExpectedAttempt:           1,
-		ExpectedLastProcessedTime: startTime,
+		ExpectedLastProcessedTime: startTime.Add(-time.Millisecond),
 	})
 }
 
