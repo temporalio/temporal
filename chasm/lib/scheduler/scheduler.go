@@ -255,7 +255,9 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
+	if err := visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields()); err != nil {
+		return nil, err
+	}
 	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, nil
@@ -303,7 +305,9 @@ func CreateSchedulerFromMigration(
 
 	visibility := chasm.NewVisibility(ctx)
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
-	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
+	if err := visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes()); err != nil {
+		return nil, err
+	}
 	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
 	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
@@ -871,7 +875,10 @@ func (s *Scheduler) Update(
 		oldVisibility := s.Visibility.Get(ctx)
 		oldMemo := oldVisibility.CustomMemo(ctx)
 
-		visibility := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
+		visibility, err := chasm.NewVisibilityWithData(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields(), oldMemo)
+		if err != nil {
+			return nil, err
+		}
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 

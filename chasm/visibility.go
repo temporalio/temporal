@@ -195,7 +195,11 @@ func NewVisibilityWithData(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
 	customMemo map[string]*commonpb.Payload,
-) *Visibility {
+) (*Visibility, error) {
+	if err := validateNoReservedSearchAttributes(customSearchAttributes); err != nil {
+		return nil, err
+	}
+
 	visibility := &Visibility{
 		Data: &persistencespb.ChasmVisibilityData{
 			TransitionCount: 0,
@@ -221,7 +225,23 @@ func NewVisibilityWithData(
 	}
 
 	visibility.generateTask(mutableContext)
-	return visibility
+	return visibility, nil
+}
+
+// validateNoReservedSearchAttributes rejects any custom search attribute whose name uses
+// the reserved `Temporal` prefix. System search attributes (e.g. TemporalScheduledStartTime,
+// TemporalSchedulePaused) all use this prefix and must never be written as custom search
+// attributes. Validation is atomic: if any key is reserved, the entire input is rejected.
+func validateNoReservedSearchAttributes(customSearchAttributes map[string]*commonpb.Payload) error {
+	for name := range customSearchAttributes {
+		if strings.HasPrefix(name, sadefs.ReservedPrefix) {
+			return serviceerror.NewInvalidArgumentf(
+				"custom search attribute %q uses the reserved %q prefix and cannot be set",
+				name, sadefs.ReservedPrefix,
+			)
+		}
+	}
+	return nil
 }
 
 func (v *Visibility) LifecycleState(_ Context) LifecycleState {
@@ -251,9 +271,13 @@ func (v *Visibility) CustomSearchAttributes(
 func (v *Visibility) MergeCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) {
+) error {
 	if len(customSearchAttributes) == 0 {
-		return
+		return nil
+	}
+
+	if err := validateNoReservedSearchAttributes(customSearchAttributes); err != nil {
+		return err
 	}
 
 	currentSA, ok := v.SA.TryGet(mutableContext)
@@ -271,6 +295,7 @@ func (v *Visibility) MergeCustomSearchAttributes(
 	}
 
 	v.generateTask(mutableContext)
+	return nil
 }
 
 // ReplaceCustomSearchAttributes replaces the existing custom search attribute fields with the provided ones.
@@ -279,7 +304,11 @@ func (v *Visibility) MergeCustomSearchAttributes(
 func (v *Visibility) ReplaceCustomSearchAttributes(
 	mutableContext MutableContext,
 	customSearchAttributes map[string]*commonpb.Payload,
-) {
+) error {
+	if err := validateNoReservedSearchAttributes(customSearchAttributes); err != nil {
+		return err
+	}
+
 	// Filter out nil/empty payload values.
 	filteredSA := payload.MergeMapOfPayload(nil, customSearchAttributes)
 
@@ -287,7 +316,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 		_, ok := v.SA.TryGet(mutableContext)
 		if !ok {
 			// Already empty, no-op
-			return
+			return nil
 		}
 
 		v.SA = NewEmptyField[*commonpb.SearchAttributes]()
@@ -299,6 +328,7 @@ func (v *Visibility) ReplaceCustomSearchAttributes(
 	}
 
 	v.generateTask(mutableContext)
+	return nil
 }
 
 // CustomMemo returns the stored custom memo fields.

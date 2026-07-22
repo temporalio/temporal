@@ -366,13 +366,15 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 
 	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+	vis, err := chasm.NewVisibilityWithData(
 		ctx,
 		map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")},
 		nil,
-	))
+	)
+	require.NoError(t, err)
+	op.Visibility = chasm.NewComponentField(ctx, vis)
 	require.NoError(t, root.SetRootComponent(op))
-	_, err := root.CloseTransaction()
+	_, err = root.CloseTransaction()
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)

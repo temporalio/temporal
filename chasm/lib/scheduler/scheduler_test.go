@@ -665,7 +665,7 @@ func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 
 	vis := sched.Visibility.Get(ctx)
 	vis.MergeCustomMemo(ctx, map[string]*commonpb.Payload{"memoKey": payload.EncodeString("v")})
-	vis.MergeCustomSearchAttributes(ctx, map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")})
+	require.NoError(t, vis.MergeCustomSearchAttributes(ctx, map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")}))
 
 	resp, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{
 		NamespaceId: namespaceID,
