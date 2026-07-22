@@ -400,7 +400,7 @@ func (x *inProcExplorer) verifyPath(path []model.Event) bool {
 	for i, e := range path {
 		out := model.Transition(x.cfg, cur, e)
 		final := i == len(path)-1
-		if !a.applyEdge(e, cur, out, final) {
+		if !a.apply(e, cur, out, final) {
 			return false
 		}
 		cur = out.Next
@@ -408,9 +408,11 @@ func (x *inProcExplorer) verifyPath(path []model.Event) bool {
 	return true
 }
 
-// applyEdge realizes e (whose predicted outcome from cur is out) and checks the observed reject kind,
+// apply realizes e (whose predicted outcome from cur is out) and checks the observed reject kind,
 // state, and — for Poll — dispatch readiness against the model. Reports (only on the final edge).
-func (a *inProcActivity) applyEdge(e model.Event, cur model.AbstractState, out model.Outcome, final bool) bool {
+// Parallel to saaHandle.apply in the tier-3 spec harness; realize is the tier-2 union of tier-3's
+// rpc / applyPoll / applyWallClock realization.
+func (a *inProcActivity) apply(e model.Event, cur model.AbstractState, out model.Outcome, final bool) bool {
 	if e.Kind == model.Poll && cur.Status == model.Scheduled {
 		wantDispatchable := cur.Dispatchability == model.Dispatchable
 		if a.dispatchable() != wantDispatchable {
@@ -537,7 +539,7 @@ func (x *inProcExplorer) randomWalk(rng *rand.Rand, steps int) {
 		trace = append(trace, e)
 		a.path = trace
 		out := model.Transition(x.cfg, cur, e)
-		if !a.applyEdge(e, cur, out, true) {
+		if !a.apply(e, cur, out, true) {
 			a, cur = freshWalk() // diverged (already reported); restart from a known state
 			trace = nil
 			continue
