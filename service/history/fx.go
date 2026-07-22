@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ffnotifier"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -92,6 +93,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(FastForwardNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),
@@ -480,6 +482,12 @@ func EventNotifierProvider(
 		metricsHandler,
 		config.GetShardID,
 	)
+}
+
+func FastForwardNotifierProvider(
+	config *configs.Config,
+) ffnotifier.Notifier {
+	return ffnotifier.NewNotifier(config.GetShardID)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

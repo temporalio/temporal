@@ -90,6 +90,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ffnotifier"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -118,6 +119,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
+		fastForwardNotifier        ffnotifier.Notifier
 		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
@@ -159,6 +161,7 @@ func NewEngineWithShardContext(
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
+	fastForwardNotifier ffnotifier.Notifier,
 	config *configs.Config,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	workerDeploymentClient workerdeployment.Client,
@@ -215,6 +218,7 @@ func NewEngineWithShardContext(
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
+		fastForwardNotifier:        fastForwardNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
@@ -686,7 +690,7 @@ func (e *historyEngineImpl) PollWorkflowExecutionTimeSkipping(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
 ) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
-	return polltimeskipping.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+	return polltimeskipping.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.fastForwardNotifier)
 }
 
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
@@ -884,6 +888,13 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 ) {
 
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
+}
+
+func (e *historyEngineImpl) NotifyFastForwardUpdate(
+	notification *ffnotifier.Notification,
+) {
+
+	e.fastForwardNotifier.NotifyFastForwardUpdate(notification)
 }
 
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {
