@@ -161,13 +161,44 @@ implications:
   confirm that a just-started workflow exists, or to poll for the Workflow ID / Run ID of a workflow you just
   started — that value is already returned to you synchronously by the start call. Polling visibility for it
   couples correctness to an eventually-consistent index.
-- **Do not put visibility queries in workflow business logic.** Visibility is an operational/analytical
-  facility. Using it on a hot path (e.g. a workflow that lists other workflows to decide what to do next)
-  multiplies load against a shared, rate-limited subsystem and makes business logic depend on eventual
-  consistency. For workflow-to-workflow coordination, prefer:
+- **Do not put visibility queries in workflow/activity business logic.** Visibility is an
+  operational/analytical facility. Using it on a hot path (e.g. an activity that lists workflows to decide what
+  to do next) multiplies load against a shared, rate-limited subsystem and makes business logic depend on
+  eventual consistency. It also inverts the blast radius: because the *workflow* now depends on visibility,
+  visibility degradation **blocks workflow completion**, and the SDK's automatic retries turn that into a
+  **retry storm** that keeps the store overloaded and unable to recover. For workflow-to-workflow coordination,
+  prefer:
   - Signals / Updates, parent-child workflows, or [Nexus](./nexus.md) for cross-workflow orchestration;
   - Queries or an external datastore for reading a running workflow's own state;
   - the deterministic result of the start/signal/update call itself for IDs and outcomes.
+
+### Anti-pattern: existence checks via visibility
+
+A common and dangerous pattern is using a list/count query to check whether a workflow exists — often as a
+"start it if it isn't already running" guard, sometimes from inside workflow/activity code:
+
+```ts
+// ANTI-PATTERN: existence check via visibility.
+// - Eventually consistent: a workflow started moments ago may not appear yet.
+// - Counts as ONE request against the visibility rate limiter regardless of how many
+//   IDs are in the IN(...) list — but a large IN(...) list is an expensive, high-fan-out
+//   query against Elasticsearch. Cheap to the limiter, costly to the store.
+const existing = await client.workflowService.listWorkflowExecutions({
+  namespace,
+  query: `WorkflowId IN ('${workflowIds.join("','")}')`,
+});
+```
+
+Prefer, in order:
+
+1. **Just start it.** `StartWorkflowExecution` with a stable Workflow ID is idempotent by ID — if it already
+   exists you get a `WorkflowExecutionAlreadyStarted` error (subject to the Workflow ID reuse/conflict policy).
+   Handle that error instead of pre-checking. This is strongly consistent and needs no visibility call.
+2. **Point lookup.** If you truly need to check one workflow, use `DescribeWorkflowExecution` (reads the
+   primary store, strongly consistent) rather than a list/count query.
+3. **Restructure the coordination.** For "per-entity, start-once and then track" patterns, model it as a
+   long-running parent workflow that manages child workflows, rather than an external client that polls
+   visibility to decide what to start.
 
 > [!NOTE]
 > Search Attribute values are **not** encoded by Data Converters or Payload Codecs — they are stored in
@@ -196,17 +227,35 @@ separate from the execution-API limiter, wired in
 Because this bucket is separate from `frontend.namespaceRPS` (the execution-API limit), a namespace can have
 ample capacity for `StartWorkflowExecution`/`SignalWorkflowExecution` and still be throttled on
 `ListWorkflowExecutions`/`ListSchedules`. Calls from the Web UI / CLI are given operator priority
-(`system.operatorRPSRatio`) so operator traffic is less likely to be starved by application traffic.
+(`system.operatorRPSRatio`) so operator traffic is less likely to be starved by application traffic. When a
+caller exceeds the limit the request is rejected with a `ResourceExhausted` error; clients (and SDKs) retry, so
+a client that ignores backoff can turn throttling into a retry storm.
+
+Two properties of this limiter are important and easy to get wrong:
+
+- **It limits requests, not query cost.** A single `ListWorkflowExecutions` with a large
+  `WorkflowId IN ('a','b',...)` list, a high-cardinality aggregation, or an unindexed predicate counts as *one*
+  request against the RPS limit but can be very expensive for Elasticsearch. RPS limiting alone therefore does
+  not protect the store from a few pathological queries.
+- **It is per-instance unless the global variant is set.** `frontend.namespaceRPS.visibility` is enforced
+  per frontend pod, so the effective ceiling scales with the number of frontend instances. Set
+  `frontend.globalNamespaceRPS.visibility` to enforce a single cluster-wide limit for a namespace (evenly
+  divided across frontends), which is the knob that actually bounds aggregate load on the store.
 
 > [!NOTE]
 > These `*.visibility` rate-limit settings are marked EXPERIMENTAL in the code and may change between releases.
+> When diagnosing whether the limiter is engaging, note that request-count/latency metrics include *throttled*
+> requests; the requests that actually reached the store are the ones **not** rejected with `ResourceExhausted`.
 
 ### 2. Persistence, system-wide (protects the store itself)
 
 The Visibility store manager is additionally wrapped by a rate limiter
 ([`common/persistence/visibility/visibility_manager_rate_limited.go`](../../common/persistence/visibility/visibility_manager_rate_limited.go),
 wired in [`factory.go`](../../common/persistence/visibility/factory.go)) that caps how hard any single host will
-hit the store:
+hit the store. This is the last-resort backstop that protects the shared store (Elasticsearch) itself,
+independent of any namespace: it is applied per pod, so the cluster-wide ceiling is roughly this value times
+the number of frontend instances. Turning it down is a blunt but effective emergency lever when the store is
+unhealthy — at the cost of throttling *all* namespaces on the host.
 
 | Dynamic config key | Default | Meaning |
 |---|---|---|
