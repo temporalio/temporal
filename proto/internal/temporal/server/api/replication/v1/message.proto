@@ -67,6 +67,12 @@ message SyncReplicationState {
   google.protobuf.Timestamp inclusive_low_watermark_time = 2;
   ReplicationState high_priority_state = 3;
   ReplicationState low_priority_state = 4;
+  // namespace IDs the sender's LOW reader should pause on
+  repeated string pause_namespace_ids = 5;
+  // per-namespace catchup QPS for dedicated catchup readers (tasks/sec).
+  // Keyed by the namespace IDs in pause_namespace_ids; omitted namespaces
+  // use the sender's default catchup rate.
+  map<string, double> namespace_catchup_qps = 6;
 }
 message ReplicationState {
   int64 inclusive_low_watermark = 1;

@@ -313,6 +313,8 @@ type Config struct {
 	ReplicationLowPriorityTaskParallelism               dynamicconfig.IntPropertyFn
 	EnableReplicationTaskBatching                       dynamicconfig.BoolPropertyFn
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
+	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
+	EnableReplicationNamespaceIsolation                 dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderHighPriorityQPS              dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLowPriorityQPS               dynamicconfig.IntPropertyFn
 	ReplicationStreamEventLoopRetryMaxAttempts          dynamicconfig.IntPropertyFn
@@ -320,6 +322,7 @@ type Config struct {
 	ReplicationReceiverSlowSubmissionLatencyThreshold   dynamicconfig.DurationPropertyFn
 	ReplicationReceiverSlowSubmissionWindow             dynamicconfig.DurationPropertyFn
 	EnableReplicationReceiverSlowSubmissionFlowControl  dynamicconfig.BoolPropertyFn
+	ReplicationStreamSenderCatchupQPSRatio             dynamicconfig.FloatPropertyFn
 	ReplicationResendMaxBatchCount                      dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheMaxSize                     dynamicconfig.IntPropertyFn
 	ReplicationProgressCacheTTL                         dynamicconfig.DurationPropertyFn
@@ -627,6 +630,8 @@ func NewConfig(
 		ReplicationLowPriorityTaskParallelism:               dynamicconfig.ReplicationLowPriorityTaskParallelism.Get(dc),
 		EnableReplicationTaskBatching:                       dynamicconfig.EnableReplicationTaskBatching.Get(dc),
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
+		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
+		EnableReplicationNamespaceIsolation:                 dynamicconfig.EnableReplicationNamespaceIsolation.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
@@ -634,6 +639,7 @@ func NewConfig(
 		ReplicationReceiverSlowSubmissionLatencyThreshold:   dynamicconfig.ReplicationReceiverSlowSubmissionLatencyThreshold.Get(dc),
 		ReplicationReceiverSlowSubmissionWindow:             dynamicconfig.ReplicationReceiverSlowSubmissionWindow.Get(dc),
 		EnableReplicationReceiverSlowSubmissionFlowControl:  dynamicconfig.EnableReplicationReceiverSlowSubmissionFlowControl.Get(dc),
+		ReplicationStreamSenderCatchupQPSRatio:             dynamicconfig.ReplicationStreamSenderCatchupQPSRatio.Get(dc),
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
