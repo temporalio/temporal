@@ -371,10 +371,19 @@ func (a *saaHandle) applyPoll(cur model.AbstractState, out model.Outcome, final 
 	return saaMismatch
 }
 
-// applyWallClock sleeps until a wall-clock event (a timeout or a dispatch-delay clock) time
-// elapses, then asserts the observed state equals Model.Next.
+// applyWallClock waits for a wall-clock event (a timeout or a dispatch-delay clock) to take effect,
+// then asserts the observed state equals Model.Next. When the model predicts an observable change it
+// polls until the state reaches that target (so a late timer is tolerated up to the window) rather than
+// reading once after a blind sleep; when it predicts no observable change — a stale/no-op timeout, or a
+// dispatch-delay elapse whose only effect is the latent readiness a later Poll verifies — the only way
+// to confirm the transition is to wait the window out and see nothing move.
 func (a *saaHandle) applyWallClock(t require.TestingT, e model.Event, cur model.AbstractState, out model.Outcome, final bool) saaApply {
-	time.Sleep(a.h.eventClock(e) + saaWallClockSettle)
+	deadline := time.Now().Add(a.h.eventClock(e) + saaWallClockSettle)
+	if out.Next.SameObserved(cur) {
+		time.Sleep(time.Until(deadline))
+	} else {
+		a.awaitObservedMatch(out.Next, deadline)
+	}
 	obs, err := a.observed()
 	require.NoError(t, err)
 	if final {

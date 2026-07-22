@@ -63,8 +63,13 @@ type saaHarness struct {
 
 const saaShortTimeout = 2 * time.Second
 
-// saaWallClockSettle is slack added to a wall-clock event's clock when waiting for it to fire.
+// saaWallClockSettle is slack added to a wall-clock event's clock: the driver polls for the event's
+// effect up to (window + settle) rather than sleeping the window blindly, so a timer firing a little
+// late is tolerated instead of racing a single post-sleep read.
 const saaWallClockSettle = 2 * time.Second
+
+// saaPollInterval is the gap between reads when polling for a wall-clock event's effect.
+const saaPollInterval = 100 * time.Millisecond
 
 // saaPollTimeout bounds a poll: just above common.MinLongPollTimeout, so a "must not dispatch" poll
 // genuinely reaches matching (below the floor the frontend rejects it, making the check vacuous).
@@ -117,9 +122,30 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 			a.token = resp.GetTaskToken()
 		}
 	case saaIsWallClock(e.Kind):
-		time.Sleep(h.eventClock(e) + saaWallClockSettle)
+		a.awaitWallClock(t, e)
 	default:
 		require.NoError(t, a.rpc(e))
+	}
+}
+
+// awaitWallClock blocks until a wall-clock event's effect is visible in the public activity info,
+// polling instead of sleeping so a late timer is tolerated up to the window. It reads only the frontend
+// Describe surface (no internal state access), so it works for functional tests that build the harness
+// with just a frontend client. A firing timeout changes the run state or attempt; a dispatch-delay
+// elapse clears NextAttemptScheduleTime as the dispatch time passes. A genuine no-op simply reaches the
+// deadline having seen nothing move — the correct outcome, at the same wall-clock cost as the blind
+// sleep it replaces.
+func (a *saaHandle) awaitWallClock(t require.TestingT, e model.Event) {
+	before := a.projection(t)
+	deadline := time.Now().Add(a.h.eventClock(e) + saaWallClockSettle)
+	for {
+		if a.projection(t) != before {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(saaPollInterval)
 	}
 }
 
@@ -307,6 +333,32 @@ func (a *saaHandle) observed() (model.AbstractState, error) {
 	a.prevStamp, a.curStamp = a.curStamp, o.Stamp
 	a.prevSTCStamp, a.curSTCStamp = a.curSTCStamp, o.ScheduleToCloseStamp
 	return model.Abstract(o), nil
+}
+
+// observedRaw reads the internal state without shifting the stamp baseline observed() maintains, so it
+// is safe to call in a polling loop (see awaitObservedMatch). Model-conformance-only: it reads internal
+// component state, so it requires chasmCtx.
+func (a *saaHandle) observedRaw() (model.AbstractState, error) {
+	o, err := saaReadObserved(a.h.chasmCtx, a.h.nsID, a.activityID, a.runID)
+	if err != nil {
+		return model.AbstractState{}, err
+	}
+	return model.Abstract(o), nil
+}
+
+// awaitObservedMatch polls the internal state (without shifting the stamp baseline) until it matches
+// want, or the deadline passes. Used by the model-conformance layer, where the model supplies the exact
+// target state to wait for.
+func (a *saaHandle) awaitObservedMatch(want model.AbstractState, deadline time.Time) {
+	for {
+		if obs, err := a.observedRaw(); err == nil && want.SameObserved(obs) {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(saaPollInterval)
+	}
 }
 
 // rpc performs the RPC for a non-Poll, non-wall-clock event and returns its error.

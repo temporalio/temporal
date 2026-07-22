@@ -195,10 +195,42 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 			a.token = resp.GetTaskToken()
 		}
 	case saaIsWallClock(e.Kind):
-		time.Sleep(h.eventClock(e) + saaWallClockSettle)
+		a.awaitWallClock(e)
 	default:
 		require.NoError(t, a.rpc(e))
 	}
+}
+
+// awaitWallClock blocks until a wall-clock event's effect shows up in the workflow's view of the
+// activity, polling instead of sleeping so a late timer is tolerated up to the window. The effect is a
+// change in the pending-activity projection, or the activity leaving the pending set (a terminal
+// timeout). Parallel to saaHandle.awaitWallClock, reading the workflow's public surface.
+func (a *wfaHandle) awaitWallClock(e model.Event) {
+	before, beforePending := a.pendingSnapshot()
+	deadline := time.Now().Add(a.h.eventClock(e) + saaWallClockSettle)
+	for {
+		if now, nowPending := a.pendingSnapshot(); nowPending != beforePending || (nowPending && now != before) {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(saaPollInterval)
+	}
+}
+
+// pendingSnapshot returns the activity's pending-activity projection and whether it is currently pending.
+func (a *wfaHandle) pendingSnapshot() (activityInfoProjection, bool) {
+	resp, err := a.h.env.SdkClient().DescribeWorkflowExecution(a.h.ctx, a.workflowID, a.runID)
+	if err != nil {
+		return activityInfoProjection{}, false
+	}
+	for _, pa := range resp.GetPendingActivities() {
+		if pa.GetActivityId() == a.activityID {
+			return projectWFA(pa), true
+		}
+	}
+	return activityInfoProjection{}, false
 }
 
 // eventClock is how long the clock behind a wall-clock event takes to elapse: a backoff lasts the
