@@ -200,8 +200,8 @@ func CalculateExponentialRetryInterval(retryPolicy *commonpb.RetryPolicy, attemp
 
 	maxInterval := retryPolicy.GetMaximumInterval()
 
-	// Cap interval to maximum if it's set
-	if maxInterval.AsDuration() != 0 && interval > maxInterval.AsDuration() {
+	// Cap interval to maximum if it's set. This also covers a nonpositive interval.
+	if maxInterval.AsDuration() != 0 && (interval <= 0 || interval > maxInterval.AsDuration()) {
 		interval = maxInterval.AsDuration()
 	}
 
