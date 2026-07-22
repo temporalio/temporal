@@ -230,7 +230,7 @@ func (s *TestCluster) writeSchemaUpdateLog(oldVersion string, newVersion string,
 }
 
 func (s *TestCluster) execSchemaVersionQuery(stmt string, args ...any) {
-	if err := s.session.Query(stmt, args...).Exec(); err != nil {
+	if err := s.session.Query(stmt, args...).Exec(context.Background()); err != nil {
 		s.logger.Fatal("loadSchemaVersion", tag.Error(err))
 	}
 }
