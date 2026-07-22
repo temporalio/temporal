@@ -1107,13 +1107,15 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 				),
 			sadefs.TemporalNamespaceDivision,
-			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision),
+			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision).Missing(""),
 		).
 		Return(
 			&elastic.SearchResult{
 				Aggregations: map[string]json.RawMessage{
+					// The empty-string bucket comes from Missing("") and
+					// represents default-division (NULL) workflows.
 					sadefs.TemporalNamespaceDivision: json.RawMessage(
-						`{"buckets":[{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
+						`{"buckets":[{"key":"","doc_count":50},{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
 					),
 				},
 			},
@@ -1122,8 +1124,14 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 	expectedResp = &store.InternalCountExecutionsResponse{
-		Count: 110,
+		Count: 160,
 		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 50,
+			},
 			{
 				GroupValues: []*commonpb.Payload{
 					mustEncodeValue("divisionA", enumspb.INDEXED_VALUE_TYPE_KEYWORD),

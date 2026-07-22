@@ -497,6 +497,19 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }
 
+// newGroupByTermsAgg builds a terms aggregation for a GROUP BY field. For
+// TemporalNamespaceDivision, default-division workflows are indexed without the
+// field, so a plain terms aggregation would silently drop them. Missing("")
+// buckets those documents under the empty string so they are counted as the
+// default division.
+func newGroupByTermsAgg(field string) *elastic.TermsAggregation {
+	agg := elastic.NewTermsAggregation().Field(field)
+	if field == sadefs.TemporalNamespaceDivision {
+		agg = agg.Missing("")
+	}
+	return agg
+}
+
 func (s *VisibilityStore) countGroupByExecutions(
 	ctx context.Context,
 	queryParams *esQueryParams,
@@ -522,10 +535,9 @@ func (s *VisibilityStore) countGroupByExecutions(
 	//     }
 	//   }
 	// }
-	termsAgg := elastic.NewTermsAggregation().Field(groupByFields[len(groupByFields)-1])
+	termsAgg := newGroupByTermsAgg(groupByFields[len(groupByFields)-1])
 	for i := len(groupByFields) - 2; i >= 0; i-- {
-		termsAgg = elastic.NewTermsAggregation().
-			Field(groupByFields[i]).
+		termsAgg = newGroupByTermsAgg(groupByFields[i]).
 			SubAggregation(groupByFields[i+1], termsAgg)
 	}
 	esResponse, err := s.esClient.CountGroupBy(
