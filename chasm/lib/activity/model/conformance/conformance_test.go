@@ -66,7 +66,7 @@ func eventsFor(k model.EventKind) []model.Event {
 }
 
 func srcState(cfg model.Config, st model.Status, keepPaused bool, count int32) model.AbstractState {
-	s := model.AbstractState{Status: st, Count: count, ResetKeepPaused: keepPaused}
+	s := model.AbstractState{Status: st, AttemptCount: count, ResetKeepPaused: keepPaused}
 	switch st {
 	case model.Unspecified, model.Scheduled:
 	default:

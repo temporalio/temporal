@@ -449,9 +449,9 @@ func (a *inProcActivity) applyEdge(e model.Event, cur model.AbstractState, out m
 	}
 	st, rs, attempt := a.describe()
 	wantSt, wantRs := model.ExpectedDescribe(out.Next)
-	if st != wantSt || rs != wantRs || attempt != out.Next.Count {
+	if st != wantSt || rs != wantRs || attempt != out.Next.AttemptCount {
 		a.x.t.Errorf("%s from %s: Describe disagrees — driver=(%v,%v,attempt=%d) model=(%v,%v,attempt=%d)\n  path: %s",
-			model.EventLabel(e), cur.Status, st, rs, attempt, wantSt, wantRs, out.Next.Count, pathString(a.path))
+			model.EventLabel(e), cur.Status, st, rs, attempt, wantSt, wantRs, out.Next.AttemptCount, pathString(a.path))
 	}
 	return gotKind == out.Reject && out.Next.SameObserved(obs)
 }

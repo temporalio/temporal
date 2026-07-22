@@ -30,7 +30,7 @@ type Outcome struct {
 
 // Initial is the state immediately after a successful StartActivityExecution.
 func Initial(cfg Config) AbstractState {
-	s := AbstractState{Status: Scheduled, Count: 1, DispatchTimeSet: true}
+	s := AbstractState{Status: Scheduled, AttemptCount: 1, DispatchTimeSet: true}
 	if cfg.HasStartDelay {
 		s.Dispatchability = StartDelayPending // first dispatch waits until schedule_time + start_delay
 	}
@@ -123,7 +123,7 @@ func respondCompleted(_ Config, s AbstractState, _ Event) Outcome {
 
 // Worker RespondActivityTaskFailed with task token fails an in-progress attempt
 func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
-	retriesRemaining := cfg.MaxAttempts == 0 || s.Count < cfg.MaxAttempts
+	retriesRemaining := cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts
 	switch s.Status {
 	case ResetRequested:
 		return applyDeferredReset(cfg, s)
@@ -135,7 +135,7 @@ func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
 			if s.Status == PauseRequested {
 				n.Status = Paused // pause takes effect on the retry
 			}
-			n.Count++
+			n.AttemptCount++
 			return Outcome{Next: n, AttemptTasksInvalidated: true} // new attempt invalidates last attempt's tasks
 		}
 		// no retry: terminal failure
@@ -256,7 +256,7 @@ func unpause(_ Config, s AbstractState, e Event) Outcome {
 		n.Status = Scheduled
 		n.DispatchTimeSet = true
 		if e.ResetAttempts {
-			n.Count = 1
+			n.AttemptCount = 1
 		}
 		// TODO(dan) double-check this is as it should be: we invalidate attempt tasks on Unpause, not on entry to Paused?
 		return Outcome{Next: n, AttemptTasksInvalidated: true}
@@ -288,7 +288,7 @@ func reset(cfg Config, s AbstractState, e Event) Outcome {
 	switch s.Status {
 	case Scheduled, Paused:
 		n := s
-		n.Count = 1
+		n.AttemptCount = 1
 		// Reset discards a pending retry backoff (the reset attempt dispatches immediately) but keeps
 		// a pending start_delay.
 		if s.Dispatchability == BackoffPending {
@@ -441,14 +441,14 @@ func attemptTimedOut(cfg Config, s AbstractState) Outcome {
 		return applyDeferredReset(cfg, s)
 	case Started, PauseRequested:
 		n := s
-		if cfg.MaxAttempts == 0 || s.Count < cfg.MaxAttempts {
+		if cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts {
 			// retry
 			n.Status = Scheduled
 			if s.Status == PauseRequested {
 				n.Status = Paused
 			}
 			n.Dispatchability = BackoffPending
-			n.Count++
+			n.AttemptCount++
 			return Outcome{Next: n, AttemptTasksInvalidated: true} // new attempt invalidates last attempt's tasks
 		}
 		n.Status = TimedOut
@@ -470,7 +470,7 @@ func attemptTimedOut(cfg Config, s AbstractState) Outcome {
 // the activity was RESET_REQUESTED and applies the reset.
 func applyDeferredReset(cfg Config, s AbstractState) Outcome {
 	n := s
-	n.Count = 1
+	n.AttemptCount = 1
 	n.Dispatchability = Dispatchable // reset discards remaining backoff
 	if s.ResetKeepPaused {
 		n.Status = Paused

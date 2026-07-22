@@ -9,7 +9,7 @@ import (
 // converge to a finite reachable set.
 func Fingerprint(s AbstractState) string {
 	return fmt.Sprintf("%v|%d|%v|%v|%v|%v|%v|%v",
-		s.Status, min(s.Count, 3), s.ResetKeepPaused, s.ResetHeartbeats,
+		s.Status, min(s.AttemptCount, 3), s.ResetKeepPaused, s.ResetHeartbeats,
 		s.ResetRestoreOptions, s.FirstAttemptStarted, s.DispatchTimeSet, s.Dispatchability)
 }
 

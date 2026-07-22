@@ -325,9 +325,9 @@ func (a *saaHandle) applyPoll(cur model.AbstractState, out model.Outcome, final 
 			return saaMismatch
 		}
 		a.token = resp.GetTaskToken()
-		if final && resp.GetAttempt() != out.Next.Count {
+		if final && resp.GetAttempt() != out.Next.AttemptCount {
 			t.Errorf("%s: dispatched task attempt number disagrees — server saw %d, model expected %d\n%s",
-				a.edge(poll, cur.Status), resp.GetAttempt(), out.Next.Count, a.pathLine())
+				a.edge(poll, cur.Status), resp.GetAttempt(), out.Next.AttemptCount, a.pathLine())
 		}
 	case cur.Status == model.Scheduled && cur.Dispatchability != model.Dispatchable:
 		// Delayed dispatch: a start_delay or backoff is still pending, so the poll finds no task. Verify
@@ -410,11 +410,11 @@ func (a *saaHandle) checkDescribe(t require.TestingT, expected model.AbstractSta
 			"  model expected: status=%v run=%v",
 			expected.Status, a.pathLine(), gotSt, gotRs, st, rs)
 	}
-	if gotAttempt := resp.GetInfo().GetAttempt(); gotAttempt != expected.Count {
+	if gotAttempt := resp.GetInfo().GetAttempt(); gotAttempt != expected.AttemptCount {
 		t.Errorf("Describe attempt while in internal status %s does not match model expectation\n%s\n"+
 			"  server saw:     attempt=%d\n"+
 			"  model expected: attempt=%d",
-			expected.Status, a.pathLine(), gotAttempt, expected.Count)
+			expected.Status, a.pathLine(), gotAttempt, expected.AttemptCount)
 	}
 }
 
@@ -551,7 +551,7 @@ func saaCarriesReqID(k model.EventKind) bool {
 }
 
 func saaFingerprint(s model.AbstractState) string {
-	count := min(s.Count, 3)
+	count := min(s.AttemptCount, 3)
 	return fmt.Sprintf("%v|%d|%v|%v|%v|%v|%v|%v",
 		s.Status, count, s.ResetKeepPaused, s.ResetHeartbeats,
 		s.ResetRestoreOptions, s.FirstAttemptStarted, s.DispatchTimeSet, s.Dispatchability)
@@ -738,7 +738,7 @@ func saaStateDiff(observed, expected model.AbstractState) string {
 	b2s := func(b bool) string { return fmt.Sprint(b) }
 	fields := [][3]string{
 		{"Status", observed.Status.String(), expected.Status.String()},
-		{"Count", fmt.Sprint(observed.Count), fmt.Sprint(expected.Count)},
+		{"Count", fmt.Sprint(observed.AttemptCount), fmt.Sprint(expected.AttemptCount)},
 		{"ResetKeepPaused", b2s(observed.ResetKeepPaused), b2s(expected.ResetKeepPaused)},
 		{"ResetHeartbeats", b2s(observed.ResetHeartbeats), b2s(expected.ResetHeartbeats)},
 		{"ResetRestoreOptions", b2s(observed.ResetRestoreOptions), b2s(expected.ResetRestoreOptions)},

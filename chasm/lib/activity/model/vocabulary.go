@@ -106,7 +106,8 @@ func (d Dispatchability) String() string {
 // field a scalar so that `n := s` is an independent copy.
 type AbstractState struct {
 	Status              Status
-	Count               int32 // attempt.count
+	AttemptCount        int32
+	FirstAttemptStarted bool
 	ResetKeepPaused     bool
 	ResetHeartbeats     bool
 	ResetRestoreOptions bool
@@ -220,7 +221,7 @@ type Observed struct {
 func Abstract(o Observed) AbstractState {
 	return AbstractState{
 		Status:              mapStatus(o.Status),
-		Count:               o.Count,
+		AttemptCount:        o.Count,
 		ResetKeepPaused:     o.ResetKeepPaused,
 		ResetHeartbeats:     o.ResetHeartbeats,
 		ResetRestoreOptions: o.ResetRestoreOptions,
