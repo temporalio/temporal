@@ -55,12 +55,10 @@ func TestResponderDoesNotHoldScriptMutex(t *testing.T) {
 
 	var wg sync.WaitGroup
 	firstResult := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := script.Invoke(context.Background(), "first", nil)
 		firstResult <- err
-	}()
+	})
 	<-started
 	_, err := script.Invoke(context.Background(), "second", nil)
 	require.NoError(t, err)

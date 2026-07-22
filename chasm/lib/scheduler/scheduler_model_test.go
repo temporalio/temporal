@@ -516,7 +516,7 @@ func modelSchedule(config modelEnvConfig) *schedulepb.Schedule {
 
 func (e *schedulerModelEnv) drain(t *rapid.T) int {
 	t.Helper()
-	for drained := 0; drained < modelDrainLimit; drained++ {
+	for drained := range modelDrainLimit {
 		runnable := e.runnableTasks(t)
 		if len(runnable) == 0 {
 			return drained

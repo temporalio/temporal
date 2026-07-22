@@ -58,11 +58,12 @@ type DeliveryTraceEvent struct {
 
 // MarshalJSON always writes a version so traces can evolve compatibly.
 func (t DeliveryTrace) MarshalJSON() ([]byte, error) {
-	if t.Version == 0 {
-		t.Version = 1
+	version := t.Version
+	if version == 0 {
+		version = 1
 	}
 	type trace DeliveryTrace
-	return json.Marshal(trace(t))
+	return json.Marshal(trace(DeliveryTrace{Version: version, Events: t.Events}))
 }
 
 // RunnableDeliveries returns one due CHASM task from each non-visibility

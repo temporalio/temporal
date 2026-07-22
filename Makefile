@@ -511,9 +511,9 @@ CHASM_SCHEDULER_PROPERTY_STEPS ?= 100
 .PHONY: chasm-scheduler-durable-property-test
 chasm-scheduler-durable-property-test:
 	@printf $(COLOR) "Run CHASM scheduler durable trace corpus and property campaign..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
+	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
 		-count=1 -run '^TestSchedulerDurableTraceCorpus$$' -rapid.checks=1
-	@CGO_ENABLED=$(CGO_ENABLED) go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
+	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
 		-count=1 -run '^TestSchedulerDurableTraceRapid$$' \
 		-rapid.checks=$(CHASM_SCHEDULER_PROPERTY_CHECKS) \
 		-rapid.steps=$(CHASM_SCHEDULER_PROPERTY_STEPS)

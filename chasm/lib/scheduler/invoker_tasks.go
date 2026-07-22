@@ -377,7 +377,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				if reconcileAlreadyStarted(start, err) {
+				if reconcileAlreadyStarted(start, err, now) {
 					metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
 					result.CompletedStarts = append(result.CompletedStarts, start)
 					return
@@ -766,7 +766,7 @@ func isAlreadyStartedError(err error) bool {
 // reconcileAlreadyStarted turns a lost successful StartWorkflow response into
 // a completed start only when the server confirms it was this buffered start.
 // Other AlreadyStarted errors remain terminal scheduler configuration failures.
-func reconcileAlreadyStarted(start *schedulespb.BufferedStart, err error) bool {
+func reconcileAlreadyStarted(start *schedulespb.BufferedStart, err error, now time.Time) bool {
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	if !errors.As(err, &alreadyStarted) ||
 		alreadyStarted.StartRequestId != start.GetRequestId() ||
@@ -774,7 +774,7 @@ func reconcileAlreadyStarted(start *schedulespb.BufferedStart, err error) bool {
 		return false
 	}
 	start.RunId = alreadyStarted.RunId
-	start.StartTime = timestamppb.New(time.Now())
+	start.StartTime = timestamppb.New(now)
 	start.HasCallback = true
 	return true
 }
