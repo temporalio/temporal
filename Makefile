@@ -517,7 +517,7 @@ chasm-scheduler-property-test:
 	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
 		-count=1 -run '^TestSchedulerDurableTraceCorpus$$' -rapid.checks=1
 	@CGO_ENABLED=1 go test -race -tags "$(ALL_TEST_TAGS)" ./chasm/lib/scheduler \
-		-count=1 -run '^(TestScheduler.*Property.*|TestSchedulerRPCProfilesUseExplicitScriptExpectations|TestSchedulerDurableTraceRapid)$$' \
+		-count=1 -run '^(TestScheduler.*(Property|Audit|Conformance).*|TestSchedulerRPCProfilesUseExplicitScriptExpectations|TestSchedulerDurableTraceRapid)$$' \
 		-rapid.checks=$(CHASM_SCHEDULER_PROPERTY_CHECKS) \
 		-rapid.steps=$(CHASM_SCHEDULER_PROPERTY_STEPS)
 

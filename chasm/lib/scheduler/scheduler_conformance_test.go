@@ -41,7 +41,7 @@ func newSchedulerConformance(t *rapid.T, paused bool) *schedulerConformance {
 
 func (r *schedulerConformance) apply(t *rapid.T, event model.Event) {
 	t.Helper()
-	beforeCalls := len(r.env.services.startCalls)
+	beforeCalls := len(r.env.services.StartCalls())
 	outcome, err := model.Transition(r.config, r.state, event)
 	require.NoError(t, err)
 	r.state = outcome.State
@@ -68,7 +68,7 @@ func (r *schedulerConformance) quiesce(t *rapid.T, effects []model.Effect, befor
 	t.Helper()
 	r.env.drain(t, schedulerConformanceDrainLimit)
 	starts := modelStartEffects(effects)
-	calls := r.env.services.startCalls[beforeCalls:]
+	calls := r.env.services.StartCalls()[beforeCalls:]
 	require.Len(t, calls, len(starts), "model and Scheduler emitted different start counts")
 	for index, start := range starts {
 		call := calls[index]

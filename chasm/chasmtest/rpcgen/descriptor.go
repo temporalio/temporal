@@ -72,7 +72,7 @@ func NewUnaryMethod[Request, Response proto.Message](
 
 func isNil[Message proto.Message](message Message) bool {
 	value := reflect.ValueOf(message)
-	return !value.IsValid() || value.Kind() == reflect.Ptr && value.IsNil()
+	return !value.IsValid() || value.Kind() == reflect.Pointer && value.IsNil()
 }
 
 // FullMethodName is the stable gRPC method identifier used in diagnostics.

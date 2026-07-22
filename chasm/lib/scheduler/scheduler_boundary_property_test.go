@@ -24,7 +24,7 @@ func TestSchedulerGeneratorDeadlineBoundaryProperty(t *testing.T) {
 			env.drain(t, schedulerConformanceDrainLimit)
 			env.timeSource.Update(schedulerPropertyStartTime.Add(defaultInterval).Add(test.delta))
 			env.drain(t, schedulerConformanceDrainLimit)
-			require.Len(t, env.services.startCalls, test.starts)
+			require.Len(t, env.services.StartCalls(), test.starts)
 		})
 	}
 }
@@ -34,6 +34,6 @@ func TestSchedulerBoundedBackfillProperty(t *testing.T) {
 	env.drain(t, schedulerConformanceDrainLimit)
 	env.backfill(t, schedulerPropertyStartTime.Add(-3*defaultInterval), schedulerPropertyStartTime, enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL)
 	env.drain(t, schedulerConformanceDrainLimit)
-	require.Len(t, env.services.startCalls, 4)
+	require.Len(t, env.services.StartCalls(), 4)
 	require.Equal(t, int64(4), env.describe(t).GetInfo().GetActionCount())
 }

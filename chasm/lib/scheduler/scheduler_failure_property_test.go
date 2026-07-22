@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/chasmtest"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,8 +21,9 @@ func TestSchedulerStartFailureRetryAndRedeliveryProperty(t *testing.T) {
 		env.trigger(t)
 
 		failedDelivery := deliverUntilStartCall(t, env)
-		require.Len(t, env.services.startCalls, 1)
-		first := env.services.startCalls[0]
+		startCalls := env.services.StartCalls()
+		require.Len(t, startCalls, 1)
+		first := startCalls[0]
 		require.Equal(t, code, status.Code(first.Err))
 		require.NotEmpty(t, first.Request.GetRequestId())
 		env.assertScripts(t)
@@ -29,21 +31,24 @@ func TestSchedulerStartFailureRetryAndRedeliveryProperty(t *testing.T) {
 		redelivery, err := env.engine.Redeliver(t.Context(), env.ref, failedDelivery)
 		require.NoError(t, err)
 		require.True(t, redelivery.Result.Dropped)
-		require.Len(t, env.services.startCalls, 1)
+		require.Len(t, env.services.StartCalls(), 1)
 
 		beforeReload := env.describe(t)
 		env.reload(t)
 		require.True(t, proto.Equal(beforeReload, env.describe(t)))
 
-		schedulerRPCProfiles{}.startSucceeded().Expect(&env.services.Start, startWorkflowMethod, "retry", nil)
+		schedulerRPCProfiles{}.startSucceeded().Expect(&env.services.Start, startWorkflowMethod, "retry", func(request *workflowservice.StartWorkflowExecutionRequest) bool {
+			return request.GetRequestId() == first.Request.GetRequestId()
+		})
 		// RunnableDeliveries intentionally respects category heads. Advance to the
 		// scheduler wakeup as well as the shorter retry deadline so the queued retry
 		// is observable through the Phase 4 delivery API.
 		env.timeSource.Update(schedulerPropertyStartTime.Add(defaultInterval))
 		env.drain(t, schedulerConformanceDrainLimit)
-		require.GreaterOrEqual(t, len(env.services.startCalls), 2)
+		startCalls = env.services.StartCalls()
+		require.GreaterOrEqual(t, len(startCalls), 2)
 		var second schedulerStartCall
-		for _, call := range env.services.startCalls[1:] {
+		for _, call := range startCalls[1:] {
 			if call.Request.GetRequestId() == first.Request.GetRequestId() {
 				second = call
 				break
@@ -68,7 +73,7 @@ func deliverUntilStartCall(t *rapid.T, env *schedulerPropertyEnv) chasmtest.Deli
 		delivery := runnable[0]
 		_, err = env.engine.Deliver(t.Context(), env.ref, delivery)
 		require.NoError(t, err)
-		if len(env.services.startCalls) > 0 {
+		if len(env.services.StartCalls()) > 0 {
 			env.delivered = append(env.delivered, delivery)
 			return delivery
 		}

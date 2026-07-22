@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,6 +61,7 @@ type schedulerServiceScripts struct {
 	Terminate rpctest.RPCContract
 	Migrate   rpctest.RPCContract
 
+	mu         sync.Mutex
 	startCalls []schedulerStartCall
 }
 
@@ -84,6 +86,15 @@ func newSchedulerPropertyEnv(t schedulerPropertyOwner, initiallyPaused bool) *sc
 }
 
 func newSchedulerPropertyEnvWithPolicy(t schedulerPropertyOwner, initiallyPaused bool, overlapPolicy enumspb.ScheduleOverlapPolicy) *schedulerPropertyEnv {
+	return newSchedulerPropertyEnvWithPolicyAndInitialPatch(t, initiallyPaused, overlapPolicy, nil)
+}
+
+func newSchedulerPropertyEnvWithPolicyAndInitialPatch(
+	t schedulerPropertyOwner,
+	initiallyPaused bool,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	initialPatch *schedulepb.SchedulePatch,
+) *schedulerPropertyEnv {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
@@ -140,7 +151,7 @@ func newSchedulerPropertyEnvWithPolicy(t schedulerPropertyOwner, initiallyPaused
 	schedule.Action.GetStartWorkflow().TaskQueue = &taskqueuepb.TaskQueue{Name: "property-task-queue"}
 	schedule.Action.GetStartWorkflow().Input = &commonpb.Payloads{}
 	_, err := handler.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{NamespaceId: namespaceID, FrontendRequest: &workflowservice.CreateScheduleRequest{
-		Namespace: namespace, ScheduleId: scheduleID, RequestId: "property-create", Schedule: schedule,
+		Namespace: namespace, ScheduleId: scheduleID, RequestId: "property-create", Schedule: schedule, InitialPatch: initialPatch,
 	}})
 	require.NoError(t, err)
 
@@ -165,7 +176,7 @@ func schedulerPropertyConfig() *scheduler.Config {
 func (e *schedulerPropertyEnv) startWorkflow(ctx context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	var response *workflowservice.StartWorkflowExecutionResponse
 	var err error
-	if e.services.Start.Pending() > 0 {
+	if e.services.Start.Matches(ctx, startWorkflowMethod, request) {
 		value, invokeErr := e.services.Start.Invoke(ctx, startWorkflowMethod, request)
 		err = invokeErr
 		if value != nil {
@@ -174,12 +185,20 @@ func (e *schedulerPropertyEnv) startWorkflow(ctx context.Context, request *workf
 	} else {
 		response = &workflowservice.StartWorkflowExecutionResponse{RunId: "run-" + request.GetRequestId()}
 	}
+	e.services.mu.Lock()
 	e.services.startCalls = append(e.services.startCalls, schedulerStartCall{Request: proto.CloneOf(request), Response: proto.CloneOf(response), Err: err})
+	e.services.mu.Unlock()
 	return response, err
 }
 
+func (s *schedulerServiceScripts) StartCalls() []schedulerStartCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]schedulerStartCall(nil), s.startCalls...)
+}
+
 func (e *schedulerPropertyEnv) describeWorkflow(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-	if e.services.Describe.Pending() > 0 {
+	if e.services.Describe.Matches(ctx, describeWorkflowMethod, request) {
 		value, err := e.services.Describe.Invoke(ctx, describeWorkflowMethod, request)
 		if value == nil {
 			return nil, err
@@ -190,7 +209,7 @@ func (e *schedulerPropertyEnv) describeWorkflow(ctx context.Context, request *hi
 }
 
 func (e *schedulerPropertyEnv) cancelWorkflow(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
-	if e.services.Cancel.Pending() > 0 {
+	if e.services.Cancel.Matches(ctx, cancelWorkflowMethod, request) {
 		value, err := e.services.Cancel.Invoke(ctx, cancelWorkflowMethod, request)
 		if value == nil {
 			return nil, err
@@ -201,7 +220,7 @@ func (e *schedulerPropertyEnv) cancelWorkflow(ctx context.Context, request *hist
 }
 
 func (e *schedulerPropertyEnv) terminateWorkflow(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-	if e.services.Terminate.Pending() > 0 {
+	if e.services.Terminate.Matches(ctx, terminateWorkflowMethod, request) {
 		value, err := e.services.Terminate.Invoke(ctx, terminateWorkflowMethod, request)
 		if value == nil {
 			return nil, err
@@ -212,7 +231,7 @@ func (e *schedulerPropertyEnv) terminateWorkflow(ctx context.Context, request *h
 }
 
 func (e *schedulerPropertyEnv) migrateWorkflow(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
-	if e.services.Migrate.Pending() > 0 {
+	if e.services.Migrate.Matches(ctx, migrateWorkflowMethod, request) {
 		value, err := e.services.Migrate.Invoke(ctx, migrateWorkflowMethod, request)
 		if value == nil {
 			return nil, err

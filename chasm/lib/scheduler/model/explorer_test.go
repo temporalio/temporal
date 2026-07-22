@@ -18,7 +18,7 @@ func TestTransitionBoundedExplorer(t *testing.T) {
 	frontier := []node{{}}
 	seen := make(map[string]struct{})
 
-	for depth := 0; depth < 5; depth++ {
+	for range 5 {
 		next := make([]node, 0)
 		for _, current := range frontier {
 			for _, event := range explorerEvents(current.state) {

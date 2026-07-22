@@ -29,8 +29,9 @@ func TestSchedulerOverlapPoliciesProperty(t *testing.T) {
 			env.drain(t, schedulerConformanceDrainLimit)
 			env.trigger(t)
 			env.drain(t, schedulerConformanceDrainLimit)
-			require.Len(t, env.services.startCalls, 1)
-			firstCall := env.services.startCalls[0]
+			startCalls := env.services.StartCalls()
+			require.Len(t, startCalls, 1)
+			firstCall := startCalls[0]
 
 			if test.cancelCalls > 0 {
 				schedulerRPCProfiles{}.cancelAccepted().Expect(&env.services.Cancel, cancelWorkflowMethod, "overlap cancellation", nil)
@@ -40,7 +41,7 @@ func TestSchedulerOverlapPoliciesProperty(t *testing.T) {
 			}
 			env.trigger(t)
 			env.drain(t, schedulerConformanceDrainLimit)
-			require.Len(t, env.services.startCalls, test.startsBeforeDone)
+			require.Len(t, env.services.StartCalls(), test.startsBeforeDone)
 			require.Len(t, env.services.Cancel.Calls(), test.cancelCalls)
 			require.Len(t, env.services.Terminate.Calls(), test.terminateCalls)
 			require.Equal(t, test.overlapSkipped, env.describe(t).GetInfo().GetOverlapSkipped())
@@ -52,7 +53,7 @@ func TestSchedulerOverlapPoliciesProperty(t *testing.T) {
 				test.policy == enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER {
 				env.complete(t, firstCall.Request.GetRequestId())
 				env.drain(t, schedulerConformanceDrainLimit)
-				require.Len(t, env.services.startCalls, 2)
+				require.Len(t, env.services.StartCalls(), 2)
 			}
 		})
 	}

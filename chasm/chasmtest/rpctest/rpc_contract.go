@@ -125,6 +125,19 @@ func (c *RPCContract) Pending() int {
 	return remaining
 }
 
+// Matches reports whether exactly one outstanding expectation accepts the call.
+func (c *RPCContract) Matches(ctx context.Context, method string, request any) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	matches := 0
+	for _, expectation := range c.expectations {
+		if !expectation.consumed && expectation.method == method && expectation.match(ctx, request) {
+			matches++
+		}
+	}
+	return matches == 1
+}
+
 // AssertSatisfied reports every expectation that was not invoked.
 func (c *RPCContract) AssertSatisfied() error {
 	c.mu.Lock()
