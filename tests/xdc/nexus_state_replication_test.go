@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,7 +27,10 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmnexusoperation "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -40,6 +44,10 @@ import (
 
 type NexusStateReplicationSuite struct {
 	xdcBaseSuite
+	// chasmEnabled selects the CHASM-based Nexus operation implementation HSM-based one.
+	// CHASM replicates via mutable state node snapshots rather than history replay,
+	// so it requires transition history to be enabled.
+	chasmEnabled bool
 }
 
 func TestNexusStateReplicationTestSuite(t *testing.T) {
@@ -47,6 +55,7 @@ func TestNexusStateReplicationTestSuite(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
+		chasmEnabled            bool
 	}{
 		{
 			name:                    "DisableTransitionHistory",
@@ -56,10 +65,17 @@ func TestNexusStateReplicationTestSuite(t *testing.T) {
 			name:                    "EnableTransitionHistory",
 			enableTransitionHistory: true,
 		},
+		{
+			// CHASM requires transition history for state-based replication.
+			name:                    "Chasm",
+			enableTransitionHistory: true,
+			chasmEnabled:            true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &NexusStateReplicationSuite{}
 			s.enableTransitionHistory = tc.enableTransitionHistory
+			s.chasmEnabled = tc.chasmEnabled
 			suite.Run(t, s)
 		})
 	}
@@ -88,6 +104,13 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		// transition history is disabled fall back to the legacy HSM callback
 		// implementation, which works with event-based replication.
 		s.dynamicConfigOverrides[dynamicconfig.EnableCHASMCallbacks.Key()] = false
+	}
+	if s.chasmEnabled {
+		// Set EnableChasm and EnableChasmWorkflowOperations config values to true so that
+		// CHASM based Nexus operation implementation is used over the HSM one.
+		// (EnableCHASMCallbacks already default to true).
+		s.dynamicConfigOverrides[dynamicconfig.EnableChasm.Key()] = true
+		s.dynamicConfigOverrides[chasmnexusoperation.EnableChasmWorkflowOperations.Key()] = true
 	}
 	s.setupSuite()
 }
@@ -672,6 +695,154 @@ NexusOperationCancelRequested
 NexusOperationCompleted
 `, events)
 	}
+}
+
+// TestNexusOperationChasmRailReplicatedWithMixedFlag verifies that a CHASM-backed
+// Nexus operation survives failover to a cluster whose creation flag is off.
+//
+// The HSM/CHASM rail is chosen at schedule time. Processing an existing operation
+// must follow the replicated state, not the target cluster's current creation flag.
+func (s *NexusStateReplicationSuite) TestNexusOperationChasmRailReplicatedWithMixedFlag() {
+	if !s.chasmEnabled {
+		s.T().Skip("mixed-flag scenario is only meaningful for the CHASM variant")
+	}
+
+	var callbackToken string
+	var publicCallbackURL string
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	ctx := testcore.NewContext()
+	ns := s.createGlobalNamespace()
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+
+	// Enable CHASM operation creation only on the initially-active cluster.
+	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, true)
+	s.clusters[1].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, false)
+
+	// Deliver the completion callback to the failover target.
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(
+			s.T(),
+			nexusoperations.CallbackURLTemplate,
+			"http://"+s.clusters[1].Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+	}
+
+	// Nexus endpoints are not replicated yet, so create the endpoint in both clusters.
+	for _, cl := range []operatorservice.OperatorServiceClient{s.clusters[0].OperatorClient(), s.clusters[1].OperatorClient()} {
+		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+			Spec: &nexuspb.EndpointSpec{
+				Name: endpointName,
+				Target: &nexuspb.EndpointTarget{
+					Variant: &nexuspb.EndpointTarget_External_{
+						External: &nexuspb.EndpointTarget_External{
+							Url: "http://" + listenAddr,
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+	}
+
+	sdkClient0, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+
+	run, err := sdkClient0.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: "tq",
+		ID:        "test",
+	}, "workflow")
+	s.NoError(err)
+
+	pollRes := s.pollWorkflowTask(ctx, s.clusters[0].FrontendClient(), ns)
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	execution := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
+
+	// The active cluster creates the operation on CHASM.
+	scheduledEventID := s.waitEvent(ctx, sdkClient0, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	s.assertOperationInChasmTree(ctx, s.clusters[0], ns, execution, scheduledEventID)
+
+	// The CHASM operation state replicates to cluster2 even with its creation flag off.
+	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+	s.assertOperationInChasmTree(ctx, s.clusters[1], ns, execution, scheduledEventID)
+
+	// Fail over to cluster2 and complete the replicated CHASM operation there.
+	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
+
+	s.completeNexusOperation(ctx, "result", publicCallbackURL, callbackToken)
+
+	// Cluster2 observes the completion and can finish the workflow.
+	pollRes = s.pollWorkflowTask(ctx, s.clusters[1].FrontendClient(), ns)
+	idx := slices.IndexFunc(pollRes.History.Events, func(ev *historypb.HistoryEvent) bool {
+		return ev.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+	})
+	s.Greater(idx, -1)
+	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollRes.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.NoError(run.Get(ctx, nil))
+}
+
+// assertOperationInChasmTree verifies the operation is stored as a CHASM node.
+func (s *NexusStateReplicationSuite) assertOperationInChasmTree(
+	ctx context.Context,
+	cluster *testcore.TestCluster,
+	ns string,
+	execution *commonpb.WorkflowExecution,
+	scheduledEventID int64,
+) {
+	s.T().Helper()
+	opID := strconv.FormatInt(scheduledEventID, 10)
+	desc, err := cluster.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: execution,
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	_, inCHASM := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+opID]
+	s.True(inCHASM, "operation %s should be stored as a CHASM node on cluster %s", opID, cluster.ClusterName())
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {
