@@ -577,6 +577,8 @@ var (
 	saaFailRetryably      = model.Event{Kind: model.RespondFailed, Retryable: true}
 	saaFailNonRetryably   = model.Event{Kind: model.RespondFailed, Retryable: false}
 	saaPause              = model.Event{Kind: model.Pause}
+	saaRequestCancel      = model.Event{Kind: model.RequestCancel}
 	saaStartDelayElapse   = model.Event{Kind: model.StartDelayElapses}
 	saaBackoffDelayElapse = model.Event{Kind: model.BackoffElapses}
+	saaStartToCloseElapse = model.Event{Kind: model.StartToCloseElapses}
 )
