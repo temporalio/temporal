@@ -42,6 +42,7 @@ const (
 	MatchingRoleTagValue      = "matching"
 	FrontendRoleTagValue      = "frontend"
 	AdminRoleTagValue         = "admin"
+	OperatorRoleTagValue      = "operator"
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
