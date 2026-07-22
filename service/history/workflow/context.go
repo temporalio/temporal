@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -53,7 +54,7 @@ type (
 		taskCompletionBuffer *TaskCompletionBuffer
 		// paginationLimiter enforces the process-wide and per-namespace limits on the
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
-		paginationLimiter *PaginationBufferLimiter
+		paginationLimiter *limiter.KeyedBytesLimiter
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -95,7 +96,7 @@ func NewContext(
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
-	paginationLimiter *PaginationBufferLimiter,
+	paginationLimiter *limiter.KeyedBytesLimiter,
 ) *ContextImpl {
 	tags := func() []tag.Tag {
 		return []tag.Tag{
@@ -162,7 +163,7 @@ func (c *ContextImpl) clearTaskCompletionBuffer() {
 		return
 	}
 	if c.paginationLimiter != nil {
-		used := c.paginationLimiter.release(c.taskCompletionBuffer.namespace, c.taskCompletionBuffer.totalSize)
+		used := c.paginationLimiter.Release(c.taskCompletionBuffer.namespace, c.taskCompletionBuffer.totalSize)
 		metrics.WorkflowTaskCompletionBufferInflightBytes.With(c.metricsHandler).Record(float64(used))
 	}
 	c.taskCompletionBuffer = nil
@@ -249,7 +250,7 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 		processLimit := int64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
 		nsRatio := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName)
 		nsLimit := int64(nsRatio * float64(processLimit))
-		ok, used := c.paginationLimiter.tryReserve(nsName, pageBytes, processLimit, nsLimit)
+		ok, used := c.paginationLimiter.TryReserve(nsName, pageBytes, processLimit, nsLimit)
 		if !ok {
 			// BufferLost makes the SDK resend from page 0, so retaining the
 			// partial buffer buys. Clear it to release the reserved bytes back

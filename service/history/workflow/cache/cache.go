@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,7 +65,7 @@ type (
 		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
 		// paginationLimiter limits pagination buffer size across all workflow cache contexts
-		paginationLimiter *workflow.PaginationBufferLimiter
+		paginationLimiter *limiter.KeyedBytesLimiter
 	}
 	cacheItem struct {
 		shardId   int32
@@ -151,7 +152,7 @@ func NewHostLevelCache(
 	return &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
-		paginationLimiter:         workflow.NewPaginationBufferLimiter(),
+		paginationLimiter:         limiter.NewKeyedBytesLimiter(),
 	}
 }
 

@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -81,7 +81,7 @@ func (s *contextSuite) SetupTest() {
 		log.NewNoopLogger(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
-		NewPaginationBufferLimiter(),
+		limiter.NewKeyedBytesLimiter(),
 	)
 }
 
@@ -748,64 +748,12 @@ func (s *contextSuite) TestTaskCompletionBuffer_PageCountLimit() {
 	s.ErrorAs(err, &invalidArgument)
 }
 
-func (s *contextSuite) TestPaginationBufferLimiter_Reserve() {
-	b := &PaginationBufferLimiter{}
-	const ns = "ns"
-
-	// Reservation within limit succeeds and tracks the running total.
-	ok, used := b.tryReserve(ns, 100, 250, 0)
-	s.True(ok)
-	s.Equal(int64(100), used)
-
-	ok, used = b.tryReserve(ns, 100, 250, 0)
-	s.True(ok)
-	s.Equal(int64(200), used)
-
-	// A reservation that would exceed the limit is rejected.
-	ok, used = b.tryReserve(ns, 100, 250, 0)
-	s.False(ok)
-	s.Equal(int64(200), used)
-
-	// A non-positive limit disables the check.
-	ok, _ = b.tryReserve(ns, 1<<40, 0, 0)
-	s.True(ok)
-
-	// Release brings the counter back down.
-	b.release(ns, 1<<40)
-	b.release(ns, 200)
-	s.Equal(int64(0), b.Used())
-	s.Equal(int64(0), b.perNamespace[ns])
-}
-
-// TestPaginationBufferLimiter_NamespaceLimit verifies the per-namespace limit is enforced
-// independently of the process limit and that one namespace's usage does not block
-// another.
-func (s *contextSuite) TestPaginationBufferLimiter_NamespaceLimit() {
-	b := &PaginationBufferLimiter{}
-
-	// ns1 can fill up to its namespace limit even though the process has room.
-	ok, _ := b.tryReserve("ns1", 100, 1000, 150)
-	s.True(ok)
-	ok, _ = b.tryReserve("ns1", 100, 1000, 150)
-	s.False(ok, "second page exceeds ns1's 150-byte namespace limit")
-	s.Equal(int64(100), b.perNamespace["ns1"])
-
-	// A different namespace has its own budget and is unaffected.
-	ok, _ = b.tryReserve("ns2", 100, 1000, 150)
-	s.True(ok)
-	s.Equal(int64(200), b.Used(), "process total tracks both namespaces")
-
-	b.release("ns1", 100)
-	b.release("ns2", 100)
-	s.Equal(int64(0), b.Used())
-}
-
 // TestTaskCompletionBuffer_PerWorkflowCapTerminates verifies that a page pushing the
 // cumulative buffer past the per-workflow limit returns the terminate sentinel and
 // releases the process budget.
 func (s *contextSuite) TestTaskCompletionBuffer_PerWorkflowCapTerminates() {
 	s.setTaskCompletionBufferSizeLimit(1)
-	s.workflowContext.paginationLimiter = &PaginationBufferLimiter{}
+	s.workflowContext.paginationLimiter = limiter.NewKeyedBytesLimiter()
 
 	// 1-byte per-workflow limit: any non-empty page exceeds it.
 	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "big"))
@@ -817,13 +765,13 @@ func (s *contextSuite) TestTaskCompletionBuffer_PerWorkflowCapTerminates() {
 // TestTaskCompletionBuffer_ProcessLimitRejects verifies that a page which would push the
 // process total over the limit is rejected with buffer-lost without storing anything.
 func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitRejects() {
-	budget := &PaginationBufferLimiter{}
+	budget := limiter.NewKeyedBytesLimiter()
 	s.workflowContext.paginationLimiter = budget
 
 	s.setTaskCompletionBufferSizeLimit(0)
 
 	processLimit := int64(s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit())
-	ok, _ := budget.tryReserve("filler", processLimit, 0, 0)
+	ok, _ := budget.TryReserve("filler", processLimit, 0, 0)
 	s.True(ok)
 
 	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0"))
@@ -836,7 +784,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitRejects() {
 // push a namespace over its share (ratio * process limit) is rejected with
 // buffer-lost even though the process itself has plenty of room.
 func (s *contextSuite) TestTaskCompletionBuffer_NamespaceRatioRejects() {
-	budget := &PaginationBufferLimiter{}
+	budget := limiter.NewKeyedBytesLimiter()
 	s.workflowContext.paginationLimiter = budget
 
 	s.setTaskCompletionBufferSizeLimit(0)
@@ -856,7 +804,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_NamespaceRatioRejects() {
 // rejection of a later page drops the whole partial buffer and releases its
 // already-reserved bytes
 func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer() {
-	budget := &PaginationBufferLimiter{}
+	budget := limiter.NewKeyedBytesLimiter()
 	s.workflowContext.paginationLimiter = budget
 
 	s.setTaskCompletionBufferSizeLimit(0)
@@ -866,7 +814,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer()
 	page0_size := s.workflowContext.taskCompletionBuffer.totalSize
 	s.Greater(page0_size, int64(0))
 
-	ok, _ := budget.tryReserve("filler", processLimit-page0_size, 0, 0)
+	ok, _ := budget.TryReserve("filler", processLimit-page0_size, 0, 0)
 	s.True(ok)
 
 	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1"))
@@ -879,7 +827,7 @@ func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer()
 // TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear verifies the process counter
 // goes back to zero after a successful merge
 func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() {
-	budget := &PaginationBufferLimiter{}
+	budget := limiter.NewKeyedBytesLimiter()
 	s.workflowContext.paginationLimiter = budget
 
 	// Disable the per-workflow cap so it never interferes with the process-counter assertions.
@@ -897,27 +845,5 @@ func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() 
 	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
 	s.Greater(budget.Used(), int64(0))
 	s.workflowContext.Clear()
-	s.Equal(int64(0), budget.Used())
-}
-
-// TestPaginationBufferLimiter_ConcurrentNetsToZero exercises concurrent reserve/release on a
-// shared budget.
-func (s *contextSuite) TestPaginationBufferLimiter_ConcurrentNetsToZero() {
-	budget := &PaginationBufferLimiter{}
-	const goroutines = 50
-
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
-				if ok, _ := budget.tryReserve("ns", 1024, 1<<40, 0); ok {
-					budget.release("ns", 1024)
-				}
-			}
-		}()
-	}
-	wg.Wait()
 	s.Equal(int64(0), budget.Used())
 }
