@@ -7,7 +7,24 @@ import (
 )
 
 // TestBackfillerBufferCapacity exercises each parameter of the capacity formula
-// around its boundaries. The formula is:
+// around its boundaries.
+//
+// Parameters:
+//   - bufferedCount:       total entries currently in the Invoker's buffer,
+//     including both actionable starts and retained completed history.
+//   - retainedActionCount: how many completed actions are kept in the buffer for
+//     reporting (the recentActionCount cap). These are discounted so retained
+//     history does not consume admission capacity.
+//   - maxBufferSize:       the buffer's total size limit; backfillers collectively
+//     get at most half of it (maxBufferSize/2).
+//   - generatorReserve:    slots held back from the shared half-buffer for the
+//     Generator (which produces the schedule's automatic actions), taken once so
+//     backfillers cannot starve regular scheduling.
+//   - backfillerCount:     number of concurrently active backfillers; the
+//     remaining capacity is split evenly across them (clamped to >= 1 so an empty
+//     set of backfillers does not divide by zero).
+//
+// Formula:
 //
 //	pending   = max(0, bufferedCount - retainedActionCount)
 //	available = max(0, maxBufferSize/2 - pending - generatorReserve)
