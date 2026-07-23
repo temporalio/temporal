@@ -931,7 +931,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		// sync version information to all the task queues
 		err = d.syncVersionDataToTaskQueues(ctx, versionData)
 		if err != nil {
-			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
 		}
 		// apply changes to current and ramping
@@ -1309,8 +1308,8 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 	}
 
 	// calling SyncDeploymentVersionUserData for each batch
+	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
 	for _, batch := range batches {
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
 		err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
