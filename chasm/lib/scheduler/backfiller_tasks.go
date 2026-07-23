@@ -198,9 +198,7 @@ func (b *BackfillerTaskHandler) processBackfill(
 
 // hasRecordedProgress reports whether a backfiller's high watermark reflects a
 // batch that was actually processed. An unset (nil or zero) watermark means no
-// progress yet - a fresh backfiller, or one whose only attempts were buffer-full
-// stalls - so processing must (re)start from the requested range start rather
-// than resume.
+// progress yet - a fresh backfiller.
 func hasRecordedProgress(lastProcessed *timestamppb.Timestamp) bool {
 	return lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0)
 }
