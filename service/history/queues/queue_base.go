@@ -293,6 +293,10 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	// Deferred so the backlog-age metric is emitted on every return path, including a
+	// range-completion failure.
+	defer p.emitImmediateQueueBacklogAge()
+
 	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		tasksCompleted += r.ShrinkSlices()
@@ -354,6 +358,39 @@ func (p *queueBase) checkpoint() {
 
 	err := p.updateQueueState(tasksCompleted, readerScopes)
 	p.resetCheckpointTimer(err)
+}
+
+// emitImmediateQueueBacklogAge emits the age of the oldest task loaded in memory in an immediate
+// (transfer/visibility/outbound) queue as a duration, the time-based counterpart to the count-based
+// ShardInfoImmediateQueueLagHistogram. This is a lower bound on the true backlog age: when the
+// oldest task is not loaded (e.g. its slice is stranded on a rate-limited/starved reader during a
+// sustained backlog) the value reflects the oldest LOADED task and can under-report, so pair it
+// with shardinfo_immediate_queue_lag for backlog detection during incidents.
+func (p *queueBase) emitImmediateQueueBacklogAge() {
+	if p.category.Type() != tasks.CategoryTypeImmediate {
+		return
+	}
+
+	var oldest time.Time
+	p.readerGroup.ForEach(func(_ int64, r Reader) {
+		r.WalkSlices(func(s Slice) {
+			if t := s.OldestPendingTaskTime(); !t.IsZero() {
+				if oldest.IsZero() || t.Before(oldest) {
+					oldest = t
+				}
+			}
+		})
+	})
+
+	if oldest.IsZero() {
+		return
+	}
+
+	age := p.timeSource.Now().Sub(oldest)
+	if age < 0 {
+		age = 0
+	}
+	metrics.QueueImmediateBacklogAge.With(p.metricsHandler).Record(age)
 }
 
 func (p *queueBase) updateShardRangeID() bool {

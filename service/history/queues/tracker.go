@@ -2,6 +2,7 @@ package queues
 
 import (
 	"fmt"
+	"time"
 
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
@@ -103,6 +104,24 @@ func (t *executableTracker) shrink() (tasks.Key, int) {
 	}
 
 	return minPendingTaskKey, tasksCompleted
+}
+
+// oldestPendingTaskVisibilityTime returns the visibility (creation) time of the
+// oldest non-acked pending task currently tracked in memory, or the zero time if
+// there are none. Acked tasks are skipped because they may not yet have been
+// removed by shrink().
+func (t *executableTracker) oldestPendingTaskVisibilityTime() time.Time {
+	var oldest time.Time
+	for _, executable := range t.pendingExecutables {
+		if executable.State() == ctasks.TaskStateAcked {
+			continue
+		}
+
+		if visibilityTime := executable.GetVisibilityTime(); oldest.IsZero() || visibilityTime.Before(oldest) {
+			oldest = visibilityTime
+		}
+	}
+	return oldest
 }
 
 func (t *executableTracker) clear() {

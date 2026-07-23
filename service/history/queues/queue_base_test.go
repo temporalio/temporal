@@ -17,10 +17,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
@@ -652,6 +654,113 @@ func (s *queueBaseSuite) QueueStateEqual(
 	s.NoError(err)
 
 	s.Equal(this, that)
+}
+
+func (s *queueBaseSuite) TestEmitImmediateQueueBacklogAge_InMemory() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.metricsHandler = captureHandler
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{ShardId: 0, RangeId: 10},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
+	now := base.timeSource.Now()
+
+	scope := NewScope(NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(1000)), predicates.Universal[tasks.Task]())
+	slice := NewSlice(nil, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, captureHandler)
+	slice.add(s.mockPendingExecutable(tasks.NewImmediateKey(300), now.Add(-10*time.Minute)))
+	slice.add(s.mockPendingExecutable(tasks.NewImmediateKey(200), now.Add(-30*time.Minute)))
+	base.readerGroup.NewReader(DefaultReaderId, slice)
+
+	capture := captureHandler.StartCapture()
+	base.emitImmediateQueueBacklogAge()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	recordings := snap[metrics.QueueImmediateBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	age := recordings[0].Value.(time.Duration)
+	s.GreaterOrEqual(age, 30*time.Minute)
+	s.Less(age, 31*time.Minute)
+}
+
+func (s *queueBaseSuite) TestEmitImmediateQueueBacklogAge_ScheduledCategory_NoEmit() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.metricsHandler = captureHandler
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{ShardId: 0, RangeId: 10},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+	now := base.timeSource.Now()
+
+	scope := NewScope(NewRange(tasks.NewKey(now.Add(-time.Hour), 1), tasks.NewKey(now.Add(time.Hour), 1)), predicates.Universal[tasks.Task]())
+	slice := NewSlice(nil, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, captureHandler)
+	slice.add(s.mockPendingExecutable(tasks.NewKey(now.Add(-time.Hour), 1), now.Add(-time.Hour)))
+	base.readerGroup.NewReader(DefaultReaderId, slice)
+
+	capture := captureHandler.StartCapture()
+	base.emitImmediateQueueBacklogAge()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	s.Empty(snap[metrics.QueueImmediateBacklogAge.Name()])
+}
+
+func (s *queueBaseSuite) TestEmitImmediateQueueBacklogAge_FutureVisibilityTime_ClampedToZero() {
+	captureHandler := metricstest.NewCaptureHandler()
+	_, base := s.newImmediateBase(captureHandler)
+	now := base.timeSource.Now()
+
+	base.readerGroup.NewReader(DefaultReaderId, s.loadedImmediateSlice(base, captureHandler, 100, 1000, now.Add(time.Hour)))
+
+	capture := captureHandler.StartCapture()
+	base.emitImmediateQueueBacklogAge()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	recordings := snap[metrics.QueueImmediateBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(time.Duration(0), recordings[0].Value.(time.Duration))
+}
+
+func (s *queueBaseSuite) newImmediateBase(captureHandler metrics.Handler) (*shard.ContextTest, *queueBase) {
+	s.metricsHandler = captureHandler
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{ShardId: 0, RangeId: 10},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	base := s.newQueueBase(mockShard, tasks.CategoryTransfer, nil)
+	return mockShard, base
+}
+
+// loadedImmediateSlice builds a fully-loaded slice (no unloaded tail) whose oldest pending task
+// has the given visibility time, sitting at the slice's lower bound.
+func (s *queueBaseSuite) loadedImmediateSlice(base *queueBase, h metrics.Handler, minID, maxID int64, oldest time.Time) Slice {
+	sl := NewSlice(nil, base.executableFactory, base.monitor, NewScope(NewRange(tasks.NewImmediateKey(minID), tasks.NewImmediateKey(maxID)), predicates.Universal[tasks.Task]()), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, h)
+	sl.add(s.mockPendingExecutable(tasks.NewImmediateKey(minID), oldest))
+	sl.iterators = nil
+	return sl
+}
+
+func (s *queueBaseSuite) mockPendingExecutable(key tasks.Key, visTime time.Time) *MockExecutable {
+	e := NewMockExecutable(s.controller)
+	e.EXPECT().GetKey().Return(key).AnyTimes()
+	e.EXPECT().GetVisibilityTime().Return(visTime).AnyTimes()
+	e.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
+	e.EXPECT().GetNamespaceID().Return("ns").AnyTimes()
+	e.EXPECT().GetTask().Return(e).AnyTimes()
+	return e
 }
 
 func (s *queueBaseSuite) newQueueBase(

@@ -932,10 +932,18 @@ var (
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)
-	TaskSchedulerThrottled       = NewCounterDef("task_scheduler_throttled")
-	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
-	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
-	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	TaskSchedulerThrottled    = NewCounterDef("task_scheduler_throttled")
+	QueueScheduleLatency      = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueImmediateBacklogAge  = NewTimerDef(
+		"queue_immediate_backlog_age",
+		WithDescription("Age of the oldest task loaded in memory in an immediate (transfer/visibility/outbound) "+
+			"queue, derived from its visibility timestamp. The time-based counterpart to shardinfo_immediate_queue_lag "+
+			"(a count). Tagged per queue by operation scope. This is a LOWER BOUND on the true backlog age: when the "+
+			"oldest task is not loaded (e.g. its slice is stranded on a starved reader during a sustained backlog) the "+
+			"value reflects the oldest loaded task and can under-report; pair it with shardinfo_immediate_queue_lag."),
+	)
 	QueueActionCounter           = NewCounterDef("queue_actions")
 	QueuePredicateResolutionLoss = NewCounterDef(
 		"queue_predicate_resolution_loss",

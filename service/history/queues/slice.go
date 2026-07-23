@@ -2,6 +2,7 @@ package queues
 
 import (
 	"fmt"
+	"time"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
@@ -33,6 +34,7 @@ type (
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
+		OldestPendingTaskTime() time.Time
 		TaskStats() TaskStats
 		Clear()
 	}
@@ -409,6 +411,17 @@ func (s *SliceImpl) MoreTasks() bool {
 	s.stateSanityCheck()
 
 	return len(s.iterators) != 0
+}
+
+// OldestPendingTaskTime returns the visibility (creation) time of the oldest
+// non-acked task currently loaded in memory for this slice, or the zero time if
+// none are loaded. For immediate queues, tasks are loaded in ascending task-id
+// order from the slice's lower bound, so when this slice has loaded any tasks the
+// oldest loaded task is the oldest unacked task in the slice. It is the zero time
+// while the slice has a backlog in persistence that has not been loaded yet.
+func (s *SliceImpl) OldestPendingTaskTime() time.Time {
+	s.stateSanityCheck()
+	return s.oldestPendingTaskVisibilityTime()
 }
 
 func (s *SliceImpl) TaskStats() TaskStats {
