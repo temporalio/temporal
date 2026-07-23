@@ -44,6 +44,8 @@ const (
 	syncMatchNoPoller
 	// A poller was available but rate limiting blocked the match.
 	syncMatchRateLimited
+	// A poller accepted the task, but the task could not be started.
+	syncMatchStartFailed
 )
 
 type taskForwarderType int32

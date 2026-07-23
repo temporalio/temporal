@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
@@ -195,6 +196,62 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		require.True(t, task.isStarted(), "task should be a started (forwarded) task")
 		require.Equal(t, taskToken, task.started.workflowTaskInfo.TaskToken)
 	})
+}
+
+func (s *PriMatcherSuite) TestOfferStartFailureIsNotSyncMatch() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	partition := tq.RootPartition()
+	cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rateLimitManager.Start()
+	defer rateLimitManager.Stop()
+
+	tm := newPriTaskMatcher(
+		ctx,
+		cfg,
+		partition,
+		nil,
+		nil,
+		nil,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		rateLimitManager,
+		func() {},
+		func() {},
+	)
+	tm.Start()
+	defer tm.Stop()
+
+	startErr := serviceerror.NewResourceExhausted(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		"workflow is busy",
+	)
+	pollDone := make(chan error, 1)
+	go func() {
+		task, err := tm.Poll(ctx, &pollMetadata{})
+		if err != nil {
+			pollDone <- err
+			return
+		}
+		task.finish(taskFinishResult{err: startErr})
+		pollDone <- nil
+	}()
+	await.RequireTrue(s.T(), tm.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	outcome, err := tm.Offer(ctx, newInternalTaskForSyncMatch(
+		&persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
+		nil,
+		0,
+		nil,
+	))
+
+	s.Require().ErrorIs(err, startErr)
+	s.Equal(syncMatchStartFailed, outcome)
+	s.Require().NoError(<-pollDone)
 }
 
 // TestValidatorDrop_SetsDropReason verifies that when the root-partition validator

@@ -405,9 +405,10 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 		if res.startErr == nil && !task.isForwarded() {
 			tm.emitDispatchLatency(task, false)
 		}
-		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
-		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
-		return syncMatchSuccess, res.startErr
+		if res.startErr != nil {
+			return syncMatchStartFailed, res.startErr
+		}
+		return syncMatchSuccess, nil
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).

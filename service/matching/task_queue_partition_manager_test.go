@@ -1357,6 +1357,7 @@ type capturingTaskMatchHook struct {
 type capturedTaskMatchDetails struct {
 	TaskQueueName     string
 	TaskQueueType     enumspb.TaskQueueType
+	IsSyncMatch       bool
 	SyncMatchOutcome  hooks.SyncMatchOutcome
 	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
 }
@@ -1379,6 +1380,7 @@ func (h *capturingTaskMatchHook) ProcessTaskAdd(ctx context.Context, event *hook
 	details := capturedTaskMatchDetails{
 		TaskQueueName:    h.taskQueueName,
 		TaskQueueType:    h.taskQueueType,
+		IsSyncMatch:      event.IsSyncMatch,
 		SyncMatchOutcome: event.SyncMatchOutcome,
 	}
 	if event.DeploymentVersion != nil {
@@ -1662,6 +1664,53 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 	s.Require().Len(calls, 1)
 	s.Equal(taskQueueName, calls[0].TaskQueueName)
 	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_BusyWorkflowStartFailure() {
+	if !s.newMatcher {
+		s.T().Skip("start failure outcome is only available in the new matcher")
+	}
+
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	startErr := serviceerror.NewResourceExhausted(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		"workflow is busy",
+	)
+	pollDone := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, err := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if err != nil {
+			pollDone <- err
+			return
+		}
+		task.finish(taskFinishResult{err: startErr})
+		pollDone <- nil
+	}()
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	await.RequireTrue(s.T(), pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.False(syncMatched)
+	s.Require().NoError(<-pollDone)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.False(calls[0].IsSyncMatch)
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
 }
 
