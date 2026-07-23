@@ -1,11 +1,15 @@
-package schedules
+package internal
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const lowestKnownSchemaRequestIDColumnLimit = 255
 
 // GenerateRequestID generates a deterministic request ID for a buffered action's
 // time. The request ID is deterministic because the jittered actual time (as
@@ -26,11 +30,26 @@ func GenerateRequestID(
 	if backfillID == "" {
 		backfillID = "auto"
 	}
-	return fmt.Sprintf(
+
+	requestID := fmt.Sprintf(
 		"sched-%s-%s-%s-%d-%d-%d",
 		backfillID,
 		namespaceID,
 		scheduleID,
+		conflictToken,
+		nominal.UnixMilli(),
+		actual.UnixMilli(),
+	)
+	if len(requestID) <= lowestKnownSchemaRequestIDColumnLimit {
+		return requestID
+	}
+
+	scheduleIDHash := sha256.Sum256([]byte(scheduleID))
+	return fmt.Sprintf(
+		"sched-%s-%s-%s-%d-%d-%d",
+		backfillID,
+		namespaceID,
+		hex.EncodeToString(scheduleIDHash[:16]),
 		conflictToken,
 		nominal.UnixMilli(),
 		actual.UnixMilli(),

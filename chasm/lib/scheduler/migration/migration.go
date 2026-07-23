@@ -10,8 +10,8 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -216,7 +216,7 @@ func convertBufferedStartsLegacyToCHASM(
 		v2Start := common.CloneProto(v1Start)
 
 		if v2Start.RequestId == "" {
-			v2Start.RequestId = schedulescommon.GenerateRequestID(
+			v2Start.RequestId = schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
@@ -227,7 +227,7 @@ func convertBufferedStartsLegacyToCHASM(
 		}
 
 		if v2Start.WorkflowId == "" {
-			v2Start.WorkflowId = schedulescommon.GenerateWorkflowID(
+			v2Start.WorkflowId = schedulerinternal.GenerateWorkflowID(
 				baseWorkflowID,
 				v1Start.GetNominalTime().AsTime(),
 			)
@@ -268,7 +268,7 @@ func convertRunningWorkflowsToBufferedStarts(
 			// Include the RunId in the tag to ensure each running workflow
 			// gets a unique RequestId (important for ALLOW_ALL overlap
 			// policy where multiple workflows may be running concurrently).
-			RequestId: schedulescommon.GenerateRequestID(
+			RequestId: schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
@@ -332,7 +332,7 @@ func convertRecentActionsToBufferedStarts(
 			StartTime:   action.ActualTime,
 			WorkflowId:  action.StartWorkflowResult.WorkflowId,
 			RunId:       action.StartWorkflowResult.RunId,
-			RequestId: schedulescommon.GenerateRequestID(
+			RequestId: schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
 				conflictToken,
@@ -359,7 +359,7 @@ func convertBackfillsLegacyToCHASM(
 
 	backfillers := make(map[string]*schedulerpb.BackfillerState, len(legacyBackfills))
 	for _, v1Backfill := range legacyBackfills {
-		backfillID := schedulescommon.GenerateBackfillerID()
+		backfillID := schedulerinternal.GenerateBackfillerID()
 
 		backfillers[backfillID] = &schedulerpb.BackfillerState{
 			Request: &schedulerpb.BackfillerState_BackfillRequest{
