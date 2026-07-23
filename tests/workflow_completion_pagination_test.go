@@ -48,7 +48,8 @@ func (s *WorkflowCompletionPaginationTestSuite) newPaginationEnv() *testcore.Tes
 	return testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.MaximumEventBatchSizeInBytes, 1024*1024),
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
-		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferSizeLimit, 32*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit, 1024*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferSizeLimit, 256*1024*1024),
 	)
 }
 
@@ -406,6 +407,90 @@ func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
 	s.NoError(completeFinalPage())
 
 	history := env.GetHistory(env.Namespace().String(), we)
+	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
+}
+
+// TestBufferLimits drives two intermediate marker pages against different total /
+// per-namespace limit combinations
+func (s *WorkflowCompletionPaginationTestSuite) TestBufferLimits() {
+	// process total exhausted
+	s.Run("process total exhausted", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize+markerPayloadSize/2, 1.0, true)
+	})
+	// namespace share exhausted
+	s.Run("namespace share exhausted", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize*3, 0.5, true)
+	})
+	// both sufficiently large
+	s.Run("both limits sufficiently large", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize*100, 1.0, false)
+	})
+}
+
+// runBufferLimitCase buffers page 0 (always fits), then buffers page 1. When
+// expectRejected, page 1 must fail with a transient buffer-lost error and write no
+// events; otherwise page 1 buffers and a final page completes the workflow.
+func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
+	totalSizeLimit int,
+	namespaceRatio float64,
+	expectRejected bool,
+) {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit, totalSizeLimit),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio, namespaceRatio),
+	)
+	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
+
+	bufferMarkerPage := func(page int32) error {
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace:        env.Namespace().String(),
+			TaskToken:        taskToken,
+			Commands:         makeMarkerCommands(1),
+			IntermediatePage: true,
+			PageNumber:       page,
+			Identity:         "worker1",
+		})
+		return err
+	}
+
+	// Page 0 always fits.
+	s.NoError(bufferMarkerPage(0))
+
+	err := bufferMarkerPage(1)
+	if expectRejected {
+		// buffer-lost is transient: no WorkflowTaskFailed event, unlike the
+		// per-workflow limit which fails the workflow task.
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+
+		history := env.GetHistory(env.Namespace().String(), we)
+		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
+		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+		return
+	}
+
+	// Both pages buffered; the final page completes the workflow.
+	s.NoError(err)
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: taskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("done"),
+				},
+			},
+		}},
+		PageNumber: 2,
+		Identity:   "worker1",
+	})
+	s.NoError(err)
+
+	history := env.GetHistory(env.Namespace().String(), we)
+	s.Equal(2, countEvents(history, enumspb.EVENT_TYPE_MARKER_RECORDED))
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 }

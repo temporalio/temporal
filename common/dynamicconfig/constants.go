@@ -1793,11 +1793,25 @@ See DynamicRateLimitingParams comments for more details.`,
 		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
 		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
 	)
+	WorkflowTaskCompletionBufferTotalSizeLimit = NewGlobalIntSetting(
+		"history.workflowTaskCompletionBufferTotalSizeLimit",
+		1024*1024*1024,
+		`WorkflowTaskCompletionBufferTotalSizeLimit is the process wide limit in bytes on the total
+		size of buffers allocated for in-flight pages of RespondWorkflowTaskCompleted requests. A page that would push
+		the total over this limit is rejected. Setting to 0 disables the limit.`,
+	)
 	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
 		"history.workflowTaskCompletionBufferSizeLimit",
 		40*1024*1024,
 		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
 		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
+	)
+	WorkflowTaskCompletionBufferNamespaceRatio = NewNamespaceFloatSetting(
+		"history.workflowTaskCompletionBufferNamespaceRatio",
+		0.5,
+		`WorkflowTaskCompletionBufferNamespaceRatio is the fraction of the process-wide pagination buffer
+		limit (WorkflowTaskCompletionBufferTotalSizeLimit) that a single namespace may hold at once, so one
+		namespace cannot exhaust the whole process budget.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",

@@ -93,6 +93,7 @@ func (s *resetterSuite) SetupTest() {
 		s.logger,
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
+		nil,
 	)
 	s.newRunID = uuid.NewString()
 

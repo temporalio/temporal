@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -236,6 +237,12 @@ func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
 // background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
 	s.FinishStop()
+}
+
+// SetFinalizerForTest overrides the shard's finalizer. Production shards always have one, so
+// tests that exercise cache paths gated on a finalizer being present must set it explicitly.
+func (s *ContextTest) SetFinalizerForTest(f *finalizer.Finalizer) {
+	s.finalizer = f
 }
 
 func (s *StubContext) GetEngine(_ context.Context) (historyi.Engine, error) {

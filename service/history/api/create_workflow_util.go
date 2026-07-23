@@ -147,6 +147,7 @@ func NewWorkflowLeaseAndContext(
 			shardCtx.GetLogger(),
 			shardCtx.GetThrottledLogger(),
 			shardCtx.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
 		),
 		wcache.NoopReleaseFn,
 		ms,
