@@ -258,8 +258,11 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
-	// Give half the available buffer to backfillers, distributed evenly, minus
-	// Generator reserve space.
+	// Divide one shared backfill budget so active ranges retain progress.
 	pending := max(0, len(invoker.GetBufferedStarts())-recentActionCount)
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-pending-tweakables.GeneratorBufferReserveSize), nil
+	available := max(0, (tweakables.MaxBufferSize/2)-pending-tweakables.GeneratorBufferReserveSize)
+	if available == 0 {
+		return 0, nil
+	}
+	return max(1, available/backfillerCount), nil
 }

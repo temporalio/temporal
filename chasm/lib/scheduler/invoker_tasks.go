@@ -290,9 +290,9 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 			if err != nil {
 				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				return
 			}
 
-			// Cancels are only attempted once.
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -328,9 +328,9 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 			if err != nil {
 				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				return
 			}
 
-			// Terminates are only attempted once.
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
@@ -377,6 +377,12 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
+				if reconcileAlreadyStarted(start, err, now) {
+					metricsWithTag.Counter(metrics.ScheduleActionSuccess.Name()).Record(1)
+					result.CompletedStarts = append(result.CompletedStarts, start)
+					return
+				}
+
 				logger.Info("failed to start workflow", tag.Error(err))
 
 				// Don't count "already started" for the error metric or retry, as it is most likely
@@ -755,6 +761,22 @@ func (h *InvokerExecuteTaskHandler) getRateLimiterPermission() (delay time.Durat
 func isAlreadyStartedError(err error) bool {
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	return errors.As(err, &expectedErr)
+}
+
+// reconcileAlreadyStarted turns a lost successful StartWorkflow response into
+// a completed start only when the server confirms it was this buffered start.
+// Other AlreadyStarted errors remain terminal scheduler configuration failures.
+func reconcileAlreadyStarted(start *schedulespb.BufferedStart, err error, now time.Time) bool {
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	if !errors.As(err, &alreadyStarted) ||
+		alreadyStarted.StartRequestId != start.GetRequestId() ||
+		alreadyStarted.RunId == "" {
+		return false
+	}
+	start.RunId = alreadyStarted.RunId
+	start.StartTime = timestamppb.New(now)
+	start.HasCallback = true
+	return true
 }
 
 func isRateLimitedError(err error) (time.Duration, bool) {
