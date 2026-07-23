@@ -7,10 +7,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 )
 
 func oneShard(namespace.ID, string) int32 { return 1 }
+
+// testKey builds an arbitrary subscription key for the generic notifier tests; the generic
+// pub/sub is key-agnostic, so these don't use the time-skipping-specific key constructor.
+func testKey(namespaceID, workflowID string) definition.WorkflowKey {
+	return definition.NewWorkflowKey(namespaceID, workflowID, "")
+}
 
 // liveKeys returns the number of keys currently held in the notifier's internal map,
 // used to prove keys are reclaimed (no leak) once their last waiter unwatches.
@@ -24,7 +31,7 @@ func liveKeys[T any](t *testing.T, n PubSubNotifier[T]) int {
 func TestPubSubNotifier(t *testing.T) {
 	t.Run("fan-out delivers to every subscriber on the key", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		_, ch1, err := n.Watch(key)
 		require.NoError(t, err)
 		_, ch2, err := n.Watch(key)
@@ -36,13 +43,13 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("notify to a key with no subscribers is a no-op", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		require.NotPanics(t, func() { n.Notify(NewKey("ns", "absent"), 1) })
+		require.NotPanics(t, func() { n.Notify(testKey("ns", "absent"), 1) })
 		require.Zero(t, liveKeys(t, n))
 	})
 
 	t.Run("notify is non-blocking and drops when the waiter buffer is full", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		_, ch, err := n.Watch(key)
 		require.NoError(t, err)
 		n.Notify(key, 1)                                  // fills the buffered-1 channel
@@ -58,7 +65,7 @@ func TestPubSubNotifier(t *testing.T) {
 	t.Run("watch is rejected past the per-key cap", func(t *testing.T) {
 		const limit = 3
 		n := NewPubSubNotifier[int](oneShard, limit)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		for range limit {
 			_, _, err := n.Watch(key)
 			require.NoError(t, err)
@@ -70,8 +77,8 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("keys are isolated from each other", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 1)
-		keyA := NewKey("ns", "a")
-		keyB := NewKey("ns", "b")
+		keyA := testKey("ns", "a")
+		keyB := testKey("ns", "b")
 		_, chA, err := n.Watch(keyA)
 		require.NoError(t, err)
 		_, _, err = n.Watch(keyB) // different key is unaffected by A's cap of 1
@@ -82,7 +89,7 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("unwatch frees a slot", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 1)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		id, _, err := n.Watch(key)
 		require.NoError(t, err)
 		_, _, err = n.Watch(key) // at the cap of 1
@@ -94,7 +101,7 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("unwatching the last subscriber removes the key (no leak)", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		id1, _, err := n.Watch(key)
 		require.NoError(t, err)
 		id2, _, err := n.Watch(key)
@@ -108,7 +115,7 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("unwatch of an unknown subscriber errors without panicking", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		_, _, err := n.Watch(key)
 		require.NoError(t, err)
 		var unwatchErr error
@@ -118,14 +125,14 @@ func TestPubSubNotifier(t *testing.T) {
 
 	t.Run("unwatch of an unknown key is a no-op without panicking", func(t *testing.T) {
 		n := NewPubSubNotifier[int](oneShard, 5)
-		require.NotPanics(t, func() { _ = n.Unwatch(NewKey("ns", "absent"), "x") })
+		require.NotPanics(t, func() { _ = n.Unwatch(testKey("ns", "absent"), "x") })
 		require.Zero(t, liveKeys(t, n))
 	})
 
 	t.Run("nil payload is delivered without panicking", func(t *testing.T) {
 		type payload struct{ v int }
 		n := NewPubSubNotifier[*payload](oneShard, 5)
-		key := NewKey("ns", "wf")
+		key := testKey("ns", "wf")
 		_, ch, err := n.Watch(key)
 		require.NoError(t, err)
 		require.NotPanics(t, func() { n.Notify(key, nil) })
@@ -143,7 +150,7 @@ func TestPubSubNotifier(t *testing.T) {
 		for i := range goroutines {
 			go func(i int) {
 				defer wg.Done()
-				key := NewKey("ns", fmt.Sprintf("wf-%d", i%16)) // 16 shared keys
+				key := testKey("ns", fmt.Sprintf("wf-%d", i%16)) // 16 shared keys
 				id, ch, err := n.Watch(key)
 				if err != nil {
 					return
@@ -163,7 +170,7 @@ func TestPubSubNotifier(t *testing.T) {
 
 func TestNoopNotifier(t *testing.T) {
 	n := NewNoopNotifier[int]()
-	key := NewKey("ns", "wf")
+	key := testKey("ns", "wf")
 
 	id, ch, err := n.Watch(key)
 	require.NoError(t, err)

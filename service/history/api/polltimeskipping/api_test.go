@@ -79,6 +79,7 @@ func shardContext(ctrl *gomock.Controller, softTimeout time.Duration) historyi.S
 	cfg.LongPollExpirationInterval = func(string) time.Duration { return softTimeout }
 	shard.EXPECT().GetConfig().Return(cfg).AnyTimes()
 	shard.EXPECT().GetNamespaceRegistry().Return(nsReg).AnyTimes()
+	shard.EXPECT().GetLifecycleContext().Return(context.Background()).AnyTimes()
 	return shard
 }
 
@@ -182,7 +183,7 @@ func TestWaitFastForwardNotification(t *testing.T) {
 	t.Run("completion notification returns completed", func(t *testing.T) {
 		ch := make(chan *notification.FastForwardNotification, 1)
 		ch <- &notification.FastForwardNotification{FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{FastForwardId: testFastForwardID, HasCompleted: true}}
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), ch, time.Minute, testFastForwardID, pending)
+		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, completed, result)
 		require.True(t, ffinfo.GetHasCompleted())
@@ -191,7 +192,7 @@ func TestWaitFastForwardNotification(t *testing.T) {
 	t.Run("different fast-forward id returns not-found", func(t *testing.T) {
 		ch := make(chan *notification.FastForwardNotification, 1)
 		ch <- &notification.FastForwardNotification{FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{FastForwardId: "new-id"}}
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), ch, time.Minute, testFastForwardID, pending)
+		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, notFound, result)
 		require.Equal(t, "new-id", ffinfo.GetFastForwardId())
@@ -200,7 +201,7 @@ func TestWaitFastForwardNotification(t *testing.T) {
 	t.Run("closed run returns workflow-end", func(t *testing.T) {
 		ch := make(chan *notification.FastForwardNotification, 1)
 		ch <- &notification.FastForwardNotification{FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{FastForwardId: testFastForwardID}, WorkflowExecutionCompleted: true}
-		_, result, err := waitFastForwardNotification(context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, workflowEnd, result)
 	})
@@ -210,7 +211,7 @@ func TestWaitFastForwardNotification(t *testing.T) {
 		// same id, not completed, not closed => no meaningful change, must keep waiting.
 		ch <- &notification.FastForwardNotification{FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{FastForwardId: testFastForwardID}}
 		ch <- &notification.FastForwardNotification{FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{FastForwardId: testFastForwardID, HasCompleted: true}}
-		_, result, err := waitFastForwardNotification(context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, completed, result)
 	})
@@ -218,14 +219,25 @@ func TestWaitFastForwardNotification(t *testing.T) {
 	t.Run("closed channel returns an internal error", func(t *testing.T) {
 		ch := make(chan *notification.FastForwardNotification)
 		close(ch)
-		_, _, err := waitFastForwardNotification(context.Background(), ch, time.Minute, testFastForwardID, pending)
+		_, _, err := waitFastForwardNotification(context.Background(), context.Background(), ch, time.Minute, testFastForwardID, pending)
 		var internalErr *serviceerror.Internal
 		require.ErrorAs(t, err, &internalErr)
 	})
 
+	t.Run("shard move wakes the poll before the soft timeout", func(t *testing.T) {
+		ch := make(chan *notification.FastForwardNotification)
+		shardCtx, cancelShard := context.WithCancel(context.Background())
+		cancelShard() // shard already moved/closed
+		// Long soft timeout: if the shard-lifecycle case were missing, this would block for a minute.
+		ffinfo, result, err := waitFastForwardNotification(context.Background(), shardCtx, ch, time.Minute, testFastForwardID, pending)
+		require.NoError(t, err)
+		require.Equal(t, pollTimeout, result)
+		require.Same(t, pending, ffinfo)
+	})
+
 	t.Run("timeout returns the pending info unchanged", func(t *testing.T) {
 		ch := make(chan *notification.FastForwardNotification)
-		ffinfo, result, err := waitFastForwardNotification(context.Background(), ch, 20*time.Millisecond, testFastForwardID, pending)
+		ffinfo, result, err := waitFastForwardNotification(context.Background(), context.Background(), ch, 20*time.Millisecond, testFastForwardID, pending)
 		require.NoError(t, err)
 		require.Equal(t, pollTimeout, result)
 		require.Same(t, pending, ffinfo)

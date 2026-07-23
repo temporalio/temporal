@@ -35,12 +35,6 @@ type pubSubNotifierImpl[T any] struct {
 	subscriptions collection.ConcurrentTxMap
 }
 
-// NewKey builds a subscription key from namespace + workflowID (RunID empty), so
-// waiters and publishers key on the execution rather than a specific run.
-func NewKey(namespaceID string, workflowID string) definition.WorkflowKey {
-	return definition.NewWorkflowKey(namespaceID, workflowID, "")
-}
-
 // noopNotifier drops every notification and registers no subscribers.
 type noopNotifier[T any] struct{}
 

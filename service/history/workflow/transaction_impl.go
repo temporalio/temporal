@@ -640,7 +640,7 @@ func notifyFastForwardUpdate(
 	// we only set completed when the whole chain of runs completes
 	completed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
 		executionInfo.GetNewExecutionRunId() == ""
-	key := notification.NewKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
+	key := notification.NewTimeSkippingNotificationKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
 	engine.NotifyFastForwardUpdate(key, &notification.FastForwardNotification{
 		FastForwardInfo:            ffInfo,
 		WorkflowExecutionCompleted: completed,

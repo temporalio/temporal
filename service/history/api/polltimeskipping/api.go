@@ -36,7 +36,7 @@ func Invoke(
 
 	// step-1: Subscribe before reading current state so any fast-forward update persisted
 	// after our read still delivers a wake-up on the channel (no lost notification).
-	watchKey := notification.NewKey(req.GetNamespaceId(), execution.GetWorkflowId())
+	watchKey := notification.NewTimeSkippingNotificationKey(req.GetNamespaceId(), execution.GetWorkflowId())
 	subscriberID, channel, err := ffNotifier.Watch(watchKey)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func Invoke(
 	// step-3: Fast-forward is pending and matches the request: long-poll for a change.
 	//
 	softTimeout := shard.GetConfig().LongPollExpirationInterval(ns.Name().String())
-	updatedFFInfo, result, err := waitFastForwardNotification(ctx, channel, softTimeout, requestedFFID, ffinfo)
+	updatedFFInfo, result, err := waitFastForwardNotification(ctx, shard.GetLifecycleContext(), channel, softTimeout, requestedFFID, ffinfo)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +101,7 @@ func readFastForwardInfo(
 // execution arrives. The workflow lease is not hold in this step so as not to block the workflow.
 func waitFastForwardNotification(
 	ctx context.Context,
+	shardLifecycleCtx context.Context,
 	channel <-chan *notification.FastForwardNotification,
 	softTimeout time.Duration,
 	requestedFFID string,
@@ -111,6 +112,7 @@ func waitFastForwardNotification(
 
 	for {
 		select {
+		// (1) A notification arrived.
 		case notif, ok := <-channel:
 			if !ok {
 				// The pub-sub notifier never closes a live subscription's channel; a closed
@@ -134,7 +136,13 @@ func waitFastForwardNotification(
 				// the pending fast-forward is unchanged, so keep waiting.
 				continue
 			}
+		// (2) soft poll timeout, or (4) the RPC context was cancelled (client disconnect / server
+		// shutdown) — stCtx derives from ctx, so it fires on either.
 		case <-stCtx.Done():
+			return pending, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_POLL_TIMEOUT, nil
+		// (3) The shard moved or closed. Release promptly instead of holding the subscriber slot
+		// until the soft timeout; the client's retry routes to the new shard owner.
+		case <-shardLifecycleCtx.Done():
 			return pending, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_POLL_TIMEOUT, nil
 		}
 	}
