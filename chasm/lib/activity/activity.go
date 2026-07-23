@@ -1365,6 +1365,15 @@ func (a *Activity) shouldRetry(ctx chasm.Context, overridingRetryInterval time.D
 	return enumspb.RETRY_STATE_IN_PROGRESS, retryInterval
 }
 
+// timeoutRetryable reports whether a StartToClose or Heartbeat timeout may be retried under the retry
+// policy.
+func (a *Activity) timeoutRetryable(timeoutType enumspb.TimeoutType) bool {
+	return !slices.Contains(
+		a.GetRetryPolicy().GetNonRetryableErrorTypes(),
+		retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
+	)
+}
+
 // hasEnoughTimeForRetry checks if there is enough time left in the schedule-to-close timeout. If sufficient time
 // remains, it will also return a valid retry interval.
 func (a *Activity) hasEnoughTimeForRetry(ctx chasm.Context, overridingRetryInterval time.Duration) (bool, time.Duration) {
