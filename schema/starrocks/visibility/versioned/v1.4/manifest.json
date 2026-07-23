@@ -1,0 +1,10 @@
+{
+  "CurrVersion": "1.4",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add execution duration, state transition count and parent workflow info columns, and indices",
+  "SchemaUpdateCqlFiles": [
+    "add_execution_duration.sql",
+    "add_state_transition_count.sql",
+    "add_parent_workflow_info.sql"
+  ]
+}
