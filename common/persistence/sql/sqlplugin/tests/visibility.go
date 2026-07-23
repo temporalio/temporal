@@ -110,6 +110,65 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 	s.Equal([]sqlplugin.VisibilityRow{visibility}, rows)
 }
 
+// TestInsertReplaceSelect_TextSearchAttributesWithSpecialChars ensures that a
+// Text search attribute whose value contains characters that are significant to
+// PostgreSQL tsvector/tsquery syntax (most notably ':', and also an apostrophe)
+// can be written and read back.
+//
+// On PostgreSQL, the Text columns are generated columns. They were defined with
+// a raw ::tsvector cast, which requires valid tsvector literal syntax, so a
+// value like "The Lost World: Jurassic Park" made the generated column
+// computation fail with "syntax error in tsvector" and rejected the whole
+// executions_visibility upsert (e.g. from RecordWorkflowExecutionClosed). MySQL
+// and SQLite store the value as plain text and were never affected.
+func (s *visibilitySuite) TestInsertReplaceSelect_TextSearchAttributesWithSpecialChars() {
+	namespaceID := primitives.NewUUID()
+	runID := primitives.NewUUID()
+	workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
+	workflowID := shuffle.String(testVisibilityWorkflowID)
+	startTime := s.now()
+	executionTime := startTime.Add(time.Second)
+	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	closeTime := executionTime.Add(time.Second)
+	historyLength := rand.Int63()
+
+	searchAttributes := sqlplugin.VisibilitySearchAttributes{
+		"Text01": "The Lost World: Jurassic Park",
+		"Text02": "it's a wonderful life",
+	}
+
+	visibility := s.newRandomVisibilityRow(
+		namespaceID,
+		runID,
+		workflowTypeName,
+		workflowID,
+		startTime,
+		executionTime,
+		status,
+		&closeTime,
+		&historyLength,
+	)
+	visibility.SearchAttributes = &searchAttributes
+
+	// Open workflow write path.
+	_, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
+	s.NoError(err)
+
+	// Closed workflow write path (RecordWorkflowExecutionClosed upsert).
+	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
+	s.NoError(err)
+
+	getFilter := sqlplugin.VisibilityGetFilter{
+		NamespaceID: namespaceID.String(),
+		RunID:       runID.String(),
+	}
+	row, err := s.store.GetFromVisibility(newVisibilityContext(), getFilter)
+	s.NoError(err)
+	s.NotNil(row.SearchAttributes)
+	s.Equal("The Lost World: Jurassic Park", (*row.SearchAttributes)["Text01"])
+	s.Equal("it's a wonderful life", (*row.SearchAttributes)["Text02"])
+}
+
 func (s *visibilitySuite) TestInsertSelect_Exists() {
 	namespaceID := primitives.NewUUID()
 	runID := primitives.NewUUID()

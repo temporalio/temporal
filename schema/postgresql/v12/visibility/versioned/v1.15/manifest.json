@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.15",
+  "MinCompatibleVersion": "0.1",
+  "Description": "use to_tsvector for Text search attribute columns so values with tsvector-significant characters (e.g. ':') don't fail upserts",
+  "SchemaUpdateCqlFiles": [
+    "fix_text_search_attributes_tsvector.sql"
+  ]
+}
