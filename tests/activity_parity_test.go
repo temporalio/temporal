@@ -25,6 +25,7 @@ import (
 // must fail the activity terminally (TimedOut) when it fires, rather than retrying.
 func (s *standaloneActivityTestSuite) TestParityNonRetryableTimeout() {
 	env := s.newTestEnv()
+	t := s.T()
 
 	both := func(t *testing.T, drive func(driver, *testing.T) enumspb.ActivityExecutionStatus) {
 		t.Run("WorkflowActivity", func(t *testing.T) {
@@ -37,12 +38,12 @@ func (s *standaloneActivityTestSuite) TestParityNonRetryableTimeout() {
 		})
 	}
 
-	s.T().Run("StartToClose", func(t *testing.T) {
+	t.Run("StartToClose", func(t *testing.T) {
 		both(t, func(d driver, t *testing.T) enumspb.ActivityExecutionStatus {
 			return d.start_Poll_StartToCloseTimeoutElapses(t)
 		})
 	})
-	s.T().Run("Heartbeat", func(t *testing.T) {
+	t.Run("Heartbeat", func(t *testing.T) {
 		both(t, func(d driver, t *testing.T) enumspb.ActivityExecutionStatus {
 			return d.start_Poll_HeartbeatTimeoutElapses(t)
 		})
@@ -71,6 +72,7 @@ type saaDriver struct {
 	token      []byte
 }
 
+//nolint:staticcheck // ST1003: underscores are desired
 func (d *saaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	d.pollTask(t)
@@ -78,6 +80,7 @@ func (d *saaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.
 	return d.describeActivity(t).GetInfo().GetStatus()
 }
 
+//nolint:staticcheck // ST1003: underscores are desired
 func (d *saaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	d.pollTask(t)
@@ -122,6 +125,8 @@ func (d *saaDriver) startWithNonRetryableTimeout(t *testing.T, timeoutType enums
 		req.StartToCloseTimeout = durationpb.New(reproTimeout)
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		req.HeartbeatTimeout = durationpb.New(reproTimeout)
+	default:
+		t.Fatalf("unsupported timeout type %v", timeoutType)
 	}
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.s.Context(), req)
 	require.NoError(t, err)
@@ -165,12 +170,14 @@ type wfaDriver struct {
 	token      []byte
 }
 
+//nolint:staticcheck // ST1003: underscores are desired
 func (d *wfaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	d.pollTask(t)
 	return d.awaitTerminalStatus(t)
 }
 
+//nolint:staticcheck // ST1003: underscores are desired
 func (d *wfaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	d.pollTask(t)
@@ -199,6 +206,8 @@ func (d *wfaDriver) startWithNonRetryableTimeout(t *testing.T, timeoutType enums
 		p.StartToClose = reproTimeout
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		p.Heartbeat = reproTimeout
+	default:
+		t.Fatalf("unsupported timeout type %v", timeoutType)
 	}
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.s.Context(),
 		sdkclient.StartWorkflowOptions{ID: testcore.RandomizeStr("parity-run"), TaskQueue: wfTQ},
