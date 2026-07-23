@@ -1240,7 +1240,6 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/number"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -100,6 +101,8 @@ func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, erro
 }
 
 // invokeWithPartitionCounts wraps a partition-aware matchingservice RPC call:
+// - if not load-balancing, does the call directly
+// - constructs the cache key
 // - attaches the client's cached counts to the outgoing request (as header)
 // - updates the cache from the server's response (trailer)
 // - retries once if it receives StalePartitionCounts error
@@ -107,16 +110,28 @@ func invokeWithPartitionCounts[Req, Res any](
 	ctx context.Context,
 	logger log.Logger,
 	cache *partitionCache,
-	pkey string,
+	p tqid.Partition,
+	loadBalance bool,
 	request Req,
 	opts []grpc.CallOption,
 	op func(
 		ctx context.Context,
+		p tqid.Partition,
+		loadBalance bool,
 		pc PartitionCounts,
 		request Req,
 		opts []grpc.CallOption,
 	) (Res, error),
 ) (Res, error) {
+	if !loadBalance {
+		// If we're not load balancing then we're directed to a specific partition and we can
+		// just do the call directly. Note that any non-partition-aware kind will always end up
+		// with loadBalance == false here.
+		return op(ctx, p, loadBalance, PartitionCounts{}, request, opts)
+	}
+
+	pkey := cache.makeKey(p.NamespaceId(), p.TaskQueue().Name(), p.TaskType())
+
 	// capture trailer
 	var trailer metadata.MD
 	opts = append(slices.Clone(opts), grpc.Trailer(&trailer))
@@ -126,7 +141,7 @@ func invokeWithPartitionCounts[Req, Res any](
 	pc := cache.lookup(pkey)
 
 	for attempt := 0; ; attempt++ {
-		res, err := op(pc.appendToOutgoingContext(ctx), pc, request, opts)
+		res, err := op(pc.appendToOutgoingContext(ctx), p, loadBalance, pc, request, opts)
 
 		// update cache on trailer on both success and error. if the trailer has no data,
 		// this removes the key from the cache.

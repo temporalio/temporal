@@ -3,6 +3,8 @@ package postgresql
 import (
 	"fmt"
 	"time"
+
+	"go.temporal.io/server/common/backoff"
 )
 
 const (
@@ -40,7 +42,8 @@ const (
 	// TODO https://github.com/uber/cadence/issues/2893
 	createDatabaseQuery = `CREATE DATABASE "%v"`
 
-	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
+	dropDatabaseQuery                 = "DROP DATABASE IF EXISTS %v"
+	terminateDatabaseConnectionsQuery = `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`
 
 	listTablesQuery = "select table_name from information_schema.tables where table_schema='public'"
 
@@ -129,4 +132,20 @@ func (pdb *db) CreateDatabase(name string) error {
 // DropDatabase drops a database
 func (pdb *db) DropDatabase(name string) error {
 	return pdb.Exec(fmt.Sprintf(dropDatabaseQuery, name))
+}
+
+// ForceDropDatabase drops a database after terminating its active connections.
+func (pdb *db) ForceDropDatabase(name string) error {
+	return backoff.ThrottleRetry(
+		func() error {
+			if err := pdb.Exec(terminateDatabaseConnectionsQuery, name); err != nil {
+				return err
+			}
+			return pdb.DropDatabase(name)
+		},
+		backoff.NewExponentialRetryPolicy(100*time.Millisecond).
+			WithMaximumInterval(time.Second).
+			WithExpirationInterval(10*time.Second),
+		pdb.dbDriver.IsObjectInUseError,
+	)
 }

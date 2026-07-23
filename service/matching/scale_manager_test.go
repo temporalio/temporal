@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -306,6 +307,93 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 	s.InDelta(float64(4), read, 0.001, "read gauge")
 	s.InDelta(float64(2), write, 0.001, "write gauge")
 	s.InDelta(float64(2), target, 0.001, "target gauge")
+}
+
+// awaitMetric blocks until at least n recordings of the named metric exist and
+// returns them (a snapshot of the values recorded so far).
+func (s *ScaleManagerSuite) awaitMetric(capt *metricstest.Capture, name string, n int) []*metricstest.CapturedRecording {
+	s.T().Helper()
+	var recs []*metricstest.CapturedRecording
+	await.RequireTruef(s.T(), func() bool {
+		recs = capt.Snapshot()[name]
+		return len(recs) >= n
+	}, time.Second, time.Millisecond, "metric %q not recorded %d time(s)", name, n)
+	return recs
+}
+
+// metricValues extracts recorded values as float64. Gauges record float64 and
+// counters record int64, so handle both.
+func metricValues(recs []*metricstest.CapturedRecording) []float64 {
+	out := make([]float64, len(recs))
+	for i, r := range recs {
+		switch v := r.Value.(type) {
+		case float64:
+			out[i] = v
+		case int64:
+			out[i] = float64(v)
+		default:
+			panic(fmt.Sprintf("unexpected metric value type %T", r.Value))
+		}
+	}
+	return out
+}
+
+// TestShadowModeEmitsExpectedGauges verifies that entering shadow
+// mode on top of a leftover managed target keeps the release path gauge-silent:
+// the release-to-baseline still performs its one-time DB write, but setState no
+// longer emits gauges in shadow mode. The read=0/write=0 sentinels therefore come
+// exclusively from the two shadow decisions (one each), not from the release.
+func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
+	s.metricsHandler = s.capture
+	s.settings.ShadowModeLogInterval = 10 * time.Millisecond
+
+	inputs := make(chan PartitionScalerInput, 2)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+	)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	// Start with a leftover managed target so entering shadow mode triggers the
+	// one-time release-to-baseline (the only persisted write). The release itself
+	// records no gauges.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 5})
+	capt := s.capture.StartCapture()
+	defer s.capture.StopCapture(capt)
+
+	// call AddedTasks 2x (# of tasks added does not impact decision, decision is mocked)
+	for i := range 2 {
+		s.sm.AddedTasks(1)
+		waitRecv(s, inputs, "shadow call missing")
+
+		// wait for log indicating nextDecision was set before we advance
+		s.awaitDecisionApplied(int64(i + 1))
+
+		// wait for the 100ms cooldown + 10ms shadow log interval
+		s.timeSource.Advance(110 * time.Millisecond)
+	}
+	// call a third time, but don't expect the decision applied log, because shadow target didn't change
+	s.sm.AddedTasks(1)
+	waitRecv(s, inputs, "third shadow call missing")
+
+	// Wait for three scale events (the first two record gauges, the last does not).
+	events := s.awaitMetric(capt, "partition_scale_events", 3)
+	s.Equal([]float64{1, 1, 1}, metricValues(events), "target gauge per changed decision")
+
+	// Target, read, and write should only have 2 recordings because the third shadow target was "no change".
+	target := s.awaitMetric(capt, "partition_scale_target", 3)
+	s.Equal([]float64{0, 2, 3}, metricValues(target), "target gauge per changed decision")
+	snap := capt.Snapshot()
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_read"]), "read gauge per changed decision")
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
 }
 
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval

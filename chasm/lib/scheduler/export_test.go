@@ -64,3 +64,12 @@ func (i *Invoker) RecordExecuteResult(
 		RetryableStarts: retryable,
 	})
 }
+
+func (b *BackfillerTaskHandler) AllowedBufferedStarts(
+	ctx chasm.Context,
+	scheduler *Scheduler,
+	invoker *Invoker,
+	tweakables Tweakables,
+) (int, error) {
+	return b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
+}
