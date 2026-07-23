@@ -35,7 +35,6 @@ func (h *activityDispatchTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	// TODO(saa-preview): make sure we handle resets when we support them, as they will reset the attempt count
 	return (TransitionStarted.Possible(activity) &&
 		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
 }
@@ -127,9 +126,21 @@ func (h *scheduleToCloseTimeoutTaskHandler) Validate(
 	_ chasm.Context,
 	activity *Activity,
 	_ chasm.TaskInvocation,
-	_ *activitypb.ScheduleToCloseTimeoutTask,
+	task *activitypb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return TransitionTimedOut.Possible(activity), nil
+	if !TransitionTimedOut.Possible(activity) {
+		return false, nil
+	}
+	// If schedule-to-close was disabled via an options update, discard this task.
+	if activity.GetScheduleToCloseTimeout().AsDuration() <= 0 {
+		return false, nil
+	}
+	// Stamp check: discard tasks from before the most recent ScheduleToCloseTimeoutTask was
+	// scheduled (e.g. after a schedule-to-close extension or a disable+re-enable cycle).
+	if task.GetStamp() != activity.GetScheduleToCloseStamp() {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (h *scheduleToCloseTimeoutTaskHandler) Execute(
@@ -163,9 +174,8 @@ func (h *startToCloseTimeoutTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	task *activitypb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	valid := ((activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED ||
-		activity.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED) &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp())
+	valid := activity.hasAttemptInProgress() &&
+		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()
 	return valid, nil
 }
 
@@ -177,7 +187,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.StartToCloseTimeoutTask,
 ) error {
-	rescheduled, err := activity.tryReschedule(ctx, 0, createStartToCloseTimeoutFailure())
+	retryState, err := activity.tryReschedule(ctx, true, 0, createStartToCloseTimeoutFailure())
 	if err != nil {
 		return err
 	}
@@ -187,7 +197,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 		return err
 	}
 
-	if rescheduled {
+	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 
 		return nil
@@ -195,6 +205,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 
 	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		retryState:     retryState,
 		metricsHandler: metricsHandler,
 		fromStatus:     activity.GetStatus(),
 	})
@@ -224,8 +235,7 @@ func (h *heartbeatTimeoutTaskHandler) Validate(
 	// On the i-th execution of this function, we look back into the past and determine whether the
 	// last heartbeat was received after hb_i. If so, we reject this timeout task. Otherwise, the
 	// Execute function runs and we fail the attempt.
-	if activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		activity.Status != activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+	if !activity.hasAttemptInProgress() {
 		return false, nil
 	}
 	// Task attempt must still match current attempt.
@@ -256,7 +266,7 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.HeartbeatTimeoutTask,
 ) error {
-	rescheduled, err := activity.tryReschedule(ctx, 0, createHeartbeatTimeoutFailure())
+	retryState, err := activity.tryReschedule(ctx, true, 0, createHeartbeatTimeoutFailure())
 	if err != nil {
 		return err
 	}
@@ -266,13 +276,14 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		return err
 	}
 
-	if rescheduled {
+	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 		return nil
 	}
 
 	return TransitionTimedOut.Apply(activity, ctx, timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		retryState:     retryState,
 		metricsHandler: metricsHandler,
 		fromStatus:     activity.GetStatus(),
 	})

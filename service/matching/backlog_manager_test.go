@@ -67,7 +67,10 @@ func TestBacklogManager_Fair_Suite(t *testing.T) {
 }
 
 func (s *BacklogManagerTestSuite) SetupTest() {
+	s.capturedTasksLock.Lock()
 	s.capturedTasksSlice = nil
+	s.capturedTasksLock.Unlock()
+
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	if s.fairness {

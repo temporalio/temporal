@@ -87,8 +87,16 @@ func (g *GeneratorTaskHandler) Execute(
 		t2 = t1
 	}
 
+	tweakables := g.config.Tweakables(scheduler.Namespace)
+	var limit *int
+	if tweakables.MaxBufferSize > 0 {
+		remaining := tweakables.MaxBufferSize - len(invoker.GetBufferedStarts())
+		limit = &remaining
+	}
+
 	// Generate BufferedStarts and determine the next HWM. Actions are skipped when
-	// they can't be taken (paused, or limited and without any remaining actions).
+	// they can't be taken (paused, or limited and without any remaining actions),
+	// and dropped when the buffer is full.
 	result, err := g.SpecProcessor.ProcessTimeRange(
 		scheduler,
 		t1, t2,
@@ -96,7 +104,7 @@ func (g *GeneratorTaskHandler) Execute(
 		scheduler.WorkflowID(),
 		"",
 		false,
-		nil,
+		limit,
 	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
@@ -104,12 +112,16 @@ func (g *GeneratorTaskHandler) Execute(
 			fmt.Sprintf("failed to process a time range: %s", err.Error()))
 	}
 
-	// Emit metrics and update state for any dropped actions.
 	if result.DroppedCount > 0 {
+		// Only system log on the first drop, as it's likely that a case that overruns
+		// will continue to overrun.
+		if scheduler.Info.BufferDropped == 0 {
+			logger.Warn("Buffer is overruning, dropping actions",
+				tag.Int64("dropped-count", result.DroppedCount))
+		}
+
 		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("buffer overrun, dropped %d actions", result.DroppedCount))
-		logger.Warn("Buffer overrun, dropping actions",
-			tag.Int64("dropped-count", result.DroppedCount))
 		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
@@ -139,7 +151,7 @@ func (g *GeneratorTaskHandler) Execute(
 	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
-	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
+	idleTimeTotal := tweakables.IdleTime
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's

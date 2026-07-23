@@ -495,7 +495,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	return resp, nil
 }
 
-// RespondActivityTaskCanceled - records failure of an activity task
+// RespondActivityTaskCanceled - records cancellation of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CancelRequest.GetTaskToken())
 	if err != nil {
@@ -2174,23 +2174,8 @@ func (h *Handler) CompleteNexusOperationChasm(
 	ctx context.Context,
 	request *historyservice.CompleteNexusOperationChasmRequest,
 ) (*historyservice.CompleteNexusOperationChasmResponse, error) {
-	componentRef := request.GetCompletion().GetComponentRef()
-	if len(componentRef) == 0 {
-		return nil, serviceerror.NewInvalidArgument("invalid component ref")
-	}
-
-	// Ignore transition-history fields when applying completion,
-	// use Request ID to accept or reject the completion instead.
-	// TODO(stephan): This should be a CHASM transition option.
-	ref := &persistencespb.ChasmComponentRef{}
-	if err := ref.Unmarshal(componentRef); err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid component ref")
-	}
-	ref.ExecutionVersionedTransition = nil
-	ref.ComponentInitialVersionedTransition = nil
-	var err error
-	componentRef, err = ref.Marshal()
-	if err != nil {
+	componentRefBytes := request.GetCompletion().GetComponentRef()
+	if len(componentRefBytes) == 0 {
 		return nil, serviceerror.NewInvalidArgument("invalid component ref")
 	}
 
@@ -2214,22 +2199,63 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewUnimplemented("unhandled Nexus operation outcome")
 	}
 
-	// Attempt to access the component and call its invocation method. We execute
-	// this similarly as we would a pure task (holding an exclusive lock), as the
-	// assumption is that the accessed component will be recording (or generating a
-	// task) based on this result.
-	_, _, err = chasm.UpdateComponent(
-		ctx,
-		componentRef,
-		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
-			return nil, c.HandleNexusCompletion(ctx, completion)
-		},
-		completion)
+	// Access the component with progress intent so that the framework blocks access to a
+	// completion targeting an operation under a closed workflow and surfaces it as a
+	// NotFound. That NotFound is the signal to fall back to the current run below.
+	ctx = chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
+
+	// First try the component as of its creation transition. This tolerates refs
+	// from before a reset while still ensuring the loaded state has the operation.
+	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
+	if shouldFallBackToCurrentRun(handlerInvoked, err, completion) {
+		// If reset moved the operation to the current run, retry without the ref's
+		// run ID or transition tokens. Non-workflow refs cannot use this lookup.
+		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
+			err = fbErr
+		}
+	}
 	if err != nil {
 		return nil, h.convertError(err)
 	}
 
 	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+}
+
+// shouldFallBackToCurrentRun reports whether a pre-handler NotFound can be
+// retried against the current workflow run.
+//
+// CurrentRun drops the run ID and transition tokens, so the completion must have
+// a request ID for the handler to re-establish operation identity.
+func shouldFallBackToCurrentRun(
+	handlerInvoked bool,
+	err error,
+	completion *persistencespb.ChasmNexusCompletion,
+) bool {
+	_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+	return !handlerInvoked &&
+		isNotFound &&
+		completion.GetRequestId() != ""
+}
+
+// applyChasmNexusCompletion applies a Nexus completion using the requested ref
+// consistency level. handlerInvoked is true only if the ref resolved and access
+// checks passed before calling HandleNexusCompletion.
+func (h *Handler) applyChasmNexusCompletion(
+	ctx context.Context,
+	componentRefBytes []byte,
+	completion *persistencespb.ChasmNexusCompletion,
+	level chasm.RefConsistencyLevel,
+) (handlerInvoked bool, err error) {
+	_, _, err = chasm.UpdateComponent(
+		ctx,
+		componentRefBytes,
+		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
+			handlerInvoked = true
+			return nil, c.HandleNexusCompletion(ctx, completion)
+		},
+		completion,
+		chasm.WithRefConsistencyLevel(level))
+	return handlerInvoked, err
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

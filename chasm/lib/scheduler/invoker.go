@@ -436,8 +436,9 @@ func (i *Invoker) applyCompletedRetention() {
 		return a.GetCompleted().GetCloseTime().AsTime().Compare(b.GetCompleted().GetCloseTime().AsTime())
 	})
 
-	keepFrom := max(0, len(completed)-recentActionCount)
-	completed = completed[keepFrom:]
+	if len(completed) > recentActionCount {
+		completed = completed[len(completed)-recentActionCount:]
+	}
 
 	i.BufferedStarts = append(nonCompleted, completed...)
 }
