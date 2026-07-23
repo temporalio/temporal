@@ -296,15 +296,9 @@ func TestHandleStarted(t *testing.T) {
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
 			}
-			// Only the in-progress statuses (matching hasAttemptInProgress) have a started attempt.
-			switch tc.activityStatus {
-			case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
-				activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+			// A recorded start request ID means this attempt was previously started.
+			if tc.startRequestID != "" {
 				attemptState.StartedTime = startedTime
-			default:
-				// Not-yet-started statuses (scheduled, terminal) leave StartedTime unset.
 			}
 
 			// Determine heartbeat timeout based on test case
