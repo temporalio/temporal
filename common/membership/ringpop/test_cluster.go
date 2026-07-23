@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/mock/gomock"
@@ -153,6 +154,7 @@ func newTestCluster(
 			3*time.Second,
 			joinTime,
 			100,
+			metrics.NoopMetricsHandler,
 		)
 		cluster.rings[i].Start()
 	}
