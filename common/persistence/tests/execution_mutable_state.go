@@ -6,12 +6,12 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -2704,10 +2704,16 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	if s.MutableStateTableCounts != nil {
 		counts, err := s.MutableStateTableCounts(s.Ctx, s.ShardID, namespaceID, workflowID, runID)
 		s.NoError(err)
-		// assert (non-fatal) so every offending table is reported, not just the first.
+		// Collect all offending tables into one assertion so every leak is
+		// reported, not just the first (a per-table require would stop at one).
+		var orphaned []string
 		for table, n := range counts {
-			assert.Zerof(s.T(), n, "orphaned rows in %s after delete", table)
+			if n != 0 {
+				orphaned = append(orphaned, fmt.Sprintf("%s=%d", table, n))
+			}
 		}
+		sort.Strings(orphaned)
+		s.Emptyf(orphaned, "orphaned rows after delete: %v", orphaned)
 	}
 }
 
