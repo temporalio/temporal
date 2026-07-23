@@ -39,6 +39,12 @@ var (
 		false,
 		`Allows attaching completion callbacks to standalone activity executions.`,
 	)
+
+	EnableStandaloneActivityOperatorCommands = dynamicconfig.NewNamespaceBoolSetting(
+		"history.enableStandaloneActivityOperatorCommands",
+		false,
+		`Enables reset, pause, unpause, and update options commands for standalone activities.`,
+	)
 )
 
 type Config struct {
@@ -65,7 +71,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		DefaultActivityRetryPolicy:               dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableCallbacks:                          EnableCallbacks.Get(dc),
 		Enabled:                                  Enabled.Get(dc),
-		EnableStandaloneActivityOperatorCommands: dynamicconfig.EnableStandaloneActivityOperatorCommands.Get(dc),
+		EnableStandaloneActivityOperatorCommands: EnableStandaloneActivityOperatorCommands.Get(dc),
 		LongPollBuffer:                           LongPollBuffer.Get(dc),
 		LongPollTimeout:                          LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),

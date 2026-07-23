@@ -3100,12 +3100,6 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
-	EnableStandaloneActivityOperatorCommands = NewNamespaceBoolSetting(
-		"history.enableStandaloneActivityOperatorCommands",
-		false,
-		"Enables reset, pause, unpause, and update options commands for standalone activities.",
-	)
-
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
 		32,
