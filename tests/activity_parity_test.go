@@ -16,6 +16,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -50,10 +52,34 @@ func (s *standaloneActivityTestSuite) TestParityNonRetryableTimeout() {
 	})
 }
 
+// Dispatching an activity task must record the task_schedule_to_start_latency metric, tagged
+// task_type=Activity, for standalone activities just as it does for workflow activities.
+func (s *standaloneActivityTestSuite) TestParityScheduleToStartLatencyMetric() {
+	env := s.newTestEnv()
+	t := s.T()
+
+	assertRecorded := func(t *testing.T, d driver) {
+		capture := env.StartNamespaceMetricCapture()
+		d.scheduleAndDispatch(t)
+		recordings := capture.CollectMetric(metrics.TaskScheduleToStartLatency.Name(),
+			func(r *metricstest.CapturedRecording) bool {
+				return r.Tags["task_type"] == enumspb.TASK_QUEUE_TYPE_ACTIVITY.String()
+			})
+		require.Len(t, recordings, 1, "dispatching the activity task must record its schedule-to-start latency")
+		latency, ok := recordings[0].Value.(time.Duration)
+		require.True(t, ok, "schedule-to-start latency must be recorded as a duration")
+		require.GreaterOrEqual(t, latency, time.Duration(0))
+	}
+
+	t.Run("WorkflowActivity", func(t *testing.T) { assertRecorded(t, &wfaDriver{s: s, env: env}) })
+	t.Run("StandaloneActivity", func(t *testing.T) { assertRecorded(t, &saaDriver{s: s, env: env}) })
+}
+
 // driver is the interface implemented by the WFA and SAA drivers.
 type driver interface {
 	start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus
 	start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus
+	scheduleAndDispatch(t *testing.T)
 }
 
 // reproTimeout is the timeout under test, kept short so it fires within the test.
@@ -84,6 +110,25 @@ func (d *saaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.Act
 	d.pollTask(t)
 	d.pollActivityExecution(t)
 	return d.describeActivity(t).GetInfo().GetStatus()
+}
+
+// scheduleAndDispatch starts an activity and dispatches its task to a poller, which is what records
+// the schedule-to-start latency.
+func (d *saaDriver) scheduleAndDispatch(t *testing.T) {
+	id := testcore.RandomizeStr(t.Name())
+	resp, err := d.env.FrontendClient().StartActivityExecution(d.s.Context(), &workflowservice.StartActivityExecutionRequest{
+		Namespace:           d.env.Namespace().String(),
+		ActivityId:          id,
+		ActivityType:        d.env.Tv().ActivityType(),
+		Identity:            "worker",
+		Input:               defaultInput,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: id},
+		StartToCloseTimeout: durationpb.New(time.Hour),
+		RequestId:           uuid.NewString(),
+	})
+	require.NoError(t, err)
+	d.activityID, d.taskQueue, d.runID = id, id, resp.RunId
+	d.pollTask(t)
 }
 
 // pollActivityExecution long-polls until the activity reaches a terminal outcome.
@@ -180,19 +225,17 @@ func (d *wfaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.Act
 	return d.awaitTerminalStatus(t)
 }
 
+// scheduleAndDispatch runs the helper workflow and dispatches its activity task to a poller, which is
+// what records the schedule-to-start latency.
+func (d *wfaDriver) scheduleAndDispatch(t *testing.T) {
+	d.startWorkflow(t, workflowActivityParams{StartToClose: time.Hour, MaxAttempts: 1})
+	d.pollTask(t)
+}
+
 // startWithNonRetryableTimeout starts a workflow that schedules one activity with the given timeout short
 // and listed in NonRetryableErrorTypes.
 func (d *wfaDriver) startWithNonRetryableTimeout(t *testing.T, timeoutType enumspb.TimeoutType) {
-	wfTQ := testcore.RandomizeStr("parity-wf")
-	d.activityTQ = testcore.RandomizeStr("parity-act")
-
-	w := sdkworker.New(d.env.SdkClient(), wfTQ, sdkworker.Options{})
-	w.RegisterWorkflow(singleActivityWorkflow)
-	require.NoError(t, w.Start())
-	t.Cleanup(w.Stop)
-
 	p := workflowActivityParams{
-		TaskQueue:              d.activityTQ,
 		StartToClose:           time.Hour,
 		MaxAttempts:            3,
 		NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType.String()},
@@ -205,6 +248,20 @@ func (d *wfaDriver) startWithNonRetryableTimeout(t *testing.T, timeoutType enums
 	default:
 		t.Fatalf("unsupported timeout type %v", timeoutType)
 	}
+	d.startWorkflow(t, p)
+}
+
+// startWorkflow runs the helper workflow that schedules one activity on its own task queue.
+func (d *wfaDriver) startWorkflow(t *testing.T, p workflowActivityParams) {
+	wfTQ := testcore.RandomizeStr("parity-wf")
+	d.activityTQ = testcore.RandomizeStr("parity-act")
+	p.TaskQueue = d.activityTQ
+
+	w := sdkworker.New(d.env.SdkClient(), wfTQ, sdkworker.Options{})
+	w.RegisterWorkflow(singleActivityWorkflow)
+	require.NoError(t, w.Start())
+	t.Cleanup(w.Stop)
+
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.s.Context(),
 		sdkclient.StartWorkflowOptions{ID: testcore.RandomizeStr("parity-run"), TaskQueue: wfTQ},
 		singleActivityWorkflow, p)
