@@ -31,28 +31,28 @@ CREATE TABLE executions_visibility (
   -- Check the `custom_search_attributes` table for complete set of examples.
 
   -- Predefined search attributes
-  TemporalChangeVersion         JSON          GENERATED ALWAYS AS (search_attributes->"$.TemporalChangeVersion"),
-  BinaryChecksums               JSON          GENERATED ALWAYS AS (search_attributes->"$.BinaryChecksums"),
-  BatcherUser                   VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.BatcherUser"),
+  TemporalChangeVersion         JSON          GENERATED ALWAYS AS (search_attributes->'$.TemporalChangeVersion'),
+  BinaryChecksums               JSON          GENERATED ALWAYS AS (search_attributes->'$.BinaryChecksums'),
+  BatcherUser                   VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'$.BatcherUser'),
   TemporalScheduledStartTime    DATETIME(6)   GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.TemporalScheduledStartTime", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.TemporalScheduledStartTime", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.TemporalScheduledStartTime', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.TemporalScheduledStartTime', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
-  TemporalScheduledById         VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalScheduledById"),
-  TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (search_attributes->"$.TemporalSchedulePaused"),
-  TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalNamespaceDivision"),
-  BuildIds                      JSON          GENERATED ALWAYS AS (search_attributes->"$.BuildIds"),
-  TemporalPauseInfo             JSON          GENERATED ALWAYS AS (search_attributes->"$.TemporalPauseInfo"),
-  TemporalReportedProblems      JSON          GENERATED ALWAYS AS (search_attributes->"$.TemporalReportedProblems"),
-  TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkerDeploymentVersion"),
-  TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkflowVersioningBehavior"),
-  TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkerDeployment"),
+  TemporalScheduledById         VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'$.TemporalScheduledById'),
+  TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (search_attributes->'$.TemporalSchedulePaused'),
+  TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'$.TemporalNamespaceDivision'),
+  BuildIds                      JSON          GENERATED ALWAYS AS (search_attributes->'$.BuildIds'),
+  TemporalPauseInfo             JSON          GENERATED ALWAYS AS (search_attributes->'$.TemporalPauseInfo'),
+  TemporalReportedProblems      JSON          GENERATED ALWAYS AS (search_attributes->'$.TemporalReportedProblems'),
+  TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalWorkerDeploymentVersion'),
+  TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalWorkflowVersioningBehavior'),
+  TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalWorkerDeployment'),
   TemporalUsedWorkerDeploymentVersions JSON GENERATED ALWAYS AS (search_attributes->'$.TemporalUsedWorkerDeploymentVersions'),
-  TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadSizeBytes"),
-  TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->"$.TemporalExternalPayloadCount"),
+  TemporalExternalPayloadSizeBytes BIGINT GENERATED ALWAYS AS (search_attributes->'$.TemporalExternalPayloadSizeBytes'),
+  TemporalExternalPayloadCount BIGINT GENERATED ALWAYS AS (search_attributes->'$.TemporalExternalPayloadCount'),
   PRIMARY KEY (namespace_id, run_id)
 );
 
@@ -94,52 +94,52 @@ CREATE TABLE custom_search_attributes (
   run_id            CHAR(64)  NOT NULL,
   _version           BIGINT    NOT NULL DEFAULT 0,
   search_attributes JSON      NULL,
-  Bool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.Bool01"),
-  Bool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.Bool02"),
-  Bool03            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.Bool03"),
+  Bool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'$.Bool01'),
+  Bool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'$.Bool02'),
+  Bool03            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'$.Bool03'),
   Datetime01        DATETIME(6)     GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.Datetime01", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.Datetime01", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.Datetime01', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.Datetime01', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
   Datetime02        DATETIME(6)     GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.Datetime02", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.Datetime02", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.Datetime02', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.Datetime02', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
   Datetime03        DATETIME(6)     GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.Datetime03", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.Datetime03", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.Datetime03', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.Datetime03', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
-  Double01          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.Double01"),
-  Double02          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.Double02"),
-  Double03          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.Double03"),
-  Int01             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.Int01"),
-  Int02             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.Int02"),
-  Int03             BIGINT          GENERATED ALWAYS AS (search_attributes->"$.Int03"),
-  Keyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword01"),
-  Keyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword02"),
-  Keyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword03"),
-  Keyword04         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword04"),
-  Keyword05         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword05"),
-  Keyword06         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword06"),
-  Keyword07         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword07"),
-  Keyword08         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword08"),
-  Keyword09         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword09"),
-  Keyword10         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.Keyword10"),
-  Text01            TEXT            GENERATED ALWAYS AS (search_attributes->>"$.Text01") STORED,
-  Text02            TEXT            GENERATED ALWAYS AS (search_attributes->>"$.Text02") STORED,
-  Text03            TEXT            GENERATED ALWAYS AS (search_attributes->>"$.Text03") STORED,
-  KeywordList01     JSON            GENERATED ALWAYS AS (search_attributes->"$.KeywordList01"),
-  KeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->"$.KeywordList02"),
-  KeywordList03     JSON            GENERATED ALWAYS AS (search_attributes->"$.KeywordList03"),
+  Double01          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->'$.Double01'),
+  Double02          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->'$.Double02'),
+  Double03          DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->'$.Double03'),
+  Int01             BIGINT          GENERATED ALWAYS AS (search_attributes->'$.Int01'),
+  Int02             BIGINT          GENERATED ALWAYS AS (search_attributes->'$.Int02'),
+  Int03             BIGINT          GENERATED ALWAYS AS (search_attributes->'$.Int03'),
+  Keyword01         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword01'),
+  Keyword02         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword02'),
+  Keyword03         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword03'),
+  Keyword04         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword04'),
+  Keyword05         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword05'),
+  Keyword06         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword06'),
+  Keyword07         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword07'),
+  Keyword08         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword08'),
+  Keyword09         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword09'),
+  Keyword10         VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.Keyword10'),
+  Text01            TEXT            GENERATED ALWAYS AS (search_attributes->>'$.Text01') STORED,
+  Text02            TEXT            GENERATED ALWAYS AS (search_attributes->>'$.Text02') STORED,
+  Text03            TEXT            GENERATED ALWAYS AS (search_attributes->>'$.Text03') STORED,
+  KeywordList01     JSON            GENERATED ALWAYS AS (search_attributes->'$.KeywordList01'),
+  KeywordList02     JSON            GENERATED ALWAYS AS (search_attributes->'$.KeywordList02'),
+  KeywordList03     JSON            GENERATED ALWAYS AS (search_attributes->'$.KeywordList03'),
 
   PRIMARY KEY (namespace_id, run_id)
 );
@@ -180,33 +180,33 @@ CREATE TABLE chasm_search_attributes (
   search_attributes JSON            NULL,
 
   -- Pre-allocated CHASM search attributes
-  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.TemporalBool01"),
-  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.TemporalBool02"),
+  TemporalBool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'$.TemporalBool01'),
+  TemporalBool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->'$.TemporalBool02'),
   TemporalDatetime01        DATETIME(6)     GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.TemporalDatetime01", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.TemporalDatetime01", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.TemporalDatetime01', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.TemporalDatetime01', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
   TemporalDatetime02        DATETIME(6)     GENERATED ALWAYS AS (
     CONVERT_TZ(
-      REGEXP_REPLACE(search_attributes->>"$.TemporalDatetime02", 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
-      SUBSTR(REPLACE(search_attributes->>"$.TemporalDatetime02", 'Z', '+00:00'), -6, 6),
+      REGEXP_REPLACE(search_attributes->>'$.TemporalDatetime02', 'Z|[+-][0-9]{2}:[0-9]{2}$', ''),
+      SUBSTR(REPLACE(search_attributes->>'$.TemporalDatetime02', 'Z', '+00:00'), -6, 6),
       '+00:00'
     )
   ),
-  TemporalDouble01                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble01"),
-  TemporalDouble02                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->"$.TemporalDouble02"),
-  TemporalInt01                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt01"),
-  TemporalInt02                   BIGINT          GENERATED ALWAYS AS (search_attributes->"$.TemporalInt02"),
-  TemporalKeyword01               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword01"),
-  TemporalKeyword02               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword02"),
-  TemporalKeyword03               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword03"),
-  TemporalKeyword04               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalKeyword04"),
-  TemporalLowCardinalityKeyword01 VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalLowCardinalityKeyword01"),
-  TemporalKeywordList01           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList01"),
-  TemporalKeywordList02           JSON            GENERATED ALWAYS AS (search_attributes->"$.TemporalKeywordList02"),
+  TemporalDouble01                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->'$.TemporalDouble01'),
+  TemporalDouble02                DECIMAL(20, 5)  GENERATED ALWAYS AS (search_attributes->'$.TemporalDouble02'),
+  TemporalInt01                   BIGINT          GENERATED ALWAYS AS (search_attributes->'$.TemporalInt01'),
+  TemporalInt02                   BIGINT          GENERATED ALWAYS AS (search_attributes->'$.TemporalInt02'),
+  TemporalKeyword01               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalKeyword01'),
+  TemporalKeyword02               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalKeyword02'),
+  TemporalKeyword03               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalKeyword03'),
+  TemporalKeyword04               VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalKeyword04'),
+  TemporalLowCardinalityKeyword01 VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'$.TemporalLowCardinalityKeyword01'),
+  TemporalKeywordList01           JSON            GENERATED ALWAYS AS (search_attributes->'$.TemporalKeywordList01'),
+  TemporalKeywordList02           JSON            GENERATED ALWAYS AS (search_attributes->'$.TemporalKeywordList02'),
 
   PRIMARY KEY (namespace_id, run_id)
 );
