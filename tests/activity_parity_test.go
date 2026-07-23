@@ -99,6 +99,18 @@ func (s *standaloneActivityTestSuite) TestParityCurrentRetryInterval() {
 		})
 	})
 
+	// Paused while still backing off: dispatch will not occur while paused, so neither the interval nor
+	// the next-attempt schedule time should be reported. (Fails against WFA today, which keeps reporting
+	// the backing-off values until it flips the state to PAUSED — see start_Poll_FailRetryably_Paused.)
+	t.Run("PausedBeforeDispatch", func(t *testing.T) {
+		both(t, activityInfoProjection{
+			State:   enumspb.PENDING_ACTIVITY_STATE_PAUSED,
+			Attempt: 2,
+		}, func(d retryDriver, t *testing.T) activityInfoProjection {
+			return d.start_Poll_FailRetryably_Paused(t)
+		})
+	})
+
 	// Paused after the retry was dispatched: the dispatched code path already nils both fields, and the
 	// pause preserves that.
 	t.Run("PausedAfterDispatch", func(t *testing.T) {
@@ -116,6 +128,7 @@ type retryDriver interface {
 	start_Poll_FailRetryably_ObserveBackingOff(t *testing.T) activityInfoProjection
 	start_Poll_FailRetryably_RetryDispatched(t *testing.T) activityInfoProjection
 	start_Poll_FailRetryably_BackoffElapses_Paused(t *testing.T) activityInfoProjection
+	start_Poll_FailRetryably_Paused(t *testing.T) activityInfoProjection
 }
 
 // activityInfoProjection is the slice of an activity's public info this suite compares across the two
@@ -249,6 +262,17 @@ func (d *saaDriver) start_Poll_FailRetryably_RetryDispatched(t *testing.T) activ
 	d.awaitObserve(t, func(p activityInfoProjection) bool { return p.Attempt == 2 })
 	time.Sleep(dispatchInterval + 3*time.Second) // let the backoff elapse so the retry dispatches to Matching
 	return d.observe(t)
+}
+
+func (d *saaDriver) start_Poll_FailRetryably_Paused(t *testing.T) activityInfoProjection { //nolint:staticcheck // ST1003: underscores
+	d.startRetryable(t, backingOffInterval) // long, so the pause and read land well before the retry dispatches
+	d.pollTask(t)
+	d.failRetryably(t)
+	d.awaitObserve(t, func(p activityInfoProjection) bool { return p.Attempt == 2 })
+	d.pauseActivity(t)
+	return d.awaitObserve(t, func(p activityInfoProjection) bool {
+		return p.State == enumspb.PENDING_ACTIVITY_STATE_PAUSED
+	})
 }
 
 func (d *saaDriver) start_Poll_FailRetryably_BackoffElapses_Paused(t *testing.T) activityInfoProjection { //nolint:staticcheck // ST1003: underscores
@@ -435,6 +459,17 @@ func (d *wfaDriver) start_Poll_FailRetryably_RetryDispatched(t *testing.T) activ
 	d.awaitObserve(t, func(p activityInfoProjection) bool { return p.Attempt == 2 })
 	time.Sleep(dispatchInterval + 3*time.Second) // let the backoff elapse so the retry dispatches to Matching
 	return d.observe(t)
+}
+
+func (d *wfaDriver) start_Poll_FailRetryably_Paused(t *testing.T) activityInfoProjection { //nolint:staticcheck // ST1003: underscores
+	d.startRetryable(t, backingOffInterval) // long, so the pause and read land well before the retry dispatches
+	d.pollTask(t)
+	d.failRetryably(t)
+	d.awaitObserve(t, func(p activityInfoProjection) bool { return p.Attempt == 2 })
+	d.pauseActivity(t)
+	return d.awaitObserve(t, func(p activityInfoProjection) bool {
+		return p.State == enumspb.PENDING_ACTIVITY_STATE_PAUSED
+	})
 }
 
 func (d *wfaDriver) start_Poll_FailRetryably_BackoffElapses_Paused(t *testing.T) activityInfoProjection { //nolint:staticcheck // ST1003: underscores
