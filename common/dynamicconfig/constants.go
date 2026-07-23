@@ -3100,7 +3100,6 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
-
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
 		32,
@@ -3210,7 +3209,7 @@ but existing callbacks will still be processed and fired.`,
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
-		false,
+		true,
 		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
 		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
 		globally if load becomes problematic.`,
