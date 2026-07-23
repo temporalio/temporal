@@ -11,7 +11,7 @@ retract (
 require (
 	cloud.google.com/go/storage v1.62.1
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/apache/cassandra-gocql-driver/v2 v2.1.0
+	github.com/apache/cassandra-gocql-driver/v2 v2.1.2
 	github.com/aws/aws-sdk-go-v2 v1.43.4
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15
@@ -153,7 +153,6 @@ require (
 	github.com/go-openapi/swag v0.27.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
