@@ -53,7 +53,7 @@ jobs:
     name: Unit test
     runs-on: ${{ inputs.test_runner == '64GB RAM (ubuntu-latest-16-cores)' && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -126,7 +126,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
