@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -734,4 +735,61 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 	env.Equal(eagerActivityTaskToken, cancelCmd.TaskToken,
 		"Cancel command task token must match the eager activity's task token")
 	t.Log("SUCCESS: Received cancel command on control queue for eagerly dispatched activity")
+}
+
+// TestPollWorkerCommandsWithDeploymentOptions verifies that polling a worker commands queue
+// with DeploymentOptions set (as an SDK would when running a versioned worker) does not get
+// rejected by the versioning path. Worker commands partitions don't support versioning.
+func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() {
+	env := testcore.NewEnv(s.T())
+	tv := env.Tv()
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+
+	// Poll with a short timeout. We don't expect a task — we just want to verify the poll
+	// is accepted (no versioning rejection error).
+	pollCtx, pollCancel := context.WithTimeout(s.Context(), 5*time.Second)
+	defer pollCancel()
+
+	resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: controlQueueName,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		Identity: tv.WorkerIdentity(),
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			DeploymentName:       "test-deployment",
+			BuildId:              "test-build-1",
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+		},
+	})
+	// The poll should succeed (returning an empty response on timeout), not be rejected.
+	s.Require().NoError(err, "PollNexusTaskQueue with DeploymentOptions on worker commands queue should not be rejected")
+	s.Require().NotNil(resp)
+}
+
+// TestPollWorkerCommandsWithWorkerVersionCapabilities verifies that polling a worker commands
+// queue with UseVersioning=true and a BuildId (old versioning API) does not get rejected.
+func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithWorkerVersionCapabilities() {
+	env := testcore.NewEnv(s.T())
+	tv := env.Tv()
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+
+	pollCtx, pollCancel := context.WithTimeout(s.Context(), 5*time.Second)
+	defer pollCancel()
+
+	resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: controlQueueName,
+			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		Identity: tv.WorkerIdentity(),
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			BuildId:       "test-build-1",
+			UseVersioning: true,
+		},
+	})
+	s.Require().NoError(err, "PollNexusTaskQueue with WorkerVersionCapabilities on worker commands queue should not be rejected")
+	s.Require().NotNil(resp)
 }
