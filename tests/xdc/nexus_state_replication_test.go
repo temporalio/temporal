@@ -44,7 +44,7 @@ import (
 
 type NexusStateReplicationSuite struct {
 	xdcBaseSuite
-	// chasmEnabled selects the CHASM-based Nexus operation implementation HSM-based one.
+	// chasmEnabled selects the CHASM-based Nexus operation implementation over the HSM-based one.
 	// CHASM replicates via mutable state node snapshots rather than history replay,
 	// so it requires transition history to be enabled.
 	chasmEnabled bool
@@ -697,12 +697,11 @@ NexusOperationCompleted
 	}
 }
 
-// TestNexusOperationChasmRailReplicatedWithMixedFlag verifies that a CHASM-backed
-// Nexus operation survives failover to a cluster whose creation flag is off.
-//
-// The HSM/CHASM rail is chosen at schedule time. Processing an existing operation
-// must follow the replicated state, not the target cluster's current creation flag.
-func (s *NexusStateReplicationSuite) TestNexusOperationChasmRailReplicatedWithMixedFlag() {
+// TestNexusOperationChasmReplicatedWithMixedFlag verifies that a CHASM-backed
+// Nexus operation created on one cluster keeps working after failover to a cluster
+// where CHASM operation creation is disabled. Whether an operation is backed by HSM
+// or CHASM is decided when it is created and then travels with the replicated state.
+func (s *NexusStateReplicationSuite) TestNexusOperationChasmReplicatedWithMixedFlag() {
 	if !s.chasmEnabled {
 		s.T().Skip("mixed-flag scenario is only meaningful for the CHASM variant")
 	}
@@ -805,10 +804,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationChasmRailReplicatedWithMi
 
 	// Cluster2 observes the completion and can finish the workflow.
 	pollRes = s.pollWorkflowTask(ctx, s.clusters[1].FrontendClient(), ns)
-	idx := slices.IndexFunc(pollRes.History.Events, func(ev *historypb.HistoryEvent) bool {
-		return ev.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
-	})
-	s.Greater(idx, -1)
+	s.RequireHistoryEvent(pollRes.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	_, err = s.clusters[1].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
@@ -825,7 +821,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationChasmRailReplicatedWithMi
 	s.NoError(run.Get(ctx, nil))
 }
 
-// assertOperationInChasmTree verifies the operation is stored as a CHASM node.
+// assertOperationInChasmTree verifies the operation is stored as a CHASM node and
+// not as an HSM sub-state-machine.
 func (s *NexusStateReplicationSuite) assertOperationInChasmTree(
 	ctx context.Context,
 	cluster *testcore.TestCluster,
@@ -841,8 +838,11 @@ func (s *NexusStateReplicationSuite) assertOperationInChasmTree(
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
+	_, inHSM := desc.DatabaseMutableState.GetExecutionInfo().
+		GetSubStateMachinesByType()[nexusoperations.OperationMachineType].GetMachinesById()[opID]
 	_, inCHASM := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+opID]
 	s.True(inCHASM, "operation %s should be stored as a CHASM node on cluster %s", opID, cluster.ClusterName())
+	s.False(inHSM, "operation %s should not be an HSM sub-state-machine on cluster %s", opID, cluster.ClusterName())
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {
