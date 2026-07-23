@@ -1674,30 +1674,29 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 	}
 
 	// calling SyncDeploymentVersionUserData for each batch
+	propagationCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
 	for _, batch := range batches {
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		err = workflow.ExecuteActivity(propagationCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
 			DeploymentName: d.DeploymentName,
 			Version:        nil,
 			ForgetVersion:  false,
 			Sync:           batch,
 		}).Get(ctx, &syncRes)
 		if err != nil {
-			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return err
 		}
 
 		if len(syncRes.TaskQueueMaxVersions) > 0 {
 			// wait for propagation
 			err = workflow.ExecuteActivity(
-				activityCtx,
+				propagationCtx,
 				d.a.CheckUnversionedRampUserDataPropagation,
 				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
 				}).Get(ctx, nil)
 			if err != nil {
-				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 				return err
 			}
 		}
