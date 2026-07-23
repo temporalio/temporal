@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -100,7 +101,12 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
-		// TODO: add error logs
+		t.logger.Debug("Skipping ResetWorkflowTask on standby cluster",
+			tag.WorkflowNamespaceID(task.NamespaceID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+			tag.TaskID(task.TaskID),
+		)
 		err = nil
 	case *tasks.CloseExecutionTask:
 		err = t.processCloseExecution(ctx, task)
