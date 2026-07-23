@@ -143,8 +143,11 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 				// RPCAddress and HTTPAddress will be filled in
 			},
 		}
+		clusterConfigs[clusterIndex].EnableArchival = params.EnableArchival
+		clusterConfigs[clusterIndex].AdditionalServerOptions = params.AdditionalServerOptions
 		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 		clusterConfigs[clusterIndex].EnableHistoryTaskRecorder = params.EnableHistoryTaskRecorder
+		clusterConfigs[clusterIndex].EnableReplicationRecorder = params.EnableReplicationRecorder
 
 		var err error
 		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
