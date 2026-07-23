@@ -16,6 +16,7 @@ import (
 // alertsSuiteName is the JUnit suite name used for structural alerts (data
 // races, panics, fatal errors).
 const alertsSuiteName = "ALERTS"
+const testrunnerSuiteName = "testrunner"
 
 const junitAlertDetailsMaxBytes = 64 * 1024
 
@@ -100,7 +101,7 @@ func (j *junitReport) write() error {
 }
 
 // appendSyntheticFailure adds a failure entry under a "testrunner" suite for
-// events outside any real testcase (e.g. timeout killing gotestsum pre-write).
+// events outside any real testcase (e.g. timeout killing go test mid-run).
 func (j *junitReport) appendSyntheticFailure(name string, kind failureType, detail string) {
 	tc := junit.Testcase{
 		Name:    name,
@@ -108,7 +109,7 @@ func (j *junitReport) appendSyntheticFailure(name string, kind failureType, deta
 	}
 	// Reuse an existing testrunner suite if one is already present.
 	for i := range j.Suites {
-		if j.Suites[i].Name == "testrunner" {
+		if j.Suites[i].Name == testrunnerSuiteName {
 			j.Suites[i].Testcases = append(j.Suites[i].Testcases, tc)
 			j.Suites[i].Failures++
 			j.Suites[i].Tests++
@@ -118,7 +119,7 @@ func (j *junitReport) appendSyntheticFailure(name string, kind failureType, deta
 		}
 	}
 	j.Suites = append(j.Suites, junit.Testsuite{
-		Name:      "testrunner",
+		Name:      testrunnerSuiteName,
 		Failures:  1,
 		Tests:     1,
 		Testcases: []junit.Testcase{tc},
@@ -327,7 +328,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 
 				// Failure.Type carries the canonical kind in merged JUnit.
 				if testCase.Failure != nil {
-					if suite.Name == alertsSuiteName {
+					if preservesFailureType(suite.Name) {
 						if testCase.Failure.Type == "" {
 							testCase.Failure.Type = testCase.Failure.Message
 						}
@@ -346,6 +347,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
+}
+
+func preservesFailureType(suiteName string) bool {
+	return suiteName == alertsSuiteName || suiteName == testrunnerSuiteName
 }
 
 type node struct {

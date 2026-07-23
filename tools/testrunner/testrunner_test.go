@@ -29,7 +29,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			// max-attempts has been stripped
-			"--",
+			// --gotestsum-path and -- have been stripped
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, args)
@@ -41,10 +41,8 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=39m",
-			"--",
 			"-timeout=35m",
 			"-coverprofile=test.cover.out",
 		})
@@ -54,54 +52,23 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Contains(t, args, "-timeout=35m")
 	})
 
-	t.Run("TotalTimeoutNotSetWhenNoGoTestTimeout", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
-			"--junitfile=test.xml",
-			"--",
-			"-coverprofile=test.cover.out",
-		})
-		require.NoError(t, err)
-		require.Zero(t, r.totalTimeout)
-	})
-
 	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"--total-timeout=invalid",
-			"--",
 			"-coverprofile=test.cover.out",
 		})
 		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
-	t.Run("GoTestSumPathMissing", func(t *testing.T) {
-		r := newRunner()
-		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--junitfile=test.xml",
-			"-foo",
-			"bar",
-			// missing:
-			// "--max-attempts=0",
-			"--",
-			"-coverprofile=test.cover.out",
-			"baz",
-		})
-		require.ErrorContains(t, err, `missing required argument "--gotestsum-path="`)
-	})
-
 	t.Run("AttemptsInvalid1", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=0", // invalid!
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -111,12 +78,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=invalid", // invalid!
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -131,7 +96,6 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-foo",
 			"bar",
 			"--max-attempts=3",
-			"--",
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
@@ -141,12 +105,10 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("CoverprofileMissing", func(t *testing.T) {
 		r := newRunner()
 		_, err := r.sanitizeAndParseArgs(testCommand, []string{
-			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
 			"-foo",
 			"bar",
 			"--max-attempts=3",
-			"--",
 			// missing:
 			// "-coverprofile=test.cover.out",
 			"baz",
