@@ -303,6 +303,8 @@ func TestHandleStarted(t *testing.T) {
 				activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 				activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 				attemptState.StartedTime = startedTime
+			default:
+				// Not-yet-started statuses (scheduled, terminal) leave StartedTime unset.
 			}
 
 			// Determine heartbeat timeout based on test case
