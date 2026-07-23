@@ -378,6 +378,9 @@ var TransitionTimedOut = chasm.NewTransition(
 		timeoutType := event.timeoutType
 
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
+			// Read before recordFailedAttempt below overwrites it: the terminal timeout chains the
+			// failure that drove the retries as its Cause, matching workflow activities.
+			priorFailure := a.priorAttemptFailure(ctx)
 			var err error
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -386,14 +389,17 @@ var TransitionTimedOut = chasm.NewTransition(
 					ctx,
 					timeoutType,
 					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
+					priorFailure,
 				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 				failure := createHeartbeatTimeoutFailure()
 				failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
+				failure.Cause = priorFailure
 				err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
 			default:
 				err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
@@ -406,6 +412,7 @@ var TransitionTimedOut = chasm.NewTransition(
 					ctx,
 					enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 					common.FailureReasonActivityRetryScheduleToCloseTimeout,
+					priorFailure,
 				); err != nil {
 					return err
 				}
