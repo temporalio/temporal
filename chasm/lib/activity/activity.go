@@ -613,9 +613,11 @@ func (a *Activity) HandleFailed(
 	}
 
 	appFailure := failure.GetApplicationFailureInfo()
-	isRetryable := appFailure != nil &&
-		!appFailure.GetNonRetryable() &&
-		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
+	// A nil failure is treated as retryable for parity with WFA (see service/history/workflow/retry.go:isRetryable).
+	isRetryable := failure == nil ||
+		(appFailure != nil &&
+			!appFailure.GetNonRetryable() &&
+			!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType()))
 
 	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
 	if err != nil {
