@@ -1,14 +1,15 @@
 package xdc
 
 import (
+	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -110,7 +111,7 @@ func (s *RemoveRemoteClusterTestSuite) TestRemoveRemoteCluster_OrphanedNamespace
 	// namespace's cluster list). updateNamespaceClusters only waits for the
 	// clusters that remain in the list, so wait for cluster0 explicitly, then let
 	// its namespace cache refresh so RemoveRemoteCluster reads the updated view.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	await.Require(context.Background(), s.T(), func(t *await.T) {
 		resp := s.describeNamespace(t, cluster0, ns, true)
 		require.ElementsMatch(t,
 			[]string{s.clusters[1].ClusterName(), s.clusters[2].ClusterName()},
