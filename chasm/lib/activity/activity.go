@@ -148,7 +148,11 @@ func (a *Activity) isTerminal() bool {
 }
 
 func (a *Activity) hasAttemptInProgress() bool {
-	switch a.GetStatus() {
+	return hasAttemptInProgressForStatus(a.GetStatus())
+}
+
+func hasAttemptInProgressForStatus(status activitypb.ActivityExecutionStatus) bool {
+	switch status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -2025,11 +2029,7 @@ func (a *Activity) emitOnCanceledMetrics(
 	handler metrics.Handler,
 	fromStatus activitypb.ActivityExecutionStatus,
 ) {
-	// Record start-to-close latency only while an attempt is running. SCHEDULED (incl. retry
-	// backoff) and PAUSED have no running attempt and a possibly-stale StartedTime.
-	attemptRunning := fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
-		fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-	if attemptRunning {
+	if hasAttemptInProgressForStatus(fromStatus) {
 		if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
 			metrics.ActivityStartToCloseLatency.With(handler).Record(time.Since(startedTime.AsTime()))
 		}
@@ -2047,11 +2047,7 @@ func (a *Activity) emitOnTimedOutMetrics(
 	timeoutType enumspb.TimeoutType,
 	fromStatus activitypb.ActivityExecutionStatus,
 ) {
-	// Record start-to-close latency only while an attempt is running. SCHEDULED (incl. retry
-	// backoff) and PAUSED have no running attempt and a possibly-stale StartedTime.
-	attemptRunning := fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED &&
-		fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED
-	if attemptRunning {
+	if hasAttemptInProgressForStatus(fromStatus) {
 		if startedTime := a.LastAttempt.Get(ctx).GetStartedTime(); startedTime != nil {
 			metrics.ActivityStartToCloseLatency.With(handler).Record(time.Since(startedTime.AsTime()))
 		}
