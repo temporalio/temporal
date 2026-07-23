@@ -382,12 +382,13 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call 
 }
 
 // TrySyncMatch mocks base method.
-func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TrySyncMatch", ctx, task)
 	ret0, _ := ret[0].(syncMatchOutcome)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // TrySyncMatch indicates an expected call of TrySyncMatch.

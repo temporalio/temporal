@@ -719,13 +719,13 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return syncMatchNoPoller, nil
+			return syncMatchNoPoller, false, nil
 		}
 	}
 
@@ -736,11 +736,11 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	matched, err := c.oldMatcher.Offer(childCtx, task)
+	matched, forwarded, err := c.oldMatcher.Offer(childCtx, task)
 	if matched {
-		return syncMatchSuccess, err
+		return syncMatchSuccess, forwarded, err
 	}
-	return syncMatchNoPoller, err
+	return syncMatchNoPoller, forwarded, err
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(

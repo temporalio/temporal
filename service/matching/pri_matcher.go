@@ -384,20 +384,24 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
+//
+// The returned bool reports whether the task was forwarded to another partition to attempt a
+// remote sync match (true regardless of whether that forward matched), so the origin partition
+// can tag the tasks_added metric.
 
-func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
-	finish := func() (syncMatchOutcome, error) {
+func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
+	finish := func() (syncMatchOutcome, bool, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
-			return syncMatchUnspecified, nil
+			return syncMatchUnspecified, false, nil
 		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
 				tm.emitDispatchLatency(task, true)
-				return syncMatchSuccess, nil
+				return syncMatchSuccess, true, nil
 			}
-			return syncMatchNoPoller, nil // forward error, give up here
+			return syncMatchNoPoller, true, nil // forward error, give up here
 		}
 		// TODO(pri): can we just always do this on the parent and simplify this to:
 		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
@@ -407,7 +411,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 		}
 		// TODO: when startErr is non-nil (e.g. busy workflow), the task was not actually
 		// dispatched. This should return a failure outcome instead of syncMatchSuccess.
-		return syncMatchSuccess, res.startErr
+		return syncMatchSuccess, false, res.startErr
 	}
 
 	// Fast path if we have a waiting poller (or forwarder).
@@ -418,23 +422,23 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (syncMa
 	case syncMatchSuccess:
 		return finish()
 	case syncMatchBacklogPresent:
-		return outcome, nil
+		return outcome, false, nil
 	default:
 		// We only block if we are the root and the task is forwarded from a backlog.
 		// Otherwise, stop here.
 		if tm.isForwardingAllowed() ||
 			task.source != enumsspb.TASK_SOURCE_DB_BACKLOG ||
 			!task.isForwarded() {
-			return outcome, nil
+			return outcome, false, nil
 		}
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 	if res.ctxErr != nil {
-		return syncMatchNoPoller, res.ctxErr
+		return syncMatchNoPoller, false, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
-		return syncMatchNoPoller, nil
+		return syncMatchNoPoller, false, nil
 	}
 
 	return finish()
