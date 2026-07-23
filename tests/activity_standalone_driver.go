@@ -128,23 +128,50 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 	}
 }
 
-// awaitWallClock blocks until a wall-clock event's effect is visible in the public activity info,
-// polling instead of sleeping so a late timer is tolerated up to the window. It reads only the frontend
-// Describe surface (no internal state access), so it works for functional tests that build the harness
-// with just a frontend client. A firing timeout changes the run state or attempt; a dispatch-delay
-// elapse clears NextAttemptScheduleTime as the dispatch time passes. A genuine no-op simply reaches the
-// deadline having seen nothing move — the correct outcome, at the same wall-clock cost as the blind
-// sleep it replaces.
+// awaitWallClock blocks until a wall-clock event's effect is visible, preferring the server's long-poll
+// to client-side polling. It reads only the frontend surface (no internal state), so it works for
+// functional tests that build the harness with just a frontend client. The deadline is window + settle:
+// a firing effect returns early, a genuine no-op waits it out.
+//
+// A timeout fires a state transition, so it blocks on a DescribeActivityExecution long-poll that wakes
+// when the execution's transition-history version advances. A dispatch-delay elapse (start-delay or
+// backoff) bumps no version — the dispatch time simply passes — so a long-poll would never wake; it is
+// detected by the read-time projection flip (NextAttemptScheduleTime clearing as the dispatch time passes).
 func (a *saaHandle) awaitWallClock(t require.TestingT, e model.Event) {
-	before := a.projection(t)
 	deadline := time.Now().Add(a.h.eventClock(e) + saaWallClockSettle)
-	for {
-		if a.projection(t) != before {
-			return
+	if e.Kind == model.StartDelayElapses || e.Kind == model.BackoffElapses {
+		a.awaitProjectionChange(t, deadline)
+		return
+	}
+	a.awaitStateTransition(t, deadline)
+}
+
+// awaitStateTransition blocks on a DescribeActivityExecution long-poll until the execution's
+// transition-history version advances past the current state (or the deadline). Passing the token from a
+// prior Describe makes the server hold the request until the state changes; it returns a full response on
+// a transition and an empty one when its long-poll window expires, so an empty response means "resubmit".
+func (a *saaHandle) awaitStateTransition(t require.TestingT, deadline time.Time) {
+	token := a.describe(t).GetLongPollToken()
+	for time.Now().Before(deadline) {
+		resp, err := a.h.env.FrontendClient().DescribeActivityExecution(a.h.ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     a.h.env.Namespace().String(),
+			ActivityId:    a.activityID,
+			RunId:         a.runID,
+			LongPollToken: token,
+		})
+		require.NoError(t, err)
+		if resp.GetInfo() != nil {
+			return // a non-empty response means the state advanced (a transition occurred)
 		}
-		if !time.Now().Before(deadline) {
-			return
-		}
+	}
+}
+
+// awaitProjectionChange client-side-polls the public projection until it changes (or the deadline). Used
+// for dispatch-delay elapses, whose only effect is the read-time NextAttemptScheduleTime flip — no
+// transition-history advance for a long-poll to wake on.
+func (a *saaHandle) awaitProjectionChange(t require.TestingT, deadline time.Time) {
+	before := a.projection(t)
+	for a.projection(t) == before && time.Now().Before(deadline) {
 		time.Sleep(saaPollInterval)
 	}
 }
