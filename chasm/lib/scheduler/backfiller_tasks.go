@@ -160,12 +160,10 @@ func (b *BackfillerTaskHandler) processBackfill(
 	endTime := request.GetEndTime().AsTime()
 	// Resume from the high watermark only once genuine progress has been recorded.
 	// The watermark is left unset until a batch is actually processed (see Execute),
-	// so a fresh or capacity-stalled backfiller starts from the range start. Attempt
-	// is a buffer-full back-off counter (see BackfillerState.Attempt), not a progress
-	// marker: a capacity stall increments Attempt without advancing the watermark, so
-	// keying the resume on Attempt would skip the earlier part of the range.
+	// so a fresh or capacity-stalled backfiller starts from the range start.
 	var startTime time.Time
-	if lastProcessed := backfiller.GetLastProcessedTime(); hasRecordedProgress(lastProcessed) {
+	lastProcessed := backfiller.GetLastProcessedTime()
+	if hasRecordedProgress(lastProcessed) {
 		startTime = lastProcessed.AsTime()
 	} else {
 		// On the first attempt, start slightly behind to make the range inclusive.
