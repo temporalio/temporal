@@ -342,7 +342,7 @@ func (c *cacheImpl) lockWorkflowExecution(
 	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(cacheKey)
-		return consts.ErrResourceExhaustedBusyWorkflow
+		return consts.NewResourceExhaustedBusyWorkflow(cacheKey.WorkflowKey.WorkflowID)
 	}
 	return nil
 }
