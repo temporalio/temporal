@@ -157,17 +157,18 @@ func (b *BackfillerTaskHandler) processBackfill(
 ) (result backfillProgressResult, err error) {
 	request := backfiller.GetBackfillRequest()
 
-	// Restore high watermark if we've already started processing the backfill.
+	endTime := request.GetEndTime().AsTime()
+	// Resume from the high watermark only once genuine progress has been recorded.
+	// The watermark is left unset until a batch is actually processed (see Execute),
+	// so a fresh or capacity-stalled backfiller starts from the range start.
 	var startTime time.Time
 	lastProcessed := backfiller.GetLastProcessedTime()
-	if backfiller.GetAttempt() > 0 {
+	if hasRecordedProgress(lastProcessed) {
 		startTime = lastProcessed.AsTime()
 	} else {
-		// On the first attempt, the start time is set slightly behind in order to make
-		// the backfill start time inclusive.
+		// On the first attempt, start slightly behind to make the range inclusive.
 		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
 	}
-	endTime := request.GetEndTime().AsTime()
 	specResult, err := b.specProcessor.ProcessTimeRange(
 		scheduler,
 		startTime,
@@ -193,6 +194,13 @@ func (b *BackfillerTaskHandler) processBackfill(
 	result.BufferedStarts = specResult.BufferedStarts
 
 	return
+}
+
+// hasRecordedProgress reports whether a backfiller's high watermark reflects a
+// batch that was actually processed. An unset (nil or zero) watermark means no
+// progress yet - a fresh backfiller.
+func hasRecordedProgress(lastProcessed *timestamppb.Timestamp) bool {
+	return lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0)
 }
 
 // backoffDelay returns the amount of delay that should be added when retrying.

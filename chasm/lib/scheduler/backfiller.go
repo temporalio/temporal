@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	schedulescommon "go.temporal.io/server/common/schedules"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // The Backfiller component is responsible for buffering manually
@@ -37,9 +36,12 @@ func addBackfiller(
 	scheduler *Scheduler,
 ) *Backfiller {
 	id := schedulescommon.GenerateBackfillerID()
+	// LastProcessedTime is intentionally left unset here. For range backfills it
+	// doubles as the "progress recorded" signal and must stay zero until a batch is
+	// actually processed (see processBackfill). Trigger backfills, which use it as
+	// their fire time, set it explicitly in NewImmediateBackfiller.
 	backfiller := newBackfillerWithState(ctx, &schedulerpb.BackfillerState{
-		BackfillId:        id,
-		LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
+		BackfillId: id,
 	})
 
 	if scheduler.Backfillers == nil {
