@@ -355,6 +355,188 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				},
 			},
 		},
+		{
+			Name:  "audit",
+			Usage: "Audit a namespace's schedules for missed runs in a time window",
+			Description: `Lists every schedule in the target namespace(s), computes the nominal times each spec should have
+produced in the audit window, and classifies each against actual workflow executions found in visibility.
+Designed to answer: did the scheduler start workflows when it should have, during a specific time range?
+
+Input and output both stream: schedules are processed as they page in (per-schedule describe -> visibility query ->
+classify), so a namespace with millions of schedules runs with bounded memory and rows begin appearing immediately.
+
+OUTPUT FORMAT
+  JSONL streamed to stdout: one self-contained JSON object per flagged schedule (redirect to a file if desired).
+  Rows are emitted in completion order (NOT sorted) as each schedule finishes; pipe through 'sort' or 'jq -s' if you
+  need a stable order. Each object is the full analysis result -- identity, audit window, every input used, and the
+  classification -- so a verdict can be inspected or replayed offline. Fields:
+    namespace, schedule_id, workflow_type
+    window {start, end}            the audited time range
+    overlap_policy                 the schedule's overlap policy (short name, e.g. BufferAll)
+    overlap_class                  how that policy treats overlaps, which drives classification:
+                                     drops       Skip / BufferOne -- overlapping fires can be dropped for good
+                                     delays      BufferAll / CancelOther / TerminateOther -- overlaps run later
+                                     concurrent  AllowAll -- overlaps run immediately
+    catchup_window                 the schedule's configured catchupWindow (Go duration string, e.g. "1m0s")
+    paused                         whether the schedule is currently paused (only audited with --include-paused)
+    create_time, update_time       schedule create/update times (null if unknown)
+    expected, actual, matched      scheduled times; unique workflows observed; scheduled times matched to a workflow
+    missed                         total unmatched scheduled times
+    counts {real_miss, skip_overlap, inconclusive_schedule_changed, paused}
+    misses [{nominal, category}]   every unmatched scheduled time and why:
+                                     real_miss                      no workflow and the policy doesn't justify a skip
+                                                                    (a delays/concurrent policy, or a drops policy with
+                                                                    nothing running). Warrants investigation.
+                                     skip_overlap                   a drops policy legitimately skipped because a prior
+                                                                    workflow was still running
+                                     inconclusive_schedule_changed  spec was modified DURING the window; can't be judged
+                                     paused                         schedule was paused before the window; benign
+                                                                    (only with --include-paused)
+    scheduled_times []             every nominal time the spec produced in the window
+    observed [{workflow_id, run_id, nominal, start, close, status}]  every workflow seen in visibility
+    delays [{workflow_id, nominal, actual, desired, start, ...}]  per started action, how late it was:
+                                     nominal          pre-jitter scheduled time (N)
+                                     actual           jittered intended fire time (A = N + deterministic jitter)
+                                     desired          when it became eligible (D; a prior action's close time if a
+                                                      delaying overlap policy held it, else = actual)
+                                     start            actual workflow start (S)
+                                     jitter_offset  A - N (intended load spreading)
+                                     overlap_wait   max(0, D - A) (held behind a prior action by the overlap policy)
+                                     dispatch_delay S - D -- system was slow to start it once eligible
+                                     e2e_delay      S - A (total delay from the intended fire time)
+                                   (durations are Go duration strings, e.g. "5m0s")
+
+CAVEATS AND LIMITATIONS
+  Retention: when --start is older than the namespace's retention boundary (now - retention), the window start is
+    clamped to that boundary and a warning is logged to stderr. Visibility purges closed workflows after retention, so
+    querying past it would surface purged data as false-positive real_miss; clamping audits only the portion that still
+    has data.
+
+  Schedule modified during window: marked inconclusive_schedule_changed. The audit can't compute the historical spec,
+    so the schedule's times are marked inconclusive rather than producing untrustworthy classifications.
+
+  Paused / exhausted schedules: exhausted schedules are always dropped. Paused schedules are dropped unless
+    --include-paused, which audits them and classifies unmatched times as 'paused' (benign) -- or as
+    inconclusive_schedule_changed when the pause happened mid-window (there is no pause-history to pinpoint when).
+
+  Catchup window: a schedule with a tight catchupWindow (e.g. 10s) will lose actions if the scheduler is briefly
+    unavailable. The audit reports such losses as real_miss; catchup_window lets users distinguish "true sustained
+    outage" from "brief blip + tight catchup".
+
+  Catchup under overlap=SKIP after a brief outage: when the V1 scheduler resumes with multiple queued actions, it
+    dispatches only the oldest and discards the rest. The audit reports the discarded actions as real_miss. A burst of
+    real_miss across many schedules within minutes typically indicates this behavior. To confirm, the user must:
+    (1) ListWorkflowExecutions with WorkflowId='temporal-sys-scheduler:<schedule_id>' and
+    TemporalNamespaceDivision='TemporalScheduler' to find the scheduler workflow run active during the window;
+    (2) GetWorkflowExecutionHistory on that run and look for WORKFLOW_TASK_TIMED_OUT events with escalating attempt
+    numbers, followed by a multi-minute gap, then a single WORKFLOW_TASK_COMPLETED that resumes normal cadence;
+    (3) compare the identity field on WORKFLOW_TASK_STARTED across affected schedules. A shared worker identity points
+    to a single sick worker pod; distinct identities point to a broader frontend/matching/persistence issue.
+
+INPUT STREAM (for --file / stdin)
+  A JSONL stream of audit targets, one JSON object per line; schedule_id is optional (omit to audit the whole
+  namespace). Examples:
+    {"namespace":"my-namespace"}
+    {"namespace":"orders-prod","schedule_id":"daily-cleanup-schedule"}
+    {"namespace":"analytics-staging","schedule_id":"my-schedule"}
+
+PRECEDENCE
+  With a --file/stdin stream, the stream is the source of targets and the flags are constraints: every streamed
+  target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
+  to guarantee the audit stays within a single namespace.
+  With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
+  audits that whole namespace; --namespace + --schedule-id audits that one schedule.
+
+TIME WINDOW
+  --start / --end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h. --start-time / --end-time
+  take an absolute RFC3339 timestamp instead. --start is required (or --start-time); --end defaults to now. The
+  duration and timestamp forms of a bound are mutually exclusive.
+
+EXAMPLES
+  Last 24 hours of a namespace, save to a file:
+    tdbg schedule audit --namespace my-ns --start 24h > audit.jsonl
+
+  Last 3 days ending 6 hours ago:
+    tdbg schedule audit --namespace my-ns --start 3d --end 6h > audit.jsonl
+
+  Absolute window from a file of targets:
+    tdbg schedule audit -f ./targets.jsonl \
+      --start-time 2026-05-01T19:30:00Z --end-time 2026-05-02T10:00:00Z > audit.jsonl
+
+  Pipe a JSONL target stream from stdin (jq, psql, awk, etc.):
+    cat ./targets.jsonl | tdbg schedule audit --start 2d
+
+  Single schedule deep-dive over an absolute window:
+    tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
+      --start-time 2026-05-19T18:00:00Z --end-time 2026-05-19T22:00:00Z
+
+  Pipe stdout through jq (e.g. only schedules with real misses):
+    tdbg schedule audit -f ./targets.jsonl --start 1d | jq 'select(.counts.real_miss > 0)'`,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagNamespace,
+					Aliases: FlagNamespaceAlias,
+					Usage: "Audit this namespace. With no stream, audits the whole namespace. With a --file/stdin " +
+						"stream, it is a constraint: every streamed target must be in this namespace or the run errors, " +
+						"guaranteeing the audit stays within a single namespace.",
+				},
+				&cli.StringFlag{
+					Name:    FlagFile,
+					Aliases: FlagFileAlias,
+					Usage: "Path to a JSONL stream of audit targets, one JSON object per line as " +
+						`'{"namespace":"...","schedule_id":"..."}' (schedule_id optional). Use '-' or omit to read ` +
+						"from stdin. Targets stream in as they are read.",
+				},
+				&cli.StringFlag{
+					Name:    FlagScheduleID,
+					Aliases: FlagScheduleIDAlias,
+					Usage: "Audit only this schedule within --namespace. With no stream, audits just this schedule; " +
+						"with a stream, it is a constraint: every streamed target's schedule_id must match or the run errors.",
+				},
+				&cli.StringFlag{
+					Name: FlagStart,
+					Usage: "Window start as a duration before now (e.g. 24h, 3d). Required unless --start-time is given; " +
+						"mutually exclusive with it.",
+				},
+				&cli.StringFlag{
+					Name:  FlagStartTime,
+					Usage: "Window start as an absolute RFC3339 timestamp. Mutually exclusive with --start.",
+				},
+				&cli.StringFlag{
+					Name: FlagEnd,
+					Usage: "Window end as a duration before now (e.g. 1h, 0s). Defaults to now; mutually exclusive with " +
+						"--end-time.",
+				},
+				&cli.StringFlag{
+					Name:  FlagEndTime,
+					Usage: "Window end as an absolute RFC3339 timestamp. Defaults to now; mutually exclusive with --end.",
+				},
+				&cli.IntFlag{
+					Name:  FlagConcurrency,
+					Usage: "How many namespaces to audit at once (the namespace worker-pool size).",
+					Value: 10,
+				},
+				&cli.IntFlag{
+					Name:  FlagRPS,
+					Usage: "Max API calls per second within a single namespace (describe, list, and visibility queries).",
+					Value: 10,
+				},
+				&cli.DurationFlag{
+					Name: FlagDelayThreshold,
+					Usage: "Also flag a schedule (even with no missed runs) when a started action's dispatch delay " +
+						"reaches this -- surfaces schedules the system was slow to start. 0 flags on missed runs only.",
+					Value: 0,
+				},
+				&cli.BoolFlag{
+					Name: FlagIncludePaused,
+					Usage: "Audit currently-paused schedules too (excluded by default). Their unmatched times are " +
+						"classified 'paused' rather than real_miss, or inconclusive_schedule_changed if paused mid-window.",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminAuditSchedules(c, clientFactory)
+			},
+		},
 	}
 }
 
