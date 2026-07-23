@@ -564,7 +564,7 @@ func (a *Activity) HandleCompleted(
 	ctx chasm.MutableContext,
 	event RespondCompletedEvent,
 ) (*historyservice.RespondActivityTaskCompletedResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), true); err != nil {
 		return nil, err
 	}
 
@@ -589,7 +589,7 @@ func (a *Activity) HandleFailed(
 	ctx chasm.MutableContext,
 	event RespondFailedEvent,
 ) (*historyservice.RespondActivityTaskFailedResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
 	}
 
@@ -629,7 +629,7 @@ func (a *Activity) HandleCanceled(
 	ctx chasm.MutableContext,
 	event RespondCancelledEvent,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId()); err != nil {
+	if err := a.validateActivityTaskToken(ctx, event.Token, event.Request.GetNamespaceId(), false); err != nil {
 		return nil, err
 	}
 
@@ -1595,7 +1595,7 @@ func (a *Activity) RecordHeartbeat(
 	ctx chasm.MutableContext,
 	input WithToken[*historyservice.RecordActivityTaskHeartbeatRequest],
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-	err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId())
+	err := a.validateActivityTaskToken(ctx, input.Token, input.Request.GetNamespaceId(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -1907,12 +1907,21 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 }
 
 // validateActivityTaskToken validates a task token against the current activity state.
+//
+// allowForceCompleteFromScheduled permits a by-ID token to pass even though the activity has no
+// attempt in progress yet, as long as it is Scheduled. Only HandleCompleted sets this, mirroring
+// the workflow-activity behavior of letting RespondActivityTaskCompletedById force-complete an
+// activity before any worker has started it.
 func (a *Activity) validateActivityTaskToken(
 	ctx chasm.Context,
 	token *tokenspb.Task,
 	requestNamespaceID string,
+	allowForceCompleteFromScheduled bool,
 ) error {
-	if !a.hasAttemptInProgress() {
+	forceCompleteFromScheduled := allowForceCompleteFromScheduled &&
+		token.Attempt == ByIDTokenAttempt &&
+		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
+	if !a.hasAttemptInProgress() && !forceCompleteFromScheduled {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
@@ -1989,8 +1998,10 @@ func (a *Activity) emitOnCompletedMetrics(ctx chasm.Context, handler metrics.Han
 	attempt := a.LastAttempt.Get(ctx)
 	startedTime := attempt.GetStartedTime().AsTime()
 
-	startToCloseLatency := time.Since(startedTime)
-	metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
+	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		startToCloseLatency := time.Since(startedTime)
+		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
+	}
 
 	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
 	metrics.ActivityScheduleToCloseLatency.With(handler).Record(scheduleToCloseLatency)
