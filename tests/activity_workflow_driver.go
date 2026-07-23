@@ -304,6 +304,12 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		}
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
 		return err
+	case model.RespondFailedByIDType:
+		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		})
+		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),

@@ -227,11 +227,13 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 	if e.Failure == nil {
 		return nil
 	}
-	return activityFailure(e.Failure.Retryable, nextRetryDelay)
-}
-
-func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Failure {
-	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !retryable}
+	if e.Failure.ServerFailure {
+		return &failurepb.Failure{
+			Message:     "test server failure",
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: !e.Failure.Retryable}},
+		}
+	}
+	info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !e.Failure.Retryable}
 	if nextRetryDelay > 0 {
 		info.NextRetryDelay = durationpb.New(nextRetryDelay)
 	}

@@ -92,6 +92,35 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 	})
 }
 
+// A retryable ServerFailure reported through RespondActivityTaskFailedById must be retried, exactly
+// like a retryable ApplicationFailure. Only the by-ID API accepts a non-application failure (the
+// by-token API rejects one), so this is the surface a ServerFailure reaches the handler through. SAA
+// previously derived retryability from ApplicationFailureInfo alone and closed a ServerFailure
+// terminally, while WFA scheduled another attempt.
+func (s *activityParityTestSuite) TestRetryableServerFailureIsRetried() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	trace := []model.Event{model.Poll, model.FailByIDRetryablyWithServerFailure}
+	// A second attempt is scheduled and backing off, rather than the activity going terminal.
+	expected := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    2,
+		CurrentRetryInterval:       activityLongDuration,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+			"a retryable ServerFailure must schedule another attempt, not fail terminally")
+	})
+}
+
 // A terminal timeout must chain the application failure that drove its retries as its Cause, so an SDK
 // can expose the real failure.
 func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {

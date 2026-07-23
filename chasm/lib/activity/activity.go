@@ -663,6 +663,9 @@ func (a *Activity) isRetryableFailure(failure *failurepb.Failure) bool {
 	if failure == nil {
 		return true
 	}
+	if serverFailure := failure.GetServerFailureInfo(); serverFailure != nil {
+		return !serverFailure.GetNonRetryable()
+	}
 	appFailure := failure.GetApplicationFailureInfo()
 	if appFailure == nil {
 		return false
