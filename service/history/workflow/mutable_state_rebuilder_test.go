@@ -2231,6 +2231,7 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesEr
 	// Flag ON + a CHASM registry that owns the scheduled event, so the event is routed to the CHASM
 	// tree and reaches the (failing) component lookup rather than falling back to HSM.
 	s.mockShard.GetConfig().EnableChasmNexusWorkflowOperations = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockShard.GetConfig().ChasmNexusWorkflowOperationsRolloutPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(100)
 	s.mockShard.SetChasmWorkflowRegistry(newFakeChasmRegistry(&fakeChasmEventDefinition{
 		eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 	}))
@@ -2343,6 +2344,7 @@ func newFakeHSMRegistry(def *fakeHSMEventDefinition) *hsm.Registry {
 type nexusRebuildCase struct {
 	chasmEnabled      bool
 	flagOn            bool
+	rolloutPercent    int
 	chasmHasDef       bool
 	hsmApplyErr       error
 	chasmApplyErr     error
@@ -2370,11 +2372,13 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 	}
 	s.mockShard.SetChasmWorkflowRegistry(newFakeChasmRegistry(def))
 	s.mockShard.GetConfig().EnableChasmNexusWorkflowOperations = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.flagOn)
+	s.mockShard.GetConfig().ChasmNexusWorkflowOperationsRolloutPercent = dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.rolloutPercent)
 
 	ms := historyi.NewMockMutableState(s.controller)
 	ms.EXPECT().HSM().Return(nil).AnyTimes()
 	ms.EXPECT().ChasmEnabled().Return(tc.chasmEnabled).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{WorkflowId: "test-workflow-id"}).AnyTimes()
 	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
@@ -2407,10 +2411,17 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 	}{
 		// --- create events: routed by the per-namespace flag ---
 		{
-			name:             "nexus scheduled, flag on, creates in chasm",
+			name:             "nexus scheduled, flag on, in rollout, creates in chasm",
 			event:            nexusScheduledEvent(),
-			tc:               nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: true},
+			tc:               nexusRebuildCase{chasmEnabled: true, flagOn: true, rolloutPercent: 100, chasmHasDef: true},
 			wantChasmApplied: true,
+		},
+		{
+			// Flag on but out of rollout: create events still route to HSM.
+			name:           "nexus scheduled, flag on, out of rollout, routes to hsm",
+			event:          nexusScheduledEvent(),
+			tc:             nexusRebuildCase{chasmEnabled: true, flagOn: true, rolloutPercent: 0, chasmHasDef: true},
+			wantHSMApplied: true,
 		},
 		{
 			name:           "nexus scheduled, flag off, routes to hsm",
@@ -2428,14 +2439,14 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 			// Flag on, but CHASM has no definition for the event: fall back to creating in HSM.
 			name:           "nexus scheduled, flag on, chasm has no definition, falls back to hsm",
 			event:          nexusScheduledEvent(),
-			tc:             nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: false},
+			tc:             nexusRebuildCase{chasmEnabled: true, flagOn: true, rolloutPercent: 100, chasmHasDef: false},
 			wantHSMApplied: true,
 		},
 		{
 			// A genuine CHASM error is surfaced, never fallen back to HSM (avoids split-brain).
 			name:    "nexus scheduled, flag on, chasm error surfaced without hsm fallback",
 			event:   nexusScheduledEvent(),
-			tc:      nexusRebuildCase{chasmEnabled: true, flagOn: true, chasmHasDef: true, chasmComponentErr: chasmErr},
+			tc:      nexusRebuildCase{chasmEnabled: true, flagOn: true, rolloutPercent: 100, chasmHasDef: true, chasmComponentErr: chasmErr},
 			wantErr: chasmErr,
 		},
 		// --- non-create events: CHASM-first, HSM fallback ---

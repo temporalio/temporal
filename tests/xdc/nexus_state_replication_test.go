@@ -108,9 +108,11 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 	if s.chasmEnabled {
 		// Set EnableChasm and EnableChasmWorkflowOperations config values to true so that
 		// CHASM based Nexus operation implementation is used over the HSM one.
-		// (EnableCHASMCallbacks already default to true).
+		// (EnableCHASMCallbacks already default to true). The rollout percentage defaults to
+		// 0, so dial it up to 100 as well; otherwise the boolean flag alone routes nothing to CHASM.
 		s.dynamicConfigOverrides[dynamicconfig.EnableChasm.Key()] = true
 		s.dynamicConfigOverrides[chasmnexusoperation.EnableChasmWorkflowOperations.Key()] = true
+		s.dynamicConfigOverrides[chasmnexusoperation.ChasmWorkflowOperationsRolloutPercent.Key()] = 100
 	}
 	s.setupSuite()
 }
@@ -722,8 +724,11 @@ func (s *NexusStateReplicationSuite) TestNexusOperationChasmReplicatedWithMixedF
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Enable CHASM operation creation only on the initially-active cluster.
+	// Enable CHASM operation creation only on the initially-active cluster. The rollout percentage
+	// defaults to 0, so dial it up to 100 there as well; otherwise the boolean flag alone routes
+	// nothing to CHASM.
 	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, true)
+	s.clusters[0].OverrideDynamicConfig(s.T(), chasmnexusoperation.ChasmWorkflowOperationsRolloutPercent, 100)
 	s.clusters[1].OverrideDynamicConfig(s.T(), chasmnexusoperation.EnableChasmWorkflowOperations, false)
 
 	// Deliver the completion callback to the failover target.
