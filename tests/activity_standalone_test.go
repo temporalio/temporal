@@ -119,6 +119,22 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	return env
 }
 
+// driveTrace runs a trace (a sequence of events) for a fresh activity, realizing each event against
+// the server, returning a handle to it at the reached state.
+func (s *standaloneActivityTestSuite) driveTrace(t *testing.T, env *standaloneActivityEnv, tr saaTrace) *saaHandle {
+	h := &saaHarness{
+		env: env.TestEnv, ctx: s.Context(),
+		idBase:        testcore.RandomizeStr(t.Name()),
+		cfg:           tr.config(),
+		startDelay:    tr.startDelay(),
+		retryInterval: tr.retryInterval,
+		// "Dispatchable" must mean "dispatches promptly", so bound the positive poll just above the
+		// long-poll minimum — that is how a queued retry is told from one still in backoff.
+		positivePollTimeout: saaPollTimeout,
+	}
+	return h.driveTrace(t, tr.trace)
+}
+
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 	env := s.newTestEnv()
 	t := s.T()
