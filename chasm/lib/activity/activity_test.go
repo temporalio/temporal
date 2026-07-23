@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/deployment/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -1327,4 +1328,44 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 
 	require.Error(t, err)
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+// TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion ensures that the
+// LastDeploymentVersion from the last attempt is included in the returned
+// ActivityExecutionInfo.
+func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			ActivityType:           &commonpb.ActivityType{Name: "T"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "current-task-queue"},
+			ScheduleToCloseTimeout: durationpb.New(30 * time.Second),
+			StartToCloseTimeout:    durationpb.New(10 * time.Second),
+			OriginalOptions:        nil,
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			LastDeploymentVersion: &deployment.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
+		Visibility:  chasm.NewComponentField(ctx, &chasm.Visibility{}),
+	}
+
+	resp, err := activity.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{},
+	})
+
+	require.NoError(t, err)
+	info := resp.FrontendResponse.GetInfo()
+	require.NotNil(t, info.GetLastDeploymentVersion())
+	require.Equal(t, "test-deployment", info.GetLastDeploymentVersion().GetDeploymentName())
+	require.Equal(t, "test-build-1", info.GetLastDeploymentVersion().GetBuildId())
 }
