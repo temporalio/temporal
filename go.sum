@@ -404,8 +404,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7 h1:lEebX/hZss+TSH3EBwhztnBavJVj7pWGJOH8UgKHS0w=
 github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7/go.mod h1:RE+CHmY+kOZQk47AQaVzwrGmxpflnLgTd6EOK0853j4=
-github.com/temporalio/sqlparser v0.0.0-20260721183058-0466b6b405ac h1:AFOFGU/hSzYNYfrMD6CNpnThorvFHC33jXqfrenkNKE=
-github.com/temporalio/sqlparser v0.0.0-20260721183058-0466b6b405ac/go.mod h1:143qKdh3G45IgV9p+gbAwp3ikRDI8mxsijFiXDfuxsw=
+github.com/temporalio/sqlparser v0.0.0-20260722001706-17d16cfe1da5 h1:5V5CN6pyeYt219lJF8CXtl3UC2DDzynXLNNZ5gjK2GE=
+github.com/temporalio/sqlparser v0.0.0-20260722001706-17d16cfe1da5/go.mod h1:143qKdh3G45IgV9p+gbAwp3ikRDI8mxsijFiXDfuxsw=
 github.com/temporalio/tchannel-go v1.22.1-0.20220818200552-1be8d8cffa5b/go.mod h1:c+V9Z/ZgkzAdyGvHrvC5AsXgN+M9Qwey04cBdKYzV7U=
 github.com/temporalio/tchannel-go v1.22.1-0.20260129151045-8706a1ab5f61 h1:v9EBEMJggmXGbVcIAjGQpKgEB+a9E/Q0brJ6fGWJvhQ=
 github.com/temporalio/tchannel-go v1.22.1-0.20260129151045-8706a1ab5f61/go.mod h1:ezRQRwu9KQXy8Wuuv1aaFFxoCNz5CeNbVOOkh3xctbY=

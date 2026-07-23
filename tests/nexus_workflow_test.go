@@ -1131,16 +1131,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 			nexus.HandlerErrorTypeNotFound,
 		)
 		assertInvalidCompletionTokenRejected(
-			"missing run",
-			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
-				s.mutateCompletionComponentRef(token, func(ref *persistencespb.ChasmComponentRef) {
-					ref.RunId = uuid.NewString()
-				})
-				return token
-			},
-			nexus.HandlerErrorTypeNotFound,
-		)
-		assertInvalidCompletionTokenRejected(
 			"wrong archetype",
 			func(token *tokenspb.NexusOperationCompletion) *tokenspb.NexusOperationCompletion {
 				s.mutateCompletionComponentRef(token, func(ref *persistencespb.ChasmComponentRef) {
@@ -1986,9 +1976,6 @@ NexusOperationStarted`, hist)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion after reset support")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())

@@ -513,7 +513,6 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// Expired tasks are added as pre-acked (nil) so they participate in
 			// readLevel calculation above and advance ackLevel + get GC'd below.
 			tr.outstandingTasks.Put(level, nil)
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 			continue
 		}
