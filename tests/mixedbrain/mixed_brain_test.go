@@ -2,12 +2,14 @@ package mixedbrain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -27,7 +29,7 @@ func testDuration() time.Duration {
 		}
 		return d
 	}
-	return 30 * time.Second // locally we want only a smoke test to ensure it works
+	return 2 * time.Minute // locally we want only a smoke test to ensure it works
 }
 
 func logDir(t *testing.T) string {
@@ -78,19 +80,14 @@ var scenarios = []omesScenario{
 	},
 }
 
-// TestMixedBrain starts two servers in parallel, one using the current branch's source
-// and the other using the latest release tag. It then runs the Omes
-// throughput_stress and scheduler_stress scenarios to ensure that the mixed
-// brain works correctly.
+// TestMixedBrain starts two current and two release servers, then replaces each
+// server once while Omes exercises the mixed-version cluster.
 // Uses PostgreSQL because older release config templates do not support SQLite.
 func TestMixedBrain(t *testing.T) {
 	tmpDir := t.TempDir()
 	logRoot := logDir(t)
 
 	omesBinary := filepath.Join(tmpDir, "omes-bin")
-
-	currentLog := filepath.Join(logRoot, "mixedbrain_process-current.log")
-	releaseLog := filepath.Join(logRoot, "mixedbrain_process-release.log")
 
 	var releaseTag string
 	t.Run("setup", func(t *testing.T) {
@@ -121,99 +118,159 @@ func TestMixedBrain(t *testing.T) {
 		t.Fatalf("mixedbrain requires PostgreSQL because older release config templates do not support SQLite")
 	}
 	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
-
-	var currentSrv, releaseSrv *devserver.Server
-	var currentLogFile, releaseLogFile *os.File
-	var conn *grpc.ClientConn
-	var proxy *frontendProxy
+	instances := []*serverInstance{
+		{
+			name:    "current-0",
+			version: "current",
+			logPath: filepath.Join(logRoot, "mixedbrain_process-current-0.log"),
+			options: devserver.Options{SourceDir: sourceRoot(), Persistence: persistence},
+		},
+		{
+			name:    "current-1",
+			version: "current",
+			logPath: filepath.Join(logRoot, "mixedbrain_process-current-1.log"),
+			options: devserver.Options{SourceDir: sourceRoot(), Persistence: persistence},
+		},
+		{
+			name:    "release-0",
+			version: "release",
+			logPath: filepath.Join(logRoot, "mixedbrain_process-release-0.log"),
+			options: devserver.Options{Ref: releaseTag, Persistence: persistence},
+		},
+		{
+			name:    "release-1",
+			version: "release",
+			logPath: filepath.Join(logRoot, "mixedbrain_process-release-1.log"),
+			options: devserver.Options{Ref: releaseTag, Persistence: persistence},
+		},
+	}
+	for _, instance := range instances {
+		if err := os.Remove(instance.logPath); !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, instance := range instances {
+			if err := instance.stop(); err != nil {
+				t.Errorf("stop %s during cleanup: %v", instance.name, err)
+			}
+		}
+	})
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
 
-	t.Run("start current server", func(st *testing.T) {
-		// Server processes use the parent t so their context survives this sub-test.
-		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
-			SourceDir:   sourceRoot(),
-			Persistence: persistence,
-		})
-
-		var err error
-		conn, err = grpc.NewClient(currentSrv.FrontendHostPort(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	t.Run("start servers", func(st *testing.T) {
+		require.NoError(st, instances[0].start(t.Context(), ""))
+		conn, err := grpc.NewClient(instances[0].frontendAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		require.NoError(st, err)
+		defer func() { _ = conn.Close() }()
 
-		// This ensures the current server is fully booted before starting the release
-		// server. Registering every scenario's namespace here gives them the full
-		// cluster-formation window to propagate to all services before Omes connects.
 		for _, s := range scenarios {
 			registerNamespace(st, conn, s.namespace)
 		}
-	})
-	if t.Failed() {
-		return
-	}
-	defer func() { _ = conn.Close() }()
-
-	t.Run("start release server", func(_ *testing.T) {
-		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
-			Ref:         releaseTag,
-			Persistence: persistence,
-			ClusterEndpoint: devserver.ClusterEndpoint{
-				RPCAddress: currentSrv.FrontendHostPort(),
-			},
-		})
+		for _, instance := range instances[1:] {
+			require.NoError(st, instance.start(t.Context(), instances[0].frontendAddress()))
+		}
 	})
 	if t.Failed() {
 		return
 	}
 
 	t.Run("form cluster", func(st *testing.T) {
-		waitForClusterFormation(st, conn, 90*time.Second, currentSrv.Ports(), releaseSrv.Ports())
+		conn, err := grpc.NewClient(instances[0].frontendAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(st, err)
+		defer func() { _ = conn.Close() }()
+		waitForClusterFormation(st, conn, 90*time.Second, instancePorts(instances)...)
 	})
 	if t.Failed() {
 		return
 	}
 
-	t.Run("run omes", func(st *testing.T) {
+	proxy := startFrontendProxy(t)
+	t.Cleanup(proxy.stop)
+	for _, instance := range instances {
+		require.NoError(t, proxy.AddBackend(instance.name, instance.version, instance.frontendAddress()))
+	}
+
+	t.Run("run omes and roll servers", func(st *testing.T) {
+		conn, err := grpc.NewClient(instances[0].frontendAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		require.NoError(st, err)
+		defer func() { _ = conn.Close() }()
+
 		// The scenario's run ID determines its task queue (omes-<run ID>).
 		// throughput_stress owns the Nexus endpoint, so target its task queue.
 		throughput := scenarios[0]
 		createNexusEndpoint(st, conn, nexusEndpoint, throughput.namespace, "omes-"+runID+"-"+throughput.name)
 
-		proxy = startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
-		st.Cleanup(proxy.stop)
-
+		duration := testDuration()
+		workloadDeadline := time.Now().Add(duration)
+		finalSoak := duration / 5
+		omesCtx, cancelOmes := context.WithCancel(st.Context())
+		results := make(chan omesResult, len(scenarios))
+		var omesWG sync.WaitGroup
+		defer omesWG.Wait()
+		defer cancelOmes()
 		for _, scenario := range scenarios {
-			st.Run(scenario.name, func(sst *testing.T) {
-				sst.Parallel()
+			omesWG.Go(func() {
 				logPath := filepath.Join(logRoot, "mixedbrain_omes_"+scenario.name+".log")
-				runOmes(sst, omesBinary, proxy.addr(), logPath, testDuration(), scenario, runID+"-"+scenario.name)
+				err := runOmes(omesCtx, st, omesBinary, proxy.addr(), logPath, duration, scenario, runID+"-"+scenario.name)
+				results <- omesResult{name: scenario.name, err: err}
 			})
 		}
-	})
-	if t.Failed() {
-		return
-	}
 
-	t.Run("verify", func(st *testing.T) {
-		requireServerAlive(st, "current", currentSrv.FrontendHostPort())
-		requireServerAlive(st, "release", releaseSrv.FrontendHostPort())
+		workloadCtx, cancelWorkload := context.WithDeadline(st.Context(), workloadDeadline)
+		defer cancelWorkload()
+		require.NoError(st, waitForProxyTraffic(workloadCtx, proxy))
 
-		for i, backend := range []string{"current", "release"} {
-			count := proxy.callCount[i].Load()
-			st.Logf("Proxy RPCs to %s: %d", backend, count)
-			require.Positive(st, count, "expected proxy to route RPCs to %s server", backend)
+		rollOrder := []*serverInstance{instances[0], instances[2], instances[1], instances[3]}
+		for i, instance := range rollOrder {
+			remainingRolls := len(rollOrder) - i
+			dwell := (time.Until(workloadDeadline) - finalSoak) / time.Duration(remainingRolls)
+			require.Positive(st, dwell, "workload deadline elapsed before replacing %s", instance.name)
+			require.NoError(st, waitForRollDwell(workloadCtx, dwell, results))
+			st.Logf("Replacing %s with %v remaining", instance.name, time.Until(workloadDeadline))
+			require.NoError(st, replaceServer(t.Context(), workloadCtx, proxy, instance, instances))
+		}
+
+		for range scenarios {
+			select {
+			case result := <-results:
+				require.NoError(st, result.err, "Omes %s failed", result.name)
+			case <-st.Context().Done():
+				st.Fatalf("Omes did not complete: %v", context.Cause(st.Context()))
+			}
 		}
 	})
+	if !t.Failed() {
+		t.Run("verify", func(st *testing.T) {
+			for _, instance := range instances {
+				requireServerAlive(st, instance.name, instance.frontendAddress())
+				count, ok := proxy.BackendCallCount(instance.name)
+				require.True(st, ok)
+				st.Logf("Proxy RPCs to %s: %d", instance.name, count)
+				require.Positive(st, count, "expected proxy to route RPCs to %s", instance.name)
+			}
+			for _, version := range []string{"current", "release"} {
+				require.Positive(st, proxy.VersionCallCount(version), "expected proxy traffic to %s servers", version)
+			}
+		})
+	}
 
 	// Stop the servers so their logs are fully flushed, then scan them for
 	// panics, soft-assertion failures, and other problems that don't surface as
 	// a process exit. Runs regardless of whether "verify" failed, since a crashed
 	// server's log is exactly what we want to inspect.
-	_ = currentSrv.Stop()
-	_ = releaseSrv.Stop()
-	_ = currentLogFile.Close()
-	_ = releaseLogFile.Close()
+	for _, instance := range instances {
+		if err := instance.stop(); err != nil {
+			t.Errorf("stop %s: %v", instance.name, err)
+		}
+	}
 
 	t.Run("scan server logs", func(st *testing.T) {
-		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
+		logPaths := make([]string, 0, len(instances))
+		for _, instance := range instances {
+			logPaths = append(logPaths, instance.logPath)
+		}
+		problems, err := scanServerLogs(serverLogValidators, logPaths...)
 		require.NoError(st, err)
 		for _, p := range problems {
 			st.Error(p)
@@ -221,20 +278,132 @@ func TestMixedBrain(t *testing.T) {
 	})
 }
 
+type omesResult struct {
+	name string
+	err  error
+}
+
+func instancePorts(instances []*serverInstance) []devserver.Ports {
+	ports := make([]devserver.Ports, 0, len(instances))
+	for _, instance := range instances {
+		if instance.server != nil {
+			ports = append(ports, instance.ports)
+		}
+	}
+	return ports
+}
+
+func waitForProxyTraffic(ctx context.Context, proxy *frontendProxy) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if proxy.VersionCallCount("current")+proxy.VersionCallCount("release") > 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for Omes proxy traffic: %w", context.Cause(ctx))
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForRollDwell(ctx context.Context, dwell time.Duration, results <-chan omesResult) error {
+	timer := time.NewTimer(dwell)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case result := <-results:
+		if result.err != nil {
+			return fmt.Errorf("Omes %s failed before server roll completed: %w", result.name, result.err)
+		}
+		return fmt.Errorf("Omes %s completed before server roll completed", result.name)
+	case <-ctx.Done():
+		return fmt.Errorf("wait before server roll: %w", context.Cause(ctx))
+	}
+}
+
+func replaceServer(
+	startCtx context.Context,
+	membershipCtx context.Context,
+	proxy *frontendProxy,
+	instance *serverInstance,
+	instances []*serverInstance,
+) error {
+	if err := proxy.RemoveBackend(instance.name); err != nil {
+		return fmt.Errorf("remove %s from proxy: %w", instance.name, err)
+	}
+
+	oldPorts := instance.ports
+	if err := instance.stop(); err != nil {
+		return fmt.Errorf("stop %s: %w", instance.name, err)
+	}
+	var clusterEndpoint string
+	for _, candidate := range instances {
+		if candidate.server != nil {
+			clusterEndpoint = candidate.frontendAddress()
+			break
+		}
+	}
+	if clusterEndpoint == "" {
+		return fmt.Errorf("replace %s: no surviving frontend", instance.name)
+	}
+	if err := waitForClusterMembership(membershipCtx, instances, []devserver.Ports{oldPorts}); err != nil {
+		return fmt.Errorf("wait for %s to leave membership: %w", instance.name, err)
+	}
+	if err := instance.start(startCtx, clusterEndpoint); err != nil {
+		return err
+	}
+	if err := waitForClusterMembership(membershipCtx, instances, nil); err != nil {
+		return fmt.Errorf("wait for replacement %s to join membership: %w", instance.name, err)
+	}
+	if err := proxy.AddBackend(instance.name, instance.version, instance.frontendAddress()); err != nil {
+		return fmt.Errorf("re-add %s to proxy: %w", instance.name, err)
+	}
+	return nil
+}
+
+func waitForClusterMembership(ctx context.Context, instances []*serverInstance, absent []devserver.Ports) error {
+	present := instancePorts(instances)
+	for _, instance := range instances {
+		if instance.server == nil {
+			continue
+		}
+		if err := waitForMembership(ctx, instance.frontendAddress(), present, absent); err != nil {
+			return fmt.Errorf("wait for %s membership: %w", instance.name, err)
+		}
+	}
+	return nil
+}
+
 // runOmes runs the given Omes scenario against serverAddr under the given run ID.
 // Retries if Omes fails due to search attribute not being ready yet.
 // Deducts elapsed time from duration on retry so total wall time stays bounded.
-func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Duration, scenario omesScenario, runID string) {
+func runOmes(
+	ctx context.Context,
+	t *testing.T,
+	binary string,
+	serverAddr string,
+	logPath string,
+	duration time.Duration,
+	scenario omesScenario,
+	runID string,
+) error {
 	t.Helper()
 	t.Logf("Running Omes %s for %v against %s", scenario.name, duration, serverAddr)
 
 	started := time.Now()
 	for {
 		remaining := duration - time.Since(started)
-		require.Greater(t, remaining, 10*time.Second, "Omes never started successfully, check %s", logPath)
+		if remaining <= 10*time.Second {
+			return fmt.Errorf("Omes never started successfully, check %s", logPath)
+		}
 
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		args := []string{
 			"run-scenario-with-worker",
@@ -252,7 +421,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		}
 
 		var buf bytes.Buffer
-		cmd := exec.CommandContext(t.Context(), binary, args...)
+		cmd := exec.CommandContext(ctx, binary, args...)
 		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto") // Omes workers may require a newer toolchain
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
@@ -260,12 +429,20 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		cmd.WaitDelay = 15 * time.Second
 
 		err = cmd.Run()
-		_ = logFile.Close()
+		closeErr := logFile.Close()
 		if err != nil && strings.Contains(buf.String(), "no mapping defined for search attribute") {
+			if closeErr != nil {
+				return fmt.Errorf("close Omes log %s: %w", logPath, closeErr)
+			}
 			t.Log("Omes failed due to search attributes not ready, retrying...")
 			continue
 		}
-		require.NoError(t, err, "Omes scenario failed, check %s", logPath)
-		return
+		if err != nil {
+			return fmt.Errorf("Omes scenario failed, check %s: %w", logPath, err)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close Omes log %s: %w", logPath, closeErr)
+		}
+		return nil
 	}
 }

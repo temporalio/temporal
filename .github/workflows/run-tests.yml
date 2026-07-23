@@ -485,6 +485,12 @@ jobs:
       - name: Install PostgreSQL schema
         run: make install-schema-postgresql12
 
+      - name: Set up Go for mixed-brain test
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: tests/mixedbrain/go.mod
+          cache: false
+
       - name: Run mixed brain test
         timeout-minutes: 20
         run: ./develop/github/monitor_test.sh make mixed-brain-test
@@ -499,11 +505,11 @@ jobs:
 
       - name: Print current server logs
         if: always()
-        run: cat .testoutput/mixedbrain_process-current.log || true
+        run: cat .testoutput/mixedbrain_process-current-*.log || true
 
       - name: Print release server logs
         if: always()
-        run: cat .testoutput/mixedbrain_process-release.log || true
+        run: cat .testoutput/mixedbrain_process-release-*.log || true
 
       - name: Print Omes logs
         if: always()
