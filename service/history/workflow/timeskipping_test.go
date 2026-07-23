@@ -442,6 +442,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Require().NotNil(tsi)
 		s.True(proto.Equal(cfg, tsi.GetConfig()))
 		s.Require().NotNil(tsi.GetFastForwardInfo())
+		s.Require().Equal(enumspb.TIME_SKIPPING_STOP_REASON_UNSPECIFIED, tsi.GetStopReason())
 		s.Require().Nil(tsi.GetAccumulatedSkippedDuration())
 		// timestamppb translates to UTC time
 		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
@@ -477,6 +478,25 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		s.Equal(targetTime.UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
+	})
+
+	s.Run("InitWithInheritedSkipOnly_NoStopReason", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		baseTime := s.mutableState.timeSource.Now()
+		hasSkipped := 2 * time.Hour
+		propagation := &commonpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(hasSkipped),
+		}
+
+		s.mutableState.initTimeSkippingInfo(nil, propagation)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.Nil(tsi.GetConfig())
+		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.Equal(baseTime.Add(hasSkipped), s.mutableState.Now(), "inherited skip still shifts the virtual clock")
+		s.Equal(enumspb.TIME_SKIPPING_STOP_REASON_UNSPECIFIED, tsi.GetStopReason())
 	})
 
 	s.Run("SessionSkipCountSeededFromPropagation", func() {
@@ -555,6 +575,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 				Enabled: false,
 			},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			StopReason:                 enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED,
 		}
 		s.mutableState.executionInfo.TimeSkippingInfo = &currentTSI
 
@@ -569,6 +590,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 
 		s.Require().NotNil(newTSI)
 		s.True(proto.Equal(newConfig, newTSI.GetConfig()))
+		s.Equal(enumspb.TIME_SKIPPING_STOP_REASON_UNSPECIFIED, newTSI.GetStopReason(), "re-enabling clears the prior stop reason")
 		s.Require().NotNil(newTSI.GetFastForwardInfo())
 		// re-installing the fast-forward records the current versioned transition, so a task
 		// emitted here validates against a stable reference after a failover.
@@ -625,6 +647,7 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		s.True(proto.Equal(tsc3, tsc3TSI.GetConfig()))
 		s.Nil(tsc3TSI.GetFastForwardInfo())
 		s.Equal(time.Hour, tsc3TSI.GetAccumulatedSkippedDuration().AsDuration())
+		s.Equal(enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED, tsc3TSI.GetStopReason())
 
 	})
 
@@ -1373,6 +1396,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
 		s.Require().False(tsi.GetConfig().GetEnabled())
 		s.Require().True(tsi.GetFastForwardInfo().GetHasReached())
+		s.Require().Equal(enumspb.TIME_SKIPPING_STOP_REASON_FAST_FORWARD_COMPLETED, tsi.GetStopReason())
 	})
 
 	// Every applied transition increments SessionSkipCount by one, and once the count reaches
@@ -1395,6 +1419,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
 		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
 		s.Require().True(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(enumspb.TIME_SKIPPING_STOP_REASON_UNSPECIFIED, tsi.GetStopReason())
 
 		// second skip: count reaches the cap of 2, disables
 		err = s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
@@ -1404,6 +1429,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		s.Require().NoError(err)
 		s.Require().Equal(int32(2), tsi.GetSessionSkipCount())
 		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(enumspb.TIME_SKIPPING_STOP_REASON_MAX_SKIP_PER_SESSION_REACHED, tsi.GetStopReason())
 	})
 
 	// A MaxSkipPerSession of 0 caps on the very first skip (1 >= 0), disabling immediately.
@@ -1424,6 +1450,7 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionTimeSkippingTransitionedEv
 		tsi := s.mutableState.GetExecutionInfo().TimeSkippingInfo
 		s.Require().Equal(int32(1), tsi.GetSessionSkipCount())
 		s.Require().False(tsi.GetConfig().GetEnabled())
+		s.Require().Equal(enumspb.TIME_SKIPPING_STOP_REASON_MAX_SKIP_PER_SESSION_REACHED, tsi.GetStopReason())
 	})
 }
 
@@ -1635,6 +1662,7 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.True(info.GetIsRunning())
 		s.Equal(now, info.GetCurrentTime().AsTime())
 		s.Nil(info.GetFastForwardInfo(), "no fast-forward set")
+		s.Equal(enumspb.TIME_SKIPPING_STOP_REASON_UNSPECIFIED, info.GetStopReason(), "no stop reason while running")
 	})
 
 	s.Run("ToDescribeInfoWithFastForward", func() {
@@ -1663,12 +1691,14 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			StopReason:                 enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED,
 		})
 		msNow := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 		info := util.ToDescribeInfo(msNow)
 		s.NotNil(info)
 		s.False(info.GetIsRunning())
 		s.Equal(msNow, info.GetCurrentTime().AsTime())
+		s.Equal(enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED, info.GetStopReason())
 	})
 
 }
