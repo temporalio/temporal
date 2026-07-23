@@ -20,7 +20,10 @@ message SchedulerIdleTask {
 message SchedulerCallbacksTask {}
 
 // Buffers actions based on the schedule's specification.
-message GeneratorTask {}
+message GeneratorTask {
+  // When set, skip recomputing FutureActionTimes to avoid oscillating visbility.
+  bool skip_future_action_times = 1;
+}
 
 // Processes buffered actions, deciding whether to execute, delay, or discard.
 message InvokerProcessBufferTask {}

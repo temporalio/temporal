@@ -51,7 +51,7 @@ func (g *GeneratorTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
 	_ chasm.TaskAttributes,
-	_ *schedulerpb.GeneratorTask,
+	task *schedulerpb.GeneratorTask,
 ) error {
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
@@ -141,7 +141,9 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
-	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
+	if !task.GetSkipFutureActionTimes() {
+		generator.UpdateFutureActionTimes(ctx, g.specBuilder)
+	}
 
 	// Schedule the next timer task. Three outcomes are possible:
 	// - isIdle: the schedule is done; arm the idle task to close it.
@@ -181,7 +183,7 @@ func (g *GeneratorTaskHandler) Execute(
 		// Keep the generator task perpetually scheduled. When paused, the next
 		// fire will simply advance the HWM without appending actions (handled in
 		// ProcessTimeRange).
-		generator.scheduleTask(ctx, result.NextWakeupTime)
+		generator.scheduleTask(ctx, result.NextWakeupTime, false)
 	} else {
 		// Hold open without a task: see the comment block above.
 		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
