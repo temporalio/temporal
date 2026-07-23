@@ -242,4 +242,13 @@ func TestWaitFastForwardNotification(t *testing.T) {
 		require.Equal(t, pollTimeout, result)
 		require.Same(t, pending, ffinfo)
 	})
+
+	t.Run("caller context cancellation is propagated as an error, not a poll-timeout", func(t *testing.T) {
+		ch := make(chan *notification.FastForwardNotification)
+		callerCtx, cancelCaller := context.WithCancel(context.Background())
+		cancelCaller() // client disconnected / deadline exceeded
+		// Long soft timeout so the only thing that fires is the caller's cancelled context.
+		_, _, err := waitFastForwardNotification(callerCtx, context.Background(), ch, time.Minute, testFastForwardID, pending)
+		require.ErrorIs(t, err, context.Canceled)
+	})
 }

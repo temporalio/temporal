@@ -3793,8 +3793,17 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.ErrorIs(err, errTimeSkippingFastForwardIdNotSet)
 	})
 
+	s.Run("missing context deadline is rejected as a long poll", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		// context.Background() has no deadline; a long poll must have one.
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		s.ErrorIs(err, common.ErrContextTimeoutNotSet)
+	})
+
 	s.Run("valid request forwards to history and returns its response", func() {
 		req := newReq("ff-id")
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 
 		want := &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
@@ -3813,17 +3822,19 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 				return &historyservice.PollWorkflowExecutionTimeSkippingResponse{Response: want}, nil
 			})
 
-		resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+		resp, err := handler(true).PollWorkflowExecutionTimeSkipping(ctx, req)
 		s.NoError(err)
 		s.Same(want, resp)
 	})
 
 	s.Run("history error is propagated", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 		s.mockHistoryClient.EXPECT().
 			PollWorkflowExecutionTimeSkipping(gomock.Any(), gomock.Any()).
 			Return(nil, serviceerror.NewUnavailable("history unavailable"))
-		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(ctx, newReq("ff-id"))
 		var unavailable *serviceerror.Unavailable
 		s.ErrorAs(err, &unavailable)
 	})

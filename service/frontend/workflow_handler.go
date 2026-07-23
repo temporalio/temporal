@@ -7544,10 +7544,12 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 	if strings.TrimSpace(request.GetFastForwardId()) == "" {
 		return nil, errTimeSkippingFastForwardIdNotSet
 	}
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollWorkflowExecutionTimeSkipping", wh.throttledLogger); err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)
 	defer cancel()
-
 	histResp, err := wh.historyClient.PollWorkflowExecutionTimeSkipping(
 		ctx,
 		&historyservice.PollWorkflowExecutionTimeSkippingRequest{

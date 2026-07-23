@@ -136,9 +136,15 @@ func waitFastForwardNotification(
 				// the pending fast-forward is unchanged, so keep waiting.
 				continue
 			}
-		// (2) soft poll timeout, or (4) the RPC context was cancelled (client disconnect / server
-		// shutdown) — stCtx derives from ctx, so it fires on either.
+		// (2) long-poll budget elapsed / (4) caller's context ended. stCtx = WithTimeout(ctx,
+		// softTimeout); softTimeout is the server-side budget, configured shorter than the caller's
+		// RPC deadline (as in pollupdate's WaitLifecycleStage), so it normally fires first and we
+		// return a graceful poll-timeout. If instead the caller's context ended first (shorter
+		// deadline / client disconnect / shutdown), propagate that error rather than faking a timeout.
 		case <-stCtx.Done():
+			if ctx.Err() != nil {
+				return nil, 0, ctx.Err()
+			}
 			return pending, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_POLL_TIMEOUT, nil
 		// (3) The shard moved or closed. Release promptly instead of holding the subscriber slot
 		// until the soft timeout; the client's retry routes to the new shard owner.
