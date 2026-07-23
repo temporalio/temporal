@@ -131,6 +131,58 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			},
 			expectRateLimit: false,
 		},
+		{
+			name:               "long poll describe activity execution",
+			request:            &workflowservice.DescribeActivityExecutionRequest{LongPollToken: []byte("token")},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution": 1,
+			},
+			expectRateLimit: true,
+		},
+		{
+			name:               "non-long poll describe activity execution",
+			request:            &workflowservice.DescribeActivityExecutionRequest{},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution": 1,
+			},
+			expectRateLimit: false,
+		},
+		{
+			name:               "long poll describe nexus operation execution",
+			request:            &workflowservice.DescribeNexusOperationExecutionRequest{LongPollToken: []byte("token")},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+			},
+			expectRateLimit: true,
+		},
+		{
+			name:               "non-long poll describe nexus operation execution",
+			request:            &workflowservice.DescribeNexusOperationExecutionRequest{},
+			numBlockedRequests: 3,
+			perInstanceLimit:   2,
+			globalLimit:        4,
+			memberCounter:      quotastest.NewFakeMemberCounter(2),
+			methodName:         "/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution",
+			tokens: map[string]int{
+				"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
+			},
+			expectRateLimit: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
