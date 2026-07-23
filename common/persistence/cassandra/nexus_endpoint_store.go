@@ -66,7 +66,7 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 	ctx context.Context,
 	request *p.InternalCreateOrUpdateNexusEndpointRequest,
 ) error {
-	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := s.session.NewBatch(gocql.LoggedBatch)
 
 	if request.Endpoint.Version == 0 {
 		batch.Query(templateCreateEndpointQuery,
@@ -101,7 +101,7 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 	}
 
 	row1 := make(map[string]any)
-	applied, iter, err := s.session.MapExecuteBatchCAS(batch, row1)
+	applied, iter, err := batch.MapExecCAS(ctx, row1)
 
 	if err != nil {
 		return gocql.ConvertError("CreateOrUpdateNexusEndpoint", err)
@@ -167,13 +167,13 @@ func (s *NexusEndpointStore) GetNexusEndpoint(
 	ctx context.Context,
 	request *p.GetNexusEndpointRequest,
 ) (*p.InternalNexusEndpoint, error) {
-	query := s.session.Query(templateGetEndpointByIdQuery, rowTypeNexusEndpoint, request.ID).WithContext(ctx)
+	query := s.session.Query(templateGetEndpointByIdQuery, rowTypeNexusEndpoint, request.ID)
 
 	var data []byte
 	var dataEncoding string
 	var version int64
 
-	err := query.Scan(&data, &dataEncoding, &version)
+	err := query.Scan(ctx, &data, &dataEncoding, &version)
 	if gocql.IsNotFoundError(err) {
 		return nil, serviceerror.NewNotFoundf("Nexus endpoint with ID `%v` not found", request.ID)
 	}
@@ -198,8 +198,8 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 
 	response := &p.InternalListNexusEndpointsResponse{}
 
-	query := s.session.Query(templateListEndpointsQuery, rowTypeNexusEndpoint).WithContext(ctx)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	query := s.session.Query(templateListEndpointsQuery, rowTypeNexusEndpoint)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	endpoints, err := s.getEndpointList(iter)
 	if err != nil {
@@ -240,7 +240,7 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 	ctx context.Context,
 	request *p.DeleteNexusEndpointRequest,
 ) error {
-	batch := s.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := s.session.NewBatch(gocql.LoggedBatch)
 
 	// Table version update must be the first statement so it is returned as the first CAS result
 	// row. CAS result row ordering differs between Cassandra (clustering key order) and ScyllaDB
@@ -256,7 +256,7 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 		request.ID)
 
 	previousPartitionStatus := make(map[string]any)
-	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previousPartitionStatus)
+	applied, iter, err := batch.MapExecCAS(ctx, previousPartitionStatus)
 
 	if err != nil {
 		return gocql.ConvertError("DeleteNexusEndpoint", err)
@@ -291,8 +291,8 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 ) (*p.InternalListNexusEndpointsResponse, error) {
 	response := &p.InternalListNexusEndpointsResponse{}
 
-	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx)
-	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter() // Use PageSize+1 to account for partitionStatus row
+	query := s.session.Query(templateListEndpointsFirstPageQuery)
+	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter(ctx) // Use PageSize+1 to account for partitionStatus row
 
 	partitionStateRow := make(map[string]any)
 	found := iter.MapScan(partitionStateRow)
@@ -330,10 +330,10 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 }
 
 func (s *NexusEndpointStore) getTableVersion(ctx context.Context) (int64, error) {
-	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionEndpointID).WithContext(ctx)
+	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionEndpointID)
 
 	var version int64
-	if err := query.Scan(&version); err != nil {
+	if err := query.Scan(ctx, &version); err != nil {
 		return 0, gocql.ConvertError("GetNexusEndpointsTableVersion", err)
 	}
 
