@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -1350,7 +1350,7 @@ func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
 			OriginalOptions:        nil,
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
-			LastDeploymentVersion: &deployment.WorkerDeploymentVersion{
+			LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
 				DeploymentName: "test-deployment",
 				BuildId:        "test-build-1",
 			},

@@ -12,9 +12,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/server/api/deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/headers"
@@ -367,8 +367,8 @@ func TestTransitionStarted(t *testing.T) {
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			Identity: "test-worker",
 		},
-		VersionDirective: &taskqueue.TaskVersionDirective{
-			DeploymentVersion: &deployment.WorkerDeploymentVersion{
+		VersionDirective: &taskqueuespb.TaskVersionDirective{
+			DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
 				DeploymentName: "test-deployment",
 				BuildId:        "test-build-1",
 			},
