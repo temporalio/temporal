@@ -23,28 +23,26 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+// initTimeSkippingInfo can be called either when (1) a user starts an execution or
+// (2) another run is started with in the same execution (the workflow chain-of-runs model)
+// `propagatedState` is only set in the latter case.
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
-	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
+	propagatedState *commonpb.TimeSkippingStatePropagation,
 ) {
-	initialSkip := timeSkippingStatePropagation.GetInitialSkippedDuration()
+	initialSkip := propagatedState.GetInitialSkippedDuration()
 	if config == nil && initialSkip == nil {
 		return
 	}
-
 	tsi := &persistencespb.TimeSkippingInfo{
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkip,
-		SessionSkipCount:           timeSkippingStatePropagation.GetInitialSkipCount(),
-	}
-	if !config.GetEnabled() {
-		tsi.StopReason = enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED
+		SessionSkipCount:           propagatedState.GetInitialSkipCount(),
 	}
 	ms.executionInfo.TimeSkippingInfo = tsi
 	ms.wrapTimeSourceWithTimeSkipping()
 	ms.wrapExecutionTimes(initialSkip)
-	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
-
+	ms.applyFastForward(propagatedState.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
 }
 
