@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/archival"
@@ -147,9 +148,34 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		return nil, err
 	}
 
+	// A standby cluster generates its own archival task when it applies the replicated close event,
+	// so the active cluster's task already covers the archive. Skipping the push here drops the
+	// duplicate write, which visibility archival does not dedup. Targets are left empty rather than
+	// returning early so that addDeletionTask still runs: with archival enabled it is the only
+	// producer of the retention DeleteHistoryEventTask, and each cluster must delete its own copy.
+	//
+	// Only global namespaces are gated. ActiveClusterName reports the recorded active cluster
+	// without regard to whether the namespace is replicated, so a local namespace must be treated
+	// as active here rather than compared against the current cluster.
+	isActive := true
+	if namespaceEntry.IsGlobalNamespace() &&
+		e.shardContext.GetConfig().ArchivalQueueArchiveOnlyOnActiveCluster(namespaceName.String()) {
+		currentCluster := e.shardContext.GetClusterMetadata().GetCurrentClusterName()
+		activeCluster := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: task.WorkflowID})
+		isActive = activeCluster == currentCluster
+		if !isActive {
+			logger.Debug(
+				"Skipping archival on standby cluster.",
+				tag.ClusterName(currentCluster),
+				tag.TargetCluster(activeCluster),
+			)
+		}
+	}
+
 	var historyURI, visibilityURI carchiver.URI
 	var targets []archival.Target
-	if e.shardContext.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() &&
+	if isActive &&
+		e.shardContext.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED {
 		targets = append(targets, archival.TargetVisibility)
 		visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
@@ -168,7 +194,8 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 			return nil, fmt.Errorf("failed to parse visibility URI for archival task: %w", err)
 		}
 	}
-	if e.shardContext.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival() &&
+	if isActive &&
+		e.shardContext.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival() &&
 		namespaceEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED {
 		historyURIString := namespaceEntry.HistoryArchivalState().URI
 		historyURI, err = carchiver.NewURI(historyURIString)
