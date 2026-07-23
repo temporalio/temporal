@@ -3100,7 +3100,6 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
-
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
 		32,
