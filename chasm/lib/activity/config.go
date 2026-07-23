@@ -39,37 +39,45 @@ var (
 		false,
 		`Allows attaching completion callbacks to standalone activity executions.`,
 	)
+
+	EnableStandaloneActivityOperatorCommands = dynamicconfig.NewNamespaceBoolSetting(
+		"history.enableStandaloneActivityOperatorCommands",
+		false,
+		`Enables reset, pause, unpause, and update options commands for standalone activities.`,
+	)
 )
 
 type Config struct {
-	BlobSizeLimitError          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BreakdownMetricsByTaskQueue dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
-	EnableCallbacks             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	Enabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	LongPollBuffer              dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	LongPollTimeout             dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit            dynamicconfig.IntPropertyFn
-	MaxCallbacksPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DefaultActivityRetryPolicy  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-	StartDelayEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityMaxPageSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BreakdownMetricsByTaskQueue              dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
+	EnableCallbacks                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	Enabled                                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableStandaloneActivityOperatorCommands dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LongPollBuffer                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                         dynamicconfig.IntPropertyFn
+	MaxCallbacksPerExecution                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	DefaultActivityRetryPolicy               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+	StartDelayEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		BlobSizeLimitError:          dynamicconfig.BlobSizeLimitError.Get(dc),
-		BlobSizeLimitWarn:           dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
-		DefaultActivityRetryPolicy:  dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
-		EnableCallbacks:             EnableCallbacks.Get(dc),
-		Enabled:                     Enabled.Get(dc),
-		LongPollBuffer:              LongPollBuffer.Get(dc),
-		LongPollTimeout:             LongPollTimeout.Get(dc),
-		MaxIDLengthLimit:            dynamicconfig.MaxIDLengthLimit.Get(dc),
-		StartDelayEnabled:           StartDelayEnabled.Get(dc),
-		MaxCallbacksPerExecution:    callback.MaxPerExecution.Get(dc),
-		VisibilityMaxPageSize:       dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+		DefaultActivityRetryPolicy:               dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
+		EnableCallbacks:                          EnableCallbacks.Get(dc),
+		Enabled:                                  Enabled.Get(dc),
+		EnableStandaloneActivityOperatorCommands: EnableStandaloneActivityOperatorCommands.Get(dc),
+		LongPollBuffer:                           LongPollBuffer.Get(dc),
+		LongPollTimeout:                          LongPollTimeout.Get(dc),
+		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
+		StartDelayEnabled:                        StartDelayEnabled.Get(dc),
+		MaxCallbacksPerExecution:                 callback.MaxPerExecution.Get(dc),
+		VisibilityMaxPageSize:                    dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 	}
 }
 

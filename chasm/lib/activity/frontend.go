@@ -40,6 +40,8 @@ type FrontendHandler interface {
 
 var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
 
+var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemented("Standalone activity operator commands are disabled")
+
 type frontendHandler struct {
 	FrontendHandler
 	callbackValidator callback.Validator
@@ -454,6 +456,9 @@ func (h *frontendHandler) PauseActivityExecution(
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
 	if err := validateAndNormalizePauseActivityExecutionRequest(
 		req,
@@ -486,6 +491,9 @@ func (h *frontendHandler) UnpauseActivityExecution(
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
 	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -513,6 +521,9 @@ func (h *frontendHandler) ResetActivityExecution(
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
 	if err := validateAndNormalizeResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -537,10 +548,11 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	ctx context.Context,
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
-	// Standalone path requires the feature to be enabled. Workflow path (workflow_id != "")
-	// is always permitted and routes to the history service.
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
 	}
 
 	if err := validateUpdateActivityExecutionOptionsRequest(
