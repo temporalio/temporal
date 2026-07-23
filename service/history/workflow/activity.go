@@ -120,13 +120,13 @@ func GetPendingActivityInfo(
 		p.Attempt = ai.Attempt
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			scheduledTime := ai.ScheduledTime.AsTime()
-			if now.Before(scheduledTime) {
+			if now.Before(scheduledTime) && !ai.Paused {
 				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
 				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
 				p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
 			} else {
-				// retry has been dispatched to Matching
+				// retry has been dispatched to Matching, or the activity is paused so no dispatch will occur
 				p.NextAttemptScheduleTime = nil
 				p.CurrentRetryInterval = nil
 			}
