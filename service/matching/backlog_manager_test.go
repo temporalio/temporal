@@ -341,15 +341,14 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 }
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_Unavailable() {
-	if s.fairness {
-		// fairBacklogManager is smarter about backlog count: it can sometimes reset
-		// ApproximateBacklogCount to zero or small values after read operations. That defeats
-		// the assumption in this test.
-		s.T().Skip("this test isn't valid with fairBacklogManager")
-	}
-
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskMgr.addFault("CreateTasks", "Unavailable", 1.0)
+
+	// This test is for write-path accounting only: an Unavailable error leaves the count
+	// incremented (the tasks may or may not have been persisted), unlike a definite failure which
+	// un-increments it. A concurrent reader can notice that the backlog is actually empty and reset
+	// the count, which breaks the test. Disable the reader reloading to make the test reliable.
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingGetTasksReloadAt, -1)
 
 	s.blm.Start()
 	defer s.blm.Stop()

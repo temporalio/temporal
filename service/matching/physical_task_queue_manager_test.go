@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -362,7 +363,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
@@ -376,14 +376,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
 	tm := s.getTaskManager()
-	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
+
+	// Fresh fair/new-matcher queues drain the other backlog on startup. This
+	// completes immediately (nothing to drain) and persists otherHasTasks=false.
+	// Wait for it to settle so it doesn't race with the assertions below, then
+	// capture the resulting write count as our baseline.
+	await.RequireTrue(s.T(), func() bool {
+		return s.tqMgr.getDrainBacklogMgr() == nil
+	}, 5*time.Second, 20*time.Millisecond)
+	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
 
 	// simulate stolen lock
 	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
@@ -399,8 +406,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 		return s.tqMgr.tqCtx.Err() != nil
 	}, 5*time.Second, 20*time.Millisecond)
 
-	// no additional updates (the failed periodic update counts as "1")
-	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))
+	// no additional updates beyond the failed periodic write (which counts as "1");
+	// in particular, no final update is done during shutdown after losing ownership.
+	s.Equal(baseline+1, tm.getUpdateCount(s.physicalTaskQueueKey))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
@@ -689,7 +697,6 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	config := defaultTestConfig()
 	config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(50 * time.Millisecond)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
