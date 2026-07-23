@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -440,7 +441,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
 	})
-	s.NoError(err)
+	require.NoError(s.T(), err)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityStartDelay)
 	s.True(resp.NamespaceInfo.Capabilities.StandaloneActivityOperatorCommands)
 }
