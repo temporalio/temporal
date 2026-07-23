@@ -95,7 +95,7 @@ func pollReq(namespaceID, workflowID, fastForwardID string) *historyservice.Poll
 func TestInvoke(t *testing.T) {
 	t.Run("invalid namespace id is rejected", func(t *testing.T) {
 		_, err := Invoke(context.Background(), pollReq("", testWorkflowID, testFastForwardID),
-			nil, mockConsistencyChecker{}, notification.NoopFastForwardNotifier)
+			nil, mockConsistencyChecker{}, notification.NoopTimeSkippingFastForwardNotifier)
 		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
 	})
@@ -104,7 +104,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{err: serviceerror.NewNotFound("workflow not found")}
 		_, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
-			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopFastForwardNotifier)
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		var notFound *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFound)
 	})
@@ -113,7 +113,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, nil, true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
-			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopFastForwardNotifier)
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
 		require.Equal(t, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND, resp.GetResponse().GetResult())
 	})
@@ -122,7 +122,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI("other-id", false), true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
-			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopFastForwardNotifier)
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
 		require.Equal(t, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND, resp.GetResponse().GetResult())
 	})
@@ -131,7 +131,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, true), true, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
-			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopFastForwardNotifier)
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
 		require.Equal(t, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED, resp.GetResponse().GetResult())
 		require.True(t, resp.GetResponse().GetFastForwardInfo().GetHasCompleted())
@@ -143,7 +143,7 @@ func TestInvoke(t *testing.T) {
 		// pending fast-forward, not running, no successor run => can never complete.
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), false, "")}}
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
-			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopFastForwardNotifier)
+			shardContext(ctrl, 20*time.Millisecond), checker, notification.NoopTimeSkippingFastForwardNotifier)
 		require.NoError(t, err)
 		require.Equal(t, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION, resp.GetResponse().GetResult())
 	})
@@ -152,7 +152,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		// not running, but NewExecutionRunId set (retry/cron/CaN) => not "closed"; polls and times out.
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), false, "next-run")}}
-		ffNotifier := notification.NewFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
+		ffNotifier := notification.NewTimeSkippingFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestInvoke(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		checker := mockConsistencyChecker{lease: mockLease{ms: mutableState(ctrl, fastForwardTSI(testFastForwardID, false), true, "")}}
 		// Real notifier: never notified, so the wait blocks until the soft timeout.
-		ffNotifier := notification.NewFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
+		ffNotifier := notification.NewTimeSkippingFastForwardNotifier(func(namespace.ID, string) int32 { return 1 })
 		resp, err := Invoke(context.Background(), pollReq(uuid.NewString(), testWorkflowID, testFastForwardID),
 			shardContext(ctrl, 20*time.Millisecond), checker, ffNotifier)
 		require.NoError(t, err)

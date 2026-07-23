@@ -173,7 +173,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		tokenSerializer:     tasktoken.NewSerializer(),
 		metricsHandler:      s.mockShard.GetMetricsHandler(),
 		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
-		fastForwardNotifier: notification.NoopFastForwardNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 	}
 	s.mockShard.SetEngineForTesting(h)
 

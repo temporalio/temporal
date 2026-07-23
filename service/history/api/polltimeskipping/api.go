@@ -22,7 +22,7 @@ func Invoke(
 	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	ffNotifier notification.FastForwardNotifier,
+	ffNotifier notification.TimeSkippingFastForwardNotifier,
 ) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
 	if err := api.ValidateNamespaceUUID(namespace.ID(req.GetNamespaceId())); err != nil {
 		return nil, err

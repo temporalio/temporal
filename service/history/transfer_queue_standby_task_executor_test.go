@@ -195,7 +195,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		logger:              s.logger,
 		tokenSerializer:     tasktoken.NewSerializer(),
 		metricsHandler:      s.mockShard.GetMetricsHandler(),
-		fastForwardNotifier: notification.NoopFastForwardNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName

@@ -7519,24 +7519,11 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		Checksum:        result.checksum,
 	}
 
-	workflowMutation.NotifyFastForward = ms.fastForwardNotificationNeeded()
-
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {
 		return nil, nil, err
 	}
 	return workflowMutation, result.workflowEventsSeq, nil
-}
-
-// fastForwardNotificationNeeded reports whether PollWorkflowExecutionTimeSkipping waiters must
-// be woken. It over-approximates on purpose: any time-skipping-info write, or the run closing
-// while it had time skipping. Waiters filter false alerts (a benign config change that left the
-// fast-forward unchanged) by re-checking the delivered fast-forward, so widening the trigger only
-// costs a spurious wake-up, never a lost one.
-func (ms *MutableStateImpl) fastForwardNotificationNeeded() bool {
-	return ms.timeSkippingInfoUpdated ||
-		(ms.executionStateUpdated &&
-			!ms.IsWorkflowExecutionRunning())
 }
 
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
@@ -7576,8 +7563,6 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		DBRecordVersion: ms.dbRecordVersion,
 		Checksum:        result.checksum,
 	}
-
-	workflowSnapshot.NotifyFastForward = ms.fastForwardNotificationNeeded()
 
 	ms.checksum = result.checksum
 	if err := ms.cleanupTransaction(); err != nil {

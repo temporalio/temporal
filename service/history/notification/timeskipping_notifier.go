@@ -10,12 +10,12 @@ type FastForwardNotification struct {
 	WorkflowExecutionCompleted bool
 }
 
-type FastForwardNotifier = PubSubNotifier[*FastForwardNotification]
+type TimeSkippingFastForwardNotifier = PubSubNotifier[*FastForwardNotification]
 
 const maxFastForwardWaitersPerExecution = 5
 
-func NewFastForwardNotifier(workflowIDToShardID func(namespace.ID, string) int32) FastForwardNotifier {
+func NewTimeSkippingFastForwardNotifier(workflowIDToShardID func(namespace.ID, string) int32) TimeSkippingFastForwardNotifier {
 	return NewPubSubNotifier[*FastForwardNotification](workflowIDToShardID, maxFastForwardWaitersPerExecution)
 }
 
-var NoopFastForwardNotifier FastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()
+var NoopTimeSkippingFastForwardNotifier TimeSkippingFastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()

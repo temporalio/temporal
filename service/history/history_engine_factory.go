@@ -34,7 +34,7 @@ type (
 		MatchingClient                  resource.MatchingClient
 		SdkClientFactory                sdk.ClientFactory
 		EventNotifier                   events.Notifier
-		FastForwardNotifier             notification.FastForwardNotifier
+		TimeSkippingFastForwardNotifier notification.TimeSkippingFastForwardNotifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
@@ -73,7 +73,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
-		f.FastForwardNotifier,
+		f.TimeSkippingFastForwardNotifier,
 		f.Config,
 		f.VersionMembershipCache,
 		f.WorkerDeploymentClient,

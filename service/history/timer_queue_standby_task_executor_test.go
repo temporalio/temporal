@@ -181,7 +181,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		tokenSerializer:     tasktoken.NewSerializer(),
 		metricsHandler:      s.mockShard.GetMetricsHandler(),
 		eventNotifier:       events.NewNotifier(s.timeSource, metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
-		fastForwardNotifier: notification.NoopFastForwardNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,

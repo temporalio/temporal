@@ -144,7 +144,7 @@ func (s *engine3Suite) SetupTest() {
 		config:              s.config,
 		timeSource:          s.mockShard.GetTimeSource(),
 		eventNotifier:       events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
-		fastForwardNotifier: notification.NoopFastForwardNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,

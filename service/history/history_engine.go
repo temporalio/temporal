@@ -119,7 +119,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
-		fastForwardNotifier        notification.FastForwardNotifier
+		fastForwardNotifier        notification.TimeSkippingFastForwardNotifier
 		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
@@ -161,7 +161,7 @@ func NewEngineWithShardContext(
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
-	fastForwardNotifier notification.FastForwardNotifier,
+	fastForwardNotifier notification.TimeSkippingFastForwardNotifier,
 	config *configs.Config,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	workerDeploymentClient workerdeployment.Client,

@@ -93,7 +93,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
-	fx.Provide(FastForwardNotifierProvider),
+	fx.Provide(TimeSkippingFastForwardNotifierProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),
@@ -484,10 +484,10 @@ func EventNotifierProvider(
 	)
 }
 
-func FastForwardNotifierProvider(
+func TimeSkippingFastForwardNotifierProvider(
 	config *configs.Config,
-) notification.FastForwardNotifier {
-	return notification.NewFastForwardNotifier(config.GetShardID)
+) notification.TimeSkippingFastForwardNotifier {
+	return notification.NewTimeSkippingFastForwardNotifier(config.GetShardID)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

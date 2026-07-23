@@ -600,7 +600,7 @@ func NotifyOnExecutionSnapshot(
 			RunID:       workflowSnapshot.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState, workflowSnapshot.NotifyFastForward)
+	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState)
 }
 
 func NotifyOnExecutionMutation(
@@ -619,16 +619,21 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
-	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState, workflowMutation.NotifyFastForward)
+	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState)
 }
 
+// notifyFastForwardUpdate wakes any PollWorkflowExecutionTimeSkipping waiter after a persist.
+// It over-notifies on purpose: it fires on every transaction of a time-skipping workflow (gated
+// only on TimeSkippingInfo presence, which is derivable from the persisted state and, once set,
+// never cleared). Waiters filter benign wake-ups by re-checking the delivered fast-forward, so a
+// spurious notification only costs a re-block, never a missed one — and Notify is a no-op when no
+// one is watching the key.
 func notifyFastForwardUpdate(
 	engine historyi.Engine,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
-	notify bool,
 ) {
-	if !notify {
+	if executionInfo.GetTimeSkippingInfo() == nil {
 		return
 	}
 	ffInfo := NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).ToFastForwardInfo()

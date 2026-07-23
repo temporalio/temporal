@@ -217,7 +217,7 @@ func (s *engineSuite) SetupTest() {
 		metricsHandler:      s.mockShard.GetMetricsHandler(),
 		tokenSerializer:     tasktoken.NewSerializer(),
 		eventNotifier:       eventNotifier,
-		fastForwardNotifier: notification.NoopFastForwardNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
 		config:              s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():          s.mockTxProcessor,

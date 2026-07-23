@@ -376,11 +376,6 @@ type (
 		Condition       int64
 		DBRecordVersion int64
 		Checksum        *persistencespb.Checksum
-
-		// NotifyFastForward is transient (not persisted): set at close-transaction when
-		// this transaction changed the fast-forward in a way PollWorkflowExecutionTimeSkipping
-		// waiters must be woken for (install / retarget / removal / completion / terminal close).
-		NotifyFastForward bool
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
@@ -404,9 +399,6 @@ type (
 		Condition       int64
 		DBRecordVersion int64
 		Checksum        *persistencespb.Checksum
-
-		// NotifyFastForward is transient (not persisted); see WorkflowMutation.NotifyFastForward.
-		NotifyFastForward bool
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
