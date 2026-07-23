@@ -32,7 +32,12 @@ type (
 			token *pageTokenLegacy,
 		) (string, []any)
 
-		buildCountStmt(namespaceID namespace.ID, queryString string, groupBy []string) (string, []any)
+		buildCountStmt(
+			namespaceID namespace.ID,
+			queryString string,
+			groupBy []string,
+			usesCustomSearchAttribute bool,
+		) (string, []any)
 
 		getDatetimeFormat() string
 
@@ -48,6 +53,10 @@ type (
 		queryString   string
 
 		seenNamespaceDivision bool
+		// Set to true by convertColName when the query references a column that isn't
+		// a system search attribute, i.e. one whose values live in custom_search_attributes
+		// or chasm_search_attributes rather than directly on executions_visibility.
+		seenCustomSearchAttribute bool
 
 		chasmMapper *chasm.VisibilitySearchAttributesMapper
 		archetypeID chasm.ArchetypeID
@@ -57,6 +66,8 @@ type (
 		queryString string
 		// List of search attributes to group by (field name, not db name).
 		groupBy []string
+		// True if the query references a custom (non-system) search attribute.
+		usesCustomSearchAttribute bool
 	}
 )
 
@@ -153,7 +164,7 @@ func (c *QueryConverterLegacy) BuildCountStmt() (*sqlplugin.VisibilitySelectFilt
 	for i, fieldName := range qp.groupBy {
 		groupByDbNames[i] = sadefs.GetSqlDbColName(fieldName)
 	}
-	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames)
+	queryString, queryArgs := c.buildCountStmt(c.namespaceID, qp.queryString, groupByDbNames, qp.usesCustomSearchAttribute)
 	return &sqlplugin.VisibilitySelectFilter{
 		Query:     queryString,
 		QueryArgs: queryArgs,
@@ -182,7 +193,7 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 		return nil, err
 	}
 
-	res := &queryParamsLegacy{}
+	res := &queryParamsLegacy{usesCustomSearchAttribute: c.seenCustomSearchAttribute}
 	if selectStmt.Where != nil {
 		res.queryString = sqlparser.String(selectStmt.Where.Expr)
 	}
@@ -460,6 +471,9 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
+	}
+	if sadefs.IsPreallocatedCSAFieldName(saFieldName, saType) || sadefs.IsChasmSearchAttribute(saFieldName) {
+		c.seenCustomSearchAttribute = true
 	}
 	if saAlias == sadefs.CloseTime {
 		*exprRef = c.getCoalesceCloseTimeExpr()

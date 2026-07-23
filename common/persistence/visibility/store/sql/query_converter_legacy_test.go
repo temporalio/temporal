@@ -68,34 +68,49 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			err:    nil,
 		},
 		{
-			name:   "single condition int",
-			input:  "AliasForInt01 = 1",
-			output: &queryParamsLegacy{queryString: "(Int01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
+			name:  "single condition int",
+			input: "AliasForInt01 = 1",
+			output: &queryParamsLegacy{
+				queryString:               "(Int01 = 1) and TemporalNamespaceDivision is null",
+				usesCustomSearchAttribute: true,
+			},
+			err: nil,
 		},
 		{
-			name:   "single condition keyword",
-			input:  "AliasForKeyword01 = 1",
-			output: &queryParamsLegacy{queryString: "(Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
+			name:  "single condition keyword",
+			input: "AliasForKeyword01 = 1",
+			output: &queryParamsLegacy{
+				queryString:               "(Keyword01 = 1) and TemporalNamespaceDivision is null",
+				usesCustomSearchAttribute: true,
+			},
+			err: nil,
 		},
 		{
-			name:   "or condition keyword",
-			input:  "AliasForInt01 = 1 OR AliasForKeyword01 = 1",
-			output: &queryParamsLegacy{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
+			name:  "or condition keyword",
+			input: "AliasForInt01 = 1 OR AliasForKeyword01 = 1",
+			output: &queryParamsLegacy{
+				queryString:               "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null",
+				usesCustomSearchAttribute: true,
+			},
+			err: nil,
 		},
 		{
-			name:   "no double parenthesis",
-			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1)",
-			output: &queryParamsLegacy{queryString: "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null"},
-			err:    nil,
+			name:  "no double parenthesis",
+			input: "(AliasForInt01 = 1 OR AliasForKeyword01 = 1)",
+			output: &queryParamsLegacy{
+				queryString:               "(Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision is null",
+				usesCustomSearchAttribute: true,
+			},
+			err: nil,
 		},
 		{
-			name:   "has namespace division",
-			input:  "(AliasForInt01 = 1 OR AliasForKeyword01 = 1) AND TemporalNamespaceDivision = 'foo'",
-			output: &queryParamsLegacy{queryString: "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')"},
-			err:    nil,
+			name:  "has namespace division",
+			input: "(AliasForInt01 = 1 OR AliasForKeyword01 = 1) AND TemporalNamespaceDivision = 'foo'",
+			output: &queryParamsLegacy{
+				queryString:               "((Int01 = 1 or Keyword01 = 1) and TemporalNamespaceDivision = 'foo')",
+				usesCustomSearchAttribute: true,
+			},
+			err: nil,
 		},
 		{
 			name:  "group by one field",
@@ -1198,22 +1213,25 @@ func (s *queryConverterSuite) TestConvertWhereString_WithChasmMapper() {
 	)
 
 	testCases := []struct {
-		name     string
-		input    string
-		expected string
-		err      error
+		name                              string
+		input                             string
+		expected                          string
+		expectedUsesCustomSearchAttribute bool
+		err                               error
 	}{
 		{
-			name:     "CHASM search attribute",
-			input:    "ChasmStatus = 'active'",
-			expected: "(TemporalKeyword01 = 'active') and TemporalNamespaceDivision is null",
-			err:      nil,
+			name:                              "CHASM search attribute",
+			input:                             "ChasmStatus = 'active'",
+			expected:                          "(TemporalKeyword01 = 'active') and TemporalNamespaceDivision is null",
+			expectedUsesCustomSearchAttribute: true,
+			err:                               nil,
 		},
 		{
-			name:     "CHASM search attribute with namespace division",
-			input:    "ChasmStatus = 'active' AND TemporalNamespaceDivision = '123'",
-			expected: "(TemporalKeyword01 = 'active' and TemporalNamespaceDivision = '123')",
-			err:      nil,
+			name:                              "CHASM search attribute with namespace division",
+			input:                             "ChasmStatus = 'active' AND TemporalNamespaceDivision = '123'",
+			expected:                          "(TemporalKeyword01 = 'active' and TemporalNamespaceDivision = '123')",
+			expectedUsesCustomSearchAttribute: true,
+			err:                               nil,
 		},
 	}
 
@@ -1223,6 +1241,7 @@ func (s *queryConverterSuite) TestConvertWhereString_WithChasmMapper() {
 			if tc.err == nil {
 				s.NoError(err)
 				s.Equal(tc.expected, qp.queryString)
+				s.Equal(tc.expectedUsesCustomSearchAttribute, qp.usesCustomSearchAttribute)
 			} else {
 				s.Error(err)
 				s.Equal(tc.err, err)
