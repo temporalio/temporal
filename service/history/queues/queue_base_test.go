@@ -744,8 +744,7 @@ func (s *queueBaseSuite) newImmediateBase(captureHandler metrics.Handler) (*shar
 	return mockShard, base
 }
 
-// loadedImmediateSlice builds a fully-loaded slice (no unloaded tail) whose oldest pending task
-// has the given visibility time, sitting at the slice's lower bound.
+// loadedImmediateSlice builds a fully-loaded slice with one pending task at the given visibility time.
 func (s *queueBaseSuite) loadedImmediateSlice(base *queueBase, h metrics.Handler, minID, maxID int64, oldest time.Time) Slice {
 	sl := NewSlice(nil, base.executableFactory, base.monitor, NewScope(NewRange(tasks.NewImmediateKey(minID), tasks.NewImmediateKey(maxID)), predicates.Universal[tasks.Task]()), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, h)
 	sl.add(s.mockPendingExecutable(tasks.NewImmediateKey(minID), oldest))

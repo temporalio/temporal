@@ -413,12 +413,8 @@ func (s *SliceImpl) MoreTasks() bool {
 	return len(s.iterators) != 0
 }
 
-// OldestPendingTaskTime returns the visibility (creation) time of the oldest
-// non-acked task currently loaded in memory for this slice, or the zero time if
-// none are loaded. For immediate queues, tasks are loaded in ascending task-id
-// order from the slice's lower bound, so when this slice has loaded any tasks the
-// oldest loaded task is the oldest unacked task in the slice. It is the zero time
-// while the slice has a backlog in persistence that has not been loaded yet.
+// OldestPendingTaskTime returns the min visibility time of this slice's non-acked in-memory
+// tasks, or the zero time if none are loaded.
 func (s *SliceImpl) OldestPendingTaskTime() time.Time {
 	s.stateSanityCheck()
 	return s.oldestPendingTaskVisibilityTime()
