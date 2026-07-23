@@ -285,7 +285,11 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 	if lastAttempt.GetStamp() != request.GetStamp() {
 		return nil, serviceerrors.NewObsoleteMatchingTask("activity attempt stamp mismatch")
 	}
-	if err := TransitionStarted.Apply(a, ctx, request); err != nil {
+	metricsHandler, err := a.scheduleToStartMetricsHandler(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := TransitionStarted.Apply(a, ctx, startedEvent{request: request, metricsHandler: metricsHandler}); err != nil {
 		if errors.Is(err, chasm.ErrInvalidTransition) {
 			return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
 		}
@@ -1962,6 +1966,36 @@ func (a *Activity) enrichMetricsHandler(ctx chasm.Context, operationTag string) 
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
 	), nil
+}
+
+// scheduleToStartMetricsHandler builds the metrics scope for task_schedule_to_start_latency, mirroring
+// the workflow-activity emission in recordactivitytaskstarted so the shared metric carries an identical
+// tag set (partition-type scope, no activity-type tags) regardless of which surface produced it.
+func (a *Activity) scheduleToStartMetricsHandler(ctx chasm.Context) (metrics.Handler, error) {
+	actCtx := activityContextFromChasm(ctx)
+	namespaceID := ctx.ExecutionKey().NamespaceID
+	namespaceName, err := actCtx.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
+	if err != nil {
+		return nil, err
+	}
+	taskQueue := a.GetTaskQueue().GetName()
+	return metrics.GetPerTaskQueuePartitionTypeScope(
+		ctx.MetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedScope)),
+		namespaceName.String(),
+		tqid.UnsafeTaskQueueFamily(namespaceID, taskQueue).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	), nil
+}
+
+// emitScheduleToStartLatency records how long the current attempt's task waited in Matching, from its
+// dispatch time to when a worker started it.
+func (a *Activity) emitScheduleToStartLatency(ctx chasm.Context, handler metrics.Handler) {
+	attempt := a.LastAttempt.Get(ctx)
+	dispatchTime := a.dispatchTimeForAttempt(attempt)
+	if dispatchTime == nil {
+		return
+	}
+	metrics.TaskScheduleToStartLatency.With(handler).Record(attempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()))
 }
 
 func (a *Activity) emitOnAttemptTimedOutMetrics(ctx chasm.Context, handler metrics.Handler, timeoutType enumspb.TimeoutType) {

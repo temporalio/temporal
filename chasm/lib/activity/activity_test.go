@@ -223,6 +223,10 @@ func TestHandleStarted(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
 			// Setup mock context
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
@@ -233,6 +237,12 @@ func TestHandleStarted(t *testing.T) {
 							RunID:      "test-run-id",
 						}
 					},
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
 				},
 			}
 

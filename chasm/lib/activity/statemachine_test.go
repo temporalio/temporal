@@ -361,10 +361,13 @@ func TestTransitionStarted(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, outcome),
 	}
 
-	err := TransitionStarted.Apply(activity, ctx, &historyservice.RecordActivityTaskStartedRequest{
-		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-			Identity: "test-worker",
+	err := TransitionStarted.Apply(activity, ctx, startedEvent{
+		request: &historyservice.RecordActivityTaskStartedRequest{
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				Identity: "test-worker",
+			},
 		},
+		metricsHandler: metrics.NoopMetricsHandler,
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)

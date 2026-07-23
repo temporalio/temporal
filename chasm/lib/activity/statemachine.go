@@ -131,13 +131,19 @@ var TransitionRescheduled = chasm.NewTransition(
 	},
 )
 
+type startedEvent struct {
+	request        *historyservice.RecordActivityTaskStartedRequest
+	metricsHandler metrics.Handler
+}
+
 // TransitionStarted transitions to Started status.
 var TransitionStarted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-	func(a *Activity, ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
+	func(a *Activity, ctx chasm.MutableContext, event startedEvent) error {
+		request := event.request
 		attempt := a.LastAttempt.Get(ctx)
 		attempt.StartedTime = timestamppb.New(ctx.Now(a))
 		attempt.StartedStamp = request.GetStamp()
@@ -175,6 +181,8 @@ var TransitionStarted = chasm.NewTransition(
 					Stamp: attempt.GetStamp(),
 				})
 		}
+
+		a.emitScheduleToStartLatency(ctx, event.metricsHandler)
 
 		return nil
 	},
