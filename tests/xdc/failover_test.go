@@ -2708,6 +2708,256 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	verifyHistory(workflowID, resp.GetRunId())
 }
 
+// TestForceMigration_ClosedWorkflow_Sharded is the sharded-variant
+// duplicate of TestForceMigration_ClosedWorkflow. Kept intentionally
+// close to the original — same workflow IDs prefixed with "sharded-",
+// same assertions — so a future swap from legacy to sharded
+// force-replication can drop the legacy version and keep behaviour
+// coverage intact.
+func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow_Sharded() {
+	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	namespace := s.createNamespaceInCluster0(true)
+
+	taskqueue := "functional-local-force-replication-sharded-task-queue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start wf1
+	workflowID := "sharded-force-replication-test-wf-1"
+	run1, err := client0.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Update ns to have 2 clusters
+	s.updateNamespaceClusters(namespace, 0, s.clusters)
+
+	// Wait for wf1 to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 1)
+
+	// Start force-replicate wf — sharded variant lives on its own
+	// dedicated task queue (MigrationShardedActivityTQ) and is
+	// registered under workflow name "force-replication-sharded".
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	forceReplicationWorkflowID := "sharded-force-replication-wf"
+	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 forceReplicationWorkflowID,
+		TaskQueue:          primitives.MigrationShardedActivityTQ,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
+		Namespace:         namespace,
+		TargetClusterName: s.clusters[1].ClusterName(),
+	})
+	s.NoError(err)
+	err = sysWfRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Verify all wf in ns is now available in cluster2
+	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	verify := func(wfID string, expectedRunID string) {
+		await.RequireTruef(s.T(), func() bool {
+			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
+			if err != nil {
+				return false
+			}
+			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
+				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
+	}
+	verify(workflowID, run1.GetRunID())
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	worker1.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker1.Start())
+	defer worker1.Stop()
+
+	// Test reset workflow in cluster1
+	resetResp, err := client1.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      run1.GetRunID(),
+		},
+		Reason:                    "force-replication-sharded-test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+
+	resetRun := client1.GetWorkflow(testCtx, workflowID, resetResp.GetRunId())
+	err = resetRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	await.RequireTruef(s.T(), func() bool {
+		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
+		if err != nil {
+			return false
+		}
+		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
+}
+
+// TestForceMigration_ResetWorkflow_Sharded is the sharded-variant
+// duplicate of TestForceMigration_ResetWorkflow. Same intent as the
+// legacy version: replicate a (reset → completed) workflow pair across
+// clusters and confirm both runs are visible on the target. Asserts
+// the activity-level verification count by walking the workflow's
+// history for "ReplicateBatch" activity completions (the sharded
+// activity name, replacing legacy "VerifyReplicationTasks").
+func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow_Sharded() {
+	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	namespace := s.createNamespaceInCluster0(true)
+
+	taskqueue := "functional-force-replication-sharded-reset-task-queue"
+	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	worker0.RegisterWorkflow(testWorkflowFn)
+	s.NoError(worker0.Start())
+	defer worker0.Stop()
+
+	// Start wf1
+	workflowID := "sharded-force-replication-test-reset-wf-1"
+	run1, err := client0.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(testCtx, nil)
+	s.NoError(err)
+
+	resp, err := client0.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      run1.GetRunID(),
+		},
+		Reason:                    "test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRun := client0.GetWorkflow(testCtx, workflowID, resp.GetRunId())
+	err = resetRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Update ns to have 2 clusters
+	s.updateNamespaceClusters(namespace, 0, s.clusters)
+
+	// Wait for both workflow runs (original + reset) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 2)
+
+	// Start force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	forceReplicationWorkflowID := "sharded-force-replication-wf"
+	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 forceReplicationWorkflowID,
+		TaskQueue:          primitives.MigrationShardedActivityTQ,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication-sharded", migration.ShardedForceReplicationParams{
+		Namespace:         namespace,
+		TargetClusterName: s.clusters[1].ClusterName(),
+	})
+	s.NoError(err)
+	err = sysWfRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Verify the force-replication workflow actually ran ReplicateBatch
+	// activities (the sharded activity name; legacy is
+	// VerifyReplicationTasks) and that VerifiedCount sums to the
+	// expected number of workflow runs.
+	var totalVerifiedCount int64
+	scheduledActivityTypes := make(map[int64]string) // scheduledEventId -> activity type name
+	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
+		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for histIter.HasNext() {
+		event, err := histIter.Next()
+		s.NoError(err)
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			scheduledActivityTypes[event.GetEventId()] = attrs.GetActivityType().GetName()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			attrs := event.GetActivityTaskCompletedEventAttributes()
+			activityType := scheduledActivityTypes[attrs.GetScheduledEventId()]
+			if activityType != "ReplicateBatch" {
+				continue
+			}
+			result := attrs.GetResult()
+			if result != nil && len(result.GetPayloads()) > 0 {
+				// Mirrors replicateBatchResult.VerifiedCount on the
+				// activity-side struct. Anonymous shape avoids
+				// importing the activity package's internal type.
+				var resp struct {
+					VerifiedCount int64
+				}
+				s.NoError(payloads.Decode(result, &resp))
+				totalVerifiedCount += resp.VerifiedCount
+			}
+		default:
+		}
+	}
+	// Expect exactly 2 verified workflow runs: original run + reset run
+	s.Equal(int64(2), totalVerifiedCount,
+		"sharded force-replication should have verified exactly 2 workflow runs (original + reset run)")
+
+	s.waitForClusterSynced()
+
+	// Verify all wf in ns is now available in cluster2
+	client1, _ := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	verifyHistory := func(wfID string, runID string) {
+		iter1 := client0.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		iter2 := client1.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for iter1.HasNext() && iter2.HasNext() {
+			event1, err := iter1.Next()
+			s.NoError(err)
+			event2, err := iter2.Next()
+			s.NoError(err)
+			s.Equal(event1, event2)
+		}
+		s.False(iter1.HasNext())
+		s.False(iter2.HasNext())
+	}
+	verifyHistory(workflowID, run1.GetRunID())
+	verifyHistory(workflowID, resp.GetRunId())
+}
+
 func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster() {
 	namespace := s.createGlobalNamespace()
 

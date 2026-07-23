@@ -111,6 +111,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockNamespaceReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockClientBean = client.NewMockBean(s.controller)
+	s.mockClientFactory = client.NewMockFactory(s.controller)
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
