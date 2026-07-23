@@ -17,7 +17,7 @@ var NoopChasmTree = &noopChasmTree{}
 
 type noopChasmTree struct{}
 
-func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction(chasm.TransactionPolicy) (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 

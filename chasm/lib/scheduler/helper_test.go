@@ -245,7 +245,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	generator := sched.Generator.Get(ctx)
 	generator.LastProcessedTime = timestamppb.New(now)
 
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(chasm.TransactionPolicyActive)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}
@@ -281,7 +281,7 @@ func (e *testEnv) ReadContext() chasm.Context {
 
 // CloseTransaction closes the current CHASM transaction.
 func (e *testEnv) CloseTransaction() error {
-	_, err := e.Node.CloseTransaction()
+	_, err := e.Node.CloseTransaction(chasm.TransactionPolicyActive)
 	return err
 }
 
@@ -413,7 +413,7 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	if err != nil {
 		t.Fatalf("failed to set root component: %v", err)
 	}
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(chasm.TransactionPolicyActive)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}
@@ -433,7 +433,7 @@ func setupSentinelForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCont
 	if err != nil {
 		t.Fatalf("failed to set root component: %v", err)
 	}
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(chasm.TransactionPolicyActive)
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}

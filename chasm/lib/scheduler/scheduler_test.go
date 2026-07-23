@@ -180,7 +180,7 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 }
 
@@ -214,7 +214,7 @@ func TestUpdate_WithNilMemo(t *testing.T) {
 	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
 		"existing": {Data: []byte("value")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 
 	// Update without memo (nil) should preserve existing memo.
@@ -243,7 +243,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 		"A": {Data: []byte("1")},
 		"B": {Data: []byte("2")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 
 	// Update with only C: should fully replace memo (A and B are gone).
@@ -270,7 +270,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("3")}, memo["C"])
 
 	// Update with empty memo: should clear all memo fields.
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 	ctx = chasm.NewMutableContext(context.Background(), node)
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
@@ -321,7 +321,7 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	require.Empty(t, invoker.BufferedStarts)
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 }
 
@@ -351,7 +351,7 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
 	require.NoError(t, infra.node.SetRootComponent(sched))
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 
 	hasGeneratorTask := false
@@ -688,7 +688,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
 }
 

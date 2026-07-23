@@ -1691,7 +1691,7 @@ func (n *Node) AddTask(
 
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
-func (n *Node) CloseTransaction() (NodesMutation, error) {
+func (n *Node) CloseTransaction(transactionPolicy TransactionPolicy) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {

@@ -45,7 +45,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	err := sched.HandleNexusCompletion(ctx, tc.completion)
 	require.NoError(t, err)
 
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(chasm.TransactionPolicyActive)
 	require.NoError(t, err)
 
 	readCtx := chasm.NewContext(context.Background(), node)

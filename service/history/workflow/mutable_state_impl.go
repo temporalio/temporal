@@ -7718,7 +7718,7 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(toChasmTransactionPolicy(transactionPolicy))
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
