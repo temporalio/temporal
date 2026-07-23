@@ -72,16 +72,14 @@ type saaDriver struct {
 	token      []byte
 }
 
-//nolint:staticcheck // ST1003: underscores are desired
-func (d *saaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
+func (d *saaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus { //nolint:staticcheck // ST1003: underscores
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	d.pollTask(t)
 	d.pollActivityExecution(t)
 	return d.describeActivity(t).GetInfo().GetStatus()
 }
 
-//nolint:staticcheck // ST1003: underscores are desired
-func (d *saaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
+func (d *saaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus { //nolint:staticcheck // ST1003: underscores
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	d.pollTask(t)
 	d.pollActivityExecution(t)
@@ -170,15 +168,13 @@ type wfaDriver struct {
 	token      []byte
 }
 
-//nolint:staticcheck // ST1003: underscores are desired
-func (d *wfaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
+func (d *wfaDriver) start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus { //nolint:staticcheck // ST1003: underscores
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	d.pollTask(t)
 	return d.awaitTerminalStatus(t)
 }
 
-//nolint:staticcheck // ST1003: underscores are desired
-func (d *wfaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus {
+func (d *wfaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus { //nolint:staticcheck // ST1003: underscores
 	d.startWithNonRetryableTimeout(t, enumspb.TIMEOUT_TYPE_HEARTBEAT)
 	d.pollTask(t)
 	return d.awaitTerminalStatus(t)
