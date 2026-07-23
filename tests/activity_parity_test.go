@@ -18,6 +18,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -303,8 +304,9 @@ func (d *saaDriver) pollTask(t *testing.T) {
 	d.token = resp.GetTaskToken()
 }
 
-// describeActivity returns the DescribeActivityExecution response.
-func (d *saaDriver) describeActivity(t *testing.T) *workflowservice.DescribeActivityExecutionResponse {
+// describeActivity returns the DescribeActivityExecution response. Takes require.TestingT so it can be
+// driven either by the test's *testing.T or by an *await.T inside an await.Require poll.
+func (d *saaDriver) describeActivity(t require.TestingT) *workflowservice.DescribeActivityExecutionResponse {
 	resp, err := d.env.FrontendClient().DescribeActivityExecution(d.s.Context(), &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:  d.env.Namespace().String(),
 		ActivityId: d.activityID,
@@ -427,7 +429,7 @@ func (d *saaDriver) pauseActivity(t *testing.T) {
 }
 
 // observe reads the activity's public retry-scheduling info as the shared projection.
-func (d *saaDriver) observe(t *testing.T) activityInfoProjection {
+func (d *saaDriver) observe(t require.TestingT) activityInfoProjection {
 	i := d.describeActivity(t).GetInfo()
 	return activityInfoProjection{
 		State:                  i.GetRunState(),
@@ -437,23 +439,17 @@ func (d *saaDriver) observe(t *testing.T) activityInfoProjection {
 	}
 }
 
-// awaitObserve client-polls the public projection until pred holds, returning that projection. Reserved
-// for a dispatch-delay elapse (start-delay / backoff), whose only effect is a read-time projection flip
-// with no transition-history version advance, so a Describe long-poll would never wake. Effects committed
-// by a synchronous RPC (or already recorded by the time a Poll returns) need no wait — describe directly.
+// awaitObserve polls the public projection until pred holds, returning that projection. Reserved for a
+// dispatch-delay elapse (start-delay / backoff), whose only effect is a read-time projection flip with no
+// transition-history version advance, so a Describe long-poll would never wake. Effects committed by a
+// synchronous RPC (or already recorded by the time a Poll returns) need no wait — describe directly.
 func (d *saaDriver) awaitObserve(t *testing.T, pred func(activityInfoProjection) bool) activityInfoProjection {
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		p := d.observe(t)
-		if pred(p) {
-			return p
-		}
-		if time.Now().After(deadline) {
-			require.Fail(t, "activity did not reach the expected state", "last observed: %+v", p)
-			return p
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	var p activityInfoProjection
+	await.Require(d.s.Context(), t, func(at *await.T) {
+		p = d.observe(at)
+		at.Require().Truef(pred(p), "last observed: %+v", p)
+	}, 15*time.Second, 100*time.Millisecond)
+	return p
 }
 
 // --- workflow-activity driver --------------------------------------------------------------
@@ -643,8 +639,9 @@ func (d *wfaDriver) pauseActivity(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// observe reads the activity's public retry-scheduling info via DescribeWorkflowExecution, as the shared projection.
-func (d *wfaDriver) observe(t *testing.T) activityInfoProjection {
+// observe reads the activity's public retry-scheduling info via DescribeWorkflowExecution, as the shared
+// projection. Takes require.TestingT so it works under an await.Require poll (see awaitObserve).
+func (d *wfaDriver) observe(t require.TestingT) activityInfoProjection {
 	resp, err := d.env.SdkClient().DescribeWorkflowExecution(d.s.Context(), d.run.GetID(), d.run.GetRunID())
 	require.NoError(t, err)
 	for _, pa := range resp.GetPendingActivities() {
@@ -661,23 +658,17 @@ func (d *wfaDriver) observe(t *testing.T) activityInfoProjection {
 	return activityInfoProjection{}
 }
 
-// awaitObserve client-polls the public projection until pred holds, returning that projection. Reserved
-// for a dispatch-delay elapse (start-delay / backoff), whose only effect is a read-time projection flip
-// with no transition-history version advance, so a Describe long-poll would never wake. Effects committed
-// by a synchronous RPC (or already recorded by the time a Poll returns) need no wait — describe directly.
+// awaitObserve polls the public projection until pred holds, returning that projection. Reserved for a
+// dispatch-delay elapse (start-delay / backoff), whose only effect is a read-time projection flip with no
+// transition-history version advance, so a Describe long-poll would never wake. Effects committed by a
+// synchronous RPC (or already recorded by the time a Poll returns) need no wait — describe directly.
 func (d *wfaDriver) awaitObserve(t *testing.T, pred func(activityInfoProjection) bool) activityInfoProjection {
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		p := d.observe(t)
-		if pred(p) {
-			return p
-		}
-		if time.Now().After(deadline) {
-			require.Fail(t, "activity did not reach the expected state", "last observed: %+v", p)
-			return p
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	var p activityInfoProjection
+	await.Require(d.s.Context(), t, func(at *await.T) {
+		p = d.observe(at)
+		at.Require().Truef(pred(p), "last observed: %+v", p)
+	}, 15*time.Second, 100*time.Millisecond)
+	return p
 }
 
 // wfaActivityID is the fixed ID the helper workflow assigns its activity.
