@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "payment-retry-sample.fullname" . }}
+  labels:
+    {{- include "payment-retry-sample.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "payment-retry-sample.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "payment-retry-sample.selectorLabels" . | nindent 8 }}
+        # Add Prometheus scrape annotations if enabled in values.yaml
+        {{- if .Values.prometheus.scrape }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: {{ .Values.prometheus.path | quote }}
+        prometheus.io/port: {{ .Values.prometheus.port | quote }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "payment-retry-sample.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: TEMPORAL_SERVER_HOST_PORT # Assuming worker uses this, or similar
+              value: {{ .Values.temporalServer.hostPort | default "temporal-frontend.temporal.svc.cluster.local:7233" | quote }}
+            - name: INJECT_FAILURE_RATE
+              value: {{ .Values.failureInjection.rate | quote }}
+            # Add other environment variables as needed, e.g., for Temporal namespace
+            - name: TEMPORAL_NAMESPACE
+              value: {{ .Values.temporalNamespace | default "default" | quote }}
+          ports:
+            - name: http-metrics
+              containerPort: 9090 # Same as EXPOSE in Dockerfile and configured in worker
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics # Or a dedicated /healthz endpoint if available
+              port: http-metrics
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /metrics # Or a dedicated /readyz endpoint if available
+              port: http-metrics
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
