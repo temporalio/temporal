@@ -18,12 +18,15 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmcb "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payloads"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -528,6 +531,88 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 	  9 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 6} // WTScheduled event which delivered update to the worker.
 	 10 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 9}
 	`, events)
+		})
+	}
+}
+
+func (s *WorkflowUpdateSuite) TestDuplicateUpdateWhileAdmitted() {
+	for _, tc := range []struct {
+		name   string
+		accept bool
+	}{
+		{name: "accepted and completed", accept: true},
+		{name: "ignored by worker"},
+	} {
+		s.Run(tc.name, func(s *WorkflowUpdateSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+				testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+					[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+			)
+			tv := env.Tv().WithRunID(mustStartWorkflow(env, env.Tv()))
+			callbackURLs := []string{"http://cb1", "http://cb2"}
+
+			// The internal API supports waiting for admission, so both requests are applied before polling.
+			for _, callbackURL := range callbackURLs {
+				resp, err := env.GetTestCluster().HistoryClient().UpdateWorkflowExecution(s.Context(),
+					&historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: env.NamespaceID().String(),
+						Request: &workflowservice.UpdateWorkflowExecutionRequest{
+							Namespace:         env.Namespace().String(),
+							WorkflowExecution: tv.WorkflowExecution(),
+							WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED},
+							Request: &updatepb.Request{
+								Meta:      &updatepb.Meta{UpdateId: tv.UpdateID()},
+								Input:     &updatepb.Input{Name: tv.HandlerName(), Args: payloads.EncodeString("args")},
+								RequestId: tv.Sub(callbackURL).RequestID(),
+								CompletionCallbacks: []*commonpb.Callback{{
+									Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+								}},
+							},
+						},
+					})
+				s.NoError(err)
+				s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, resp.GetResponse().GetStage())
+			}
+
+			_, err := env.TaskPoller().PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					s.Len(task.Messages, 1)
+					if !tc.accept {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+					}
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Commands: env.UpdateAcceptCompleteCommands(tv),
+						Messages: env.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+					}, nil
+				})
+			s.NoError(err)
+
+			if !tc.accept {
+				_, err := env.FrontendClient().PollWorkflowExecutionUpdate(s.Context(),
+					&workflowservice.PollWorkflowExecutionUpdateRequest{
+						Namespace:  env.Namespace().String(),
+						UpdateRef:  tv.UpdateRef(),
+						WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
+					})
+				s.ErrorAs(err, new(*serviceerror.NotFound), "rejected updates must be removed from the registry")
+				return
+			}
+
+			desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(),
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
+				})
+			s.NoError(err)
+			var got []string
+			for _, cb := range desc.GetCallbacks() {
+				if cb.GetTrigger().GetUpdateWorkflowExecutionCompleted().GetUpdateId() == tv.UpdateID() {
+					got = append(got, cb.GetCallback().GetNexus().GetUrl())
+				}
+			}
+			s.ElementsMatch(callbackURLs, got)
 		})
 	}
 }

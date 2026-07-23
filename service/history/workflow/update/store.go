@@ -76,7 +76,7 @@ type (
 		RejectWorkflowExecutionUpdate(updateID string, rejectionFailure *failurepb.Failure) error
 
 		// HasRequestID checks whether the given requestID has already been
-		// recorded for this workflow execution. Used by AttachCallbacks to deduplicate
+		// recorded for this workflow execution. Used by AttachCallbacksForDuplicate to deduplicate
 		// callback attachment when the same request is retried.
 		HasRequestID(requestID string) bool
 	}

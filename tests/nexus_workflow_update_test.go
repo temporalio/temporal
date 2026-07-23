@@ -1127,7 +1127,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetRejec
 // TestWorkflowUpdateCallbackAfterResetCompletedUpdate verifies that when a workflow is
 // reset after an update with callbacks has already completed, the update is reapplied in
 // the new run, completes again, and a new nexus operation targeting the same update ID
-// receives the result via the AttachCallbacks path.
+// receives the result via the AttachCallbacksForDuplicate path.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompletedUpdate(standalone bool) {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
 	ctx := s.Context()
@@ -1184,7 +1184,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackAfterResetCompl
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Second operation: targets the same update ID.
-	// Since the update is already completed in the new run, AttachCallbacks fires the callback.
+	// Since the update is already completed in the new run, AttachCallbacksForDuplicate fires the callback.
 	op2 := s.startOperation(caller, cfg.childWfID)
 	var result2 string
 	s.NoError(s.getOperationResult(caller, op2, &result2))

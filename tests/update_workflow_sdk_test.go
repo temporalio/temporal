@@ -387,7 +387,7 @@ func (s *UpdateWorkflowSdkSuite) pollUpdate(env *testcore.TestEnv, waitPolicy *u
 }
 
 // TestUpdateSameRequestIDDeduplicatesCallbacks verifies requestID-based
-// deduplication in AttachCallbacks. The update blocks (stays in stateAccepted), then:
+// deduplication in AttachCallbacksForDuplicate. The update blocks (stays in stateAccepted), then:
 //   - A second request with the same requestID is deduped (no new callback).
 //   - A third request with a different requestID creates an additional callback.
 //
@@ -451,11 +451,11 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
 	s.NoError(err)
 
-	// Second request: same requestID → should be deduped by AttachCallbacks (no new callback).
+	// Second request: same requestID → should be deduped by AttachCallbacksForDuplicate (no new callback).
 	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
 	s.NoError(err)
 
-	// Third request: different requestID → should create a new callback via AttachCallbacks.
+	// Third request: different requestID → should create a new callback via AttachCallbacksForDuplicate.
 	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID2))
 	s.NoError(err)
 

@@ -194,14 +194,15 @@ func (u *Updater) applyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
-	if err != nil {
-		return nil, err
-	}
-	if callbacksAttached {
+	if alreadyExisted && len(updateRequest.GetCompletionCallbacks()) > 0 {
+		// Attach is only required on an incoming update that both 1. has callbacks and 2. is a duplicate
+		isNoOp, err := u.upd.AttachCallbacksForDuplicate(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+		if err != nil {
+			return nil, err
+		}
 		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
+			Noop:               isNoOp, // determined by AttachCallbacksForDuplicate
+			CreateWorkflowTask: false,  // never needed as its a duplicate update
 		}, nil
 	}
 
