@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -47,6 +48,12 @@ type (
 		ExecutionManager  p.ExecutionManager
 		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
+
+		// MutableStateTableCounts reports surviving row counts per table that SQL
+		// uses to persist a WorkflowMutableState's sub-collections. SQL entrypoints
+		// wire it from the raw DB; nil on Cassandra, where these live as columns on
+		// the executions row and can't be queried alone.
+		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -2691,6 +2698,17 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
+
+	// GetWorkflowExecution short-circuits on the missing executions row, so it
+	// can't see orphaned child-table rows; check them directly where possible.
+	if s.MutableStateTableCounts != nil {
+		counts, err := s.MutableStateTableCounts(s.Ctx, s.ShardID, namespaceID, workflowID, runID)
+		s.NoError(err)
+		// assert (non-fatal) so every offending table is reported, not just the first.
+		for table, n := range counts {
+			assert.Zerof(s.T(), n, "orphaned rows in %s after delete", table)
+		}
+	}
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {
