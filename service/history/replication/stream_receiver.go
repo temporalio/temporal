@@ -44,13 +44,18 @@ type (
 		serverShardKey          ClusterShardKey
 		highPriorityTaskTracker ExecutableTaskTracker
 		lowPriorityTaskTracker  ExecutableTaskTracker
-		shutdownChan            channel.ShutdownOnce
-		logger                  log.Logger
-		stream                  Stream
-		taskConverter           ExecutableTaskConverter
-		receiverMode            ReceiverMode
-		flowController          ReceiverFlowController
-		recvSignalChan          chan struct{}
+		// tierTaskTrackers holds one tracker per throttled lane id (1..K), created
+		// lazily as the sender tags messages. Each lane is its own monotonic stream, so
+		// it needs its own tracker; they all schedule as LOW priority.
+		tierTrackerMu    sync.RWMutex
+		tierTaskTrackers map[int32]ExecutableTaskTracker
+		shutdownChan     channel.ShutdownOnce
+		logger           log.Logger
+		stream           Stream
+		taskConverter    ExecutableTaskConverter
+		receiverMode     ReceiverMode
+		flowController   ReceiverFlowController
+		recvSignalChan   chan struct{}
 
 		slowSubmissionMu         sync.RWMutex
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -90,6 +95,7 @@ func NewStreamReceiver(
 		serverShardKey:          serverShardKey,
 		highPriorityTaskTracker: highPriorityTaskTracker,
 		lowPriorityTaskTracker:  lowPriorityTaskTracker,
+		tierTaskTrackers:        make(map[int32]ExecutableTaskTracker),
 		shutdownChan:            channel.NewShutdownOnce(),
 		logger:                  logger,
 		stream: newStream(
@@ -105,7 +111,9 @@ func NewStreamReceiver(
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:  highPriorityTaskTracker.Size(),
+			// Include the throttled-tier trackers: isolation splits HIGH, so flow control
+			// protects against total HIGH backlog (default lane + all tiers).
+			taskTrackingCount:  receiver.highFamilyTrackingCount(),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
 		}
 	}
@@ -156,6 +164,11 @@ func (r *StreamReceiverImpl) Stop() {
 	r.stream.Close()
 	r.highPriorityTaskTracker.Cancel()
 	r.lowPriorityTaskTracker.Cancel()
+	r.tierTrackerMu.RLock()
+	for _, tracker := range r.tierTaskTrackers {
+		tracker.Cancel()
+	}
+	r.tierTrackerMu.RUnlock()
 
 	r.logger.Info("StreamReceiver shutting down.")
 }
@@ -224,9 +237,10 @@ func (r *StreamReceiverImpl) ackMessage(
 ) (int64, error) {
 	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
 	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
-	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
+	size := r.highFamilyTrackingCount() + r.lowPriorityTaskTracker.Size()
 
 	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
+	var throttledLaneStates []*replicationspb.ReplicationState
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
@@ -269,6 +283,36 @@ func (r *StreamReceiverImpl) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
+		// Fold throttled-tier lanes into the overall min so Scopes[0] on the sender (and
+		// thus cleanup) accounts for a lagging tier. The overall min must be the lowest
+		// point in flight across every lane (default HIGH, LOW, and all throttled tiers).
+		tierWms := r.tierWatermarks()
+		maxLane := int32(0)
+		for laneID, wm := range tierWms {
+			if laneID > maxLane {
+				maxLane = laneID
+			}
+			if wm.Watermark < inclusiveLowWaterMark {
+				inclusiveLowWaterMark = wm.Watermark
+				inclusiveLowWaterMarkTime = wm.Timestamp
+			}
+		}
+		// Report each tier's watermark positionally (lane t -> index t-1). Lanes with no
+		// tracker yet are padded with the overall min (a safe, conservative cursor).
+		for laneID := int32(1); laneID <= maxLane; laneID++ {
+			wm, ok := tierWms[laneID]
+			if !ok {
+				throttledLaneStates = append(throttledLaneStates, &replicationspb.ReplicationState{
+					InclusiveLowWatermark:     inclusiveLowWaterMark,
+					InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
+				})
+				continue
+			}
+			throttledLaneStates = append(throttledLaneStates, &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     wm.Watermark,
+				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
+			})
+		}
 	case ReceiverModeSingleStack:
 		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
 			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
@@ -305,6 +349,11 @@ func (r *StreamReceiverImpl) ackMessage(
 				LowPriorityState:          lowPriorityWatermark,
 				PauseNamespaceIds:         pauseNamespaceIDs,
 				NamespaceCatchupQps:       namespaceCatchupQPS,
+				ThrottledLaneStates:       throttledLaneStates,
+				// Advertise that this receiver routes throttled_lane_id-tagged messages,
+				// so the sender may safely emit tier traffic to it. Isolation only applies
+				// to the tiered stack.
+				SupportsNamespaceIsolation: receiverMode == ReceiverModeTieredStack,
 			},
 		},
 	}); err != nil {
@@ -368,13 +417,18 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
-		taskTracker, err := r.getTaskTracker(priority)
+		// Route to the per-lane tracker: throttled lanes (id >= 1) each get their own
+		// monotonic tracker; lane 0 routes by priority (HIGH / default-LOW).
+		taskTracker, err := r.getOrCreateTaskTracker(priority, messages.GetThrottledLaneId())
 		if err != nil {
 			// Todo: Change to write Tasks to DLQ. As resend task will not help here
 			return NewStreamError("ReplicationTask wrong priority", err)
 		}
 
-		if priority == enumsspb.TASK_PRIORITY_LOW {
+		if priority == enumsspb.TASK_PRIORITY_HIGH {
+			// Isolation acts on HIGH (live) traffic: feed the throttler every HIGH task,
+			// including tier-lane tasks, so a peeled namespace stays observable and is
+			// released once its HIGH rate drops.
 			for _, task := range convertedTasks {
 				if nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId(); nsID != "" {
 					r.NamespaceThrottler.RecordTask(nsID)
@@ -431,6 +485,55 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
+}
+
+// getOrCreateTaskTracker returns the tracker for a message's (priority, laneID). A
+// throttled lane (laneID >= 1) gets its own lazily-created tracker so each lane stays a
+// single monotonic stream; lane 0 routes by priority (HIGH / default-LOW).
+func (r *StreamReceiverImpl) getOrCreateTaskTracker(priority enumsspb.TaskPriority, laneID int32) (ExecutableTaskTracker, error) {
+	if laneID <= 0 {
+		return r.getTaskTracker(priority)
+	}
+	r.tierTrackerMu.RLock()
+	tracker, ok := r.tierTaskTrackers[laneID]
+	r.tierTrackerMu.RUnlock()
+	if ok {
+		return tracker, nil
+	}
+	r.tierTrackerMu.Lock()
+	defer r.tierTrackerMu.Unlock()
+	if tracker, ok = r.tierTaskTrackers[laneID]; ok {
+		return tracker, nil
+	}
+	tracker = NewExecutableTaskTracker(r.logger, r.MetricsHandler)
+	r.tierTaskTrackers[laneID] = tracker
+	return tracker, nil
+}
+
+// highFamilyTrackingCount is the total tracked-task count across the default HIGH lane
+// and all throttled tiers (used for HIGH flow control — isolation splits HIGH).
+func (r *StreamReceiverImpl) highFamilyTrackingCount() int {
+	count := r.highPriorityTaskTracker.Size()
+	r.tierTrackerMu.RLock()
+	for _, tracker := range r.tierTaskTrackers {
+		count += tracker.Size()
+	}
+	r.tierTrackerMu.RUnlock()
+	return count
+}
+
+// tierWatermarks snapshots the low watermark of every throttled-lane tracker that has
+// received at least one batch, keyed by lane id.
+func (r *StreamReceiverImpl) tierWatermarks() map[int32]WatermarkInfo {
+	r.tierTrackerMu.RLock()
+	defer r.tierTrackerMu.RUnlock()
+	out := make(map[int32]WatermarkInfo, len(r.tierTaskTrackers))
+	for laneID, tracker := range r.tierTaskTrackers {
+		if wm := tracker.LowWatermark(); wm != nil {
+			out[laneID] = *wm
+		}
+	}
+	return out
 }
 
 func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPriority, task TrackableExecutableTask) (enumsspb.TaskPriority, error) {

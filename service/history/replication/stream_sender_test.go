@@ -710,6 +710,7 @@ func (s *streamSenderSuite) TestSendTasks_Noop() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.NoError(err)
 }
@@ -740,6 +741,7 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.NoError(err)
 }
@@ -833,6 +835,7 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.NoError(err)
 }
@@ -912,6 +915,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.NoError(err)
 }
@@ -1008,6 +1012,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.NoError(err)
 }
@@ -1041,6 +1046,7 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 		nil,
+		0,
 	)
 	s.Error(err, "rpc error")
 	s.IsType(&StreamError{}, err)

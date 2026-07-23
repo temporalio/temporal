@@ -2730,6 +2730,21 @@ that task will be sent to DLQ.`,
 		0.1,
 		`Fraction of ReplicationStreamSenderLowPriorityQPS to use when a namespace is catching up after being throttled`,
 	)
+	ReplicationStreamSenderThrottledLaneCount = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderThrottledLaneCount",
+		4,
+		`Number of throttled severity tiers (extra LOW-lane cursors) used for replication namespace isolation. Changing it restarts streams.`,
+	)
+	ReplicationStreamSenderTierDemotionCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderTierDemotionCycles",
+		3,
+		`Consecutive throttled ack cycles a namespace must remain throttled in a tier before it is demoted one tier deeper`,
+	)
+	ReplicationStreamSenderUnthrottleCooldownCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderUnthrottleCooldownCycles",
+		3,
+		`Calm ack cycles a namespace must stay un-throttled before it is returned from a throttled tier to the default LOW lane`,
+	)
 	ReplicationResendMaxBatchCount = NewGlobalIntSetting(
 		"history.ReplicationResendMaxBatchCount",
 		10,

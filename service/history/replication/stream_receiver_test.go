@@ -260,6 +260,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 					InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
 					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
 				},
+				SupportsNamespaceIsolation: true,
 			},
 		},
 	},

@@ -18,6 +18,6 @@ type NamespaceThrottler interface {
 // NoopNamespaceThrottler is the default implementation which never throttles.
 type NoopNamespaceThrottler struct{}
 
-func (NoopNamespaceThrottler) RecordTask(_ string)              {}
-func (NoopNamespaceThrottler) ThrottledNamespaceIDs() []string  { return nil }
-func (NoopNamespaceThrottler) CatchupQPS(_ string) float64      { return 0 }
+func (NoopNamespaceThrottler) RecordTask(_ string)             {}
+func (NoopNamespaceThrottler) ThrottledNamespaceIDs() []string { return nil }
+func (NoopNamespaceThrottler) CatchupQPS(_ string) float64     { return 0 }

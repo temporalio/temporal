@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,11 +62,16 @@ type (
 		config                  *configs.Config
 		isTieredStackEnabled    bool
 		readerGroup             *replicationReaderGroup
-		nsIsolation             *namespaceIsolationManager
-		flowController          SenderFlowController
-		sendLock                sync.Mutex
-		ssRateLimiter           ServerSchedulerRateLimiter
-		catchupRateLimiter      quotas.RateLimiter
+		laneManager             *laneManager
+		// isolationConfirmed is set once the receiver advertises support for grouped-cursor
+		// isolation. Until then the sender keeps all LOW traffic on the default lane and
+		// emits no tier-tagged messages, so an old receiver is never sent lanes it would
+		// misroute.
+		isolationConfirmed atomic.Bool
+		flowController     SenderFlowController
+		sendLock           sync.Mutex
+		ssRateLimiter      ServerSchedulerRateLimiter
+		tierRateLimiters   []quotas.RateLimiter // index t-1 limits throttled tier t
 	}
 )
 
@@ -102,15 +108,13 @@ func NewStreamSender(
 		clientClusterShardCount: clientClusterShardCount,
 		recvSignalChan:          make(chan struct{}, 1),
 		shutdownChan:            channel.NewShutdownOnce(),
-		config:              config,
-		isTieredStackEnabled: config.EnableReplicationTaskTieredProcessing(),
-		readerGroup:         newReaderGroupIfEnabled(config, shardContext, clientShardKey),
-		nsIsolation:         newNsIsolationIfEnabled(config),
-		flowController:      NewSenderFlowController(config, logger),
-		ssRateLimiter:       ssRateLimiter,
-		catchupRateLimiter: quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-			return float64(config.ReplicationStreamSenderLowPriorityQPS()) * config.ReplicationStreamSenderCatchupQPSRatio()
-		}),
+		config:                  config,
+		isTieredStackEnabled:    config.EnableReplicationTaskTieredProcessing(),
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey),
+		laneManager:             newLaneManagerIfEnabled(config, shardContext, clientShardKey),
+		flowController:          NewSenderFlowController(config, logger),
+		ssRateLimiter:           ssRateLimiter,
+		tierRateLimiters:        newTierRateLimiters(config),
 	}
 }
 
@@ -133,6 +137,12 @@ func (s *StreamSenderImpl) Start() {
 		// Low Priority sender is used for force replication closed workflow
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		if s.laneManager != nil {
+			// One send loop per throttled tier; each drains its (rate-limited) members.
+			for tier := 1; tier <= s.laneManager.TierCount(); tier++ {
+				go WrapEventLoop(s.server.Context(), func() error { return s.sendTierEventLoop(tier) }, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+			}
+		}
 	} else {
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	}
@@ -195,8 +205,11 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
 			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
 		}
-		if (s.nsIsolation != nil) != s.config.EnableReplicationNamespaceIsolation() {
+		if (s.laneManager != nil) != (s.config.EnableReplicationNamespaceIsolation() && s.isTieredStackEnabled) {
 			return NewStreamError("StreamSender detected namespace isolation config change, restart the stream", nil)
+		}
+		if s.laneManager != nil && s.laneManager.TierCount() != s.config.ReplicationStreamSenderThrottledLaneCount() {
+			return NewStreamError("StreamSender detected throttled lane count change, restart the stream", nil)
 		}
 
 		req, err := s.server.Recv()
@@ -265,8 +278,35 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	if s.isTieredStackEnabled {
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
-	if s.nsIsolation != nil && s.isTieredStackEnabled {
-		s.syncNamespaceIsolation(attr.GetPauseNamespaceIds(), attr.GetNamespaceCatchupQps())
+	if attr.GetSupportsNamespaceIsolation() {
+		s.isolationConfirmed.Store(true)
+	}
+
+	if s.laneManager != nil {
+		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
+			return NewStreamError("streamSender: missing priority state with namespace isolation", nil)
+		}
+		// Reconcile HIGH-lane tier membership against the receiver's throttled set, then
+		// persist 3+K scopes — tier scopes carry their NamespacePredicate + acked
+		// watermark, so a reconnect reconstructs tiers instead of re-sending the whole
+		// HIGH lane. Split/demote floors and the merge-back gate anchor on applied
+		// (acked) watermarks so ordered HIGH events never straddle two lanes with a gap.
+		// Scopes[0] = the receiver's overall min, so cleanup stays safe.
+		s.laneManager.Reconcile(
+			attr.GetPauseNamespaceIds(),
+			attr.GetHighPriorityState().GetInclusiveLowWatermark(),
+			tierAckedWatermarks(attr.GetThrottledLaneStates(), s.laneManager.TierCount()),
+		)
+		s.emitTierMetrics()
+		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.buildTieredIsolationReaderState(attr)); err != nil {
+			return err
+		}
+		// Failover uses the HIGH lane (live traffic), same as the tiered stack.
+		return s.shardContext.UpdateRemoteReaderInfo(
+			readerID,
+			attr.HighPriorityState.InclusiveLowWatermark-1,
+			attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime(),
+		)
 	}
 
 	if s.readerGroup != nil {
@@ -391,64 +431,61 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
-	var catchupBeginInclusiveWatermark int64
-	if s.readerGroup != nil {
-		catchupBeginInclusiveWatermark = s.readerGroup.CatchupBeginWatermark(catchupEndExclusiveWatermark, priority)
-	} else {
-		readerID := shard.ReplicationReaderIDFromClusterShardID(
-			int64(s.clientShardKey.ClusterID),
-			s.clientShardKey.ShardID,
-		)
-		queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
-		if !ok {
-			s.logger.Debug("StreamSender queueState not found")
-			catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
-		} else {
-			readerState, ok := queueState.ReaderStates[readerID]
-			if !ok {
-				s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
-				catchupBeginInclusiveWatermark = catchupEndExclusiveWatermark
-			} else {
-				catchupBeginInclusiveWatermark = s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
-			}
-		}
-	}
+	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
 	if err := s.sendTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
-		s.defaultLowNsFilter(priority),
+		s.defaultLaneFilter(priority),
+		0, // default HIGH / LOW lane: not a throttled tier
 	); err != nil {
 		return 0, err
+	}
+	if s.laneManager != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		s.laneManager.AdvanceDefaultCursor(catchupEndExclusiveWatermark)
 	}
 	return catchupEndExclusiveWatermark, nil
 }
 
-func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
-	getReaderScopesIndex := func(priority enumsspb.TaskPriority) int {
-		switch priority {
-		case enumsspb.TASK_PRIORITY_HIGH:
-			/*
-				this is to handle the case when switch from single stack to tiered stack, the reader state is still in old format.
-				In this case, it is safe to use the overall low watermark as the beginInclusiveWatermark, as long as we always guarantee
-				the overall low watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark)
-			*/
-			if len(readerState.Scopes) != 3 {
-				return 0
-			}
-			return 1
-		case enumsspb.TASK_PRIORITY_LOW:
-			if len(readerState.Scopes) != 3 {
-				return 0
-			}
-			return 2
-		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
-		default:
-			return 0
-		}
+// catchupBeginWatermark returns the inclusive begin watermark for the catch-up scan.
+// With isolation ON the lane manager reconstructs throttled tiers, so the default HIGH
+// lane resumes normally from its own (HIGH) scope. Only when isolation is OFF but
+// leftover tier scopes are persisted (isolation was disabled while a tier lagged) does
+// default-HIGH resume from the overall low watermark (scope 0) to re-cover the undrained
+// windows once — a rare, bounded, idempotent re-send.
+func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority, end int64) int64 {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		s.logger.Debug("StreamSender queueState not found")
+		return end
 	}
-	return readerState.Scopes[getReaderScopesIndex(priority)].Range.InclusiveMin.TaskId
+	readerState, ok := queueState.ReaderStates[readerID]
+	if !ok {
+		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
+		return end
+	}
+	scopePriority := priority
+	// Isolation OFF but leftover tier scopes persisted (isolation disabled while a tier
+	// lagged): resume default-LOW from the overall min (scope 0) so the undrained tier
+	// windows are re-covered once. With isolation ON the tiers are reconstructed, so
+	// default-LOW resumes normally from its own (LOW) scope.
+	if s.laneManager == nil && priority == enumsspb.TASK_PRIORITY_HIGH && len(readerState.Scopes) > 3 {
+		scopePriority = enumsspb.TASK_PRIORITY_UNSPECIFIED
+	}
+	return s.getSendCatchupBeginInclusiveWatermark(readerState, scopePriority)
+}
+
+func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
+	// priorityScopeIndex tolerates the single-stack format (1 scope -> index 0) and the
+	// tiered format (3+ scopes -> HIGH=1, LOW=2). When switching from single to tiered
+	// stack the reader state is still in the old format, in which case using the overall
+	// low watermark (scope 0) is safe as long as we always guarantee the overall low
+	// watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark).
+	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes))].Range.InclusiveMin.TaskId
 }
 
 func (s *StreamSenderImpl) sendLive(
@@ -458,20 +495,20 @@ func (s *StreamSenderImpl) sendLive(
 ) error {
 	syncStatusTimer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer syncStatusTimer.Stop()
-	nsFilter := s.defaultLowNsFilter(priority)
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 		if err := s.sendTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
-			nsFilter,
+			s.defaultLaneFilter(priority), // re-snapshot per batch: tier membership changes
+			0,
 		); err != nil {
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
-		if s.nsIsolation != nil && priority == enumsspb.TASK_PRIORITY_LOW {
-			s.nsIsolation.UpdateDefaultLowCursor(endExclusiveWatermark)
+		if s.laneManager != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+			s.laneManager.AdvanceDefaultCursor(endExclusiveWatermark)
 		}
 		if !syncStatusTimer.Stop() {
 			select {
@@ -503,7 +540,8 @@ func (s *StreamSenderImpl) sendTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
-	nsFilter func(namespaceID string) bool,
+	nsFilter func(namespaceID string, taskID int64) bool,
+	laneID int32,
 ) error {
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
@@ -520,6 +558,7 @@ func (s *StreamSenderImpl) sendTasks(
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   priority,
+					ThrottledLaneId:            laneID,
 				},
 			},
 		})
@@ -559,6 +598,7 @@ Loop:
 						ExclusiveHighWatermark:     item.GetTaskID(),
 						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
 						Priority:                   priority,
+						ThrottledLaneId:            laneID,
 					},
 				},
 			}); err != nil {
@@ -570,7 +610,7 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
-		if nsFilter != nil && !nsFilter(item.GetNamespaceID()) {
+		if nsFilter != nil && !nsFilter(item.GetNamespaceID(), item.GetTaskID()) {
 			continue Loop
 		}
 		if !s.shouldProcessTask(item) {
@@ -582,6 +622,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTagValue(laneID)),
 		)
 
 		var attempt int64
@@ -632,7 +673,7 @@ Loop:
 				)); err != nil {
 					return s.recordRetry(item, attempt, fmt.Errorf("rate_limit: %w", err))
 				}
-				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
+				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)), metrics.ReplicationStreamLaneTag(laneTagValue(laneID)))
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -641,6 +682,7 @@ Loop:
 						ExclusiveHighWatermark:     task.SourceTaskId + 1,
 						ExclusiveHighWatermarkTime: task.VisibilityTime,
 						Priority:                   priority,
+						ThrottledLaneId:            laneID,
 					},
 				},
 			}); err != nil {
@@ -652,6 +694,8 @@ Loop:
 				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.OperationTag(TaskOperationTag(task)),
+				metrics.ReplicationTaskPriorityTag(priority),
+				metrics.ReplicationStreamLaneTag(laneTagValue(laneID)),
 			)
 			return nil
 		}
@@ -669,6 +713,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTagValue(laneID)),
 		)
 		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
 			time.Since(item.GetVisibilityTime()),
@@ -676,6 +721,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTagValue(laneID)),
 		)
 		if err != nil {
 			metrics.ReplicationTaskSendError.With(s.metrics).Record(
@@ -684,6 +730,7 @@ Loop:
 				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 				metrics.ReplicationTaskPriorityTag(priority),
+				metrics.ReplicationStreamLaneTag(laneTagValue(laneID)),
 			)
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
@@ -695,6 +742,7 @@ Loop:
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 				Priority:                   priority,
+				ThrottledLaneId:            laneID,
 			},
 		},
 	})
@@ -743,6 +791,35 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 	return shouldProcessTask
 }
 
+// tierLaneTagValue is the replicationStreamLane metric value for a throttled tier.
+func tierLaneTagValue(tier int) string {
+	return "tier-" + strconv.Itoa(tier)
+}
+
+// emitTierMetrics reports how many namespaces are isolated in each throttled tier, so
+// the throttled lane count can be sized and isolation usage observed.
+func (s *StreamSenderImpl) emitTierMetrics() {
+	for tier := 1; tier <= s.laneManager.TierCount(); tier++ {
+		metrics.ReplicationStreamSenderThrottledNamespaceCount.With(s.metrics).Record(
+			float64(len(s.laneManager.TierMembers(tier))),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.ReplicationStreamLaneTag(tierLaneTagValue(tier)),
+		)
+	}
+}
+
+// laneTagValue is the replicationStreamLane metric value for a throttled lane id:
+// "tier-N" for a throttled tier, "default" otherwise. It is orthogonal to the task's
+// priority (HIGH/LOW), which is tagged separately: (priority, lane) together identify
+// the physical lane — (HIGH, default), (LOW, default), or (LOW, tier-N).
+func laneTagValue(laneID int32) string {
+	if laneID > 0 {
+		return tierLaneTagValue(int(laneID))
+	}
+	return "default"
+}
+
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
 	switch t := task.(type) {
 	case *tasks.SyncWorkflowStateTask:
@@ -783,90 +860,217 @@ func newReaderGroupIfEnabled(
 	return newReplicationReaderGroup(shardContext, clientShardKey, config.EnableReplicationTaskTieredProcessing())
 }
 
-func newNsIsolationIfEnabled(config *configs.Config) *namespaceIsolationManager {
-	if !config.EnableReplicationNamespaceIsolation() {
+// newLaneManagerIfEnabled builds the LOW-lane severity-tier manager when namespace
+// isolation is enabled. Isolation only exists in the tiered stack (the LOW lane only
+// exists there), so both flags are required. On a stream (re)start it reconstructs
+// tier membership and cursors from the persisted reader state, so throttled
+// namespaces stay isolated across reconnects (e.g. history deploys) instead of
+// bursting back onto the default lane.
+func newLaneManagerIfEnabled(config *configs.Config, shardContext historyi.ShardContext, clientShardKey ClusterShardKey) *laneManager {
+	if !config.EnableReplicationNamespaceIsolation() || !config.EnableReplicationTaskTieredProcessing() {
 		return nil
 	}
-	return newNamespaceIsolationManager()
+	tierCount := config.ReplicationStreamSenderThrottledLaneCount()
+	defaultCursor, tiers := reconstructLaneState(shardContext, clientShardKey, tierCount)
+	return newLaneManagerWithState(
+		tierCount,
+		config.ReplicationStreamSenderTierDemotionCycles(),
+		config.ReplicationStreamSenderUnthrottleCooldownCycles(),
+		defaultCursor,
+		tiers,
+	)
 }
 
-// defaultLowNsFilter returns a namespace filter for the default LOW reader that excludes
-// namespaces with active dedicated readers. Returns nil when isolation is disabled or
-// for non-LOW priorities.
-func (s *StreamSenderImpl) defaultLowNsFilter(priority enumsspb.TaskPriority) func(string) bool {
-	if s.nsIsolation == nil || priority != enumsspb.TASK_PRIORITY_LOW {
-		return nil
+// reconstructLaneState reads the persisted replication reader state and extracts the
+// default-HIGH resume cursor and per-tier membership/cursors. Tier scope t lives at
+// scope index 2+t (scope 0 = overall min, 1 = default-HIGH, 2 = LOW). Returns zero
+// state when nothing is persisted (fresh shard).
+func reconstructLaneState(shardContext historyi.ShardContext, clientShardKey ClusterShardKey, tierCount int) (int64, []reconstructedTier) {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientShardKey.ClusterID),
+		clientShardKey.ShardID,
+	)
+	queueState, ok := shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		return 0, nil
 	}
-	return func(nsID string) bool { return !s.nsIsolation.IsDefaultLowExcluded(nsID) }
+	readerState, ok := queueState.ReaderStates[readerID]
+	if !ok {
+		return 0, nil
+	}
+	return parseLaneState(readerState, tierCount)
 }
 
-// syncNamespaceIsolation reconciles the sender's namespace reader state against the
-// set of throttled namespace IDs received from the receiver's ack.
-//
-// Newly throttled namespaces are registered as paused — the default LOW reader skips
-// them but no goroutine starts yet. When a namespace leaves the throttled list,
-// a rate-limited catchup goroutine is launched to send the skipped tasks before
-// re-admitting the namespace to the default LOW reader.
-func (s *StreamSenderImpl) syncNamespaceIsolation(throttledNamespaceIDs []string, catchupQPS map[string]float64) {
-	start, drain := s.nsIsolation.Sync(throttledNamespaceIDs)
-
-	for _, ns := range start {
-		s.nsIsolation.ThrottleNamespace(ns)
+// parseLaneState extracts the default-HIGH resume cursor and per-tier membership from a
+// persisted reader state (scope index 2+t = tier t). Pure; the inverse of
+// buildTieredIsolationReaderState.
+func parseLaneState(readerState *persistencespb.QueueReaderState, tierCount int) (int64, []reconstructedTier) {
+	if len(readerState.Scopes) < 3 {
+		return 0, nil
 	}
+	defaultCursor := readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId()
+	var tiers []reconstructedTier
+	for i := 3; i < len(readerState.Scopes); i++ {
+		tier := i - 2
+		if tier > tierCount {
+			break
+		}
+		scope := readerState.Scopes[i]
+		members := scope.GetPredicate().GetNamespaceIdPredicateAttributes().GetNamespaceIds()
+		if len(members) == 0 {
+			continue
+		}
+		tiers = append(tiers, reconstructedTier{
+			tier:    tier,
+			cursor:  scope.GetRange().GetInclusiveMin().GetTaskId(),
+			members: members,
+		})
+	}
+	return defaultCursor, tiers
+}
 
-	for _, ns := range drain {
-		ctx, startCursor, ok := s.nsIsolation.BeginCatchup(s.server.Context(), ns)
-		if ok {
-			// First time this namespace leaves the throttled list: start catchup.
-			rl := s.catchupRateLimiterFor(ns, catchupQPS)
-			go func() {
-				err := s.sendNamespaceEventLoop(ctx, ns, startCursor, rl)
-				s.nsIsolation.Remove(ns)
-				if err != nil && ctx.Err() == nil {
-					s.Stop()
-				}
-			}()
-		} else {
-			// Already catching up: check whether it has reached the default cursor.
-			s.nsIsolation.CheckAndRemoveIfCaughtUp(ns)
+// buildTieredIsolationReaderState builds the persisted reader state for the HIGH-lane
+// isolation layout: scope 0 = overall min, 1 = default-HIGH (predicate excludes
+// throttled namespaces), 2 = LOW (single lane, universal), 2+t = throttled HIGH tier t
+// (predicate = its members, watermark from the receiver's throttled_lane_states). All K
+// tier scopes are written positionally so reconstruction maps scope index 2+t back to
+// tier t.
+func (s *StreamSenderImpl) buildTieredIsolationReaderState(attr *replicationspb.SyncReplicationState) *persistencespb.QueueReaderState {
+	universal := func() *persistencespb.Predicate {
+		return &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+			Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
 		}
 	}
-}
-
-// catchupRateLimiterFor returns a rate limiter for the catchup reader of the given
-// namespace. If the receiver specified a per-namespace QPS, a dedicated limiter is
-// created for it; otherwise the shared default catchup limiter is returned.
-func (s *StreamSenderImpl) catchupRateLimiterFor(namespaceID string, catchupQPS map[string]float64) quotas.RateLimiter {
-	if qps, ok := catchupQPS[namespaceID]; ok && qps > 0 {
-		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return qps })
+	namespacePredicate := func(ids []string) *persistencespb.Predicate {
+		return &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
+			Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
+				NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{NamespaceIds: ids},
+			},
+		}
 	}
-	return s.catchupRateLimiter
+	makeScope := func(watermark int64, predicate *persistencespb.Predicate) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(watermark)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: predicate,
+		}
+	}
+
+	throttled := s.laneManager.AllThrottledNamespaces()
+	defaultHighPredicate := universal()
+	if len(throttled) > 0 {
+		defaultHighPredicate = &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_NOT,
+			Attributes: &persistencespb.Predicate_NotPredicateAttributes{
+				NotPredicateAttributes: &persistencespb.NotPredicateAttributes{Predicate: namespacePredicate(throttled)},
+			},
+		}
+	}
+	scopes := []*persistencespb.QueueSliceScope{
+		makeScope(attr.GetInclusiveLowWatermark(), universal()),
+		makeScope(attr.GetHighPriorityState().GetInclusiveLowWatermark(), defaultHighPredicate),
+		makeScope(attr.GetLowPriorityState().GetInclusiveLowWatermark(), universal()),
+	}
+	laneStates := attr.GetThrottledLaneStates()
+	for tier := 1; tier <= s.laneManager.TierCount(); tier++ {
+		watermark := attr.GetInclusiveLowWatermark()
+		if tier-1 < len(laneStates) {
+			watermark = laneStates[tier-1].GetInclusiveLowWatermark()
+		}
+		scopes = append(scopes, makeScope(watermark, namespacePredicate(s.laneManager.TierMembers(tier))))
+	}
+	return &persistencespb.QueueReaderState{Scopes: scopes}
 }
 
-// sendNamespaceEventLoop runs the rate-limited dedicated LOW reader for a single
-// namespace in catchup mode. It runs until the context is cancelled — either by
-// CheckAndRemoveIfCaughtUp once the cursor has caught up, or by stream shutdown.
-func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespaceID string, startCursor int64, rateLimiter quotas.RateLimiter) error {
+// newTierRateLimiters builds one outgoing rate limiter per throttled tier; deeper
+// tiers run slower at LowPriorityQPS * CatchupQPSRatio^tier. Returns nil when
+// isolation is off.
+func newTierRateLimiters(config *configs.Config) []quotas.RateLimiter {
+	if !config.EnableReplicationNamespaceIsolation() || !config.EnableReplicationTaskTieredProcessing() {
+		return nil
+	}
+	count := config.ReplicationStreamSenderThrottledLaneCount()
+	limiters := make([]quotas.RateLimiter, count)
+	for i := range limiters {
+		depth := i + 1 // tier number (1-based)
+		limiters[i] = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+			ratio := math.Pow(config.ReplicationStreamSenderCatchupQPSRatio(), float64(depth))
+			return float64(config.ReplicationStreamSenderLowPriorityQPS()) * ratio
+		})
+	}
+	return limiters
+}
+
+// defaultLaneFilter returns the namespace filter for the default HIGH lane: it excludes
+// namespaces currently owned by a throttled tier. Returns nil (admit all) when
+// isolation is disabled or for non-HIGH priorities.
+func (s *StreamSenderImpl) defaultLaneFilter(priority enumsspb.TaskPriority) func(string, int64) bool {
+	// Until the receiver confirms isolation support, admit everything on the default
+	// lane (no exclusion, no tier traffic) — otherwise an old receiver would never
+	// receive the excluded namespaces' tasks.
+	if s.laneManager == nil || priority != enumsspb.TASK_PRIORITY_HIGH || !s.isolationConfirmed.Load() {
+		return nil
+	}
+	_, filter := s.laneManager.DefaultBatchStart()
+	return filter
+}
+
+// tierAckedWatermarks extracts the per-tier acked watermarks (positional, 1-based) the
+// receiver reports in throttled_lane_states, padded to tierCount. These are the applied
+// points the lane manager anchors demote floors and merge-back gates on.
+func tierAckedWatermarks(laneStates []*replicationspb.ReplicationState, tierCount int) []int64 {
+	out := make([]int64, tierCount)
+	for i := range out {
+		if i < len(laneStates) {
+			out[i] = laneStates[i].GetInclusiveLowWatermark()
+		}
+	}
+	return out
+}
+
+// sendTierEventLoop runs the rate-limited send loop for one throttled HIGH tier
+// (1..K). It streams only the tier's current members, each at or above its floor,
+// tagging messages with the tier's throttled_lane_id. The loop runs for the life of the
+// stream; an empty tier idles. The lane manager's tier cursor is advanced via
+// compare-and-swap, so a concurrent Reconcile rewind is honored by re-reading.
+func (s *StreamSenderImpl) sendTierEventLoop(tier int) (retErr error) {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			retErr = panicErr
+			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+		}
+	}()
+	defer log.CapturePanic(s.logger, &panicErr)
+
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
 
+	rateLimiter := s.tierRateLimiters[tier-1]
 	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer timer.Stop()
 
-	cursor := startCursor
-	nsFilter := func(nsID string) bool { return nsID == namespaceID }
-
 	for {
-		if err := rateLimiter.Wait(ctx); err != nil {
-			return nil // context cancelled or shutdown
-		}
-
+		cursor, nsFilter := s.laneManager.TierBatchStart(tier)
 		end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		if err := s.sendTasks(enumsspb.TASK_PRIORITY_LOW, cursor, end, nsFilter); err != nil {
-			return err
+		// Only emit tier-tagged traffic once the receiver has confirmed it routes lanes.
+		if cursor < end && s.isolationConfirmed.Load() {
+			if err := rateLimiter.Wait(s.server.Context()); err != nil {
+				return nil // context cancelled or shutdown
+			}
+			if err := s.sendTasks(enumsspb.TASK_PRIORITY_HIGH, cursor, end, nsFilter, int32(tier)); err != nil {
+				return err
+			}
+			// Commit progress; if Reconcile rewound the cursor meanwhile, redo from
+			// the new (lower) cursor rather than skipping the rewound window.
+			if !s.laneManager.AdvanceTierCursor(tier, cursor, end) {
+				continue
+			}
 		}
-		cursor = end
-		s.nsIsolation.UpdateDedicatedCursor(namespaceID, cursor)
 
 		if !timer.Stop() {
 			select {
@@ -877,8 +1081,6 @@ func (s *StreamSenderImpl) sendNamespaceEventLoop(ctx context.Context, namespace
 		timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
 
 		select {
-		case <-ctx.Done():
-			return nil
 		case <-s.shutdownChan.Channel():
 			return nil
 		case <-newTaskNotificationChan:

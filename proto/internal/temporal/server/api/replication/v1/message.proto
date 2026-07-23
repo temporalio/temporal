@@ -73,6 +73,12 @@ message SyncReplicationState {
   // Keyed by the namespace IDs in pause_namespace_ids; omitted namespaces
   // use the sender's default catchup rate.
   map<string, double> namespace_catchup_qps = 6;
+  // Per-throttled-lane low watermarks, indexed by throttled lane (tier) position.
+  repeated ReplicationState throttled_lane_states = 7;
+  // True when the receiver understands grouped-cursor namespace isolation (per-lane
+  // routing of throttled_lane_id-tagged messages). The sender requires this before it
+  // emits tier-tagged traffic, so an old receiver is never sent lanes it would misroute.
+  bool supports_namespace_isolation = 8;
 }
 message ReplicationState {
   int64 inclusive_low_watermark = 1;
@@ -95,6 +101,10 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
+  // Throttled lane (tier) this batch belongs to: 0 = normal priority routing,
+  // 1..K = a throttled severity tier. Used by the receiver only for tracker
+  // routing; scheduler priority still comes from `priority`.
+  int32 throttled_lane_id = 5;
 }
 
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic

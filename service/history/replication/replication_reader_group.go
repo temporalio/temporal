@@ -94,10 +94,12 @@ func (r *replicationReaderGroup) FailoverWatermark(
 }
 
 // priorityScopeIndex maps a priority to its index within QueueReaderState.Scopes.
+// Scope 0 is the overall watermark, scope 1 HIGH, scope 2 default-LOW; any further
+// scopes (3+) are throttled-tier cursors looked up by the lane manager, not here.
 // Falls back to index 0 (the overall watermark) when the state was written by an
 // older single-stack version that only has one scope.
 func priorityScopeIndex(priority enumsspb.TaskPriority, scopeCount int) int {
-	if scopeCount == 3 {
+	if scopeCount >= 3 {
 		switch priority {
 		case enumsspb.TASK_PRIORITY_HIGH:
 			return 1

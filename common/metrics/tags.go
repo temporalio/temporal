@@ -45,6 +45,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
+	replicationStreamLane                          = "replicationStreamLane"
 	taskExpireStage                                = "task_expire_stage"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -450,6 +451,14 @@ func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
 // ReplicationTaskPriorityTag returns a replication task priority tag.
 func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 	return Tag{Key: replicationTaskPriority, Value: value.String()}
+}
+
+// ReplicationStreamLaneTag identifies the replication stream sender lane that carried
+// a task: "high", "low" (the default LOW lane), or "tier-N" (a throttled severity
+// tier). A single dimension that subsumes priority for the send counter; keep the
+// throttled lane count (K) small to bound cardinality.
+func ReplicationStreamLaneTag(value string) Tag {
+	return Tag{Key: replicationStreamLane, Value: value}
 }
 
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.

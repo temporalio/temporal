@@ -414,7 +414,9 @@ func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKeyP
 			}
 			continue
 		}
-		if len(readerState.Scopes) == 3 {
+		if len(readerState.Scopes) >= 3 {
+			// Scope 0 = overall, 1 = HIGH, 2 = default-LOW; scopes 3+ are throttled
+			// tiers, whose lag is already reflected in the overall ack level (scope 0).
 			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
 				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
 				highPriorityAckLevel: readerState.Scopes[1].Range.InclusiveMin.TaskId,
