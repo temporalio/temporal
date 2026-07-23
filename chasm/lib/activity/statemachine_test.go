@@ -615,6 +615,62 @@ func TestTransitionCompleted(t *testing.T) {
 	protorequire.ProtoEqual(t, payload, outcome.GetSuccessful().GetOutput())
 }
 
+// TestTransitionCompleted_FromScheduled covers force-completing an activity by ID before any
+// worker has started it (RespondActivityTaskCompletedById). Since no attempt ever started,
+// ActivityStartToCloseLatency must not be emitted, mirroring the WFA behavior in
+// respondactivitytaskcompleted/api.go of leaving attemptStartedTime zero when the started event
+// is fabricated.
+func TestTransitionCompleted_FromScheduled(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+	attemptState := &activitypb.ActivityAttemptState{Count: 1}
+	outcome := &activitypb.ActivityOutcome{}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			RetryPolicy:            defaultRetryPolicy,
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		LastAttempt: chasm.NewDataField(ctx, attemptState),
+		Outcome:     chasm.NewDataField(ctx, outcome),
+	}
+
+	payload := payloads.EncodeString("Done")
+
+	controller := gomock.NewController(t)
+	metricsHandler := metrics.NewMockHandler(controller)
+
+	// The activity never had a started attempt, so ActivityStartToCloseLatency must not be recorded.
+	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Times(0)
+
+	timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
+	timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
+	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
+
+	counterSuccess := metrics.NewMockCounterIface(controller)
+	counterSuccess.EXPECT().Record(int64(1)).Times(1)
+	metricsHandler.EXPECT().Counter(metrics.ActivitySuccess.Name()).Return(counterSuccess)
+
+	req := &historyservice.RespondActivityTaskCompletedRequest{
+		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
+			Result:   payload,
+			Identity: "worker",
+		},
+	}
+
+	err := TransitionCompleted.Apply(activity, ctx, completeEvent{
+		req:            req,
+		metricsHandler: metricsHandler,
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
+}
+
 func TestTransitionFailed(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
