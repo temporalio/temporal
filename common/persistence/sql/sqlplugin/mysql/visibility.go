@@ -82,6 +82,13 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 	return fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(items, ", "))
 }
 
+func combineRollbackError(operationErr error, rollbackErr error) error {
+	if rollbackErr == nil || errors.Is(rollbackErr, sql.ErrTxDone) {
+		return operationErr
+	}
+	return fmt.Errorf("transaction rollback failed: %w", errors.Join(rollbackErr, operationErr))
+}
+
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
 func (mdb *db) InsertIntoVisibility(
@@ -102,12 +109,7 @@ func (mdb *db) InsertIntoVisibility(
 		return nil, err
 	}
 	defer func() {
-		err := tx.Rollback()
-		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
-		if err != nil && !errors.Is(err, sql.ErrTxDone) {
-			// Transaction rollback error should never happen, unless db connection was lost.
-			retError = fmt.Errorf("transaction rollback failed: %w", retError)
-		}
+		retError = combineRollbackError(retError, tx.Rollback())
 	}()
 	result, err = tx.NamedExecContext(ctx, templateInsertWorkflowExecution, finalRow)
 	if err != nil {
@@ -146,12 +148,7 @@ func (mdb *db) ReplaceIntoVisibility(
 		return nil, err
 	}
 	defer func() {
-		err := tx.Rollback()
-		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
-		if err != nil && !errors.Is(err, sql.ErrTxDone) {
-			// Transaction rollback error should never happen, unless db connection was lost.
-			retError = fmt.Errorf("transaction rollback failed: %w", retError)
-		}
+		retError = combineRollbackError(retError, tx.Rollback())
 	}()
 	result, err = tx.NamedExecContext(ctx, templateUpsertWorkflowExecution, finalRow)
 	if err != nil {
@@ -190,12 +187,7 @@ func (mdb *db) DeleteFromVisibility(
 		return nil, err
 	}
 	defer func() {
-		err := tx.Rollback()
-		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
-		if err != nil && !errors.Is(err, sql.ErrTxDone) {
-			// Transaction rollback error should never happen, unless db connection was lost.
-			retError = fmt.Errorf("transaction rollback failed: %w", retError)
-		}
+		retError = combineRollbackError(retError, tx.Rollback())
 	}()
 	_, err = tx.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
 	if err != nil {
