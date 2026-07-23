@@ -325,22 +325,23 @@ message TimeSkippingInfo {
   reserved 3;
   reserved "current_elapsed_duration_bound";
 
-  // Current time-skipping configuration applied to the workflow.
+  // Current time-skipping configuration applied to the execution.
   temporal.api.common.v1.TimeSkippingConfig config = 1;
 
-  // Total skipped duration for the current workflow execution run, including any
-  // inherited skipped duration carried over from a preceding execution that started this run.
+  // Total skipped duration for the current execution, including any
+  // inherited skipped duration carried over from a preceding run that started this one.
   google.protobuf.Duration accumulated_skipped_duration = 2;
 
   // The current fast-forward info for time skipping.
   FastForwardInfo fast_forward_info = 4;
 
   // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
-  // skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
-  // that pending timer tasks must be re-stamped against the new accumulated skip, since a
-  // skip mutates this workflow-level field without bumping any per-timer
-  // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+  // skip transition changed accumulated_skipped_duration or a request updated the config.)
   VersionedTransition last_update_versioned_transition = 5;
+
+  // Tracks the number of times a time-skipping transition has occurred since time skipping
+  // was most recently enabled. It is reset every time the skipping config is updated.
+  int32 session_skip_count = 6;
 }
 
 message FastForwardInfo {
