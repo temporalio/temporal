@@ -71,10 +71,10 @@ const TaskGroupName = "nexus"
 // It's the responsibility of the parent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, startTime *time.Time, links []*commonpb.Link) error
-	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
-	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationCanceled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, closeTime *time.Time) error
+	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, closeTime *time.Time) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure, fromAttempt bool) error
-	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
+	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, closeTime *time.Time, links []*commonpb.Link) error
 	OnNexusOperationCancellationCompleted(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationCancellationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	// NexusOperationInvocationData loads invocation data (Input, Header, NexusLinks) from the scheduled history event.
@@ -212,28 +212,31 @@ func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, s
 }
 
 // onCompleted applies the succeeded transition or delegates to the store if one is present.
-func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Payload, links []*commonpb.Link) error {
+// closeTime, when non-nil, is the callback-reported completion time used instead of the current time.
+func (o *Operation) onCompleted(ctx chasm.MutableContext, result *commonpb.Payload, closeTime *time.Time, links []*commonpb.Link) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationCompleted(ctx, o, result, links)
+		return store.OnNexusOperationCompleted(ctx, o, result, closeTime, links)
 	}
 	o.Links = append(o.Links, links...)
-	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result})
+	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{Result: result, CompleteTime: closeTime})
 }
 
 // onFailed applies the failed transition or delegates to the store if one is present.
-func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+// closeTime, when non-nil, is the callback-reported completion time used instead of the current time.
+func (o *Operation) onFailed(ctx chasm.MutableContext, cause *failurepb.Failure, closeTime *time.Time) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationFailed(ctx, o, cause)
+		return store.OnNexusOperationFailed(ctx, o, cause, closeTime)
 	}
-	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause})
+	return TransitionFailed.Apply(o, ctx, EventFailed{Failure: cause, CompleteTime: closeTime})
 }
 
 // onCanceled applies the canceled transition or delegates to the store if one is present.
-func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure) error {
+// closeTime, when non-nil, is the callback-reported completion time used instead of the current time.
+func (o *Operation) onCanceled(ctx chasm.MutableContext, cause *failurepb.Failure, closeTime *time.Time) error {
 	if store, ok := o.Store.TryGet(ctx); ok {
-		return store.OnNexusOperationCanceled(ctx, o, cause)
+		return store.OnNexusOperationCanceled(ctx, o, cause, closeTime)
 	}
-	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause})
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{Failure: cause, CompleteTime: closeTime})
 }
 
 // onTimedOut applies the timed out transition or delegates to the store if one is present.
@@ -269,14 +272,15 @@ func (o *Operation) HandleNexusCompletion(
 		links = nil
 	}
 
+	closeTime := timestamp.TimeValuePtr(completion.GetCloseTime())
 	switch outcome := completion.Outcome.(type) {
 	case *persistencespb.ChasmNexusCompletion_Success:
-		return o.onCompleted(ctx, outcome.Success, nil)
+		return o.onCompleted(ctx, outcome.Success, closeTime, nil)
 	case *persistencespb.ChasmNexusCompletion_Failure:
 		if outcome.Failure.GetCanceledFailureInfo() != nil {
-			return o.onCanceled(ctx, outcome.Failure)
+			return o.onCanceled(ctx, outcome.Failure, closeTime)
 		}
-		return o.onFailed(ctx, outcome.Failure)
+		return o.onFailed(ctx, outcome.Failure, closeTime)
 	default:
 		return serviceerror.NewInvalidArgument("invalid completion outcome")
 	}
@@ -352,11 +356,11 @@ func (o *Operation) saveInvocationResult(
 			// HandleNexusCompletion will apply its outcome from the completion callback.
 			return nil, o.onStarted(ctx, r.response.Pending.Token, nil, links)
 		}
-		return nil, o.onCompleted(ctx, r.response.Successful, links)
+		return nil, o.onCompleted(ctx, r.response.Successful, nil, links)
 	case invocationResultCancel:
-		return nil, o.onCanceled(ctx, r.failure)
+		return nil, o.onCanceled(ctx, r.failure, nil)
 	case invocationResultFail:
-		return nil, o.onFailed(ctx, r.failure)
+		return nil, o.onFailed(ctx, r.failure, nil)
 	case invocationResultTimeout:
 		return nil, o.onTimedOut(ctx, r.failure, true)
 	case invocationResultRetry:

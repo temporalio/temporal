@@ -80,6 +80,7 @@ func (w *Workflow) OnNexusOperationCanceled(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
+	closeTime *time.Time,
 ) error {
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -95,6 +96,10 @@ func (w *Workflow) OnNexusOperationCanceled(
 				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
+		if closeTime != nil {
+			// Use the callback-reported completion time instead of the current time.
+			e.EventTime = timestamppb.New(*closeTime)
+		}
 	})
 	return err
 }
@@ -105,6 +110,7 @@ func (w *Workflow) OnNexusOperationFailed(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	cause *failurepb.Failure,
+	closeTime *time.Time,
 ) error {
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -120,6 +126,10 @@ func (w *Workflow) OnNexusOperationFailed(
 				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
+		if closeTime != nil {
+			// Use the callback-reported completion time instead of the current time.
+			e.EventTime = timestamppb.New(*closeTime)
+		}
 	})
 	return err
 }
@@ -130,6 +140,7 @@ func (w *Workflow) OnNexusOperationCompleted(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
 	result *commonpb.Payload,
+	closeTime *time.Time,
 	links []*commonpb.Link,
 ) error {
 	parentData := &chasmworkflowpb.NexusOperationParentData{}
@@ -146,6 +157,10 @@ func (w *Workflow) OnNexusOperationCompleted(
 			},
 		}
 		e.Links = links
+		if closeTime != nil {
+			// Use the callback-reported completion time instead of the current time.
+			e.EventTime = timestamppb.New(*closeTime)
+		}
 	})
 	return err
 }

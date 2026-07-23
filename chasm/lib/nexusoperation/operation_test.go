@@ -142,6 +142,23 @@ func TestHandleNexusCompletion(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {
 			ctx := newCtx()
 			op := newStartedOp(t, ctx)
+			closeTime := defaultTime.Add(time.Minute)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: op.GetRequestId(),
+				CloseTime: timestamppb.New(closeTime),
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			// The callback-reported completion time is stamped onto the operation.
+			require.Equal(t, closeTime, op.GetClosedTime().AsTime())
+		})
+
+		t.Run("AfterStartedWithoutCloseTime", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
 			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
 				RequestId: op.GetRequestId(),
 				Outcome: &persistencespb.ChasmNexusCompletion_Success{
@@ -150,6 +167,8 @@ func TestHandleNexusCompletion(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			// Falls back to the current component time when no close time is provided.
+			require.Equal(t, defaultTime, op.GetClosedTime().AsTime())
 		})
 
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
@@ -191,14 +210,17 @@ func TestHandleNexusCompletion(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {
 			ctx := newCtx()
 			op := newStartedOp(t, ctx)
+			closeTime := defaultTime.Add(time.Minute)
 			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
 				RequestId: op.GetRequestId(),
+				CloseTime: timestamppb.New(closeTime),
 				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
 					Failure: &failurepb.Failure{Message: "oops"},
 				},
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, op.GetStatus())
+			require.Equal(t, closeTime, op.GetClosedTime().AsTime())
 		})
 
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
@@ -224,8 +246,10 @@ func TestHandleNexusCompletion(t *testing.T) {
 		t.Run("AfterStarted", func(t *testing.T) {
 			ctx := newCtx()
 			op := newStartedOp(t, ctx)
+			closeTime := defaultTime.Add(time.Minute)
 			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
 				RequestId: op.GetRequestId(),
+				CloseTime: timestamppb.New(closeTime),
 				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
 					Failure: &failurepb.Failure{
 						Message: "canceled",
@@ -237,6 +261,7 @@ func TestHandleNexusCompletion(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.GetStatus())
+			require.Equal(t, closeTime, op.GetClosedTime().AsTime())
 		})
 
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
