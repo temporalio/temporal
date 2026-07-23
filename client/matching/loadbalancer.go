@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 )
@@ -123,6 +124,13 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
+	// If the server provided per-partition backlog counts covering all read partitions, weight
+	// polls toward partitions with more backlog (size + floor) so pollers aren't trapped on empty
+	// partitions. Otherwise keep the classic fewest-outstanding-pollers behavior.
+	if partitionCount > 0 && len(pc.BacklogCount) >= partitionCount {
+		return tqlb.pickReadPartitionWeighted(partitionCount, pc.BacklogCount)
+	}
+
 	return tqlb.pickReadPartition(partitionCount)
 }
 
@@ -161,6 +169,37 @@ func (b *tqLoadBalancer) pickReadPartition(partitionCount int) *pollToken {
 
 	return &pollToken{
 		TQPartition: b.taskQueue.NormalPartition(partitionID),
+		balancer:    b,
+	}
+}
+
+// pickReadPartitionWeighted is like pickReadPartition, but distributes outstanding pollers across
+// partitions proportionally to backlog count (rather than equally). weights must have length
+// partitionCount.
+func (b *tqLoadBalancer) pickReadPartitionWeighted(partitionCount int, backlogCounts []number.Compact8) *pollToken {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	b.ensurePartitionCountLocked(partitionCount)
+
+	startPartitionID := rand.Intn(partitionCount)
+	pickedPartitionID := startPartitionID
+	for i := 1; i < partitionCount; i++ {
+		currPartitionID := (startPartitionID + i) % partitionCount
+		// currPartitionID is more under-served than pickedPartitionID when
+		//   pollerCounts[curr]/(backlog[curr]+1) < pollerCounts[picked]/(backlog[picked]+1)
+		// which, since backlog+1 is positive, is equivalent to the cross-multiplied form below
+		// (avoids floating point).
+		if int64(b.pollerCounts[currPartitionID])*(number.DecodeCompact8(backlogCounts[pickedPartitionID])+1) <
+			int64(b.pollerCounts[pickedPartitionID])*(number.DecodeCompact8(backlogCounts[currPartitionID])+1) {
+			pickedPartitionID = currPartitionID
+		}
+	}
+
+	b.pollerCounts[pickedPartitionID]++
+
+	return &pollToken{
+		TQPartition: b.taskQueue.NormalPartition(pickedPartitionID),
 		balancer:    b,
 	}
 }
