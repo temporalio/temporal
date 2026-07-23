@@ -600,9 +600,11 @@ func (a *Activity) HandleFailed(
 	failure := event.Request.GetFailedRequest().GetFailure()
 
 	appFailure := failure.GetApplicationFailureInfo()
-	isRetryable := appFailure != nil &&
+	serverFailure := failure.GetServerFailureInfo()
+	isRetryable := (appFailure != nil &&
 		!appFailure.GetNonRetryable() &&
-		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())
+		!slices.Contains(a.GetRetryPolicy().GetNonRetryableErrorTypes(), appFailure.GetType())) ||
+		(serverFailure != nil && !serverFailure.GetNonRetryable())
 
 	retryState, err := a.tryReschedule(ctx, isRetryable, appFailure.GetNextRetryDelay().AsDuration(), failure)
 	if err != nil {
