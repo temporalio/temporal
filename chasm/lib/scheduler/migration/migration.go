@@ -12,7 +12,6 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -228,7 +227,7 @@ func convertBufferedStartsLegacyToCHASM(
 		}
 
 		if v2Start.WorkflowId == "" {
-			v2Start.WorkflowId = schedulescommon.GenerateWorkflowID(
+			v2Start.WorkflowId = schedulerinternal.GenerateWorkflowID(
 				baseWorkflowID,
 				v1Start.GetNominalTime().AsTime(),
 			)
@@ -360,7 +359,7 @@ func convertBackfillsLegacyToCHASM(
 
 	backfillers := make(map[string]*schedulerpb.BackfillerState, len(legacyBackfills))
 	for _, v1Backfill := range legacyBackfills {
-		backfillID := schedulescommon.GenerateBackfillerID()
+		backfillID := schedulerinternal.GenerateBackfillerID()
 
 		backfillers[backfillID] = &schedulerpb.BackfillerState{
 			Request: &schedulerpb.BackfillerState_BackfillRequest{
