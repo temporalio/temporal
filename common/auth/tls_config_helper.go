@@ -36,6 +36,74 @@ func NewTLSConfigForServer(
 	return c
 }
 
+// NewTLSConfigForServerWithRootCAProvider creates a client TLS configuration
+// that resolves its root CA pool through getRootCAs on every new handshake
+// instead of freezing a pool at construction time. Go has no client-side
+// per-handshake RootCAs hook, so host-verifying configurations disable the
+// built-in verifier and perform the equivalent chain and identity checks in
+// VerifyConnection with the freshly resolved pool.
+//
+// Contract:
+//   - enableHostVerification=false returns the legacy no-verification config;
+//     getRootCAs is ignored entirely.
+//   - a nil getRootCAs fails every host-verifying handshake (fail closed).
+//   - a nil pool returned by getRootCAs falls back to the system trust store,
+//     matching the prior static-config behavior.
+//   - ConnectionState.VerifiedChains is not populated for these connections;
+//     the chain built in VerifyConnection is checked and discarded.
+func NewTLSConfigForServerWithRootCAProvider(
+	serverName string,
+	enableHostVerification bool,
+	getRootCAs func() (*x509.CertPool, error),
+) *tls.Config {
+	c := NewTLSConfigForServer(serverName, enableHostVerification)
+	if !enableHostVerification {
+		return c
+	}
+
+	// Required to bypass the frozen RootCAs field. VerifyConnection below performs
+	// the full chain and identity verification using the current cached CA pool.
+	// Note: with InsecureSkipVerify set, crypto/tls does not populate
+	// ConnectionState.VerifiedChains, so downstream consumers must not rely on
+	// it; the chain built in VerifyConnection is checked and discarded.
+	c.InsecureSkipVerify = true
+	c.VerifyConnection = func(state tls.ConnectionState) error {
+		if len(state.PeerCertificates) == 0 {
+			return errors.New("tls: server presented no certificates")
+		}
+		if getRootCAs == nil {
+			return errors.New("tls: root CA provider is not configured")
+		}
+
+		rootCAs, err := getRootCAs()
+		if err != nil {
+			return fmt.Errorf("tls: failed to load root CAs for verification: %w", err)
+		}
+
+		verifyName := state.ServerName
+		if verifyName == "" {
+			verifyName = serverName
+		}
+		if verifyName == "" {
+			return errors.New("tls: cannot verify server identity: connection provided no SNI and no ServerName is configured")
+		}
+
+		opts := x509.VerifyOptions{
+			Roots:         rootCAs,
+			Intermediates: x509.NewCertPool(),
+			DNSName:       verifyName,
+		}
+		for _, cert := range state.PeerCertificates[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+
+		_, err = state.PeerCertificates[0].Verify(opts)
+		return err
+	}
+
+	return c
+}
+
 func NewDynamicTLSClientConfig(
 	getCert func() (*tls.Certificate, error),
 	rootCAs *x509.CertPool,
