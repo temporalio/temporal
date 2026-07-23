@@ -6,6 +6,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -15,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -597,6 +600,7 @@ func NotifyOnExecutionSnapshot(
 			RunID:       workflowSnapshot.ExecutionState.RunId,
 		}, nil)
 	}
+	notifyFastForwardUpdate(engine, workflowSnapshot.ExecutionInfo, workflowSnapshot.ExecutionState)
 }
 
 func NotifyOnExecutionMutation(
@@ -615,6 +619,32 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
+	notifyFastForwardUpdate(engine, workflowMutation.ExecutionInfo, workflowMutation.ExecutionState)
+}
+
+// notifyFastForwardUpdate wakes any PollWorkflowExecutionTimeSkipping waiter after a persist.
+// It over-notifies on purpose: it fires on every transaction of a time-skipping workflow (gated
+// only on TimeSkippingInfo presence, which is derivable from the persisted state and, once set,
+// never cleared). Waiters filter benign wake-ups by re-checking the delivered fast-forward, so a
+// spurious notification only costs a re-block, never a missed one — and Notify is a no-op when no
+// one is watching the key.
+func notifyFastForwardUpdate(
+	engine historyi.Engine,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+) {
+	if executionInfo.GetTimeSkippingInfo() == nil {
+		return
+	}
+	ffInfo := NewTimeSkippingInfoUtil(executionInfo.GetTimeSkippingInfo()).ToFastForwardInfo()
+	// we only set completed when the whole chain of runs completes
+	completed := executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED &&
+		executionInfo.GetNewExecutionRunId() == ""
+	key := notification.NewTimeSkippingNotificationKey(executionInfo.GetNamespaceId(), executionInfo.GetWorkflowId())
+	engine.NotifyFastForwardUpdate(key, &notification.FastForwardNotification{
+		FastForwardInfo:            ffInfo,
+		WorkflowExecutionCompleted: completed,
+	})
 }
 
 func NotifyNewHistorySnapshotEvent(

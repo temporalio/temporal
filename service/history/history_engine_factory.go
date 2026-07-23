@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -33,6 +34,7 @@ type (
 		MatchingClient                  resource.MatchingClient
 		SdkClientFactory                sdk.ClientFactory
 		EventNotifier                   events.Notifier
+		TimeSkippingFastForwardNotifier notification.TimeSkippingFastForwardNotifier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
@@ -71,6 +73,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
+		f.TimeSkippingFastForwardNotifier,
 		f.Config,
 		f.VersionMembershipCache,
 		f.WorkerDeploymentClient,

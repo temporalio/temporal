@@ -27,6 +27,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
+	notification "go.temporal.io/server/service/history/notification"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -426,6 +427,18 @@ func (mr *MockEngineMockRecorder) NotifyChasmExecution(executionKey, componentRe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyChasmExecution", reflect.TypeOf((*MockEngine)(nil).NotifyChasmExecution), executionKey, componentRef)
 }
 
+// NotifyFastForwardUpdate mocks base method.
+func (m *MockEngine) NotifyFastForwardUpdate(key definition.WorkflowKey, arg1 *notification.FastForwardNotification) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyFastForwardUpdate", key, arg1)
+}
+
+// NotifyFastForwardUpdate indicates an expected call of NotifyFastForwardUpdate.
+func (mr *MockEngineMockRecorder) NotifyFastForwardUpdate(key, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyFastForwardUpdate", reflect.TypeOf((*MockEngine)(nil).NotifyFastForwardUpdate), key, arg1)
+}
+
 // NotifyNewHistoryEvent mocks base method.
 func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 	m.ctrl.T.Helper()
@@ -493,6 +506,21 @@ func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservi
 func (mr *MockEngineMockRecorder) PollMutableState(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockEngine)(nil).PollMutableState), ctx, request)
+}
+
+// PollWorkflowExecutionTimeSkipping mocks base method.
+func (m *MockEngine) PollWorkflowExecutionTimeSkipping(ctx context.Context, request *historyservice.PollWorkflowExecutionTimeSkippingRequest) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionTimeSkipping", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionTimeSkipping indicates an expected call of PollWorkflowExecutionTimeSkipping.
+func (mr *MockEngineMockRecorder) PollWorkflowExecutionTimeSkipping(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionTimeSkipping", reflect.TypeOf((*MockEngine)(nil).PollWorkflowExecutionTimeSkipping), ctx, request)
 }
 
 // PollWorkflowExecutionUpdate mocks base method.

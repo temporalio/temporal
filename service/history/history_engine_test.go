@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -208,15 +209,16 @@ func (s *engineSuite) SetupTest() {
 	)
 
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		logger:             s.mockShard.GetLogger(),
-		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    tasktoken.NewSerializer(),
-		eventNotifier:      eventNotifier,
-		config:             s.config,
+		currentClusterName:  s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shardContext:        s.mockShard,
+		clusterMetadata:     s.mockClusterMetadata,
+		executionManager:    s.mockExecutionMgr,
+		logger:              s.mockShard.GetLogger(),
+		metricsHandler:      s.mockShard.GetMetricsHandler(),
+		tokenSerializer:     tasktoken.NewSerializer(),
+		eventNotifier:       eventNotifier,
+		fastForwardNotifier: notification.NoopTimeSkippingFastForwardNotifier,
+		config:              s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():          s.mockTxProcessor,
 			s.mockTimerProcessor.Category():       s.mockTimerProcessor,
