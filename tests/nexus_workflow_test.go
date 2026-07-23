@@ -75,9 +75,6 @@ func (s *NexusWorkflowTestSuite) newTestEnv(chasmEnabled bool, opts ...testcore.
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus cancellation support")
-	}
 
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
@@ -1826,9 +1823,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion and internal auth callback support")
-	}
 	env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 	// Set URL template with invalid host
 	env.OverrideDynamicConfig(
@@ -1904,9 +1898,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(c
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_CancelationEventuallyDelivered(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus cancellation before start support")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
@@ -2158,9 +2149,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterFramework
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion with nil IO support")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
@@ -2406,9 +2394,6 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEna
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async error rehydration support")
-	}
 	type testcase struct {
 		outcome, action    string
 		checkWorkflowError func(s *NexusWorkflowTestSuite, wfErr error)
@@ -2571,9 +2556,6 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus callback failure handling after caller completion")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
@@ -2655,9 +2637,6 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus sync failure conversion support")
-	}
 	env := s.newTestEnv(chasmEnabled)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -2721,9 +2700,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chasmEnabled bool) {
-	if chasmEnabled {
-		s.T().Skip("Blocked on CHASM Nexus async completion with multiple callers support")
-	}
 	// number of concurrent Nexus operation calls
 	numCalls := 5
 	handlerWf := func(ctx workflow.Context, input string) (string, error) {
@@ -2741,6 +2717,11 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers(chas
 
 	buildNexusEnvFn := func(ctx context.Context, s *NexusWorkflowTestSuite) (*NexusTestEnv, CallerWfFn) {
 		env := s.newTestEnv(chasmEnabled)
+		if chasmEnabled {
+			// Surface Nexus-delivered signal request IDs in RequestIdInfos; the CHASM signal-backlink
+			// write path is gated on this flag (HSM records them unconditionally).
+			env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSignalBacklinks, true)
+		}
 		endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 		_, err := env.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{

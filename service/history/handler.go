@@ -2202,19 +2202,29 @@ func (h *Handler) CompleteNexusOperationChasm(
 	// Access the component with progress intent so that the framework blocks access to a
 	// completion targeting an operation under a closed workflow and surfaces it as a
 	// NotFound. That NotFound is the signal to fall back to the current run below.
-	ctx = chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
+	progressCtx := chasm.NewContextWithOperationIntent(ctx, chasm.OperationIntentProgress)
 
 	// First try the component as of its creation transition. This tolerates refs
 	// from before a reset while still ensuring the loaded state has the operation.
-	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
+	handlerInvoked, err := h.applyChasmNexusCompletion(progressCtx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
 	if shouldFallBackToCurrentRun(handlerInvoked, err, completion) {
 		// If reset moved the operation to the current run, retry without the ref's
 		// run ID or transition tokens. Non-workflow refs cannot use this lookup.
-		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
+		if _, fbErr := h.applyChasmNexusCompletion(progressCtx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
 			err = fbErr
 		}
 	}
 	if err != nil {
+		// The completion could not be applied. It may be that the operation is genuinely missing
+		// (e.g. a reset/rebuild moved it to the other framework, which the frontend handles by
+		// falling back), or that the caller workflow has already closed, in which case the operation
+		// is gone for good. The attempts above resolve the current run, so when they fail because that
+		// run is closed the framework reports an access-check failure (preserved through error
+		// conversion). Surface the same terminal error HSM returns so the completion callback fails
+		// instead of retrying, and the frontend skips a pointless cross-framework fallback.
+		if chasm.IsAccessCheckFailedError(err) {
+			return nil, consts.ErrWorkflowCompleted
+		}
 		return nil, h.convertError(err)
 	}
 
