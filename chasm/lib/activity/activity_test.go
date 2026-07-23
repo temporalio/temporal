@@ -155,6 +155,10 @@ func TestHandleStarted(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	testRequestID := "test-request-id"
 	testStamp := int32(1)
+	// startedTime is the StartedTime set on an in-progress attempt during setup. The idempotent
+	// retry cases assert the response echoes it, rather than testTime (the mocked now) that a fresh
+	// transition would stamp, proving no new transition occurred.
+	startedTime := timestamppb.New(testTime.Add(-1 * time.Minute))
 
 	testCases := []struct {
 		name           string
@@ -186,6 +190,56 @@ func TestHandleStarted(t *testing.T) {
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
 				require.NoError(t, err)
+			},
+		},
+		{
+			name:           "idempotent retry - cancel requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
+			},
+		},
+		{
+			name:           "error - cancel requested with different request ID",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: "different-request-id",
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.ErrorAs(t, err, new(*serviceerrors.ObsoleteMatchingTask))
+			},
+		},
+		{
+			name:           "idempotent retry - pause requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
+			},
+		},
+		{
+			name:           "idempotent retry - reset requested",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			startRequestID: testRequestID,
+			requestID:      testRequestID,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int32(1), response.Attempt)
+				require.Equal(t, startedTime, response.StartedTime)
 			},
 		},
 		{
@@ -242,8 +296,13 @@ func TestHandleStarted(t *testing.T) {
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
 			}
-			if tc.activityStatus == activitypb.ACTIVITY_EXECUTION_STATUS_STARTED {
-				attemptState.StartedTime = timestamppb.New(testTime.Add(-1 * time.Minute))
+			// Only the in-progress statuses (matching hasAttemptInProgress) have a started attempt.
+			switch tc.activityStatus {
+			case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+				activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+				activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+				activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+				attemptState.StartedTime = startedTime
 			}
 
 			// Determine heartbeat timeout based on test case
