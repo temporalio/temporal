@@ -748,8 +748,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	if deployment != nil {
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			// TODO: reject poller of old sticky queue if newer version exist
+		// Use default unversioned queue if versioning is not supported.
+		if !pm.partition.SupportsVersioning() {
+			// TODO: for sticky queues, reject poller of old sticky queue if newer version exists.
 		} else {
 			// default queue should stay alive even if requests go to other queues
 			dbq.MarkAlive()
@@ -772,26 +773,31 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			return nil, false, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
 		}
 
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			// In the sticky case we always use the unversioned queue
-			// For the old API, we may kick off this worker if there's a newer one.
-			oldVersioning, err := checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
-			if err != nil {
-				return nil, false, err
-			}
-
-			if !oldVersioning {
-				activeRules := getActiveRedirectRules(versioningData.GetRedirectRules())
-				terminalBuildId := findTerminalBuildId(buildId, activeRules)
-				if terminalBuildId != buildId {
-					return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
+		// Use default unversioned queue if versioning is not supported.
+		if !pm.partition.SupportsVersioning() {
+			// Sticky queues need additional handling: kick off a poller if a newer
+			// version exists (old versioning API), and clear the build ID for recordStart.
+			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+				// In the sticky case we always use the unversioned queue.
+				// For the old API, we may kick off this worker if there's a newer one.
+				oldVersioning, err := checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
+				if err != nil {
+					return nil, false, err
 				}
+
+				if !oldVersioning {
+					activeRules := getActiveRedirectRules(versioningData.GetRedirectRules())
+					terminalBuildId := findTerminalBuildId(buildId, activeRules) //nolint:staticcheck
+					if terminalBuildId != buildId {                              //nolint:revive
+						return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
+					}
+				}
+				// We set versionSetUsed to true for all sticky tasks until old versioning is cleaned up.
+				// this value is used by matching_engine to decide if it should pass the worker build ID
+				// to history in the recordStart call or not. We don't need to pass build ID for sticky
+				// tasks as no redirect happen in a sticky queue.
+				versionSetUsed = true
 			}
-			// We set versionSetUsed to true for all sticky tasks until old versioning is cleaned up.
-			// this value is used by matching_engine to decide if it should pass the worker build ID
-			// to history in the recordStart call or not. We don't need to pass build ID for sticky
-			// tasks as no redirect happen in a sticky queue.
-			versionSetUsed = true
 		} else {
 			// default queue should stay alive even if requests go to other queues
 			dbq.MarkAlive()
