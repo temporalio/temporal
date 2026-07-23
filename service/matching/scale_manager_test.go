@@ -389,11 +389,11 @@ func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
 	s.Equal([]float64{1, 1, 1}, metricValues(events), "target gauge per changed decision")
 
 	// Target, read, and write should only have 2 recordings because the third shadow target was "no change".
-	target := s.awaitMetric(capt, "partition_scale_target", 2)
-	s.Equal([]float64{2, 3}, metricValues(target), "target gauge per changed decision")
+	target := s.awaitMetric(capt, "partition_scale_target", 3)
+	s.Equal([]float64{0, 2, 3}, metricValues(target), "target gauge per changed decision")
 	snap := capt.Snapshot()
-	s.Equal([]float64{0, 0}, metricValues(snap["partition_scale_read"]), "read gauge per changed decision")
-	s.Equal([]float64{0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_read"]), "read gauge per changed decision")
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
 }
 
 // TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval

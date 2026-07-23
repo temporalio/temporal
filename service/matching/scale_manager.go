@@ -170,7 +170,6 @@ func (sm *scaleManager) callScaler() {
 
 	settings := sm.settings()
 	shadowMode := settings.ShadowModeLogInterval > 0
-	metricsHandlerWithShadowTag := sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))
 
 	// Entering shadow mode on top of a previously-applied managed target releases
 	// control back to the dynamic-config baseline: zero the managed target once so
@@ -227,7 +226,7 @@ func (sm *scaleManager) callScaler() {
 			sm.prevShadowTarget == target || // only log new changes
 			target <= 0 { // only log if scaler is enabled
 			// emit scale event metric as a heartbeat even if no shadow log
-			metrics.PartitionScaleEvents.With(metricsHandlerWithShadowTag).Record(1)
+			metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 			return
 		}
 		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
@@ -253,7 +252,7 @@ func (sm *scaleManager) callScaler() {
 		tag.Int32("prev-target", prevTarget),
 		tag.Int32("max-target", newState.MaxTarget),
 		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
-	metrics.PartitionScaleEvents.With(metricsHandlerWithShadowTag).Record(1)
+	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
 func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
@@ -295,8 +294,6 @@ func (sm *scaleManager) releaseManagedState(settings dynamicconfig.PartitionScal
 // setState updates the current scale state and syncs it to ephemeral data.
 // This should only be called _after_ the state is persisted to the db.
 // Called from backgroundWork or LoadedMetadata only.
-// Can be called with shadow mode on when releasing managed state back to zero;
-// in that case do not record metrics, callScaler will record shadow metrics.
 func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, settings dynamicconfig.PartitionScaleManagerSettings) {
 	prevInfo := scaleStateToInfo(sm.scaleState, settings)
 
@@ -309,9 +306,7 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 		sm.userDataManager.SetPartitionScale(newInfo)
 	}
 
-	if settings.ShadowModeLogInterval <= 0 {
-		sm.emitGaugeMetricsIfEnabled(float64(newInfo.Read), float64(newInfo.Write), float64(sm.scaleState.GetTarget()))
-	}
+	sm.emitGaugeMetricsIfEnabled(float64(newInfo.Read), float64(newInfo.Write), float64(sm.scaleState.GetTarget()))
 }
 
 func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQueuePartitionRequest {
