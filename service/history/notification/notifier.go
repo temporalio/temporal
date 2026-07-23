@@ -27,7 +27,6 @@ type PubSubNotifier[T any] interface {
 }
 
 type pubSubNotifierImpl[T any] struct {
-	workflowIDToShardID  func(namespace.ID, string) int32
 	maxSubscribersPerKey int
 	// key: definition.WorkflowKey, value: map[subscriberID]chan T. The inner map is
 	// not thread-safe on its own; every access is guarded by the ConcurrentTxMap's
@@ -57,16 +56,19 @@ func (noopNotifier[T]) Unwatch(definition.WorkflowKey, string) error { return ni
 
 // NewPubSubNotifier creates a notifier that admits at most maxSubscribersPerKey
 // concurrent waiters per key; Watch beyond that returns a ResourceExhausted error.
-func NewPubSubNotifier[T any](workflowIDToShardID func(namespace.ID, string) int32, maxSubscribersPerKey int) PubSubNotifier[T] {
+//
+// hashKey only stripes the internal map's locks for concurrency — any uniform hash of
+// (namespace, workflowID) works and it has no history-shard meaning here (callers just pass
+// the workflow->shard hash as a convenient, well-distributed one).
+func NewPubSubNotifier[T any](hashKey func(namespace.ID, string) int32, maxSubscribersPerKey int) PubSubNotifier[T] {
 	hashFn := func(key any) uint32 {
 		wk, ok := key.(definition.WorkflowKey)
 		if !ok {
 			return 0
 		}
-		return uint32(workflowIDToShardID(namespace.ID(wk.NamespaceID), wk.WorkflowID))
+		return uint32(hashKey(namespace.ID(wk.NamespaceID), wk.WorkflowID))
 	}
 	return &pubSubNotifierImpl[T]{
-		workflowIDToShardID:  workflowIDToShardID,
 		maxSubscribersPerKey: maxSubscribersPerKey,
 		subscriptions:        collection.NewShardedConcurrentTxMap(1024, hashFn),
 	}

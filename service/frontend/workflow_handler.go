@@ -721,7 +721,7 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
 		}
 		if strings.TrimSpace(tsc.GetFastForwardId()) == "" {
-			return errTimeSkippingFastForwardIdNotSet
+			return errTimeSkippingFastForwardIDNotSet
 		}
 	}
 
@@ -7542,10 +7542,7 @@ func (wh *WorkflowHandler) PollWorkflowExecutionTimeSkipping(ctx context.Context
 		return nil, errWorkflowTimeSkippingNotEnabled
 	}
 	if strings.TrimSpace(request.GetFastForwardId()) == "" {
-		return nil, errTimeSkippingFastForwardIdNotSet
-	}
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollWorkflowExecutionTimeSkipping", wh.throttledLogger); err != nil {
-		return nil, err
+		return nil, errTimeSkippingFastForwardIDNotSet
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)

@@ -892,7 +892,7 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 
 func (e *historyEngineImpl) NotifyFastForwardUpdate(
 	key definition.WorkflowKey,
-	notification *notification.FastForwardNotification,
+	fastforwardNotification *notification.FastForwardNotification,
 ) {
 	if e.fastForwardNotifier == nil {
 		// Always injected in production via fx; a nil here means a misconfigured engine.
@@ -903,7 +903,7 @@ func (e *historyEngineImpl) NotifyFastForwardUpdate(
 			tag.WorkflowID(key.WorkflowID))
 		return
 	}
-	e.fastForwardNotifier.Notify(key, notification)
+	e.fastForwardNotifier.Notify(key, fastforwardNotification)
 }
 
 func (e *historyEngineImpl) NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte) {

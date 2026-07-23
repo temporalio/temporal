@@ -22,8 +22,8 @@ func NewTimeSkippingNotificationKey(namespaceID string, workflowID string) defin
 
 const maxFastForwardWaitersPerExecution = 5
 
-func NewTimeSkippingFastForwardNotifier(workflowIDToShardID func(namespace.ID, string) int32) TimeSkippingFastForwardNotifier {
-	return NewPubSubNotifier[*FastForwardNotification](workflowIDToShardID, maxFastForwardWaitersPerExecution)
+func NewTimeSkippingFastForwardNotifier(hashKey func(namespace.ID, string) int32) TimeSkippingFastForwardNotifier {
+	return NewPubSubNotifier[*FastForwardNotification](hashKey, maxFastForwardWaitersPerExecution)
 }
 
-var NoopTimeSkippingFastForwardNotifier TimeSkippingFastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()
+var NoopTimeSkippingFastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()

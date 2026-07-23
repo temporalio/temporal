@@ -485,9 +485,9 @@ func EventNotifierProvider(
 }
 
 func TimeSkippingFastForwardNotifierProvider(
-	config *configs.Config,
+	serviceConfig *configs.Config,
 ) notification.TimeSkippingFastForwardNotifier {
-	return notification.NewTimeSkippingFastForwardNotifier(config.GetShardID)
+	return notification.NewTimeSkippingFastForwardNotifier(serviceConfig.GetShardID)
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
