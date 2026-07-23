@@ -165,15 +165,18 @@ func (u *Updater) ApplyRequest(
 		return nil, err
 	}
 
-	callbacksAttached, err := u.upd.AttachCallbacks(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
-	if err != nil {
-		return nil, err
-	}
-	if callbacksAttached {
-		return &api.UpdateWorkflowAction{
-			Noop:               false,
-			CreateWorkflowTask: false,
-		}, nil
+	if alreadyExisted {
+		// Attach is only required for updates that already exist
+		callbacksAttached, err := u.upd.AttachCallbacksOnDuplicateUpdates(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms))
+		if err != nil {
+			return nil, err
+		}
+		if callbacksAttached {
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
+		}
 	}
 
 	// If WT is scheduled, but not started, updates will be attached to it, when WT is started.
