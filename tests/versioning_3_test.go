@@ -1892,18 +1892,33 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 
 // TestChildWorkflowExplicitPinnedOverrideTakesPrecedence verifies that a pinned
 // child override wins over inherited pinned routing on the same task queue.
+// Flow:
+// 1. Register parent v1 as current and child v2 as inactive.
+// 2. Start the parent and establish it as pinned on v1.
+// 3. Parent starts a child with an explicit pinned override to v2.
+// 4. Assert the child starts on v2 and records only the explicit override.
 func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedence() {
 	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(false, vbPinned)
 }
 
 // TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceCrossTaskQueue verifies
 // that an explicit target is validated against and routed on the child's task queue.
+// Flow:
+// 1. Register v1 as current on both task queues and child v2 as inactive on the child task queue.
+// 2. Verify child v2 belongs only to the child task queue, then start the parent pinned on v1.
+// 3. Parent starts a child with an explicit pinned override to child v2.
+// 4. Assert the child starts on v2 and records only the explicit override.
 func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceCrossTaskQueue() {
 	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(true, vbPinned)
 }
 
 // TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceOverAutoUpgradeParent
 // verifies that explicit child routing does not retain AutoUpgrade inheritance.
+// Flow:
+// 1. Register parent v1 as current and child v2 as inactive on the same task queue.
+// 2. Start the parent and establish AutoUpgrade behavior on v1.
+// 3. Parent starts a child with an explicit pinned override to v2.
+// 4. Assert the child starts on v2 and records no inherited AutoUpgrade metadata.
 func (s *Versioning3Suite) TestChildWorkflowExplicitPinnedOverrideTakesPrecedenceOverAutoUpgradeParent() {
 	s.testChildWorkflowExplicitPinnedOverrideTakesPrecedence(false, vbUnpinned)
 }
