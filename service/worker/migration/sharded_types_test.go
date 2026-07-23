@@ -286,11 +286,11 @@ func requireBucketInvariant(t *testing.T, b *shardBuckets) {
 		for _, runs := range byBID {
 			n += len(runs)
 		}
-		require.Greaterf(t, n, 0, "byShard[%d] present but empty", sh)
+		require.Positivef(t, n, "byShard[%d] present but empty", sh)
 		require.Equalf(t, n, b.counts[sh], "counts[%d] out of sync with byShard[%d]", sh, sh)
 	}
 	for sh, c := range b.counts {
-		require.Greaterf(t, c, 0, "counts[%d] present but non-positive", sh)
+		require.Positivef(t, c, "counts[%d] present but non-positive", sh)
 		_, ok := b.byShard[sh]
 		require.Truef(t, ok, "counts[%d] present with no byShard entry", sh)
 	}
@@ -427,7 +427,7 @@ func requireBatchInvariant(t *testing.T, b *inFlightBatches) {
 		require.Equalf(t, 1, n, "shard %d held by %d batches (must be exactly 1)", sh, n)
 		require.Truef(t, b.inFlight[sh], "shard %d held but missing from inFlight", sh)
 	}
-	require.Equalf(t, len(holders), len(b.inFlight),
+	require.Lenf(t, b.inFlight, len(holders),
 		"inFlight (%d entries) must match the union of held sets (%d shards)", len(b.inFlight), len(holders))
 }
 
