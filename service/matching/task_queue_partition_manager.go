@@ -748,11 +748,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	if deployment != nil {
-		if !pm.partition.SupportsVersioning() { //nolint:revive // nesting from legacy sticky check
-			// Worker commands and sticky partitions: skip versioning, use default queue.
-			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY { //nolint:staticcheck // SA9003: TODO stub
-				// TODO: reject poller of old sticky queue if newer version exist
-			}
+		// Use default unversioned queue if versioning is not supported.
+		if !pm.partition.SupportsVersioning() {
+			// TODO: for sticky queues, reject poller of old sticky queue if newer version exists.
 		} else {
 			// default queue should stay alive even if requests go to other queues
 			dbq.MarkAlive()
@@ -775,10 +773,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 			return nil, false, serviceerror.NewInvalidArgument("build ID must be provided when using worker versioning")
 		}
 
+		// Use default unversioned queue if versioning is not supported.
 		if !pm.partition.SupportsVersioning() {
-			// Worker commands and sticky partitions: skip versioning, use default queue.
+			// Sticky queues need additional handling: kick off a poller if a newer
+			// version exists (old versioning API), and clear the build ID for recordStart.
 			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-				// In the sticky case we always use the unversioned queue
+				// In the sticky case we always use the unversioned queue.
 				// For the old API, we may kick off this worker if there's a newer one.
 				oldVersioning, err := checkVersionForStickyPoll(versioningData, pollMetadata.workerVersionCapabilities)
 				if err != nil {
@@ -787,8 +787,8 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 				if !oldVersioning {
 					activeRules := getActiveRedirectRules(versioningData.GetRedirectRules())
-					terminalBuildId := findTerminalBuildId(buildId, activeRules) //nolint:staticcheck // pre-existing name
-					if terminalBuildId != buildId {                              //nolint:revive // pre-existing nesting
+					terminalBuildId := findTerminalBuildId(buildId, activeRules) //nolint:staticcheck
+					if terminalBuildId != buildId {                              //nolint:revive
 						return nil, false, serviceerror.NewNewerBuildExists(terminalBuildId)
 					}
 				}
