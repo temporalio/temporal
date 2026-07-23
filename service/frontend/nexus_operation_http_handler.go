@@ -42,6 +42,7 @@ type NexusOperationHTTPHandler struct {
 	auth                                 *authorization.Interceptor
 	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
+	callerRateLimitInterceptor           interceptor.CallerRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 }
@@ -60,6 +61,7 @@ func NewNexusOperationHTTPHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
+	callerRateLimitInterceptor interceptor.CallerRateLimitInterceptor,
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
@@ -76,6 +78,7 @@ func NewNexusOperationHTTPHandler(
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
+		callerRateLimitInterceptor:           callerRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
@@ -221,6 +224,7 @@ func (h *NexusOperationHTTPHandler) baseNexusContext(apiName string, header http
 	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
+		callerRateLimitInterceptor:           h.callerRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
 		apiName:                              apiName,

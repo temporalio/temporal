@@ -75,10 +75,24 @@ type contextOptions struct {
 	namespacePassive        bool
 	quota                   int
 	namespaceRateLimitAllow bool
+	callerRateLimitDeny     bool
 	rateLimitAllow          bool
 	redirectAllow           bool
 	headersBlacklist        []string
 }
+
+type fakeCallerRateLimitInterceptor struct {
+	deny bool
+}
+
+func (f fakeCallerRateLimitInterceptor) Allow(*namespace.Namespace, string, headers.HeaderGetter) error {
+	if f.deny {
+		return interceptor.ErrCallerRateLimitExceeded
+	}
+	return nil
+}
+
+var _ interceptor.CallerRateLimitInterceptor = fakeCallerRateLimitInterceptor{}
 
 func newOperationContext(options contextOptions) *operationContext {
 	oc := &operationContext{
@@ -150,6 +164,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		metrics.NoopMetricsHandler,
 	)
+	oc.callerRateLimitInterceptor = fakeCallerRateLimitInterceptor{deny: options.callerRateLimitDeny}
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},
 		make(map[string]int),
@@ -251,6 +266,145 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	snap := capture.Snapshot()
 	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "namespace_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_CallerRateLimited_ResultsInResourceExhausted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		callerRateLimitDeny:     true,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "caller rate limit exceeded", handlerError.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "caller_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_CallerRateLimitAllowed_Proceeds(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		callerRateLimitDeny:     false,
+		rateLimitAllow:          true,
+	})
+	err := oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	require.NoError(t, err)
+}
+
+func TestNexusInterceptRequest_CallerRateLimitPrecedesNamespaceRateLimit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: false,
+		callerRateLimitDeny:     true,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "caller rate limit exceeded", handlerError.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "caller_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_CallerRateLimitPrecedesNamespaceConcurrency(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   0,
+		namespaceRateLimitAllow: true,
+		callerRateLimitDeny:     true,
+		rateLimitAllow:          true,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "caller rate limit exceeded", handlerError.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "caller_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_CallerRateLimitPrecedesAllOtherLimiters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   0,
+		namespaceRateLimitAllow: false,
+		callerRateLimitDeny:     true,
+		rateLimitAllow:          false,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "caller rate limit exceeded", handlerError.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "caller_rate_limited"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_CallerRateLimitPrecedesGlobal(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		callerRateLimitDeny:     true,
+		rateLimitAllow:          false,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "caller rate limit exceeded", handlerError.Message)
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "caller_rate_limited"}, snap["test"][0].Tags)
 }
 
 func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *testing.T) {
