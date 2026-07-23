@@ -4,25 +4,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/tools/common/github"
 )
 
 func TestBuildFailureMessage(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 			CreatedAt:  time.Now(),
-		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890defghijk",
-			ShortSHA: "abc1234",
-			Author:   "Test Author",
-			Message:  "Test commit message",
 		},
 		FailedJobs: []github.Job{
 			{
@@ -36,60 +29,78 @@ func TestBuildFailureMessage(t *testing.T) {
 				URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/2",
 			},
 		},
+		Failures:  []string{"TestHistoryWorkflow", "TestMatchingWorkflow"},
 		TotalJobs: 5,
 	}
 
-	msg := BuildFailureMessage(report)
-
-	require.NotNil(t, msg, "BuildFailureMessage returned nil")
-	assert.Contains(t, msg.Text, "CI Failed")
-	assert.NotEmpty(t, msg.Blocks, "Message should have at least one block")
-
-	// Check that the first block contains the header
-	require.NotNil(t, msg.Blocks[0].Text)
-	assert.Contains(t, msg.Blocks[0].Text.Text, "CI Failed")
+	require.Equal(t, &SlackMessage{
+		Text: "CI Failed on Main",
+		Blocks: []SlackBlock{
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failures (2):* `TestHistoryWorkflow`, `TestMatchingWorkflow`",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failed jobs (2/5):* " +
+						"<https://github.com/temporalio/temporal/actions/runs/123456/job/1|test-job-1>, " +
+						"<https://github.com/temporalio/temporal/actions/runs/123456/job/2|test-job-2>",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "<https://github.com/temporalio/temporal/actions/runs/123456|View Run>",
+				},
+			},
+		},
+	}, BuildFailureMessage(report))
 }
 
 func TestFormatMessageForDebug(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890defghijk",
-			ShortSHA: "abc1234",
-			Author:   "Test Author",
-		},
-		FailedJobs: []github.Job{
-			{Name: "test-job-1", Conclusion: "failure"},
-		},
+		FailedJobs: []github.Job{{
+			Name:       "test-job-1",
+			Conclusion: "failure",
+			URL:        "https://github.com/temporalio/temporal/actions/runs/123456/job/1",
+		}},
+		Failures:  []string{"TestHistoryWorkflow"},
 		TotalJobs: 5,
 	}
 
-	output := FormatMessageForDebug(report)
-
-	assert.Contains(t, output, "CI Failed")
-	assert.Contains(t, output, "All Tests")
-	assert.Contains(t, output, "abc1234")
-	assert.Contains(t, output, "Test Author")
-	assert.Contains(t, output, "test-job-1")
+	require.Equal(t, "🚨 CI Failed on Main Branch 🚨\n\n"+
+		"Failures (1): `TestHistoryWorkflow`\n\n"+
+		"Failed jobs (1/5): test-job-1 (https://github.com/temporalio/temporal/actions/runs/123456/job/1)\n"+
+		"\nView Run: https://github.com/temporalio/temporal/actions/runs/123456\n",
+		FormatMessageForDebug(report))
 }
 
 func TestSlackMessageStructure(t *testing.T) {
 	report := &FailureReport{
-		Workflow: github.Run{
+		Run: github.Run{
 			Name:       "All Tests",
 			HeadBranch: "main",
 			HeadSHA:    "abc1234567890",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123",
-		},
-		Commit: CommitInfo{
-			SHA:      "abc1234567890",
-			ShortSHA: "abc1234",
-			Author:   "Test",
 		},
 		FailedJobs: []github.Job{
 			{Name: "job1", URL: "http://example.com/job1"},
@@ -97,27 +108,89 @@ func TestSlackMessageStructure(t *testing.T) {
 		TotalJobs: 3,
 	}
 
+	require.Equal(t, &SlackMessage{
+		Text: "CI Failed on Main",
+		Blocks: []SlackBlock{
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "*Failed jobs (1/3):* <http://example.com/job1|job1>",
+				},
+			},
+			{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: "<https://github.com/temporalio/temporal/actions/runs/123|View Run>",
+				},
+			},
+		},
+	}, BuildFailureMessage(report))
+}
+
+func TestBuildFailureMessageLimitsFailures(t *testing.T) {
+	report := &FailureReport{
+		Run: github.Run{
+			URL: "https://github.com/temporalio/temporal/actions/runs/123",
+		},
+		FailedJobs: []github.Job{
+			{Name: "job1", URL: "http://example.com/job1"},
+		},
+		Failures: []string{
+			"Test01",
+			"Test02",
+			"Test03",
+			"Test04",
+			"Test05",
+			"Test06",
+		},
+		TotalJobs: 3,
+	}
+
 	msg := BuildFailureMessage(report)
 
-	// Verify we have the expected number of blocks
-	// Header, Info, Summary, Jobs List, Link = 5 blocks
-	assert.Len(t, msg.Blocks, 5)
+	require.Len(t, msg.Blocks, 4)
+	require.Equal(t, SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: "*Failures (6):* `Test01`, `Test02`, `Test03`, `Test04`, `Test05`",
+		},
+	}, msg.Blocks[1])
+}
 
-	// Verify the info block has 4 fields
-	infoBlock := msg.Blocks[1]
-	assert.Len(t, infoBlock.Fields, 4)
+func TestIsFailedJobExcludesTestStatus(t *testing.T) {
+	require.True(t, isFailedJob(github.Job{
+		Name:       "Functional test (sqlite, shard1)",
+		Conclusion: github.ConclusionFailure,
+	}))
+	require.False(t, isFailedJob(github.Job{
+		Name:       testStatusJobName,
+		Conclusion: github.ConclusionFailure,
+	}))
+	require.False(t, isFailedJob(github.Job{
+		Name:       "Functional test (sqlite, shard1)",
+		Conclusion: github.ConclusionSuccess,
+	}))
 }
 
 func TestFilterCompleted(t *testing.T) {
 	tests := []struct {
 		name     string
 		runs     []github.Run
-		expected int
+		expected []github.Run
 	}{
 		{
-			name:     "empty slice",
-			runs:     []github.Run{},
-			expected: 0,
+			name: "empty slice",
+			runs: []github.Run{},
 		},
 		{
 			name: "all completed",
@@ -125,7 +198,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: "success"},
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "mixed with in-progress",
@@ -134,7 +210,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: ""}, // in-progress
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "with cancelled and skipped",
@@ -144,7 +223,10 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: "skipped"},
 				{Conclusion: "failure"},
 			},
-			expected: 2,
+			expected: []github.Run{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
 		},
 		{
 			name: "only in-progress",
@@ -152,14 +234,12 @@ func TestFilterCompleted(t *testing.T) {
 				{Conclusion: ""},
 				{Conclusion: ""},
 			},
-			expected: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterCompleted(tt.runs)
-			assert.Len(t, result, tt.expected)
+			require.Equal(t, tt.expected, filterCompleted(tt.runs))
 		})
 	}
 }
@@ -175,10 +255,9 @@ func TestSlowestRuns(t *testing.T) {
 		},
 	}
 
-	result := report.slowestRuns(3)
-
-	require.Len(t, result, 3)
-	require.Equal(t, "slowest", result[0].DisplayTitle)
-	require.Equal(t, "second slowest", result[1].DisplayTitle)
-	require.Equal(t, "medium", result[2].DisplayTitle)
+	require.Equal(t, []github.Run{
+		{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+		{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		{DisplayTitle: "medium", Duration: 20 * time.Minute},
+	}, report.slowestRuns(3))
 }

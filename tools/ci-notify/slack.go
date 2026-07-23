@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"go.temporal.io/server/tools/common/github"
 )
+
+const maxFailures = 5
 
 // SlackMessage represents a Slack Block Kit message
 type SlackMessage struct {
@@ -41,74 +41,60 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 		},
 	}
 
-	// Workflow and commit info
-	commitURL := github.CommitURL("temporalio/temporal", report.Commit.SHA)
-	infoBlock := SlackBlock{
-		Type: "section",
-		Fields: []SlackText{
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Workflow:*\n%s", report.Workflow.Name),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Branch:*\n`%s`", report.Workflow.HeadBranch),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Commit.ShortSHA),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Author:*\n%s", report.Commit.Author),
-			},
-		},
-	}
-
-	// Failure summary
-	summaryBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Failed Jobs:* %d of %d total jobs",
-				len(report.FailedJobs), report.TotalJobs),
-		},
-	}
-
 	// List of failed jobs
 	var failedJobNames []string
 	for _, job := range report.FailedJobs {
 		failedJobNames = append(failedJobNames,
-			fmt.Sprintf("• <%s|%s>", job.URL, job.Name))
+			fmt.Sprintf("<%s|%s>", job.URL, job.Name))
 	}
 
 	jobsBlock := SlackBlock{
 		Type: "section",
 		Text: &SlackText{
 			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Failed Jobs:*\n%s",
-				strings.Join(failedJobNames, "\n")),
+			Text: fmt.Sprintf("*Failed jobs (%d/%d):* %s",
+				len(report.FailedJobs),
+				report.TotalJobs,
+				strings.Join(failedJobNames, ", ")),
 		},
 	}
 
-	// Link to workflow run
+	blocks := []SlackBlock{headerBlock}
+	if len(report.Failures) > 0 {
+		failures := report.Failures
+		if len(failures) > maxFailures {
+			failures = failures[:maxFailures]
+		}
+
+		var failureLines []string
+		for _, failure := range failures {
+			failureLines = append(failureLines, fmt.Sprintf("`%s`", failure))
+		}
+		blocks = append(blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Failures (%d):* %s",
+					len(report.Failures),
+					strings.Join(failureLines, ", ")),
+			},
+		})
+	}
+	blocks = append(blocks, jobsBlock)
+
+	// Link to run
 	linkBlock := SlackBlock{
 		Type: "section",
 		Text: &SlackText{
 			Type: "mrkdwn",
-			Text: fmt.Sprintf("<%s|View Full Workflow Run>", report.Workflow.URL),
+			Text: fmt.Sprintf("<%s|View Run>", report.Run.URL),
 		},
 	}
+	blocks = append(blocks, linkBlock)
 
 	return &SlackMessage{
-		Text: fmt.Sprintf("CI Failed on Main: %s", report.Workflow.Name),
-		Blocks: []SlackBlock{
-			headerBlock,
-			infoBlock,
-			summaryBlock,
-			jobsBlock,
-			linkBlock,
-		},
+		Text:   "CI Failed on Main",
+		Blocks: blocks,
 	}
 }
 
@@ -116,15 +102,21 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
-	fmt.Fprintf(&sb, "Workflow: %s\n", report.Workflow.Name)
-	fmt.Fprintf(&sb, "Branch: %s\n", report.Workflow.HeadBranch)
-	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Commit.ShortSHA, report.Commit.Author)
-	fmt.Fprintf(&sb, "Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs)
-	fmt.Fprintln(&sb, "Failed Jobs:")
-	for _, job := range report.FailedJobs {
-		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
+	if len(report.Failures) > 0 {
+		var failures []string
+		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
+			failures = append(failures, fmt.Sprintf("`%s`", failure))
+		}
+		fmt.Fprintf(&sb, "Failures (%d): %s\n", len(report.Failures), strings.Join(failures, ", "))
+		fmt.Fprintln(&sb)
 	}
-	fmt.Fprintf(&sb, "\nView Full Workflow Run: %s\n", report.Workflow.URL)
+
+	var failedJobNames []string
+	for _, job := range report.FailedJobs {
+		failedJobNames = append(failedJobNames, fmt.Sprintf("%s (%s)", job.Name, job.URL))
+	}
+	fmt.Fprintf(&sb, "Failed jobs (%d/%d): %s\n", len(report.FailedJobs), report.TotalJobs, strings.Join(failedJobNames, ", "))
+	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()
 }
 
