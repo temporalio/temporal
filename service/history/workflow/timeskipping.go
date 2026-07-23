@@ -323,8 +323,26 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 		return nil
 	}
 	return &commonpb.TimeSkippingInfo{
-		CurrentTime: timestamppb.New(currentTime),
-		IsRunning:   util.IsEnabled(),
+		CurrentTime:     timestamppb.New(currentTime),
+		IsRunning:       util.IsEnabled(),
+		FastForwardInfo: util.ToFastForwardInfo(),
+	}
+}
+
+// ToFastForwardInfo maps the persisted fast-forward, if any, to its API shape. Returns nil when the
+// execution has no fast-forward so the describe response omits the field entirely.
+func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFastForwardInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil {
+		return nil
+	}
+	return &commonpb.TimeSkippingFastForwardInfo{
+		TargetTime:    ff.GetTargetTime(),
+		HasCompleted:  ff.GetHasReached(),
+		FastForwardId: util.tsi.GetConfig().GetFastForwardId(),
 	}
 }
 

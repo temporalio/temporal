@@ -1634,6 +1634,29 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.NotNil(info)
 		s.True(info.GetIsRunning())
 		s.Equal(now, info.GetCurrentTime().AsTime())
+		s.Nil(info.GetFastForwardInfo(), "no fast-forward set")
+	})
+
+	s.Run("ToDescribeInfoWithFastForward", func() {
+		now := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+		targetTime := now.Add(time.Hour)
+		util := NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:       true,
+				FastForwardId: "ff-1",
+			},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(targetTime),
+				HasReached: true,
+			},
+		})
+		info := util.ToDescribeInfo(now)
+		s.NotNil(info)
+		ff := info.GetFastForwardInfo()
+		s.NotNil(ff)
+		s.Equal(targetTime, ff.GetTargetTime().AsTime())
+		s.True(ff.GetHasCompleted())
+		s.Equal("ff-1", ff.GetFastForwardId())
 	})
 
 	s.Run("ToDescribeInfoDisabled", func() {
