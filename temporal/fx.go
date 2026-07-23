@@ -414,7 +414,7 @@ type (
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		TestHooks                       testhooks.TestHooks
-		PerServiceFxOptions             map[primitives.ServiceName][]fx.Option  `optional:"true"`
+		PerServiceFxOptions             map[primitives.ServiceName][]fx.Option `optional:"true"`
 	}
 )
 
