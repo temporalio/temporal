@@ -52,10 +52,29 @@ func (s *standaloneActivityTestSuite) TestParityNonRetryableTimeout() {
 	})
 }
 
+// A RespondActivityTaskFailed with an omitted Failure must be treated as retryable (parity with WFA),
+// scheduling attempt 2 rather than closing the activity with no consumable outcome.
+func (s *standaloneActivityTestSuite) TestParityNilFailureRetryable() {
+	env := s.newTestEnv()
+	t := s.T()
+
+	t.Run("WorkflowActivity", func(t *testing.T) {
+		d := &wfaDriver{s: s, env: env}
+		require.EqualValues(t, 2, d.start_Poll_FailNilFailure_SecondAttempt(t),
+			"a nil failure must be retryable and schedule attempt 2, not close the activity")
+	})
+	t.Run("StandaloneActivity", func(t *testing.T) {
+		d := &saaDriver{s: s, env: env}
+		require.EqualValues(t, 2, d.start_Poll_FailNilFailure_SecondAttempt(t),
+			"a nil failure must be retryable and schedule attempt 2, not close the activity")
+	})
+}
+
 // driver is the interface implemented by the WFA and SAA drivers.
 type driver interface {
 	start_Poll_StartToCloseTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus
 	start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.ActivityExecutionStatus
+	start_Poll_FailNilFailure_SecondAttempt(t *testing.T) int32
 }
 
 // reproTimeout is the timeout under test, kept short so it fires within the test.
@@ -243,6 +262,39 @@ func (d *saaDriver) start_Poll_HeartbeatTimeoutElapses(t *testing.T) enumspb.Act
 	d.pollTask(t)
 	d.pollActivityExecution(t)
 	return d.describeActivity(t).GetInfo().GetStatus()
+}
+
+func (d *saaDriver) start_Poll_FailNilFailure_SecondAttempt(t *testing.T) int32 { //nolint:staticcheck // ST1003: underscores
+	d.startRetryable(t, dispatchInterval, 2)
+	d.pollTask(t) // attempt 1
+	d.respondFailedNilFailure(t)
+	return d.pollAttempt(t)
+}
+
+// respondFailedNilFailure fails the current attempt with an omitted Failure.
+func (d *saaDriver) respondFailedNilFailure(t *testing.T) {
+	_, err := d.env.FrontendClient().RespondActivityTaskFailed(d.s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: d.env.Namespace().String(),
+		TaskToken: d.token,
+		Identity:  "worker",
+		// Failure intentionally omitted.
+	})
+	require.NoError(t, err)
+}
+
+// pollAttempt polls for a redispatched task and returns its attempt number, or 0 if none is dispatched.
+func (d *saaDriver) pollAttempt(t *testing.T) int32 {
+	ctx, cancel := context.WithTimeout(d.s.Context(), 10*time.Second)
+	defer cancel()
+	resp, err := d.env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: d.env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: d.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "worker",
+	})
+	if err != nil || resp.GetActivityId() == "" {
+		return 0
+	}
+	return resp.GetAttempt()
 }
 
 // pollActivityExecution long-polls until the activity reaches a terminal outcome.
@@ -596,6 +648,13 @@ func (d *wfaDriver) start_Poll_FailRetryably_BackoffElapses_Paused(t *testing.T)
 	return d.observe(t)
 }
 
+func (d *wfaDriver) start_Poll_FailNilFailure_SecondAttempt(t *testing.T) int32 { //nolint:staticcheck // ST1003: underscores
+	d.startRetryable(t, dispatchInterval, 2)
+	d.pollTask(t) // attempt 1
+	d.respondFailedNilFailure(t)
+	return d.pollAttempt(t)
+}
+
 // startRetryable starts a workflow that schedules one activity whose failures are retryable, with a
 // constant backoff of retryInterval.
 func (d *wfaDriver) startRetryable(t *testing.T, retryInterval time.Duration, maxAttempts int32) {
@@ -619,6 +678,17 @@ func (d *wfaDriver) startRetryable(t *testing.T, retryInterval time.Duration, ma
 func (d *wfaDriver) failRetryably(t *testing.T) {
 	_, err := d.env.FrontendClient().RespondActivityTaskFailed(d.s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
 		Namespace: d.env.Namespace().String(), TaskToken: d.token, Identity: "worker", Failure: retryableFailure(),
+	})
+	require.NoError(t, err)
+}
+
+// respondFailedNilFailure fails the current attempt with an omitted Failure.
+func (d *wfaDriver) respondFailedNilFailure(t *testing.T) {
+	_, err := d.env.FrontendClient().RespondActivityTaskFailed(d.s.Context(), &workflowservice.RespondActivityTaskFailedRequest{
+		Namespace: d.env.Namespace().String(),
+		TaskToken: d.token,
+		Identity:  "worker",
+		// Failure intentionally omitted.
 	})
 	require.NoError(t, err)
 }
@@ -673,6 +743,21 @@ func (d *wfaDriver) awaitObserve(t *testing.T, pred func(activityInfoProjection)
 
 // wfaActivityID is the fixed ID the helper workflow assigns its activity.
 const wfaActivityID = "act"
+
+// pollAttempt polls for a redispatched task and returns its attempt number, or 0 if none is dispatched.
+func (d *wfaDriver) pollAttempt(t *testing.T) int32 {
+	ctx, cancel := context.WithTimeout(d.s.Context(), 10*time.Second)
+	defer cancel()
+	resp, err := d.env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: d.env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: d.activityTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "worker",
+	})
+	if err != nil || resp.GetActivityId() == "" {
+		return 0
+	}
+	return resp.GetAttempt()
+}
 
 // workflowActivityParams configures the single activity the helper workflow schedules.
 type workflowActivityParams struct {
