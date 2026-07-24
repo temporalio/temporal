@@ -11,7 +11,9 @@ The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
   safety/liveness rulebook, fact log, gRPC interceptor, OTEL span processor. Unit-tested.
 - **Domain** (`tests/umpire/`): 4 entities, 14 facts, 12 registered rules (4 safety,
-  8 liveness) + 1 generic rule built-but-unregistered, each with a positive + negative test.
+  8 liveness), each with a positive + negative test. The generic
+  `EntityTransitionLegality` is now registered (see below), so there is no
+  built-but-unregistered rule left.
 - **All 14 facts decode from live traffic.** Facts now carry the namespace, so entities are
   rooted at a `Namespace` (`EntityPath.Ancestors`, root-first).
 - **Namespace-scoped, per-test enforcement is wired.** `CheckNamespace` + `PurgeNamespace`
@@ -163,8 +165,8 @@ generic rules** would. Annotate each FSM with metadata (which states are termina
 transitions are legal, an optional per-state "must progress within"), then provide generic
 rules that consume it:
 
-- generic **legal-transition / monotonic** safety → subsumes `StageMonotone` and would catch
-  illegal transitions for free;
+- generic **legal-transition / monotonic** safety → subsumes `StageMonotone` and catches
+  illegal transitions for free (**done**: `EntityTransitionLegality` over `Classify`);
 - generic **reach-a-terminal-state** liveness → subsumes `LossPrevention`, `Completion`, and
   the single-entity "stuck" rules;
 - generic **state ↔ marker/timestamp consistency** safety → subsumes `StateConsistency`.
@@ -184,20 +186,34 @@ guarded `if Can(){Event()}` pattern dropped silently), plus `Lifecycled` + `Chan
 for type-erased iteration. **All three entities** (`WorkflowUpdate`, `WorkflowTask`,
 `Workflow`) are migrated onto it — looplab now appears only inside `lifecycle.go`.
 
+The FSM is now an **executable transition function** (an oracle), not just a legal-edge
+guard. `Lifecycle.Classify(event)` is a pure, three-valued function — `Advance` (a legal
+forward edge), `NoOp` (a benign duplicate / late / out-of-order / post-terminal
+re-observation), or `Illegal` (impossible given the observed history) — and `Fire` is defined
+in terms of it. Modelling the benign re-observations as `NoOp` (rather than lumping every
+non-edge into "illegal") is what removed the false-positive vector. `States`/`Events`/
+`Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpire/entity`
+checks every default lifecycle is sound and `Classify` is total, server-free in ms — the
+analog of the SAA model's `validate` package). This realizes item #1 of `SAAMODEL.md`.
+
 - `EntityProgress` (liveness, generic) is **registered and replaces** `WorkflowUpdateLossPrevention`
   + `WorkflowUpdateCompletion`, which are deleted. Parity is exact: the update declares
   `MustProgress = {admitted, accepted}`, so it fires on exactly the states those two rules
   did and stays silent on `unspecified`. Other entities declare no must-progress states, so
   the rule is a safe no-op for them.
-- `EntityTransitionLegality` (safety, generic) is **built and unit-tested but not registered**:
-  "illegal transition" over-captures benign races (e.g. a duplicate accepted span, or a
-  best-effort settle), so it would false-positive under enforcement. `WorkflowUpdateStageMonotone`
-  stays registered until event-time ordering makes illegal transitions unambiguous.
+- `EntityTransitionLegality` (safety, generic) is **now registered and replaces**
+  `WorkflowUpdateStageMonotone` (deleted): a stage regression is simply not a legal edge, so
+  the generic conformance rule subsumes it and checks every `Lifecycled` type at once. The
+  previous blocker — "illegal transition" over-capturing benign races (a duplicate accepted
+  span, a best-effort settle) — is gone now that `Classify` returns `NoOp` for those. A
+  genuinely impossible forward span from the initial state (e.g. accept-before-admit) is still
+  flagged. Residual gate: suite-wide validation under enforcement is still owed, since a true
+  cross-branch reorder without event-time could in principle still surface as illegal.
 
 `WorkflowUpdateStateConsistency` is **deleted**: the update's `*At` accessors are now derived
 from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp set" holds by
 construction — there is nothing left to check. Remaining: close the close-signal / event-time
-fidelity gaps, then register `EntityTransitionLegality` and retire `StageMonotone`.
+fidelity gaps to sharpen the residual cross-branch-reorder case for `EntityTransitionLegality`.
 
 ## Gate run (priority 0) — first result
 
@@ -336,7 +352,7 @@ is the pragmatic target now and the down payment on generation later.
 **First cut:** Phases 0–2 alone deliver the dead-rule report and are shippable independently
 of the CI gate (Phase 3).
 
-## Rule inventory (12 registered + 1 built-unregistered)
+## Rule inventory (12 registered)
 
 Naming: struct drops the `Rule` suffix; `Name()` returns struct name + `"Rule"` (enforced at
 registration).
@@ -348,7 +364,7 @@ registration).
 | `SpeculativeTaskCreation` | a speculative task must not coexist with a pending normal task for the same workflow | groups by `workflowID:runID` |
 | `WorkflowUpdateHistoryOrdering` | update not in `accepted` after workflow completed | subset of `Closure` |
 | `WorkflowUpdateClosure` | no update accepted/completed after workflow `CompletedAt` | needs live workflow completion |
-| `WorkflowUpdateStageMonotone` | update stage never regresses | stateful (`highWater`); superseded by `EntityTransitionLegality` once ordering is sound |
+| `EntityTransitionLegality` (generic) | no `Lifecycled` entity observes an illegal transition | over `Lifecycle.Classify`; subsumes the former `WorkflowUpdateStageMonotone` (a regression is not a legal edge), all entity types at once |
 
 ### Liveness — must eventually hold; unresolved at teardown ⇒ violation
 
@@ -363,22 +379,22 @@ registration).
 | `WorkflowUpdateWorkerSkipped` | update not left `admitted` after a task was polled post-admit | admitted-stuck family |
 | `WorkflowUpdateContextClear` | non-terminal update not stranded with no pending task (workflow not completed) | defers completed case to `Closure` |
 
-### Built but not registered
-
-| Rule | Invariant | Why gated |
-|---|---|---|
-| `EntityTransitionLegality` (generic safety) | no lifecycle entity observes an illegal transition | over-captures benign races (duplicate spans) until event-time ordering lands |
-
 Removed by consolidation: `WorkflowUpdateLossPrevention`, `WorkflowUpdateCompletion` (→ `EntityProgress`),
-`WorkflowUpdateStateConsistency` (now structural via derived `*At` accessors).
+`WorkflowUpdateStageMonotone` (→ `EntityTransitionLegality`), `WorkflowUpdateStateConsistency`
+(now structural via derived `*At` accessors).
 
 ## Done recently
 
+`Lifecycle` upgraded to an **executable transition function**: pure three-valued
+`Classify` (`Advance`/`NoOp`/`Illegal`) with `Fire` defined over it, plus
+`States`/`Events`/`Reachable`/`Validate` and server-free Tier-1 static validation of every
+default lifecycle (`SAAMODEL.md` #1). Generic `EntityTransitionLegality` **registered**,
+replacing (and deleting) `WorkflowUpdateStageMonotone` — benign duplicate/late/post-terminal
+spans now classify as `NoOp`, removing the false-positive that had gated it.
 Reusable `Lifecycle` FSM primitive (entry timestamps, derived terminals, `MustProgress`,
 illegal-transition capture) adopted by all entities; generic `EntityProgress` liveness rule
 registered, replacing `LossPrevention` + `Completion`; `WorkflowUpdateStateConsistency`
-deleted (now structural — `*At` accessors derived from lifecycle entry times); generic
-`EntityTransitionLegality` built (unregistered).
+deleted (now structural — `*At` accessors derived from lifecycle entry times).
 Namespace-scoped `CheckNamespace`/`PurgeNamespace` with per-test teardown enforcement across
 the functional suite (facts now namespace-rooted via `EntityPath.Ancestors`); live update-
 lifecycle decoding; live workflow completion (`WorkflowExecutionCompleted`); duplicate dedup

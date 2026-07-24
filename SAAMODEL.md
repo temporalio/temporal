@@ -161,12 +161,18 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
 
 ## What to steal (concrete, tied to `UMPIRE_PLAN.md`)
 
-1. **Give each entity an executable transition function, not just a Lifecycle FSM.** We already
-   have `Lifecycle` with legal transitions and terminals; add per-event *outcome prediction*
-   (next state + expected API result). Then one generic **conformance rule** checks observed
-   transitions against it. This subsumes `StageMonotone`, `EntityTransitionLegality`, and
-   `StateConsistency` (all flagged for consolidation) *and* upgrades "catch anticipated badness"
-   to "catch any deviation." It also finally answers the vacuous-rule worry structurally.
+1. **Give each entity an executable transition function, not just a Lifecycle FSM.** ✅ **Done.**
+   `Lifecycle` now carries a pure, three-valued transition function `Classify(event) → Outcome`
+   (`Advance` / `NoOp` / `Illegal`), mirroring the SAA model's advance/noop/reject; `Fire` is
+   defined over it. Modelling benign duplicate/late/out-of-order/post-terminal spans as `NoOp`
+   (instead of lumping every non-edge into "illegal") removed the exact false-positive that had
+   kept the generic conformance rule unregistered. The generic `EntityTransitionLegality` is now
+   registered and **replaces** `WorkflowUpdateStageMonotone` (deleted) — a regression is just not
+   a legal edge — checking every `Lifecycled` type at once. `States`/`Events`/`Reachable`/
+   `Validate` expose the graph for **Tier-1 static validation** (`tests/umpire/entity` proves each
+   default lifecycle is sound and `Classify` total, server-free in ms — the analog of the SAA
+   `validate` package). Remaining next step toward full parity: predict the *API result* per edge
+   too (see item 5), not just the state transition. See `UMPIRE_PLAN.md`.
 
 2. **Derive the scenario/coverage catalog from the model with `Reachable`.** Phase 2 of the
    Scenario plan wants to seed the catalog from rule preconditions and emit a dead-rule report.

@@ -48,7 +48,13 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	// are derived from the lifecycle's entry times, so they cannot drift.)
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateStageMonotone{} })
+	// EntityTransitionLegality is the generic conformance rule over any Lifecycled
+	// entity. It subsumes WorkflowUpdateStageMonotone (a stage regression is simply
+	// not a legal edge) and checks every entity type at once. It became safe to
+	// enforce once the Lifecycle's executable transition function began classifying
+	// benign duplicate/late/out-of-order/post-terminal spans as NoOp rather than
+	// illegal — the false-positive vector that previously kept it unregistered.
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.EntityTransitionLegality{} })
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
@@ -61,12 +67,6 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContinueAsNew{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateWorkerSkipped{} })
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContextClear{} })
-
-	// rule.EntityTransitionLegality is a generic safety rule over any Lifecycled
-	// entity (it would subsume WorkflowUpdateStageMonotone). Left UNregistered for
-	// now: "illegal transition" over-captures benign races (e.g. a duplicate
-	// accepted span), which would false-positive under enforcement. Enable it once
-	// event-time ordering makes illegal transitions unambiguous (UMPIRE_PLAN.md).
 
 	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
 		return nil, fmt.Errorf("umpire: failed to initialize rules: %w", err)

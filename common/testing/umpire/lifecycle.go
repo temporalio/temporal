@@ -2,7 +2,9 @@ package umpire
 
 import (
 	"context"
+	"fmt"
 	"iter"
+	"sort"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -13,6 +15,36 @@ import (
 type Transition struct {
 	Event string
 	From  []string
+	To    string
+}
+
+// TransitionKind is the three-valued verdict of applying an event in a given
+// state — the output of the Lifecycle's executable transition function. Modelling
+// every (state, event) pair with one of these three outcomes is what turns a bare
+// FSM into an oracle: there is no fourth "we never thought about this" case that
+// silently passes.
+type TransitionKind int
+
+const (
+	// Advance: the event is a legal edge to a different state; the machine moves.
+	Advance TransitionKind = iota
+	// NoOp: the event is not a forward edge, but it is a benign re-observation — a
+	// duplicate / late / out-of-order fact consistent with the progress already
+	// made, or any event arriving once the entity is terminal. State is unchanged
+	// and it is NOT a violation. This is the case that made the generic
+	// transition-legality rule too noisy to enforce before it was modelled.
+	NoOp
+	// Illegal: the event is impossible given the observed history — neither a legal
+	// edge nor consistent with the progress already made. A real violation.
+	Illegal
+)
+
+// Outcome is the predicted result of applying an event from a state: the pure,
+// inspectable output of Classify. To == From for NoOp and Illegal.
+type Outcome struct {
+	Kind  TransitionKind
+	From  string
+	Event string
 	To    string
 }
 
@@ -48,6 +80,12 @@ type IllegalTransition struct {
 // Event/Can/SetState remain for compatibility and direct manipulation in tests.
 type Lifecycle struct {
 	fsm          *fsm.FSM
+	initial      string
+	states       []string                     // all declared states, stable sorted
+	eventNames   []string                     // all declared event names, stable sorted
+	edges        map[string]map[string]string // from -> event -> to (legal edges)
+	eventDests   map[string][]string          // event -> declared destination states
+	canReach     map[string]map[string]bool   // transitive closure over legal edges (≥1 hop)
 	terminal     map[string]bool
 	mustProgress map[string]bool
 	entered      map[string]time.Time
@@ -59,12 +97,27 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 	events := make(fsm.Events, 0, len(spec.Transitions))
 	srcSeen := map[string]bool{}
 	dstSeen := map[string]bool{}
+	edges := map[string]map[string]string{}
+	eventDestSet := map[string]map[string]bool{}
+	stateSet := map[string]bool{spec.Initial: true}
+	eventSet := map[string]bool{}
 	for _, t := range spec.Transitions {
 		events = append(events, fsm.EventDesc{Name: t.Event, Src: t.From, Dst: t.To})
+		eventSet[t.Event] = true
+		stateSet[t.To] = true
+		dstSeen[t.To] = true
+		if eventDestSet[t.Event] == nil {
+			eventDestSet[t.Event] = map[string]bool{}
+		}
+		eventDestSet[t.Event][t.To] = true
 		for _, s := range t.From {
 			srcSeen[s] = true
+			stateSet[s] = true
+			if edges[s] == nil {
+				edges[s] = map[string]string{}
+			}
+			edges[s][t.Event] = t.To
 		}
-		dstSeen[t.To] = true
 	}
 
 	terminal := spec.Terminal
@@ -83,27 +136,112 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		mustProgress[s] = true
 	}
 
+	eventDests := map[string][]string{}
+	for e, set := range eventDestSet {
+		eventDests[e] = sortedKeys(set)
+	}
+
 	return &Lifecycle{
 		fsm:          fsm.NewFSM(spec.Initial, events, fsm.Callbacks{}),
+		initial:      spec.Initial,
+		states:       sortedKeys(stateSet),
+		eventNames:   sortedKeys(eventSet),
+		edges:        edges,
+		eventDests:   eventDests,
+		canReach:     reachClosure(edges),
 		terminal:     terminal,
 		mustProgress: mustProgress,
 		entered:      map[string]time.Time{spec.Initial: time.Now()},
 	}
 }
 
-// Fire attempts the transition for event. If it is legal, the machine advances
-// and the destination's entry time is stamped (first entry wins); it returns
-// true. If it is not legal, the attempt is recorded as an IllegalTransition and
-// it returns false. This replaces the guarded `if Can(x) { Event(x) }` pattern,
-// which silently drops impossible transitions.
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// reachClosure returns, for each state, the set of states reachable from it by
+// following one or more legal edges (self-loops excluded).
+func reachClosure(edges map[string]map[string]string) map[string]map[string]bool {
+	adj := map[string][]string{}
+	for from, evs := range edges {
+		for _, to := range evs {
+			if to != from {
+				adj[from] = append(adj[from], to)
+			}
+		}
+	}
+	reach := map[string]map[string]bool{}
+	for from := range edges {
+		seen := map[string]bool{}
+		queue := append([]string{}, adj[from]...)
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			if seen[cur] {
+				continue
+			}
+			seen[cur] = true
+			queue = append(queue, adj[cur]...)
+		}
+		reach[from] = seen
+	}
+	return reach
+}
+
+// Classify predicts the Outcome of applying event from the current state, purely
+// from the spec and the entity's observed history. It is the Lifecycle's
+// executable transition function; Fire is defined in terms of it, and rules or
+// tools can consult it directly. It never panics: every (state, event) pair maps
+// to exactly one of Advance / NoOp / Illegal.
+func (l *Lifecycle) Classify(event string) Outcome {
+	from := l.fsm.Current()
+	if to, ok := l.edges[from][event]; ok {
+		kind := Advance
+		if to == from {
+			kind = NoOp // self-loop: legal, but no movement
+		}
+		return Outcome{Kind: kind, From: from, Event: event, To: to}
+	}
+	// No forward edge. Decide whether this is a benign re-observation or illegal.
+	if l.terminal[from] {
+		// A terminal entity absorbs every further event as a stale no-op: once
+		// closed, late/duplicate facts about it carry no new legal transition.
+		return Outcome{Kind: NoOp, From: from, Event: event, To: from}
+	}
+	for _, d := range l.eventDests[event] {
+		// The event announces reaching d. If we are already at d, or d lies behind
+		// our current state, this is a duplicate / late / out-of-order fact that is
+		// consistent with the progress we have already made — benign, not illegal.
+		if d == from || l.canReach[d][from] {
+			return Outcome{Kind: NoOp, From: from, Event: event, To: from}
+		}
+	}
+	return Outcome{Kind: Illegal, From: from, Event: event, To: from}
+}
+
+// Fire applies event according to Classify. On Advance the machine moves and the
+// destination's entry time is stamped (first entry wins), returning true. On NoOp
+// (a benign duplicate/stale/out-of-order re-observation) nothing changes and it
+// returns false. On Illegal the attempt is recorded as an IllegalTransition and it
+// returns false. This replaces the guarded `if Can(x) { Event(x) }` pattern, which
+// silently dropped both impossible transitions and benign re-observations alike.
 func (l *Lifecycle) Fire(ctx context.Context, event string) bool {
-	if !l.fsm.Can(event) {
-		l.illegal = append(l.illegal, IllegalTransition{From: l.fsm.Current(), Event: event, At: time.Now()})
+	switch o := l.Classify(event); o.Kind {
+	case Advance:
+		_ = l.fsm.Event(ctx, event)
+		l.stampEntry()
+		return true
+	case NoOp:
+		return false
+	default: // Illegal
+		l.illegal = append(l.illegal, IllegalTransition{From: o.From, Event: event, At: time.Now()})
 		return false
 	}
-	_ = l.fsm.Event(ctx, event)
-	l.stampEntry()
-	return true
 }
 
 func (l *Lifecycle) stampEntry() {
@@ -155,6 +293,46 @@ func (l *Lifecycle) Terminal(state string) bool { return l.terminal[state] }
 
 // Illegal returns the illegal transitions observed so far.
 func (l *Lifecycle) Illegal() []IllegalTransition { return l.illegal }
+
+// States returns all states declared by the spec (including the initial state), sorted.
+func (l *Lifecycle) States() []string { return append([]string(nil), l.states...) }
+
+// Events returns all event names declared by the spec, sorted.
+func (l *Lifecycle) Events() []string { return append([]string(nil), l.eventNames...) }
+
+// Reachable returns the set of states reachable from the initial state by
+// following legal edges. It is structural — independent of observed history — and
+// is the coverage target for exploring or validating the lifecycle.
+func (l *Lifecycle) Reachable() map[string]bool {
+	out := map[string]bool{l.initial: true}
+	for s := range l.canReach[l.initial] {
+		out[s] = true
+	}
+	return out
+}
+
+// Validate is the Tier-1 static check on the spec: it needs no server and catches
+// spec drift up front. It verifies the initial state is set, every declared state
+// is reachable from it (no dead states), and terminal states have no outgoing
+// edges. Classify's totality (every state × event yields a defined Outcome) holds
+// by construction, so it needs no runtime assertion here.
+func (l *Lifecycle) Validate() error {
+	if l.initial == "" {
+		return fmt.Errorf("lifecycle: empty initial state")
+	}
+	reachable := l.Reachable()
+	for _, s := range l.states {
+		if !reachable[s] {
+			return fmt.Errorf("lifecycle: state %q is unreachable from initial %q", s, l.initial)
+		}
+	}
+	for s := range l.terminal {
+		if len(l.edges[s]) > 0 {
+			return fmt.Errorf("lifecycle: terminal state %q has outgoing transitions", s)
+		}
+	}
+	return nil
+}
 
 // Lifecycled is implemented by entities backed by a Lifecycle, letting generic
 // rules operate over any such entity regardless of its concrete type.
