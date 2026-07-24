@@ -37,7 +37,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-) (_ *historyservice.QueryWorkflowResponse, retError error) {
+) (resp *historyservice.QueryWorkflowResponse, retError error) {
 	scope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -78,6 +78,26 @@ func Invoke(
 		// Do not clear mutable state when query failed. Clear mutable state will fail other buffered pending queries.
 		// Note: QueryWorkflow should not alter mutable state, so it is safe to ignore error and not clear ms.
 		workflowLease.GetReleaseFn()(nil)
+	}()
+	defer func() {
+		if retError != nil || resp.GetResponse() == nil {
+			return
+		}
+		// Add link to Workflow regardless of query status as long as there isnt an error.
+		reason := "Query processed"
+		if resp.Response.QueryRejected != nil {
+			reason = "Query rejected"
+		}
+		resp.Response.Link = &commonpb.Link{
+			Variant: &commonpb.Link_Workflow_{
+				Workflow: &commonpb.Link_Workflow{
+					Namespace:  request.Request.GetNamespace(),
+					WorkflowId: request.Request.Execution.GetWorkflowId(),
+					RunId:      request.Request.Execution.GetRunId(),
+					Reason:     reason,
+				},
+			},
+		}
 	}()
 
 	// Context metadata is automatically set during mutable state transaction close for operations that mutate state.
