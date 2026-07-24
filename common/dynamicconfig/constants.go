@@ -905,6 +905,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10000,
 		`VisibilityArchivalQueryMaxPageSize is the maximum page size for a visibility archival query`,
 	)
+	VisibilityArchivalQueryDefaultPageSize = NewGlobalIntSetting(
+		"frontend.visibilityArchivalQueryDefaultPageSize",
+		1000,
+		`VisibilityArchivalQueryDefaultPageSize is the default page size for a visibility archival query when the caller omits PageSize. Should not exceed frontend.visibilityArchivalQueryMaxPageSize.`,
+	)
 	EnableServerVersionCheck = NewGlobalBoolSetting(
 		"frontend.enableServerVersionCheck",
 		os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == "",
