@@ -1076,22 +1076,16 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
 }
 
-// TestBacklogDelivery_WritePathWakesStuckReader verifies the write-path recovery for stuck fair readers.
-// When the fair task reader is in state {atEnd=false, readPending=false, backoffTimer=nil},
-// a write via SpoolTask calls wroteNewTasks -> mergeTasks(mergeWrite). The fix adds a call
-// to maybeReadTasksLocked() in the write path, which triggers a DB read that picks up the
-// task and delivers it to the matcher.
-func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader() {
+// TestFairReaderReMergeOfCompletedWriteKeepsReadLevel reproduces the write/read race that
+// triggered a bug in fair reader.
+func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsReadLevel() {
 	if !s.fairness {
-		s.T().Skip("only applies to fair backlog manager")
+		s.T().Skip("the stuck-reader bug is specific to the fair task reader")
 	}
-
 	s.setupToCaptureTasks()
 
-	// Enable the write-path recovery dynamic config for this test.
-	s.cfgcli.OverrideValue(dynamicconfig.MatchingForceReadTasksOnWrite.Key(), true)
-
-	// Set up initial qkey in DB so the initial read finds an empty queue.
+	// Initialize the backlog manager so its DB (ack levels, subqueue state) is set up. The real
+	// subqueue reader will just read the empty queue and go idle; we drive our own reader below.
 	qkey := s.ptqMgr.QueueKey()
 	_, err := s.taskMgr.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{
 		RangeID: 1,
@@ -1102,58 +1096,73 @@ func (s *BacklogManagerTestSuite) TestBacklogDelivery_WritePathWakesStuckReader(
 		},
 	})
 	s.Require().NoError(err)
-
+	blm := s.blm.(*fairBacklogManagerImpl)
 	s.blm.Start()
-	defer s.blm.Stop()
+	// We advance our reader's ack level past the real (empty) subqueue reader's; skip the final
+	// ack-level write on Stop so it isn't flagged as moving backwards.
+	defer func() { blm.skipFinalUpdate.Store(true); blm.Stop() }()
 	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
-	// Wait for the initial empty read to complete (reader reaches atEnd=true).
-	await.RequireTrue(s.T(), func() bool {
-		return s.taskMgr.getGetTasksCount(qkey) == 1
-	}, 5*time.Second, 10*time.Millisecond)
+	// Drive our own reader so the async read loop doesn't race with our hand-sequenced merges.
+	// readPending stays false so a mergeWrite is actually processed (the mergeTasks wrapper defers
+	// writes while a read is pending); we keep the reader atEnd=true throughout so no completeTask
+	// spawns an async read.
+	tr := newFairTaskReader(blm, subqueueZero, fairLevel{})
 
-	// Put the reader into the stuck state: atEnd=false, readPending=false, backoffTimer=nil.
-	blm := s.blm.(*fairBacklogManagerImpl)
-	blm.subqueueLock.Lock()
-	reader := blm.subqueues[subqueueZero]
-	blm.subqueueLock.Unlock()
+	mkTask := func(id int64) *persistencespb.AllocatedTaskInfo {
+		return &persistencespb.AllocatedTaskInfo{
+			TaskPass: 1,
+			TaskId:   id,
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtc(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			},
+		}
+	}
+	lvl := func(id int64) fairLevel { return fairLevel{pass: 1, id: id} }
+	finish := func(id int64) {
+		for _, t := range s.capturedTasks() {
+			if t.fairLevel() == lvl(id) {
+				t.finish(taskFinishResult{consumedToken: true})
+				return
+			}
+		}
+		s.FailNowf("no captured task to finish", "level %v", lvl(id))
+	}
 
-	reader.lock.Lock()
-	reader.atEnd = false
-	reader.lock.Unlock()
+	// 1. Writer pins the ack level at the start of its writeBatch.
+	tr.getAndPinAckLevel()
 
-	// Install a capturing metrics handler with namespace tag to verify the stuck metric
-	// is emitted with the correct namespace (as it would be in production).
-	captureHandler := metricstest.NewCaptureHandler()
-	capture := captureHandler.StartCapture()
-	defer captureHandler.StopCapture(capture)
-	blm.metricsHandler = captureHandler.WithTags(metrics.NamespaceTag("test-namespace"))
+	// 2. An in-flight read pulls the just-written task 5 from the DB and delivers it to the matcher.
+	//    (mergeReadToEnd: fewer than a batch, so the reader believes it's at the end.)
+	tr.mergeTasks([]*persistencespb.AllocatedTaskInfo{mkTask(5)}, mergeReadToEnd)
+	s.Require().Equal(1, tr.getLoadedTasks())
+	s.Require().Equal(1, s.capturedTasksLen())
 
-	// Record the current DB read count before writing.
-	readCountBefore := s.taskMgr.getGetTasksCount(qkey)
-	capturedBefore := s.capturedTasksLen()
+	// 3. The matcher completes task 5. It becomes a pre-acked (nil) entry, but the ack level can't
+	//    advance because it's pinned by the writer, so the ack "piles up" in memory.
+	finish(5)
+	s.Require().Equal(0, tr.getLoadedTasks())
+	readLevel, _ := tr.getLevels()
+	s.Require().Equal(lvl(5), readLevel, "read level should be at the task we read")
 
-	// Write a task via SpoolTask. The writer calls wroteNewTasks -> mergeTasks(mergeWrite).
-	// With the fix, mergeTasks now calls maybeReadTasksLocked() for write-mode merges,
-	// which triggers a DB read to pick up the task.
-	s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
-		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
-		CreateTime: timestamp.TimeNowPtrUtc(),
-	}))
+	// 4. The writer's wroteNewTasks finally runs and re-merges task 5. It's already present (the
+	//    ack), so merged is empty. readLevel must stay put; pre-fix it collapsed to the ack level,
+	//    evicted the ack, and set atEnd=false with nothing loaded (the stuck state).
+	tr.mergeTasks([]*persistencespb.AllocatedTaskInfo{mkTask(5)}, mergeWrite)
+	readLevel, _ = tr.getLevels()
+	s.Require().Equal(lvl(5), readLevel, "write-merge of an already-acked task must not move read level")
+	s.Require().Equal(1, s.capturedTasksLen(), "already-acked task must not be re-delivered")
 
-	// Assert the fix: the write path triggers a DB read and the task reaches the matcher.
-	await.RequireTrue(s.T(), func() bool {
-		return s.capturedTasksLen() > capturedBefore
-	}, 5*time.Second, 10*time.Millisecond)
+	// 5. Writer finishes the batch and unpins; the piled-up ack now advances.
+	tr.unpinAckLevel(nil)
+	_, ackLevel := tr.getLevels()
+	s.Require().Equal(lvl(5), ackLevel, "ack level should advance past the completed task after unpin")
 
-	// Assert that additional DB reads were triggered by the write path.
-	s.Require().Greater(s.taskMgr.getGetTasksCount(qkey), readCountBefore,
-		"DB reads should have been triggered after SpoolTask to pick up the written task")
-
-	// Assert that the stuck detection metric was emitted exactly once with namespace tag.
-	snap := capture.Snapshot()
-	recordings := snap[metrics.FairReaderStuckDetected.Name()]
-	s.Require().Len(recordings, 1, "fair_reader_stuck_detected metric should have been emitted exactly once")
-	s.Require().Equal(int64(1), recordings[0].Value)
-	s.Require().Equal("test-namespace", recordings[0].Tags["namespace"])
+	// 6. The reader is not stuck: a subsequent write is still delivered to the matcher. On the
+	//    pre-fix code the reader is at atEnd=false with a collapsed read level, so this write would
+	//    be dropped (above read level) and never delivered.
+	tr.mergeTasks([]*persistencespb.AllocatedTaskInfo{mkTask(6)}, mergeWrite)
+	s.Require().Equal(2, s.capturedTasksLen(), "reader should still deliver new tasks")
+	s.Require().Equal(1, tr.getLoadedTasks())
 }

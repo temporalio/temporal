@@ -48,7 +48,6 @@ type (
 		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForceReadTasksOnWrite                    dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MetadataUpdateOnAppendInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -181,7 +180,6 @@ type (
 		AutoEnableV2Sub                func(func(bool)) (bool, func())
 		GetTasksBatchSize              func() int
 		GetTasksReloadAt               func() int
-		ForceReadTasksOnWrite          func() bool
 		UpdateAckInterval              func() time.Duration
 		MetadataUpdateOnAppendInterval func() time.Duration
 		MaxTaskQueueIdleTime           func() time.Duration
@@ -304,7 +302,6 @@ func NewConfig(
 		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
-		ForceReadTasksOnWrite:                    dynamicconfig.MatchingForceReadTasksOnWrite.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MetadataUpdateOnAppendInterval:           dynamicconfig.MatchingMetadataUpdateOnAppendInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
@@ -433,9 +430,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		GetTasksReloadAt: func() int {
 			return config.GetTasksReloadAt(ns.String(), taskQueueName, taskType)
-		},
-		ForceReadTasksOnWrite: func() bool {
-			return config.ForceReadTasksOnWrite(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)
