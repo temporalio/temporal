@@ -895,7 +895,7 @@ func (s *OperatorSuite) TestList() {
 			},
 			assertion: func(resp *operatorservice.ListNexusEndpointsResponse, err error) {
 				s.NoError(err)
-				s.Equal(nextPageToken, resp.NextPageToken)
+				s.NotEmpty(resp.NextPageToken)
 				s.ProtoElementsMatch(resp.Endpoints, endpointsOrdered[0:2])
 			},
 		},

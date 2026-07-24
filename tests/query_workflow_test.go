@@ -347,18 +347,26 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	// Small page size forces pagination in matching service.
 	s.OverrideDynamicConfig(dynamicconfig.MatchingHistoryMaxPageSize, 2)
 
+	const activityCountQuery = "activity-count"
+	const totalActivities = 5
+
 	s.SdkWorker().Stop()
 
 	activityFn := func(ctx context.Context) error { return nil }
 	workflowFn := func(ctx workflow.Context) (string, error) {
+		completedActivities := 0
 		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "query works", nil
+		})
+		_ = workflow.SetQueryHandler(ctx, activityCountQuery, func() (int, error) {
+			return completedActivities, nil
 		})
 		// Run activities to generate multiple event batches in history.
 		ao := workflow.ActivityOptions{StartToCloseTimeout: 5 * time.Second}
 		actCtx := workflow.WithActivityOptions(ctx, ao)
-		for range 5 {
+		for range totalActivities {
 			_ = workflow.ExecuteActivity(actCtx, activityFn).Get(ctx, nil)
+			completedActivities++
 		}
 		// Keep workflow alive for query.
 		workflow.GetSignalChannel(ctx, "done").Receive(ctx, nil)
@@ -382,7 +390,20 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
-	// Wait for all activities to complete, generating many event batches.
+	// Wait for the workflow to process all activity completions and park on the signal receive.
+	s.Eventually(func() bool {
+		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", activityCountQuery)
+		if err != nil {
+			return false
+		}
+		var completedActivities int
+		if err := queryResult.Get(&completedActivities); err != nil {
+			return false
+		}
+		return completedActivities == totalActivities
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Verify the workflow accumulated enough history to exercise pagination.
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
@@ -407,7 +428,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_NonStickyMultiPageHistory() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  "test-worker",
 		})
-		return err == nil && len(pollResp.GetTaskToken()) > 0
+		return err == nil && len(pollResp.GetTaskToken()) > 0 && pollResp.GetQuery() != nil
 	}, 10*time.Second, 100*time.Millisecond)
 
 	s.NotNil(pollResp.GetHistory())

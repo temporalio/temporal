@@ -31,8 +31,7 @@ const (
 	templateDeleteEndpointQuery         = `DELETE FROM nexus_endpoints WHERE partition = 0 AND type = ? AND id = ? IF EXISTS`
 	templateGetEndpointByIdQuery        = `SELECT data, data_encoding, version FROM nexus_endpoints WHERE partition = 0 AND type = ? AND id = ? LIMIT 1`
 	templateBaseListEndpointsQuery      = `SELECT id, data, data_encoding, version FROM nexus_endpoints WHERE partition = 0`
-	templateListEndpointsQuery          = templateBaseListEndpointsQuery + ` AND type = ?`
-	templateListEndpointsFirstPageQuery = templateBaseListEndpointsQuery + ` ORDER BY type ASC`
+	templateListEndpointsFirstPageQuery = templateBaseListEndpointsQuery + ` ORDER BY type ASC, id ASC`
 )
 
 type (
@@ -192,13 +191,13 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 	ctx context.Context,
 	request *p.ListNexusEndpointsRequest,
 ) (*p.InternalListNexusEndpointsResponse, error) {
-	if request.LastKnownTableVersion == 0 && request.NextPageToken == nil {
+	if request.NextPageToken == nil {
 		return s.listFirstPageWithVersion(ctx, request)
 	}
 
 	response := &p.InternalListNexusEndpointsResponse{}
 
-	query := s.session.Query(templateListEndpointsQuery, rowTypeNexusEndpoint).WithContext(ctx)
+	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	endpoints, err := s.getEndpointList(iter)
@@ -303,6 +302,12 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 		}
 		// No result and no error means no endpoints have been inserted yet, so return empty response.
 		response.TableVersion = 0
+		if request.LastKnownTableVersion != 0 {
+			return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
+				p.ErrNexusTableVersionConflict,
+				request.LastKnownTableVersion,
+				response.TableVersion)
+		}
 		return response, nil
 	}
 
@@ -311,6 +316,12 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 		return nil, err
 	}
 	response.TableVersion = tableVersion
+	if request.LastKnownTableVersion != 0 && request.LastKnownTableVersion != tableVersion {
+		return nil, fmt.Errorf("%w. provided table version: %v current table version: %v",
+			p.ErrNexusTableVersionConflict,
+			request.LastKnownTableVersion,
+			tableVersion)
+	}
 
 	endpoints, err := s.getEndpointList(iter)
 	if err != nil {

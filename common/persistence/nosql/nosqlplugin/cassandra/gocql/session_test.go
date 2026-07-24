@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -51,9 +51,24 @@ func TestSessionEmitsMetricOnRefreshThrottle(t *testing.T) {
 
 func TestPanicCapture(t *testing.T) {
 	_, err := initSession(log.NewNoopLogger(), func() (*gocql.ClusterConfig, error) {
-		return &gocql.ClusterConfig{Hosts: []string{"0.0.0.0"}}, nil
+		panic("mock panic")
 	}, metrics.NoopMetricsHandler)
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panic:")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "panic:")
+}
+
+func TestShouldRetryWithoutInitialHostLookup(t *testing.T) {
+	cluster := gocql.NewCluster("127.0.0.1")
+	missingPeersV2Err := errors.New("gocql: unable to create session: unable to fetch peer host info: unconfigured table peers_v2")
+
+	require.True(t, shouldRetryWithoutInitialHostLookup(cluster, missingPeersV2Err))
+	require.True(t, isMissingPeersV2TableError(missingPeersV2Err))
+	require.False(t, shouldRetryWithoutInitialHostLookup(cluster, errors.New("some other error")))
+	require.False(t, isMissingPeersV2TableError(errors.New("some other error")))
+	require.False(t, shouldRetryWithoutInitialHostLookup(cluster, nil))
+	require.False(t, isMissingPeersV2TableError(nil))
+
+	cluster.DisableInitialHostLookup = true
+	require.False(t, shouldRetryWithoutInitialHostLookup(cluster, missingPeersV2Err))
 }

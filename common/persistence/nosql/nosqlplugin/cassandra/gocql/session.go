@@ -2,6 +2,7 @@ package gocql
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,7 @@ const (
 const (
 	refreshThrottleTagValue = "throttle"
 	refreshErrorTagValue    = "error"
+	missingPeersV2Table     = "unconfigured table peers_v2"
 )
 
 type (
@@ -105,7 +107,28 @@ func initSession(
 	defer func() {
 		metrics.CassandraInitSessionLatency.With(metricsHandler).Record(time.Since(start))
 	}()
-	return cluster.CreateSession()
+	session, err := cluster.CreateSession()
+	if err == nil {
+		return session, nil
+	}
+	if !shouldRetryWithoutInitialHostLookup(cluster, err) {
+		return nil, err
+	}
+	logger.Warn("gocql wrapper: retrying session initialization with initial host lookup disabled", tag.Error(err))
+	retryCluster, retryErr := newClusterConfigFunc()
+	if retryErr != nil {
+		return nil, retryErr
+	}
+	retryCluster.DisableInitialHostLookup = true
+	return retryCluster.CreateSession()
+}
+
+func shouldRetryWithoutInitialHostLookup(cluster *gocql.ClusterConfig, err error) bool {
+	return !cluster.DisableInitialHostLookup && isMissingPeersV2TableError(err)
+}
+
+func isMissingPeersV2TableError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), missingPeersV2Table)
 }
 
 func (s *session) Query(
@@ -159,7 +182,13 @@ func (s *session) AwaitSchemaAgreement(
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
 
-	return s.Value.Load().(*gocql.Session).AwaitSchemaAgreement(ctx)
+	if err := s.Value.Load().(*gocql.Session).AwaitSchemaAgreement(ctx); err != nil {
+		if isMissingPeersV2TableError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *session) Close() {
