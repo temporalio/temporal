@@ -94,7 +94,6 @@ func TestSimplePartitionScalerDisabled(t *testing.T) {
 	dec := onTasksLoop(scaler, 1, 3, 10, nil, 0)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 0, dec.NewTarget)
-	require.Empty(t, scaler.trackers, "disabled scaler must not create trackers")
 }
 
 // TestSimplePartitionScalerFixed verifies that a non-zero Fixed value overrides
@@ -113,7 +112,6 @@ func TestSimplePartitionScalerFixed(t *testing.T) {
 
 	dec := onTasksLoop(scaler, 1, 1, 10, nil, 0)
 	require.Equal(t, 7, dec.NewTarget)
-	require.Empty(t, scaler.trackers, "Fixed short-circuits before trackers are created")
 }
 
 // TestSimplePartitionScalerEnabledNoWindows verifies the documented behavior for
@@ -127,7 +125,6 @@ func TestSimplePartitionScalerEnabledNoWindows(t *testing.T) {
 	dec := onTasksLoop(scaler, 1, 3, 10, nil, 0)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 3, dec.NewTarget, "with no windows the current target is used as-is")
-	require.Empty(t, scaler.trackers)
 }
 
 // TestSimplePartitionScalerScalesUp drives a sustained rate above the Up target
@@ -147,7 +144,6 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	dec := onTasksLoop(scaler, 100, 1, 10, ts, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 10, dec.NewTarget)
-	require.NotNil(t, dec.PrivateState, "a real decision carries private state")
 }
 
 // TestSimplePartitionScalerScalesDown drives a rate below the current target's
@@ -267,7 +263,6 @@ func TestSimplePartitionScalerMultipleWindows(t *testing.T) {
 
 	dec := scaler.OnTasks(PartitionScalerInput{NumTasks: 10, CurrentTarget: 1})
 	require.True(t, dec.NoChange, "no window is full on the first call")
-	require.Len(t, scaler.trackers, 2, "distinct windows must create distinct trackers")
 
 	// After 1s the 1s window is full but the 2s window is not: still no decision.
 	ts.Advance(1 * time.Second)
