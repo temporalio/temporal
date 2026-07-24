@@ -33,6 +33,17 @@ func MustEncodeValue(val any, t enumspb.IndexedValueType) *commonpb.Payload {
 	return valPayload
 }
 
+// MustDecodeValue decodes search attribute Payload and IndexedValueType to value.
+// Panics if it fails to decode.
+func MustDecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) any {
+	v, err := DecodeValue(value, t, false)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
+	return v
+}
+
 // DecodeValue decodes search attribute value from Payload using (in order):
 // 1. passed type t.
 // 2. type from MetadataType field, if t is not specified.

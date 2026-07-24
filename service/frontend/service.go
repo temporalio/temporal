@@ -178,6 +178,8 @@ type Config struct {
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Enable ListChasmExecutions to list workflows.
+	EnableReadChasmWorkflows dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -366,6 +368,7 @@ func NewConfig(
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		EnableReadChasmWorkflows:             dynamicconfig.EnableReadChasmWorkflows.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,11 +30,13 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -90,6 +93,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -2716,8 +2720,148 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}, nil
 }
 
+func convertChasmExecutionToWorkflowExecution(
+	chasmExecution *chasmspb.VisibilityExecutionInfo,
+) *workflowpb.WorkflowExecutionInfo {
+	chasmSA := chasmExecution.ChasmSearchAttributes.IndexedFields
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	statusStr := sadefs.MustDecodeValue(
+		chasmSA[sadefs.ExecutionStatus],
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	).(string)
+	status, err := enumspb.WorkflowExecutionStatusFromString(statusStr)
+	if err != nil {
+		// nolint:forbidigo // must never happen
+		panic(err)
+	}
+
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	workflowType := sadefs.MustDecodeValue(
+		chasmSA[sadefs.WorkflowType],
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	).(string)
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	executionTime := sadefs.MustDecodeValue(
+		chasmSA[sadefs.ExecutionTime],
+		enumspb.INDEXED_VALUE_TYPE_DATETIME,
+	).(time.Time)
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	taskQueue := sadefs.MustDecodeValue(
+		chasmSA[sadefs.TaskQueue],
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	).(string)
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	rootWorkflowID := sadefs.MustDecodeValue(
+		chasmSA[sadefs.RootWorkflowID],
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	).(string)
+	//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+	rootRunID := sadefs.MustDecodeValue(
+		chasmSA[sadefs.RootRunID],
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	).(string)
+
+	exec := &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: chasmExecution.BusinessId,
+			RunId:      chasmExecution.RunId,
+		},
+		Type: &commonpb.WorkflowType{
+			Name: workflowType,
+		},
+		StartTime:        chasmExecution.StartTime,
+		ExecutionTime:    timestamppb.New(executionTime),
+		Memo:             chasmExecution.Memo,
+		SearchAttributes: chasmExecution.CustomSearchAttributes,
+		TaskQueue:        taskQueue,
+		Status:           status,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: rootWorkflowID,
+			RunId:      rootRunID,
+		},
+	}
+
+	if parentWorkflowIDPayload, ok := chasmSA[sadefs.ParentWorkflowID]; ok {
+		//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+		parentWorkflowID := sadefs.MustDecodeValue(
+			parentWorkflowIDPayload,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		).(string)
+		//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+		parentRunID := sadefs.MustDecodeValue(
+			chasmSA[sadefs.ParentRunID],
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		).(string)
+
+		exec.ParentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: parentWorkflowID,
+			RunId:      parentRunID,
+		}
+	}
+
+	if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		//nolint:revive // Chasm execution for workflows encodes the value in VisibilityManager
+		executionDuration := time.Duration(sadefs.MustDecodeValue(
+			chasmSA[sadefs.ExecutionDuration],
+			enumspb.INDEXED_VALUE_TYPE_INT,
+		).(int64))
+
+		exec.CloseTime = chasmExecution.CloseTime
+		exec.ExecutionDuration = durationpb.New(executionDuration)
+		exec.HistoryLength = chasmExecution.HistoryLength
+		exec.HistorySizeBytes = chasmExecution.HistorySizeBytes
+		exec.StateTransitionCount = chasmExecution.StateTransitionCount
+	}
+
+	return exec
+}
+
+func (wh *WorkflowHandler) listWorkflowsChasm(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowExecutionsRequest,
+) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := prepareQueryChasmWorkflows(request.Query)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid query: %v", err.Error())
+	}
+
+	resp, err := wh.visibilityMgr.ListChasmExecutions(
+		ctx,
+		&visibilityservice.ListChasmExecutionsRequest{
+			ArchetypeId:   chasm.WorkflowArchetypeID,
+			NamespaceId:   namespaceID.String(),
+			Namespace:     namespaceName.String(),
+			Query:         query,
+			PageSize:      request.GetPageSize(),
+			NextPageToken: request.GetNextPageToken(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	executions := make([]*workflowpb.WorkflowExecutionInfo, len(resp.Executions))
+	for i, chasmExec := range resp.Executions {
+		executions[i] = convertChasmExecutionToWorkflowExecution(chasmExec)
+	}
+
+	return &workflowservice.ListWorkflowExecutionsResponse{
+		Executions:    executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
 // ListWorkflowExecutions is a visibility API to list workflow executions in a specific namespace.
-func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) ListWorkflowExecutions(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowExecutionsRequest,
+) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -2736,6 +2880,10 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	metrics.VisibilityListWorkflowsQueryLength.With(wh.metricsScope(ctx)).Record(int64(len(request.GetQuery())))
+
+	if wh.config.EnableReadChasmWorkflows(request.GetNamespace()) {
+		return wh.listWorkflowsChasm(ctx, request)
+	}
 
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
@@ -2853,8 +3001,56 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	return resp, nil
 }
 
+func (wh *WorkflowHandler) countWorkflowsChasm(
+	ctx context.Context,
+	request *workflowservice.CountWorkflowExecutionsRequest,
+) (*workflowservice.CountWorkflowExecutionsResponse, error) {
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := prepareQueryChasmWorkflows(request.Query)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid query: %v", err.Error())
+	}
+
+	resp, err := wh.visibilityMgr.CountChasmExecutions(
+		ctx,
+		&visibilityservice.CountChasmExecutionsRequest{
+			ArchetypeId: chasm.WorkflowArchetypeID,
+			NamespaceId: namespaceID.String(),
+			Namespace:   namespaceName.String(),
+			Query:       query,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var groups []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup
+	if len(resp.Groups) > 0 {
+		groups = make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, len(resp.Groups))
+		for i, g := range resp.Groups {
+			groups[i] = &workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+				GroupValues: g.GroupValues,
+				Count:       g.Count,
+			}
+		}
+	}
+
+	return &workflowservice.CountWorkflowExecutionsResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
 // CountWorkflowExecutions is a visibility API to count of workflow executions in a specific namespace.
-func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
+func (wh *WorkflowHandler) CountWorkflowExecutions(
+	ctx context.Context,
+	request *workflowservice.CountWorkflowExecutionsRequest,
+) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -2865,6 +3061,12 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
+	}
+
+	metrics.VisibilityListWorkflowsQueryLength.With(wh.metricsScope(ctx)).Record(int64(len(request.GetQuery())))
+
+	if wh.config.EnableReadChasmWorkflows(request.GetNamespace()) {
+		return wh.countWorkflowsChasm(ctx, request)
 	}
 
 	req := &manager.CountWorkflowExecutionsRequest{
@@ -2882,6 +3084,51 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		Groups: persistenceResp.Groups,
 	}
 	return resp, nil
+}
+
+func prepareQueryChasmWorkflows(query string) (string, error) {
+	nsDivisionExpr := &sqlparser.ColName{
+		Name: sqlparser.NewColIdent(sadefs.TemporalNamespaceDivision),
+	}
+	// TemporalNamespaceDivision is null or TemporalNamespaceDivision = '<chasm workflow archetype id>'
+	baseExpr := &sqlparser.OrExpr{
+		Left: &sqlparser.IsExpr{
+			Operator: sqlparser.IsNullStr,
+			Expr:     nsDivisionExpr,
+		},
+		Right: &sqlparser.ComparisonExpr{
+			Operator: sqlparser.EqualStr,
+			Left:     nsDivisionExpr,
+			Right:    sqlparser.NewStrVal([]byte(strconv.Itoa(int(chasm.WorkflowArchetypeID)))),
+		},
+	}
+	baseQueryStr := sqlparser.String(baseExpr)
+	query = strings.TrimSpace(query)
+	if len(query) == 0 {
+		return baseQueryStr, nil
+	}
+	if len(query) >= 8 {
+		prefix := strings.ToLower(query[:8])
+		if prefix == "order by" || prefix == "group by" {
+			return baseQueryStr + " " + query, nil
+		}
+	}
+	selectPrefix := "select * from t where "
+	stmt, err := sqlparser.Parse(selectPrefix + query)
+	if err != nil {
+		return "", err
+	}
+	//nolint:revive // By construction, this is a sqlparser.Select object
+	selectExpr := stmt.(*sqlparser.Select)
+	selectExpr.Where.Expr = &sqlparser.AndExpr{
+		Left: &sqlparser.ParenExpr{
+			Expr: baseExpr,
+		},
+		Right: &sqlparser.ParenExpr{
+			Expr: selectExpr.Where.Expr,
+		},
+	}
+	return sqlparser.String(selectExpr)[len(selectPrefix):], nil
 }
 
 // GetSearchAttributes is a visibility API to get all legal keys that could be used in list APIs
