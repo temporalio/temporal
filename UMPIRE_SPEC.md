@@ -4,20 +4,24 @@ Umpire is model-based acceptance testing for Temporal: a closed loop that **driv
 server, **observes** it, builds an *executable model* of its entities, **judges** that model,
 and **steers** toward the states worth judging — without tests hand-writing assertions.
 
-Umpire has two halves that share one model:
+Umpire is one system with three parts that share one model — a passive judge and an active
+pair that drives:
 
-- **Monitor — the passive half (built, enforced).** Observes (gRPC + OTEL), models (entity
+- **Monitor — the passive judge (built, enforced).** Observes (gRPC + OTEL), models (entity
   FSMs that are executable oracles), and judges (safety/liveness rules → violations). It never
   drives. See [`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md) / [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
-- **Driver — the active half (specced, unbuilt).** Drives the server, injects faults, and
-  steers it into the states the Monitor rules on. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
+- **Planner — the active brains (planning core built).** Given a target state or constraints,
+  plans routes over the Monitor's model; coverage-guided fuzzing is its most advanced mode. See
+  [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md).
+- **Driver — the active mechanics (specced, unbuilt).** Realizes each planned route step as real
+  traffic against the server, and injects faults. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
 
-The halves close a cycle: **drive → observe → model → judge → steer**. The Driver reads the
-same model the Monitor builds (action guards are predicates over entity state, not sleeps), and
-the Monitor's coverage catalog is the Driver's reward signal (what states nobody has reached
-yet). A deferred **strategist** (a coverage-guided fuzzer) will later choose which actions to
-drive; the server under test is just the SUT. Workloads are reused from **Omes** (kitchensink
-workflows; see [`OMES.md`](./OMES.md)) rather than a bespoke DSL.
+The parts close a cycle: **plan → drive → observe → model → judge → steer**. The Planner plans
+over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
+judges the result; and the Monitor's coverage catalog (`Coverage.Unmet()` — the states nobody
+reached) is what the Planner's guided mode steers toward. The server under test is just the SUT.
+Workloads are reused from **Omes** (kitchensink workflows; see [`OMES.md`](./OMES.md)) rather
+than a bespoke DSL.
 
 ## Goals
 
@@ -38,11 +42,10 @@ workflows; see [`OMES.md`](./OMES.md)) rather than a bespoke DSL.
 
 ## Non-goals (for now)
 
-- **Smart, coverage-guided exploration (the strategist).** Build the deterministic driver
-  (replayable, seeded actions) first; add the strategist once there is a reward signal to
-  optimize toward.
-- **Coverage-guided fuzzing.** The Scenario/Coverage catalog is specced (`UMPIRE_PLAN.md`) and is
-  the seam the strategist will optimize toward, but it is unbuilt.
+- **Coverage-guided fuzzing (the Planner's guided mode).** The Planner's fixed and exploratory
+  planning is built; the guided, coverage-optimizing mode is deferred — build the deterministic
+  core first, add guided fuzzing once the coverage signal it steers toward is trustworthy. The
+  Scenario/Coverage catalog it needs is specced (`UMPIRE_PLAN.md`) but unbuilt.
 - **Persistence / durable stores.** Model state is in-memory and per-test; a durable coverage
   store is a later concern.
 - **A new proxy/interception stack.** Reuse the existing gRPC interceptor + OTEL processor seams
@@ -92,22 +95,35 @@ workflows; see [`OMES.md`](./OMES.md)) rather than a bespoke DSL.
   model-derived checks; genuinely relational invariants stay bespoke rules. That cross-entity
   reach is Umpire's differentiator — a single-archetype model (SAA) has no such story.
 
+### Plan (Planner)
+
+- **Describe states, not steps.** You name a target state (or constraints); the Planner computes
+  routes over the model graph (`Reachable`/`Cells`), failing fast if the target is unreachable
+  under those constraints. A `Plan` is validated before any traffic — reviewable, diff-able,
+  replayable.
+- **Planned and judged from one declaration.** The Planner's model catalog and the Monitor's
+  fact-routing derive from the same entity declaration, so the drive side and the judge side can
+  never disagree about which entities and states exist.
+
 ### Drive (Driver)
 
-- **Actions are predicate-guarded, not clocked.** An action fires when a *predicate over the
-  Monitor's model* is true (`Update.Reached("admitted")`), not after a timer. Eventual-consistency
-  waits become structural, not flaky sleeps.
-- **Actions and facts are symmetric.** The Monitor decodes wire → facts; the Driver encodes
-  intent → wire. They meet at the same `EntityPath` addressing and the same deterministic
-  identifiers, so an action and the fact it provokes name the same entity.
+- **Realize events as traffic.** A route is abstract events (`admit`, `accept`); the Driver's
+  single seam, `Do(ctx, event)`, maps each to real traffic (RPC / worker poll / fault).
+  Eventual-consistency waits are polled to a *predicate over the model*, never slept — driven
+  concurrency stays deterministic.
+- **Events and facts are symmetric.** The Monitor decodes wire → facts; the Driver encodes a
+  planned event → wire. They meet at the same `EntityPath` addressing and the same deterministic
+  identifiers, so an event and the fact it provokes name the same entity.
 - **Fault injection rides the existing hook.** The dormant `FaultInjector.Inject` and the
   interceptor's `inj` slot are built and wired but no-op today; the Driver is the first real
-  injector (drop → error, delay → sleep-then-proceed, corrupt → mutate). A grey-box reach.
+  injector (drop → error, delay → sleep-then-proceed, corrupt → mutate). Faults are events with a
+  grey-box reach.
 
 ### Shared
 
-- **One model, two consumers.** No second state store: the `Registry` the Monitor fills is the
-  `Registry` the Driver queries. This is why the two halves live together.
+- **One model, shared by all three.** No second state store: the `Registry` the Monitor fills is
+  what the Planner plans routes over and the Driver polls while realizing them. This is why the
+  parts live together.
 - **Observation tiers — black / grey / white box.** Facts carry a provenance *tier* (frontend
   gRPC = black; internal RPC + OTEL = grey; persistence = white); actions carry a matching
   *reach*. A run enables only channels ≤ its tier: the flagship lifecycle rules and black-box
@@ -115,8 +131,7 @@ workflows; see [`OMES.md`](./OMES.md)) rather than a bespoke DSL.
   tier-gated — portability is the axis a white-box-only model doesn't address.
 - **Coverage is the reward signal.** The Scenario/Coverage catalog (planned, `UMPIRE_PLAN.md`)
   turns a rule's precondition into a coverage target; `Coverage.Unmet()` is the list of
-  interesting states nobody reached — the seam the Driver (and later the strategist) steers
-  toward.
+  interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
 - **Pluggable registries.** Rules register in a name-validated `Rulebook`; actions and scenarios
   get parallel registries. Adding one ≠ touching the framework.
 - **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpire`
@@ -125,23 +140,21 @@ workflows; see [`OMES.md`](./OMES.md)) rather than a bespoke DSL.
 ## Shape
 
 ```
-        ┌────────── strategist (deferred: coverage/fuzz-guided) ─────────────┐
-        ▼                                                                     │
-   ┌─────────┐  actions (RPCs)   ┌──────────┐  gRPC + OTEL + (persist)  ┌─────────┐
-   │ Driver  │ ────────────────▶ │  Server  │ ────────────────────────▶ │ Decoder │
-   │ (drive) │  faults (Inject)  │  (SUT)   │   tier-gated fact sources │ wire→fact│
-   └─────────┘                   └──────────┘                           └─────────┘
-        ▲                                                                     │ Facts
-        │                                                                     ▼
-        │                                          ┌──────────────────────────────────┐
-        │                                          │  Registry (entity models)         │
-        │                                          │  Classify: Advance/NoOp/Illegal    │
-        │                                          │  (FactLog: record of every fact)   │
-        │                                          └──────────────────────────────────┘
-        │                                                                     │
-        │                                                                     ▼
-        │                                          ┌──────────────────────────────────┐
-        └───── Coverage.Unmet() (reward signal) ◀── │  Rulebook: generic conformance    │──▶ Violations
-                guards read the SAME model          │  + liveness + relational rules     │
-                                                    └──────────────────────────────────┘
+   ┌─────────┐ routes  ┌─────────┐ actions ┌──────────┐ gRPC+OTEL+(persist) ┌─────────┐
+   │ Planner │────────▶│ Driver  │────────▶│  Server  │────────────────────▶│ Decoder │
+   │ (brains)│(events) │(mechanic)│ +faults │  (SUT)   │  tier-gated sources │wire→fact│
+   └─────────┘         └─────────┘         └──────────┘                     └─────────┘
+        ▲                                                                        │ Facts
+        │                                                                        ▼
+        │                                       ┌──────────────────────────────────┐
+        │  plans over the SAME model            │  Registry (entity models)         │
+        │                                       │  Classify: Advance/NoOp/Illegal    │
+        │                                       │  (FactLog: record of every fact)   │
+        │                                       └──────────────────────────────────┘
+        │                                                                        │
+        │                                                                        ▼
+        │                                       ┌──────────────────────────────────┐
+        └──── Coverage.Unmet() (reward) ◀────── │  Rulebook: conformance + liveness │──▶ Violations
+                                                │  + relational rules                │
+                                                └──────────────────────────────────┘
 ```
