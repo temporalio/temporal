@@ -135,7 +135,7 @@ These already exist or are half-built in the Umpire code; the Driver consumes th
    of injected faults against a live multi-goroutine server is the hard part. May need the fault
    seams to expose synchronization points ("hold request between points X and Y").
 2. **Guard polling vs. event-driven.** When realizing an eventual-consistency event, does the
-   Driver poll the `EntityRegistry` or get notified on generation bumps? Polling is simplest and
+   Driver poll the `ModelState` or get notified on generation bumps? Polling is simplest and
    matches the existing generation watermark; a notify seam may be needed for tight timing.
 3. **Overlap with existing pollers/testvars.** The Driver should *replace* the fragmented
    poller/testvars style, not become a fourth style beside them. Plan a migration, not an

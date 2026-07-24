@@ -11,7 +11,7 @@ emit violations).
 ```
    observe                     model                        judge
 ┌────────────┐   Facts   ┌──────────────────┐         ┌──────────────┐
-│  Decoder   │ ────────▶ │     EntityRegistry     │ ──────▶ │   RuleRegistry   │ ──▶ Violations
+│  Decoder   │ ────────▶ │     ModelState     │ ──────▶ │   RuleRegistry   │ ──▶ Violations
 │ (wire+span)│           │  (entity FSMs +  │  dirty  │ safety +     │
 └────────────┘           │   generations)   │  query  │ liveness     │
       ▲                  └──────────────────┘         └──────────────┘
@@ -73,7 +73,7 @@ type EntityFactory func() Entity
 An entity interprets a stream of facts and holds the resulting state. Rules read that
 state; they never see facts directly.
 
-### `EntityRegistry` — routing + dirty tracking (`registry.go`)
+### `ModelState` — routing + dirty tracking (`registry.go`)
 
 The heart of the model layer. It:
 
@@ -145,7 +145,7 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 ### `Umpire` — the orchestrator (`umpire.go`)
 
-Wires the framework to Temporal and is the object tests hold. It owns a `EntityRegistry`, a
+Wires the framework to Temporal and is the object tests hold. It owns a `ModelState`, a
 `FactDecoder`, a `RuleRegistry` (with all default rules registered), and a `FactLog`.
 
 It plugs into the server two ways:
@@ -196,7 +196,7 @@ to.
 2. The interceptor / `SpanProcessor` hands it to `Umpire`.
 3. `FactDecoder` turns it into a `Fact` targeting an `EntityPath` (or nothing, if
    unrecognised — most traffic is ignored).
-4. `EntityRegistry.RouteFacts` finds/creates the target entity (and parents), delivers the fact
+4. `ModelState.RouteFacts` finds/creates the target entity (and parents), delivers the fact
    via `OnFact`, and bumps that entity's **generation**.
 5. On the next `RuleRegistry.Check`, each rule queries only entities changed since its last run
    (`ChangedEntities[T]`), then asserts (safety) or records `Pending`/`Resolve` (liveness).

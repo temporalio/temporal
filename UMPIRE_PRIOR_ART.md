@@ -260,7 +260,7 @@ half:
 | STAMP | Umpire analogue |
 |---|---|
 | `Model[T]` + typed `Prop[T]`/`Marker` + `Verify()` | `Entity` FSM + `Flag` + `Rule` |
-| `mdl_router.go` routes RPCs to model instances | `EntityRegistry.RouteFacts` |
+| `mdl_router.go` routes RPCs to model instances | `ModelState.RouteFacts` |
 | **Actions / Scenarios / Patterns / Generators** (`act.go`, `test_scenario.go`, `tests/acceptance/patterns/`, `Gen[T]`) | *(none — Umpire's deferred "active" side)* |
 | **Persistence interception** (`common/persistence/intercept/`) | *(none — Umpire observes only gRPC + OTEL)* |
 
@@ -329,7 +329,7 @@ suite), this is the blueprint for the generative next step — including `poll_u
 ### Deliberately *not* importing
 
 - **The heavy generics + reflection model core** (`mdl.go`, `mdl_set.go`, `mdl_router.go`).
-  Umpire's plainer `Entity`/`EntityRegistry`/`Rule` is easier to read and already does routing and
+  Umpire's plainer `Entity`/`ModelState`/`Rule` is easier to read and already does routing and
   dirty-tracking well. STAMP's model machinery is more abstract than its proven payload
   (`Verify()` is mostly TODO) — don't trade Umpire's clarity for unproven abstraction.
 - **`Verify()`-on-the-model as the only judging path.** STAMP attaches verification to each

@@ -25,6 +25,8 @@ than a bespoke DSL.
 
 ## Glossary
 
+*Naming: **`*Registry`** holds what's declared before a run (rules, coverpoints, entity types); **`*State`** and logs hold what accumulates during one (the live model, facts, coverage).*
+
 **Parts**
 - **Umpire** — the whole system: the closed loop of Planner + Driver + Monitor over one shared model.
 - **Monitor** — the passive half; observes traffic, maintains the model, and judges it with rules. Never drives.
@@ -32,20 +34,21 @@ than a bespoke DSL.
 - **Driver** — the active mechanics; realizes each planned event as real traffic and injects faults.
 
 **Model (Monitor)**
-- **Model** — the whole: every entity and its current state, held in the `EntityRegistry`. What the Planner plans over and what rules read.
+- **Model** — the whole: every entity and its current state at runtime (the `ModelState`). What the Planner plans over and what rules read.
 - **Entity** — one piece of the model: a single executable state machine / *oracle* (Workflow, WorkflowUpdate, WorkflowTask, TaskQueue, NexusOperation, …), built up from facts.
 - **Fact** — a normalized unit of observation (a request, response, span event, or history event) addressed to one entity.
 - **Classify** — an entity's total transition function: every (state, event) → `Advance` / `NoOp` / `Illegal`. The source of "no vacuous pass."
-- **EntityRegistry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
-- **FactLog** — an append-only, queryable record of every fact.
+- **EntityRegistry** *(declared)* — the registered entity types/factories + fact importers: the model's declared shape.
+- **ModelState** *(runtime)* — holds the live entities and their FSM state, routes each fact to its entity, and tracks changes by a generation counter.
+- **FactLog** *(runtime)* — an append-only, queryable record of every fact.
 
 **Judging (Monitor)**
 - **Rule** — an invariant over model state. **Safety** rules must hold at every observation; **Liveness** rules must eventually hold.
-- **RuleRegistry** — the name-validated registry of rules.
+- **RuleRegistry** *(declared)* — the name-validated registry of rules.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
 - **Coverpoint** — a named, interesting condition worth reaching at least once (e.g. a rule's precondition, or a notable state).
-- **CoverpointRegistry** — the name-validated registry of coverpoints (mirrors the `RuleRegistry`).
-- **Coverage** — the tally of which coverpoints have been hit; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
+- **CoverpointRegistry** *(declared)* — the name-validated registry of coverpoints (mirrors the `RuleRegistry`).
+- **Coverage** *(runtime)* — the tally of which coverpoints have been hit; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
 
 **Planning (Planner) — high-level, over the model**
 - **target** — the state you ask the Planner to reach, fully-qualified by entity (e.g. `WorkflowUpdate:completed`).
@@ -163,7 +166,7 @@ than a bespoke DSL.
 
 ### Shared
 
-- **One model, shared by all three.** No second state store: the `EntityRegistry` the Monitor fills is
+- **One model, shared by all three.** No second state store: the `ModelState` the Monitor fills is
   what the Planner plans routes over and the Driver polls while realizing them. This is why the
   parts live together.
 - **Environments & capabilities.** The model, rules, planned routes, and coverage catalog are all
@@ -204,7 +207,7 @@ than a bespoke DSL.
         ▲                                                                        │ Facts
         │                                                                        ▼
         │                                       ┌──────────────────────────────────┐
-        │  plans over the SAME model            │  EntityRegistry (entity models)         │
+        │  plans over the SAME model            │  ModelState (entity models)             │
         │                                       │  Classify: Advance/NoOp/Illegal    │
         │                                       │  (FactLog: record of every fact)   │
         │                                       └──────────────────────────────────┘
