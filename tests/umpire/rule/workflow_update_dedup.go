@@ -15,7 +15,7 @@ func (m *WorkflowUpdateDeduplication) Name() string {
 }
 
 func (m *WorkflowUpdateDeduplication) CheckLiveness(c *umpire.LivenessContext) {
-	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
+	for r := range c.Changed[model.WorkflowUpdate]() {
 		wu := r.Entity
 		if wu.UpdateID == "" || wu.RequestCount <= 1 {
 			continue

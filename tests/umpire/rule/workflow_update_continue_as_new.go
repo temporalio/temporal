@@ -20,7 +20,7 @@ func (m *WorkflowUpdateContinueAsNew) Name() string {
 func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 	// Build set of completed workflows.
 	completedWorkflows := make(map[string]time.Time)
-	for r := range umpire.ChangedEntities[model.Workflow](c) {
+	for r := range c.Changed[model.Workflow]() {
 		wf := r.Entity
 		if wf.WorkflowID == "" {
 			continue
@@ -30,7 +30,7 @@ func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
+	for r := range c.Changed[model.WorkflowUpdate]() {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

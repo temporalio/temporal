@@ -20,7 +20,7 @@ The parts close a cycle: **plan → drive → observe → model → judge → st
 over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
 judges the result; and the Monitor's coverage catalog (`Coverage.Unmet()` — the states nobody
 reached) is what the Planner's guided mode steers toward. The server under test is just the SUT.
-Workloads are reused from **Omes** (kitchensink workflows; see [`OMES.md`](./OMES.md)) rather
+Workloads are reused from **Omes** (kitchensink workflows; see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)) rather
 than a bespoke DSL.
 
 ## Goals
@@ -75,7 +75,7 @@ than a bespoke DSL.
 - **Facts, not calls.** Everything observed (requests, responses, span events, history events)
   is normalized into a `Fact` targeting one entity. One decoder owns wire→fact.
 - **Entities are executable models, not just FSMs.** Each entity is a total transition function
-  `Classify(event) → Advance | NoOp | Illegal` (the oracle inversion in `SAAMODEL.md`). A total
+  `Classify(event) → Advance | NoOp | Illegal` (the oracle inversion in `UMPIRE_PRIOR_ART.md` (SAA)). A total
   model has **no vacuous pass**: an unanticipated state or an illegal edge is a diff against the
   model, caught by one generic conformance rule — not something a human had to foresee and
   hand-write. Rules read; the model judges its own transitions.

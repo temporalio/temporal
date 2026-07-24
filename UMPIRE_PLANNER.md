@@ -7,7 +7,7 @@ constraints, it plans routes over the Monitor's model. Coverage-guided fuzzing i
 most advanced mode, not a separate subsystem.
 
 For the whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for the model these plans
-run over read [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md) and [`SAAMODEL.md`](./SAAMODEL.md).
+run over read [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md) and [`UMPIRE_PRIOR_ART.md` (SAA)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-the-saa-behavioral-model).
 
 ## The one idea: describe states, not steps
 
@@ -169,7 +169,7 @@ Ranked by value, these reuse the same plan-over-the-model core:
    require.Error(t, err) // "accepted" is unreachable without the accept event
    ```
 3. **Coverage-goal tests** — "exercise *every* cell/edge in sub-graph Z at least once." The
-   `Cells()` denominator from `SAAMODEL.md` #2 becomes the goal; the Planner plans a covering set
+   `Cells()` denominator from `UMPIRE_PRIOR_ART.md` (SAA) #2 becomes the goal; the Planner plans a covering set
    of routes. Directly attacks dead-rule detection.
 4. **Fault overlays** — take any fixed or exploratory plan and inject faults (drop/delay/error,
    early timer) at chosen edges: "same route to completed, but crash between accept and complete."

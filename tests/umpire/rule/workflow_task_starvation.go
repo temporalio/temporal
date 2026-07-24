@@ -19,13 +19,13 @@ func (m *WorkflowTaskStarvation) CheckLiveness(c *umpire.LivenessContext) {
 	// closed was superseded by the close, not starved — so task progress is
 	// judged relative to observed workflow close, not test-teardown timing.
 	closed := make(map[string]bool)
-	for r := range umpire.ChangedEntities[model.Workflow](c) {
+	for r := range c.Changed[model.Workflow]() {
 		if wf := r.Entity; wf.WorkflowID != "" && wf.FSM.IsTerminal() {
 			closed[wf.WorkflowID] = true
 		}
 	}
 
-	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
+	for r := range c.Changed[model.WorkflowTask]() {
 		wt := r.Entity
 		if wt.WorkflowID == "" || wt.IsSpeculative {
 			continue

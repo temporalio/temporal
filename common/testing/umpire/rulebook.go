@@ -176,33 +176,24 @@ func (c *LivenessContext) Resolve(key string) {
 	c.state.passedKeys = append(c.state.passedKeys, key)
 }
 
-// dirtyQuerier is implemented by both SafetyContext and LivenessContext,
-// allowing ChangedEntities to accept either context type.
-type dirtyQuerier interface {
-	dirtyQuery() (context.Context, *Registry, uint64, *EntityID)
-}
-
-func (c *SafetyContext) dirtyQuery() (context.Context, *Registry, uint64, *EntityID) {
-	return c.Context, c.Registry, c.sinceGeneration, c.scope
-}
-func (c *LivenessContext) dirtyQuery() (context.Context, *Registry, uint64, *EntityID) {
-	return c.Context, c.Registry, c.sinceGeneration, c.scope
-}
-
 // EntityResult pairs a registry key with a typed entity pointer.
 type EntityResult[T any] struct {
 	Key    string
 	Entity *T
 }
 
-// ChangedEntities returns entities of type T that received facts since this rule's last check.
+// Changed yields entities of type T that received facts since this rule's last
+// check (respecting the rule's dirty-generation watermark and namespace scope).
 // Iteration stops early if the context is cancelled.
-func ChangedEntities[T any](c dirtyQuerier) iter.Seq[EntityResult[T]] {
-	ctx, reg, since, scope := c.dirtyQuery()
+//
+// It is a generic method (Go 1.27+), defined once on the embedded ruleContext and
+// promoted to both SafetyContext and LivenessContext — so a rule writes
+// c.Changed[model.WorkflowUpdate]() regardless of which context it holds.
+func (c *ruleContext) Changed[T any]() iter.Seq[EntityResult[T]] {
 	return func(yield func(EntityResult[T]) bool) {
 		et := EntityType(reflect.TypeOf((*T)(nil)).Elem().Name())
-		for _, e := range reg.QueryEntities(et, since, scope) {
-			if ctx.Err() != nil {
+		for _, e := range c.Registry.QueryEntities(et, c.sinceGeneration, c.scope) {
+			if c.Err() != nil {
 				return
 			}
 			if typed, ok := any(e.Entity).(*T); ok {

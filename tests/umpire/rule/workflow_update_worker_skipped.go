@@ -20,7 +20,7 @@ func (m *WorkflowUpdateWorkerSkipped) Name() string {
 func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 	// Build map of workflow→latest polled time.
 	latestPoll := make(map[string]time.Time)
-	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
+	for r := range c.Changed[model.WorkflowTask]() {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue
@@ -32,7 +32,7 @@ func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
+	for r := range c.Changed[model.WorkflowUpdate]() {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

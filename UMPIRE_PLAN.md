@@ -199,7 +199,7 @@ task ↔ update, update ↔ its workflow's close, worker poll ↔ update) and st
 where the interesting bugs live. Trade-off: generic rules give less specific messages (carry
 the state/metadata in tags to compensate). (STAMP took the opposite route — no FSM, state as
 reactive bool markers + per-model `Verify()`; Umpire's explicit FSMs already give
-transition-legality and monotonicity, so lean on them. See `STAMP_IMPORT.md`.)
+transition-legality and monotonicity, so lean on them. See `UMPIRE_PRIOR_ART.md` (STAMP).)
 
 **Status: built and adopted.** `common/testing/umpire/lifecycle.go` provides `Lifecycle`
 (a drop-in superset of the looplab FSM that records per-state entry times, derives terminal
@@ -216,7 +216,7 @@ in terms of it. Modelling the benign re-observations as `NoOp` (rather than lump
 non-edge into "illegal") is what removed the false-positive vector. `States`/`Events`/
 `Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpire/model`
 checks every default lifecycle is sound and `Classify` is total, server-free in ms — the
-analog of the SAA model's `validate` package). This realizes item #1 of `SAAMODEL.md`.
+analog of the SAA model's `validate` package). This realizes item #1 of `UMPIRE_PRIOR_ART.md` (SAA).
 
 - `EntityProgress` (liveness, generic) is **registered and replaces** `WorkflowUpdateLossPrevention`
   + `WorkflowUpdateCompletion`, which are deleted. Parity is exact: the update declares
@@ -239,7 +239,7 @@ fidelity gaps to sharpen the residual cross-branch-reorder case for `EntityTrans
 
 ## How rules map onto the model (north star: complete models)
 
-The direction of travel (`SAAMODEL.md` #1) is a **complete, executable model per entity**: a
+The direction of travel (`UMPIRE_PRIOR_ART.md` (SAA) #1) is a **complete, executable model per entity**: a
 total transition function (`Classify`: every state × event → `Advance`/`NoOp`/`Illegal`) plus
 the state-derived predictions (terminal, must-progress, timestamps, and eventually the expected
 API result per edge). "Complete" is a *means*, not the goal — it buys the SPEC goals (no vacuous
@@ -255,7 +255,7 @@ model — it splits into three buckets.
 
 A per-entity complete model absorbs ~4–5 of the 12 registered rules; the other ~7 remain rules.
 That is not a shortfall: even the SAA model is single-archetype and has **no** cross-entity
-story (`SAAMODEL.md`, "where Umpire's approach is genuinely different"). Cross-entity correlation
+story (`UMPIRE_PRIOR_ART.md` (SAA), "where Umpire's approach is genuinely different"). Cross-entity correlation
 is Umpire's differentiator, not a gap in it.
 
 ### The boundary is movable
@@ -455,7 +455,7 @@ Removed by consolidation: `WorkflowUpdateLossPrevention`, `WorkflowUpdateComplet
 `Lifecycle` upgraded to an **executable transition function**: pure three-valued
 `Classify` (`Advance`/`NoOp`/`Illegal`) with `Fire` defined over it, plus
 `States`/`Events`/`Reachable`/`Validate` and server-free Tier-1 static validation of every
-default lifecycle (`SAAMODEL.md` #1). Generic `EntityTransitionLegality` **registered**,
+default lifecycle (`UMPIRE_PRIOR_ART.md` (SAA) #1). Generic `EntityTransitionLegality` **registered**,
 replacing (and deleting) `WorkflowUpdateStageMonotone` — benign duplicate/late/post-terminal
 spans now classify as `NoOp`, removing the false-positive that had gated it.
 Reusable `Lifecycle` FSM primitive (entry timestamps, derived terminals, `MustProgress`,

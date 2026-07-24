@@ -426,13 +426,13 @@ type LifecycleResult struct {
 
 // ChangedLifecycles yields every entity implementing Lifecycled that changed
 // since the rule's last check (respecting the rule's dirty-generation watermark
-// and namespace scope). It is the type-erased counterpart of ChangedEntities[T],
-// letting one rule judge many entity types by their shared lifecycle.
-func ChangedLifecycles(c dirtyQuerier) iter.Seq[LifecycleResult] {
-	ctx, reg, since, scope := c.dirtyQuery()
+// and namespace scope). It is the type-erased counterpart of Changed[T], letting
+// one rule judge many entity types by their shared lifecycle. Like Changed, it is
+// a method on the embedded ruleContext, promoted to both rule contexts.
+func (c *ruleContext) ChangedLifecycles() iter.Seq[LifecycleResult] {
 	return func(yield func(LifecycleResult) bool) {
-		for _, e := range reg.QueryAll(since, scope) {
-			if ctx.Err() != nil {
+		for _, e := range c.Registry.QueryAll(c.sinceGeneration, c.scope) {
+			if c.Err() != nil {
 				return
 			}
 			if lc, ok := e.Entity.(Lifecycled); ok {

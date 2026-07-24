@@ -14,7 +14,7 @@ func (m *SpeculativeTaskRollback) Name() string {
 
 func (m *SpeculativeTaskRollback) CheckLiveness(c *umpire.LivenessContext) {
 	speculativePolled := make(map[string]bool)
-	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
+	for r := range c.Changed[model.WorkflowTask]() {
 		wt := r.Entity
 		if !wt.IsSpeculative || wt.WorkflowID == "" {
 			continue
@@ -27,7 +27,7 @@ func (m *SpeculativeTaskRollback) CheckLiveness(c *umpire.LivenessContext) {
 		return
 	}
 
-	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
+	for r := range c.Changed[model.WorkflowUpdate]() {
 		wu := r.Entity
 		if wu.UpdateID == "" || wu.WorkflowID == "" {
 			continue

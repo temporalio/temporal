@@ -48,13 +48,13 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// are derived from the lifecycle's entry times, so they cannot drift.)
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
-	// EntityTransitionLegality is the generic conformance rule over any Lifecycled
-	// entity. It subsumes WorkflowUpdateStageMonotone (a stage regression is simply
-	// not a legal edge) and checks every entity type at once. It became safe to
-	// enforce once the Lifecycle's executable transition function began classifying
-	// benign duplicate/late/out-of-order/post-terminal spans as NoOp rather than
-	// illegal — the false-positive vector that previously kept it unregistered.
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.EntityTransitionLegality{} })
+	// rule.EntityTransitionLegality (generic, over any Lifecycled entity) is built
+	// and unit-tested but NOT registered: a suite run surfaced a false positive —
+	// a Workflow observes `complete` while still in `created` because its `start`
+	// was not observed on that path (a forward jump over an unobserved state, not an
+	// illegal transition). Classify treats duplicate/stale/post-terminal spans as
+	// NoOp, but not yet forward jumps; until that (or event-time ordering) lands,
+	// enforcing it suite-wide is unsafe. See UMPIRE_PLAN.md.
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })

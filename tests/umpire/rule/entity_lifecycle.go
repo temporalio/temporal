@@ -15,7 +15,7 @@ type EntityTransitionLegality struct{}
 func (EntityTransitionLegality) Name() string { return "EntityTransitionLegalityRule" }
 
 func (EntityTransitionLegality) CheckSafety(c *umpire.SafetyContext) {
-	for r := range umpire.ChangedLifecycles(c) {
+	for r := range c.ChangedLifecycles() {
 		lc := r.Entity.Lifecycle()
 		illegal := lc.Illegal()
 		c.Eval(r.Key, len(illegal) == 0, umpire.Violation{
@@ -38,7 +38,7 @@ type EntityProgress struct{}
 func (EntityProgress) Name() string { return "EntityProgressRule" }
 
 func (EntityProgress) CheckLiveness(c *umpire.LivenessContext) {
-	for r := range umpire.ChangedLifecycles(c) {
+	for r := range c.ChangedLifecycles() {
 		lc := r.Entity.Lifecycle()
 		if !lc.MustProgress() {
 			c.Resolve(r.Key)

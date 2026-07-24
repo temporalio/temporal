@@ -24,7 +24,7 @@ func (m *SpeculativeTaskCreation) CheckSafety(c *umpire.SafetyContext) {
 	}
 	byWorkflow := make(map[string]*taskPair)
 
-	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
+	for r := range c.Changed[model.WorkflowTask]() {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue
