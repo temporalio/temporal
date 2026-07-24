@@ -20,6 +20,35 @@ type rpcFaultOptions struct {
 	namespaceName string
 }
 
+func (o rpcFaultOptions) matchesNamespace(req any) bool {
+	if o.namespaceID == "" && o.namespaceName == "" {
+		return true
+	}
+
+	matched := false
+	if o.namespaceID != "" {
+		if r, ok := req.(interface{ GetNamespaceId() string }); ok {
+			if namespaceID := r.GetNamespaceId(); namespaceID != "" {
+				if namespaceID != o.namespaceID {
+					return false
+				}
+				matched = true
+			}
+		}
+	}
+	if o.namespaceName != "" {
+		if r, ok := req.(interface{ GetNamespace() string }); ok {
+			if namespaceName := r.GetNamespace(); namespaceName != "" {
+				if namespaceName != o.namespaceName {
+					return false
+				}
+				matched = true
+			}
+		}
+	}
+	return matched
+}
+
 // WithNamespaceID filters faults to only fire for requests whose GetNamespaceId()
 // matches the given namespace ID.
 func WithNamespaceID(id string) RPCFaultOption {
@@ -74,15 +103,8 @@ func InjectRPCFault(t testing.TB, tc *TestCluster, fault RPCFault, opts ...RPCFa
 	var fired atomic.Bool
 
 	unregister := generator.RegisterCallback(func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-		if options.namespaceID != "" {
-			if r, ok := req.(interface{ GetNamespaceId() string }); ok && r.GetNamespaceId() != options.namespaceID {
-				return false, nil, nil
-			}
-		}
-		if options.namespaceName != "" {
-			if r, ok := req.(interface{ GetNamespace() string }); ok && r.GetNamespace() != options.namespaceName {
-				return false, nil, nil
-			}
+		if !options.matchesNamespace(req) {
+			return false, nil, nil
 		}
 
 		if injectedErr := fault(req, resp, err); injectedErr != nil {
