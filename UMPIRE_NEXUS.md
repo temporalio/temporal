@@ -2,7 +2,7 @@
 
 How to extend the umpire from workflow-update coverage to **Nexus operations**. For the *why*
 read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for *how it fits together* read
-[`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md); for current status read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
+[`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md); for current status read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
 
 ## Snapshot
 

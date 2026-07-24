@@ -3,7 +3,7 @@
 The Driver is Umpire's active **mechanics** — the arm, not the brain. The **Planner**
 (see [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md)) decides *what* states to reach and plans
 routes over the model; the Driver realizes each abstract route step as real traffic against
-the running server, and injects faults. The **Monitor** ([`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md))
+the running server, and injects faults. The **Monitor** ([`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md))
 then judges the result. For the whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md).
 
 This document is a plan, not built code — it names the seam, the reach discipline, and the

@@ -7,7 +7,7 @@ constraints, it plans routes over the Monitor's model. Coverage-guided fuzzing i
 most advanced mode, not a separate subsystem.
 
 For the whole-system pitch read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for the model these plans
-run over read [`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md) and [`SAAMODEL.md`](./SAAMODEL.md).
+run over read [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md) and [`SAAMODEL.md`](./SAAMODEL.md).
 
 ## The one idea: describe states, not steps
 

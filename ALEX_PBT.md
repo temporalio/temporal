@@ -6,7 +6,7 @@ The branch adds a **property-based analysis harness** for the Temporal *schedule
 matching-time computation. It overlaps Umpire's territory — both are model-first,
 deterministic, evidence-producing test systems — but attacks it from the opposite end of
 the scope/depth axis. This doc summarizes the branch, then compares it against Umpire
-(`UMPIRE_SPEC.md` / `UMPIRE_ABOUT.md` / `UMPIRE_PLAN.md` / `UMPIRE_DRIVER.md`). For the
+(`UMPIRE_SPEC.md` / `UMPIRE_MONITOR.md` / `UMPIRE_PLAN.md` / `UMPIRE_DRIVER.md`). For the
 other design references see [`SAAMODEL.md`](./SAAMODEL.md) and
 [`STAMP_IMPORT.md`](./STAMP_IMPORT.md).
 

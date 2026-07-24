@@ -1,4 +1,4 @@
-# Umpire — Architecture
+# Umpire — Monitor (the passive half): architecture
 
 How the pieces fit together. For *why* it exists read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md);
 for current status, gaps, and the rule inventory read [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).

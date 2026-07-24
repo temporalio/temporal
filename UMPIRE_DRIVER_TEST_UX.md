@@ -2,7 +2,7 @@
 
 The developer-facing guide to the Driver (Umpire's active half). For the broader architecture read
 [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md); for the model these tests plan over read
-[`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md) and [`SAAMODEL.md`](./SAAMODEL.md).
+[`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md) and [`SAAMODEL.md`](./SAAMODEL.md).
 
 ## The one idea: describe states, not steps
 

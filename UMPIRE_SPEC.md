@@ -9,7 +9,7 @@ pair that drives:
 
 - **Monitor — the passive judge (built, enforced).** Observes (gRPC + OTEL), models (entity
   FSMs that are executable oracles), and judges (safety/liveness rules → violations). It never
-  drives. See [`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md) / [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
+  drives. See [`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md) / [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
 - **Planner — the active brains (planning core built).** Given a target state or constraints,
   plans routes over the Monitor's model; coverage-guided fuzzing is its most advanced mode. See
   [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md).

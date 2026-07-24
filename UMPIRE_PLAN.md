@@ -2,7 +2,7 @@
 
 Current state, a critical read against the goals, gap analysis, and rule inventory. For the
 *why* read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md); for *how it fits together* read
-[`UMPIRE_ABOUT.md`](./UMPIRE_ABOUT.md).
+[`UMPIRE_MONITOR.md`](./UMPIRE_MONITOR.md).
 
 ## Snapshot
 
