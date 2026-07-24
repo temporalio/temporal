@@ -248,10 +248,9 @@ func TestReadBuffer_ConcurrentReaders(t *testing.T) {
 	b := newTestBuffer(64)
 
 	var wg sync.WaitGroup
-	for reader := 0; reader < 8; reader++ {
-		wg.Add(1)
-		go func(offset int64) {
-			defer wg.Done()
+	for reader := range 8 {
+		offset := int64(reader) * 3
+		wg.Go(func() {
 			// Each reader scans the whole id space in overlapping windows,
 			// starting at a slightly different position like staggered lanes.
 			next := 1 + offset
@@ -261,20 +260,26 @@ func TestReadBuffer_ConcurrentReaders(t *testing.T) {
 				cursor := next
 				for cursor != 0 {
 					page, n, err := b.readPage(cursor, end, fetch)
-					require.NoError(t, err)
+					if err != nil {
+						t.Errorf("readPage(%d, %d) failed: %v", cursor, end, err)
+						return
+					}
 					for _, task := range page {
 						got[task.GetTaskID()] = struct{}{}
 					}
 					cursor = n
 				}
 				for id := next; id < end; id++ {
-					_, ok := got[id]
-					require.True(t, ok, "reader missed task %d in [%d, %d)", id, next, end)
+					if _, ok := got[id]; !ok {
+						t.Errorf("reader missed task %d in [%d, %d)", id, next, end)
+					}
 				}
-				require.Len(t, got, int(end-next))
+				if len(got) != int(end-next) {
+					t.Errorf("got %d tasks in [%d, %d), want %d", len(got), next, end, end-next)
+				}
 				next = end
 			}
-		}(int64(reader) * 3)
+		})
 	}
 	wg.Wait()
 }
