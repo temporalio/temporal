@@ -342,10 +342,6 @@ message TimeSkippingInfo {
   // Tracks the number of times a time-skipping transition has occurred since time skipping
   // was most recently enabled. It is reset every time the skipping config is updated.
   int32 session_skip_count = 6;
-
-  // Why time skipping most recently stopped running. Set when skipping transitions from running to
-  // stopped (user disabled it, a fast-forward completed, or the per-session skip cap was reached).
-  temporal.api.enums.v1.TimeSkippingStopReason stop_reason = 7;
 }
 
 message FastForwardInfo {

@@ -93,7 +93,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
 	s.True(ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
-	inputConfig.MaxSkipPerSession = defaultMaxSkipPerSession // frontend populated this from dynamic config
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -124,7 +124,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
 	s.NoError(err)
 
 	ms := s.getMutableState(env, tv.WorkflowID(), resp.RunId)
-	inputConfig.MaxSkipPerSession = defaultMaxSkipPerSession // frontend populated this from dynamic config
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -178,7 +178,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ExecuteMultiOperation_DCEnabled
 
 	runID := resp.GetResponses()[0].GetStartWorkflow().GetRunId()
 	ms := s.getMutableState(env, tv.WorkflowID(), runID)
-	inputConfig.MaxSkipPerSession = defaultMaxSkipPerSession // frontend populated this from dynamic config
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession // frontend populated this from dynamic config
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 }
 
@@ -243,7 +243,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 		FastForward: durationpb.New(time.Hour),
 	}
 	updateOptions(config1)
-	config1.MaxSkipPerSession = defaultMaxSkipPerSession
+	config1.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config1, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -257,7 +257,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 		FastForward: durationpb.New(2 * time.Hour),
 	}
 	updateOptions(config2)
-	config2.MaxSkipPerSession = defaultMaxSkipPerSession
+	config2.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config2, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -269,7 +269,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_UpdateWorkflowOptions_DCEnabled
 	// disabled config, so MaxSkipPerSession still comes back set.
 	config3 := &commonpb.TimeSkippingConfig{Enabled: false}
 	updateOptions(config3)
-	config3.MaxSkipPerSession = defaultMaxSkipPerSession
+	config3.MaxSessionSkipCount = defaultMaxSkipPerSession
 
 	ms = s.getMutableState(env, tv.WorkflowID(), runID)
 	s.True(proto.Equal(config3, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
@@ -345,7 +345,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_ResetWithUpdateOptions() {
 
 	// New run's mutable state must have the config (MaxSkipPerSession populated by the frontend).
 	ms := s.getMutableState(env, tv.WorkflowID(), newRunID)
-	inputConfig.MaxSkipPerSession = defaultMaxSkipPerSession
+	inputConfig.MaxSessionSkipCount = defaultMaxSkipPerSession
 	s.True(proto.Equal(inputConfig, ms.State.ExecutionInfo.GetTimeSkippingInfo().GetConfig()))
 
 	// New run's history must contain a WorkflowExecutionOptionsUpdated event with the config.

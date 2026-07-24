@@ -6,7 +6,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -54,9 +53,6 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 		return
 	}
 	ms.executionInfo.TimeSkippingInfo.Config = config
-	if !config.GetEnabled() {
-		tsi.StopReason = enumspb.TIME_SKIPPING_STOP_REASON_USER_DISABLED
-	}
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
 	tsi.SessionSkipCount = 0
@@ -191,8 +187,8 @@ func propagateTimeSkippingToChild(
 
 	// propagate both config and state
 	return &commonpb.TimeSkippingConfig{
-		Enabled:           true,
-		MaxSkipPerSession: tsc.GetMaxSkipPerSession(),
+		Enabled:             true,
+		MaxSessionSkipCount: tsc.GetMaxSessionSkipCount(),
 	}, stateProp
 }
 
@@ -338,7 +334,7 @@ func (util *TimeSkippingInfoUtil) IsRunning(now time.Time) bool {
 	if util == nil || util.tsi == nil {
 		return false
 	}
-	hasSkipQuota := util.tsi.Config.GetMaxSkipPerSession() > util.tsi.GetSessionSkipCount()
+	hasSkipQuota := util.tsi.Config.GetMaxSessionSkipCount() > util.tsi.GetSessionSkipCount()
 	if !hasSkipQuota {
 		return false
 	}
@@ -361,7 +357,6 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 		CurrentTime:     timestamppb.New(currentTime),
 		IsRunning:       util.IsRunning(currentTime),
 		FastForwardInfo: util.ToFastForwardInfo(),
-		StopReason:      util.tsi.GetStopReason(),
 	}
 }
 
@@ -586,13 +581,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
 		tsi.GetFastForwardInfo().HasReached = true
 		tsi.Config.Enabled = false
-		tsi.StopReason = enumspb.TIME_SKIPPING_STOP_REASON_FAST_FORWARD_COMPLETED
 	}
 	// update skip
 	tsi.SessionSkipCount += 1
-	if tsi.SessionSkipCount >= tsi.Config.GetMaxSkipPerSession() && tsi.Config.Enabled {
+	if tsi.SessionSkipCount >= tsi.Config.GetMaxSessionSkipCount() && tsi.Config.Enabled {
 		tsi.Config.Enabled = false
-		tsi.StopReason = enumspb.TIME_SKIPPING_STOP_REASON_MAX_SKIP_PER_SESSION_REACHED
 	}
 
 	ms.timeSkippingInfoUpdated = true
