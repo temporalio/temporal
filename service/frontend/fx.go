@@ -303,11 +303,6 @@ func GrpcServerOptionsProvider(
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
-	}
-	if faultInterceptor := faultinjection.GRPCUnaryServerInterceptor(testHooks); faultInterceptor != nil {
-		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
-	}
-	unaryInterceptors = append(unaryInterceptors,
 		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -318,11 +313,12 @@ func GrpcServerOptionsProvider(
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 		contextMetadataInterceptor.Intercept,
-	)
+	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
+	unaryInterceptors = append(unaryInterceptors, faultinjection.GRPCUnaryServerInterceptor(testHooks))
 	// retry interceptor should be the most inner interceptor
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
