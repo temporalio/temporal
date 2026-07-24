@@ -77,7 +77,7 @@ func (h *HistoryStore) AppendHistoryNodes(
 			node.TransactionID,
 			node.Events.Data,
 			node.Events.EncodingType.String(),
-		).WithContext(ctx)
+		).WithContext(ctx).Idempotent(true)
 		if err := query.Exec(); err != nil {
 			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 		}
@@ -129,7 +129,7 @@ func (h *HistoryStore) DeleteHistoryNodes(
 		branchID,
 		nodeID,
 		txnID,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteHistoryNodes", err)
 	}
@@ -166,7 +166,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 		queryString = v2templateReadHistoryNode
 	}
 
-	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID).WithContext(ctx)
+	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID).WithContext(ctx).Idempotent(true)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	var pagingToken []byte
@@ -255,7 +255,7 @@ func (h *HistoryStore) ForkHistoryBranch(
 	if err != nil {
 		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
-	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
+	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx).Idempotent(true)
 	err = query.Exec()
 	if err != nil {
 		return gocql.ConvertError("ForkHistoryBranch", err)
@@ -303,7 +303,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
-	query := h.Session.Query(v2templateScanAllTreeBranches).WithContext(ctx)
+	query := h.Session.Query(v2templateScanAllTreeBranches).WithContext(ctx).Idempotent(true)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -360,7 +360,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	if err != nil {
 		return nil, serviceerror.NewInternalf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err)
 	}
-	query := h.Session.Query(v2templateReadAllBranches, treeID).WithContext(ctx)
+	query := h.Session.Query(v2templateReadAllBranches, treeID).WithContext(ctx).Idempotent(true)
 
 	pageSize := 100
 	var pagingToken []byte

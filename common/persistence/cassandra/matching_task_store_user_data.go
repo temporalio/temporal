@@ -48,7 +48,7 @@ func (d *userDataStore) GetTaskQueueUserData(
 	query := d.Session.Query(templateGetTaskQueueUserDataQuery,
 		request.NamespaceID,
 		request.TaskQueue,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 	var version int64
 	var userDataBytes []byte
 	var encoding string
@@ -134,7 +134,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 }
 
 func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, request *p.ListTaskQueueUserDataEntriesRequest) (*p.InternalListTaskQueueUserDataEntriesResponse, error) {
-	query := d.Session.Query(templateListTaskQueueUserDataQuery, request.NamespaceID).WithContext(ctx)
+	query := d.Session.Query(templateListTaskQueueUserDataQuery, request.NamespaceID).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
@@ -172,7 +172,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
 
 	var taskQueues []string
@@ -207,7 +207,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 
 func (d *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *p.CountTaskQueuesByBuildIdRequest) (int, error) {
 	var count int
-	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
+	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx).Idempotent(true)
 	err := query.Scan(&count)
 	return count, err
 }
