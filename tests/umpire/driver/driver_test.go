@@ -11,7 +11,7 @@ import (
 
 // recordingActuator is a fake Actuator: instead of sending RPCs it records the events
 // it was asked to realize, so tests can assert what a Plan drives. A real driver
-// would map each event onto Temporal traffic (see DRIVER_TEST_UX.md).
+// would map each event onto Temporal traffic (see UMPIRE_DRIVER_TEST_UX.md).
 type recordingActuator struct{ events []string }
 
 func (d *recordingActuator) Do(_ context.Context, event string) error {

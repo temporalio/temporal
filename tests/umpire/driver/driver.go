@@ -6,7 +6,7 @@
 // before a single RPC is sent. Realizing an abstract event as real traffic is the
 // Actuator seam.
 //
-// See DRIVER_TEST_UX.md for the developer guide and DRIVER.md for the broader
+// See UMPIRE_DRIVER_TEST_UX.md for the developer guide and UMPIRE_DRIVER.md for the broader
 // architecture.
 package driver
 

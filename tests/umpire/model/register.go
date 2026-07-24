@@ -8,7 +8,7 @@ import (
 // DefaultEntity is one entry in the default entity set: an entity factory plus the
 // facts that route to it. DefaultEntities (below) is the single source of truth for
 // which entities the umpire models — both the passive side (RegisterDefaultEntities,
-// which routes facts to them) and the active side (pitcher.DefaultModels, which
+// which routes facts to them) and the active side (driver.DefaultModels, which
 // plans over them) derive from it, so adding an entity is a one-line change in one
 // place, not two that can drift.
 type DefaultEntity struct {
