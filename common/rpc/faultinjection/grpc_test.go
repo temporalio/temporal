@@ -13,6 +13,8 @@ import (
 )
 
 func TestGRPCUnaryServerInterceptor_NoGenerator(t *testing.T) {
+	t.Parallel()
+
 	interceptor := GRPCUnaryServerInterceptor(testhooks.NewTestHooks())
 	response, err := interceptor(
 		context.Background(),
@@ -28,6 +30,8 @@ func TestGRPCUnaryServerInterceptor_NoGenerator(t *testing.T) {
 }
 
 func TestGRPCUnaryServerInterceptor_BeforeHandler(t *testing.T) {
+	t.Parallel()
+
 	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
 	testhooks.Set(
@@ -57,6 +61,8 @@ func TestGRPCUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 }
 
 func TestGRPCUnaryServerInterceptor_AfterHandler(t *testing.T) {
+	t.Parallel()
+
 	testHooks := testhooks.NewTestHooks()
 	testhooks.Set(
 		testHooks,
