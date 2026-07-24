@@ -40,11 +40,11 @@ func primedScaler(
 }
 
 // onTasksLoop calls OnTasks with the same numTasks for numRepetitions.
-func onTasksLoop(scaler *simplePartitionScaler, numTasks, currentTarget, numRepetitions int, ts *clock.EventTimeSource, delay time.Duration) (dec PartitionScalerDecision) {
+func onTasksLoop(initialTarget int, scaler *simplePartitionScaler, ts *clock.EventTimeSource, numTasks, numRepetitions int, delay time.Duration) (dec PartitionScalerDecision) {
 	for i := 0; i < numRepetitions; i++ {
-		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: numTasks, CurrentTarget: currentTarget})
+		dec = scaler.OnTasks(PartitionScalerInput{NumTasks: numTasks, CurrentTarget: initialTarget})
 		if !dec.NoChange {
-			currentTarget = dec.NewTarget
+			initialTarget = dec.NewTarget
 		}
 		if ts != nil {
 			ts.Advance(delay)
@@ -91,7 +91,7 @@ func TestSimplePartitionScalerDisabled(t *testing.T) {
 			},
 		})
 
-	dec := onTasksLoop(scaler, 1, 3, 10, nil, 0)
+	dec := onTasksLoop(3, scaler, nil, 1, 10, 0)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 0, dec.NewTarget)
 }
@@ -109,8 +109,7 @@ func TestSimplePartitionScalerFixed(t *testing.T) {
 				{Window: scalerWindow, TargetRate: 100},
 			},
 		})
-
-	dec := onTasksLoop(scaler, 1, 1, 10, nil, 0)
+	dec := onTasksLoop(1, scaler, nil, 1, 10, 0)
 	require.Equal(t, 7, dec.NewTarget)
 }
 
@@ -122,7 +121,7 @@ func TestSimplePartitionScalerEnabledNoWindows(t *testing.T) {
 	scaler := newTestScaler(clock.NewEventTimeSource(),
 		dynamicconfig.SimplePartitionScalerSettings{Enabled: true})
 
-	dec := onTasksLoop(scaler, 1, 3, 10, nil, 0)
+	dec := onTasksLoop(3, scaler, nil, 1, 10, 0)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 3, dec.NewTarget, "with no windows the current target is used as-is")
 }
@@ -141,7 +140,7 @@ func TestSimplePartitionScalerScalesUp(t *testing.T) {
 	})
 
 	// 1000 tasks/s against TargetRate 100 => target 10.
-	dec := onTasksLoop(scaler, 100, 1, 10, ts, 100*time.Millisecond)
+	dec := onTasksLoop(1, scaler, ts, 100, 10, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 10, dec.NewTarget)
 }
@@ -160,7 +159,7 @@ func TestSimplePartitionScalerScalesDown(t *testing.T) {
 	})
 
 	// Current target 20, only 300 tasks/s against TargetRate 100 => target 3.
-	dec := onTasksLoop(scaler, 300, 20, 1, ts, 100*time.Millisecond)
+	dec := onTasksLoop(20, scaler, ts, 300, 1, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 3, dec.NewTarget) // TODO: this works with 300 tasks and 1 repetition, not sure why it is 1 with 30 tasks 10 reps (in 1 second)
 }
@@ -178,7 +177,7 @@ func TestSimplePartitionScalerScalesDownFlooredAtOne(t *testing.T) {
 		},
 	})
 
-	dec := onTasksLoop(scaler, 0, 5, 10, ts, 100*time.Millisecond)
+	dec := onTasksLoop(0, scaler, ts, 5, 10, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 1, dec.NewTarget, "scale-down is floored at one partition")
 }
@@ -198,7 +197,7 @@ func TestSimplePartitionScalerMaxBound(t *testing.T) {
 	})
 
 	// Rate would compute a target of 10; Max clamps it to 5.
-	dec := onTasksLoop(scaler, 10, 1, 10, ts, 100*time.Millisecond)
+	dec := onTasksLoop(10, scaler, ts, 1, 10, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 5, dec.NewTarget)
 }
@@ -218,7 +217,7 @@ func TestSimplePartitionScalerMinBound(t *testing.T) {
 	})
 
 	// Rate would compute a target of 2; Min raises it to 8.
-	dec := onTasksLoop(scaler, 2, 1, 10, ts, 100*time.Millisecond)
+	dec := onTasksLoop(2, scaler, ts, 1, 10, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 8, dec.NewTarget)
 }
@@ -241,7 +240,7 @@ func TestSimplePartitionScalerHysteresisDeadband(t *testing.T) {
 		},
 	})
 
-	dec := onTasksLoop(scaler, 150, 2, 2, ts, 100*time.Millisecond) // TODO: target goes to 1 after third rep, why?
+	dec := onTasksLoop(2, scaler, ts, 150, 2, 100*time.Millisecond) // TODO: target goes to 1 after third rep, why?
 	require.False(t, dec.NoChange)
 	require.Equal(t, 2, dec.NewTarget, "a rate inside the deadband holds the current target")
 }
