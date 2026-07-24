@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,37 +22,56 @@ func TestEntityLifecyclesAreValidAndTotal(t *testing.T) {
 
 	for name, e := range entities {
 		t.Run(name, func(t *testing.T) {
-			spec := e.Lifecycle()
-			require.NoError(t, spec.Validate(), "lifecycle spec must be structurally sound")
+			lc := e.Lifecycle()
+			require.NoError(t, lc.Validate(), "lifecycle spec must be structurally sound")
 
 			// Classify must be total: every reachable state × every declared event
-			// maps to exactly one of the three outcomes and never panics.
-			for state := range spec.Reachable() {
-				lc := freshLifecycle(t, e)
-				lc.SetState(state)
-				for _, ev := range lc.Events() {
-					o := lc.Classify(ev)
-					require.Contains(t, []umpire.TransitionKind{umpire.Advance, umpire.NoOp, umpire.Illegal}, o.Kind,
-						"state=%s event=%s", state, ev)
-				}
+			// maps to exactly one of the three defined outcomes and never panics.
+			for _, c := range lc.Cells() {
+				require.Contains(t, []umpire.TransitionKind{umpire.Advance, umpire.NoOp, umpire.Illegal}, c.Kind,
+					"state=%s event=%s", c.From, c.Event)
 			}
 		})
 	}
 }
 
-// freshLifecycle returns a new Lifecycle of the same shape as e's, so mutating its
-// state during the totality sweep does not disturb the shared entity.
-func freshLifecycle(t *testing.T, e umpire.Lifecycled) *umpire.Lifecycle {
-	t.Helper()
-	switch e.(type) {
-	case *Workflow:
-		return NewWorkflow().Lifecycle()
-	case *WorkflowTask:
-		return NewWorkflowTask().Lifecycle()
-	case *WorkflowUpdate:
-		return NewWorkflowUpdate().Lifecycle()
-	default:
-		t.Fatalf("unknown entity type %T", e)
-		return nil
+// TestEntityModelDecisionTables renders each default entity's model as a decision
+// table — a server-free, readable "living doc" of how the entity behaves (the
+// coverage denominator for future exploration) — and asserts the model has no dead
+// events (every declared event is a live transition from some reachable state).
+func TestEntityModelDecisionTables(t *testing.T) {
+	entities := map[string]umpire.Lifecycled{
+		"Workflow":       NewWorkflow(),
+		"WorkflowTask":   NewWorkflowTask(),
+		"WorkflowUpdate": NewWorkflowUpdate(),
+	}
+	names := make([]string, 0, len(entities))
+	for n := range entities {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		lc := entities[name].Lifecycle()
+		cells := lc.Cells()
+
+		t.Logf("%s model: %d reachable states, %d events, %d cells",
+			name, len(lc.Reachable()), len(lc.Events()), len(cells))
+		for _, c := range cells {
+			if c.Kind == umpire.Advance {
+				t.Logf("  %-14s --%s--> %s", c.From, c.Event, c.To)
+			}
+		}
+
+		advanced := map[string]bool{}
+		for _, c := range cells {
+			if c.Kind == umpire.Advance {
+				advanced[c.Event] = true
+			}
+		}
+		for _, ev := range lc.Events() {
+			require.Truef(t, advanced[ev], "%s: event %q is never a live transition (dead event)",
+				name, ev)
+		}
 	}
 }

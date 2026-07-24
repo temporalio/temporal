@@ -39,12 +39,34 @@ const (
 	Illegal
 )
 
+func (k TransitionKind) String() string {
+	switch k {
+	case Advance:
+		return "Advance"
+	case NoOp:
+		return "NoOp"
+	case Illegal:
+		return "Illegal"
+	default:
+		return "TransitionKind(?)"
+	}
+}
+
 // Outcome is the predicted result of applying an event from a state: the pure,
 // inspectable output of Classify. To == From for NoOp and Illegal.
 type Outcome struct {
 	Kind  TransitionKind
 	From  string
 	Event string
+	To    string
+}
+
+// Cell is one entry of a lifecycle's decision table: the predicted Outcome of
+// applying Event from state From.
+type Cell struct {
+	From  string
+	Event string
+	Kind  TransitionKind
 	To    string
 }
 
@@ -199,7 +221,14 @@ func reachClosure(edges map[string]map[string]string) map[string]map[string]bool
 // tools can consult it directly. It never panics: every (state, event) pair maps
 // to exactly one of Advance / NoOp / Illegal.
 func (l *Lifecycle) Classify(event string) Outcome {
-	from := l.fsm.Current()
+	return l.classifyFrom(l.fsm.Current(), event)
+}
+
+// classifyFrom is the pure core of Classify: it predicts the Outcome of event from
+// an arbitrary state, reading only the static spec. Classify calls it with the
+// current state; Cells calls it across the reachable set to build the decision
+// table without mutating the FSM.
+func (l *Lifecycle) classifyFrom(from, event string) Outcome {
 	if to, ok := l.edges[from][event]; ok {
 		kind := Advance
 		if to == from {
@@ -311,17 +340,40 @@ func (l *Lifecycle) Reachable() map[string]bool {
 	return out
 }
 
+// Cells returns the model's decision table over its reachable states: for every
+// reachable state × declared event, the predicted Outcome. It is the coverage
+// target (the denominator) for exploring the model and a readable, server-free
+// description of how the entity behaves — computed from the spec alone, without
+// touching the FSM's current state. States and events are in stable sorted order.
+func (l *Lifecycle) Cells() []Cell {
+	reachable := l.Reachable()
+	froms := sortedKeys(reachable)
+	out := make([]Cell, 0, len(froms)*len(l.eventNames))
+	for _, from := range froms {
+		for _, e := range l.eventNames {
+			o := l.classifyFrom(from, e)
+			out = append(out, Cell{From: from, Event: e, Kind: o.Kind, To: o.To})
+		}
+	}
+	return out
+}
+
 // Validate is the Tier-1 static check on the spec: it needs no server and catches
 // spec drift up front. It verifies the initial state is set, every declared state
-// is reachable from it (no dead states), and terminal states have no outgoing
-// edges. Classify's totality (every state × event yields a defined Outcome) holds
-// by construction, so it needs no runtime assertion here.
+// is reachable from it (no dead states), terminal states have no outgoing edges,
+// and every MustProgress annotation is coherent (a declared, non-terminal state
+// from which a terminal state is actually reachable — otherwise the generic
+// EntityProgress liveness rule would either never fire or fire unsatisfiably).
+// Classify's totality (every state × event yields a defined Outcome) holds by
+// construction, so it needs no runtime assertion here.
 func (l *Lifecycle) Validate() error {
 	if l.initial == "" {
 		return fmt.Errorf("lifecycle: empty initial state")
 	}
 	reachable := l.Reachable()
+	stateSet := map[string]bool{}
 	for _, s := range l.states {
+		stateSet[s] = true
 		if !reachable[s] {
 			return fmt.Errorf("lifecycle: state %q is unreachable from initial %q", s, l.initial)
 		}
@@ -331,7 +383,28 @@ func (l *Lifecycle) Validate() error {
 			return fmt.Errorf("lifecycle: terminal state %q has outgoing transitions", s)
 		}
 	}
+	for s := range l.mustProgress {
+		switch {
+		case !stateSet[s]:
+			return fmt.Errorf("lifecycle: must-progress state %q is not a declared state", s)
+		case l.terminal[s]:
+			return fmt.Errorf("lifecycle: must-progress state %q is terminal (can never be left)", s)
+		case !l.reachesTerminal(s):
+			return fmt.Errorf("lifecycle: no terminal state is reachable from must-progress state %q", s)
+		}
+	}
 	return nil
+}
+
+// reachesTerminal reports whether some terminal state is reachable from s by
+// following legal edges — i.e. progress out of s is actually possible.
+func (l *Lifecycle) reachesTerminal(s string) bool {
+	for t := range l.canReach[s] {
+		if l.terminal[t] {
+			return true
+		}
+	}
+	return false
 }
 
 // Lifecycled is implemented by entities backed by a Lifecycle, letting generic

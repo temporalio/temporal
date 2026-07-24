@@ -171,13 +171,21 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
    a legal edge — checking every `Lifecycled` type at once. `States`/`Events`/`Reachable`/
    `Validate` expose the graph for **Tier-1 static validation** (`tests/umpire/model` proves each
    default lifecycle is sound and `Classify` total, server-free in ms — the analog of the SAA
-   `validate` package). Remaining next step toward full parity: predict the *API result* per edge
-   too (see item 5), not just the state transition. See `UMPIRE_PLAN.md`.
+   `validate` package). Predicting the *API result* per edge (item 5) was considered next but does
+   **not** fit: SAA's events *are* API calls, so an edge has an API outcome; Umpire's events are
+   observed lifecycle **spans**, and the interceptor drops errored responses entirely
+   (`interceptor.go` records only when `err == nil`). Porting it would mean restructuring facts to
+   be API-call-centric — a different architecture, not an increment. See `UMPIRE_PLAN.md`.
 
 2. **Derive the scenario/coverage catalog from the model with `Reachable`.** Phase 2 of the
    Scenario plan wants to seed the catalog from rule preconditions and emit a dead-rule report.
    A reachability walk over the entity FSMs produces that target set for free — no hand-curated
-   equivalence classes. Adopt `Fingerprint`-style bucketing so retry/attempt loops converge.
+   equivalence classes. ✅ **Foundation built:** `Lifecycle.Reachable()` + `Cells()` give the
+   per-entity coverage denominator (the decision table) with zero server, and
+   `tests/umpire/model` renders each model as a living-doc table and asserts no dead events. Still
+   to do: track *exercised* cells at runtime and aggregate across purges (the process-global
+   `Coverage` sink) to turn the denominator into a real coverage/dead-rule report. Adopt
+   `Fingerprint`-style bucketing so retry/attempt loops converge.
 
 3. **Introduce a virtual clock in the in-process functional tier.** Directly addresses the
    event-time gap (#2) and dissolves the `settleWorkflows` hack: timeouts and closure become
@@ -189,9 +197,11 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
    `activity.Transition*`, and assert every transition our model accepts is reachable in the code
    (and vice-versa). Server-free, ~1s, catches model drift before any cluster spins up.
 
-5. **Model the full edge contract, not just state.** Use the dormant `ResponseRecorder` to check
-   predicted reject kinds and response projections, and model side effects (task invalidation)
-   as observable deltas, as the SAA `Outcome` does.
+5. **Model the full edge contract, not just state.** Model side effects (task invalidation) as
+   observable deltas, as the SAA `Outcome` does. Note the caveat under item 1: predicting reject
+   *kinds* per edge needs an API-call-centric fact model Umpire doesn't have (the interceptor
+   doesn't even observe errored responses today), so it is a re-architecture, not a quick win —
+   pursue only if API-error bugs prove worth a dedicated error-observation channel.
 
 ## The unifying insight
 

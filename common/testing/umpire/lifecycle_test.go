@@ -124,6 +124,41 @@ func TestLifecycle_ClassifyIsTotalOverReachableStates(t *testing.T) {
 	}
 }
 
+func TestLifecycle_Cells(t *testing.T) {
+	l := NewLifecycle(testSpec())
+	cells := l.Cells()
+
+	// One cell per (reachable state, event). 6 reachable states × 5 events.
+	require.Len(t, cells, len(l.Reachable())*len(l.Events()))
+
+	// Spot-check a few decisive entries.
+	get := func(from, event string) Cell {
+		for _, c := range cells {
+			if c.From == from && c.Event == event {
+				return c
+			}
+		}
+		t.Fatalf("no cell for (%s, %s)", from, event)
+		return Cell{}
+	}
+	require.Equal(t, Cell{From: "unspecified", Event: "admit", Kind: Advance, To: "admitted"}, get("unspecified", "admit"))
+	require.Equal(t, Illegal, get("unspecified", "accept").Kind)
+	require.Equal(t, NoOp, get("completed", "accept").Kind) // terminal absorbs
+	require.Equal(t, NoOp, get("accepted", "admit").Kind)   // stale, behind current
+
+	// Every declared event must be an Advance from at least one reachable state —
+	// i.e. the model has no dead events.
+	advanced := map[string]bool{}
+	for _, c := range cells {
+		if c.Kind == Advance {
+			advanced[c.Event] = true
+		}
+	}
+	for _, e := range l.Events() {
+		require.Truef(t, advanced[e], "event %q is never a live transition (dead event)", e)
+	}
+}
+
 func TestLifecycle_Reachable(t *testing.T) {
 	l := NewLifecycle(testSpec())
 	require.Equal(t, map[string]bool{
@@ -146,5 +181,36 @@ func TestLifecycle_Validate(t *testing.T) {
 		Initial:     "a",
 		Transitions: []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
 		Terminal:    map[string]bool{"a": true},
+	}).Validate())
+
+	// A well-formed spec with a coherent MustProgress annotation is valid.
+	require.NoError(t, NewLifecycle(LifecycleSpec{
+		Initial:      "a",
+		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		MustProgress: []string{"a"},
+	}).Validate())
+
+	// MustProgress naming a state that does not exist is rejected.
+	require.Error(t, NewLifecycle(LifecycleSpec{
+		Initial:      "a",
+		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		MustProgress: []string{"nope"},
+	}).Validate())
+
+	// MustProgress on a terminal state (can never be left) is rejected.
+	require.Error(t, NewLifecycle(LifecycleSpec{
+		Initial:      "a",
+		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		MustProgress: []string{"b"},
+	}).Validate())
+
+	// MustProgress on a state with no path to any terminal (a pure cycle) is rejected.
+	require.Error(t, NewLifecycle(LifecycleSpec{
+		Initial: "a",
+		Transitions: []Transition{
+			{Event: "x", From: []string{"a"}, To: "b"},
+			{Event: "y", From: []string{"b"}, To: "a"},
+		},
+		MustProgress: []string{"a"},
 	}).Validate())
 }

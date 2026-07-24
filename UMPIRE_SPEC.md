@@ -1,7 +1,8 @@
 # Umpire — Spec
 
-Property-based test monitoring for Temporal: observe a running server, model its
-entities, and rule on invariants — without tests hand-writing assertions.
+Property-based test monitoring for Temporal: observe a running server, build an
+*executable model* of its entities, and rule on that model — without tests hand-writing
+assertions.
 
 ## Goals
 
@@ -13,8 +14,10 @@ entities, and rule on invariants — without tests hand-writing assertions.
 
 ## Non-goals (for now)
 
-- Driving actions / generating scenarios (the "active" side — Pitcher/Skipper). Tests drive.
-- Fault injection, fuzzing, coverage-guided exploration. Hooks exist; logic does not.
+- Driving actions / generating scenarios (the "active" side — Pitcher/Skipper). Tests
+  drive. See `PITCHER.md`.
+- Fault injection, fuzzing, coverage-guided exploration. The Scenario/Coverage catalog is
+  specced (`UMPIRE_PLAN.md`) but unbuilt; the `FaultInjector` hook exists, logic does not.
 - Persistence. State is in-memory and per-test.
 
 ## Constraints
@@ -29,14 +32,31 @@ entities, and rule on invariants — without tests hand-writing assertions.
 
 - **Facts, not calls.** Everything observed (requests, responses, span events, history
   events) is normalized into a `Fact` targeting one entity. One decoder owns wire→fact.
-- **Entities are FSMs.** A `Registry` routes facts to per-entity state machines
-  (Workflow → Task/Update, TaskQueue, Namespace). Entities interpret; rules read.
+- **Entities are executable models, not just FSMs.** Each entity is a total transition
+  function `Classify(event) → Advance | NoOp | Illegal` (the oracle inversion in
+  `SAAMODEL.md`). A total model has **no vacuous pass**: an unanticipated state or an
+  illegal edge is a diff against the model, caught by one generic conformance rule — not
+  something a human had to foresee and hand-write. Rules read; the model judges its own
+  transitions.
 - **Generation-based dirty tracking.** Each fact delivery bumps a counter; rules only
   re-examine entities changed since their last check. No per-tick history retained.
 - **Safety vs. Liveness split** (maps strong vs. eventual consistency):
   - *Safety* — must hold at every observation; violated ⇒ immediate failure.
   - *Liveness* — must eventually hold; tracked as `Pending`/`Resolve`, unresolved items
-    become violations at teardown.
+    become violations at teardown. Both derive from model annotations (terminal states,
+    `MustProgress`) where possible.
+- **Models plus relational invariants.** A complete model is *per-entity*, but Umpire's
+  most valuable invariants are *cross-entity* (speculative task ↔ update, update ↔ its
+  workflow's close). So the rulebook splits: single-entity conformance and liveness
+  collapse into generic, model-derived checks; genuinely relational invariants stay bespoke
+  rules. That cross-entity reach is Umpire's differentiator — SAA's single-archetype model
+  has no such story.
+- **Observation tiers — black / grey / white box.** Facts carry a provenance *tier*
+  (frontend gRPC = black; internal RPC + OTEL = grey; persistence = white). A run enables
+  only importers ≤ its tier and skips higher-tier rules **explicitly** — "not observable
+  here," never a silent pass. One model, tier-gated: the flagship lifecycle rules run in
+  canary/Cloud while white-box rules stay functional-test-only. Portability is the axis
+  SAA's white-box model doesn't address.
 - **Rulebook is pluggable.** Rules register by name (must match their type); a run may
   select a subset. Adding a rule ≠ touching the framework.
 - **Framework / domain split.** `common/testing/umpire` is generic and reusable;
@@ -45,6 +65,9 @@ entities, and rule on invariants — without tests hand-writing assertions.
 ## Shape
 
 ```
-gRPC + OTEL ──▶ Decoder ──▶ Facts ──▶ Registry(entity FSMs) ──▶ Rulebook ──▶ Violations
-                                          (FactLog: queryable record of all facts)
+gRPC + OTEL + (persist)          Decoder      Facts      Registry            Rulebook
+  tier-gated fact sources  ────▶  wire→fact ────────▶  entity models  ────▶  generic conformance
+                                                       Classify:              + liveness (model-derived)
+                                                       Advance/NoOp/Illegal   + cross-entity relational  ──▶ Violations
+                                          (FactLog: queryable record of every fact)
 ```
