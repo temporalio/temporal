@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -1396,6 +1397,27 @@ func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
 	return append([]capturedTaskMatchDetails(nil), h.calls...)
 }
 
+// The matching engine drops an unstarted manager on the loser side of a concurrent
+// load of the same partition. Construction must therefore not register any dynamic
+// config subscriptions — otherwise the abandoned manager would stay reachable from
+// the dynamic config collection forever. Subscriptions are only registered in Start.
+func (s *PartitionManagerTestSuite) TestConstructionDoesNotRegisterDynamicConfigSubscriptions() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	s.Empty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Start()
+	s.NotEmpty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Stop()
+	s.Empty(pm.rateLimitManager.cancels)
+}
+
 // setupPartitionManagerWithTaskHookFactories creates a partition manager with the given task match hooks.
 func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskHookFactories(taskHookFactories []hooks.TaskHookFactory) (*taskQueuePartitionManagerImpl, func()) {
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
@@ -2089,3 +2111,75 @@ func (m *mockUserDataManager) updateVersioningData(data *persistencespb.Versioni
 }
 
 var _ userDataManager = (*mockUserDataManager)(nil)
+
+// TestWorkerCommandsPollTask_VersioningFieldsIgnored verifies that PollTask on a
+// WorkerCommandsPartition does not reject polls that include versioning fields.
+func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		pollMetadata *pollMetadata
+	}{
+		{
+			name: "DeploymentOptions with versioned mode",
+			pollMetadata: &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					DeploymentName:       "my-deployment",
+					BuildId:              "v1",
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			},
+		},
+		{
+			name: "WorkerVersionCapabilities with UseVersioning",
+			pollMetadata: &pollMetadata{
+				workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:       "v1",
+					UseVersioning: true,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+			ns, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+			config := defaultTestConfig()
+			config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+			engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+			userDataMgr := &mockUserDataManager{}
+
+			pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+			require.NoError(t, err)
+			engine.Start()
+			pm.Start()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			defer cancel()
+			err = pm.WaitUntilInitialized(ctx)
+			require.NoError(t, err)
+
+			// Poll with a short timeout — we expect no task (nothing dispatched),
+			// but the poll must not fail with a versioning rejection error.
+			pollCtx, pollCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer pollCancel()
+			_, _, err = pm.PollTask(pollCtx, tc.pollMetadata)
+			// errNoTasks is expected (no tasks dispatched). Any other error indicates
+			// the versioning path incorrectly rejected the poll.
+			require.ErrorIs(t, err, errNoTasks, "PollTask on WorkerCommandsPartition must not reject versioning fields")
+		})
+	}
+}

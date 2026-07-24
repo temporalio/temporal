@@ -438,7 +438,7 @@ jobs:
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
-          TEMPORAL_TEST_LOG_LEVEL: info
+          TEMPORAL_TEST_LOG_LEVEL: warn
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
 
       - name: Dump container logs

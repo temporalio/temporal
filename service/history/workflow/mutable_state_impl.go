@@ -3193,7 +3193,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.Priority = event.Priority
 
 	if tsc, stateProp := event.GetTimeSkippingConfig(), event.GetTimeSkippingStatePropagation(); tsc != nil || stateProp.GetInitialSkippedDuration().AsDuration() > 0 {
-		if err := ms.initTimeSkippingInfo(tsc, stateProp, startEvent.GetEventId()); err != nil {
+		if err := ms.initTimeSkippingInfo(tsc, stateProp); err != nil {
 			return err
 		}
 	}
@@ -4710,6 +4710,7 @@ func (ms *MutableStateImpl) GenerateActivityCancelCommandsForClose() error {
 			ai.Version,
 			ai.StartVersion,
 			nil,
+			0,
 		))
 		if err != nil {
 			return err
@@ -5944,11 +5945,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
-			if err := ms.initTimeSkippingInfo(tsc, nil, event.GetEventId()); err != nil {
+			if err := ms.initTimeSkippingInfo(tsc, nil); err != nil {
 				return err
 			}
 		} else {
-			if err := ms.updateTimeSkippingInfo(tsc, event.GetEventId()); err != nil {
+			if err := ms.updateTimeSkippingInfo(tsc); err != nil {
 				return err
 			}
 		}
@@ -7748,12 +7749,14 @@ func (ms *MutableStateImpl) closeTransaction(
 		ms.closeTransactionUpdateLastRunningClock(transactionPolicy, workflowEventsSeq)
 	}
 
+	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
 
 	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
+	// generate tasks
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
 		eventBatches,

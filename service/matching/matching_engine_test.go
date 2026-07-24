@@ -1485,11 +1485,13 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
-	// Directly override admin rate limits to simulate dynamic config at rateLimitManager.
-	mgr.GetRateLimitManager().SetAdminRateForTesting(25000.0)
-
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()
+
+	// Directly override admin rate limits to simulate dynamic config at rateLimitManager.
+	// Must happen after Start, which registers the dynamic config subscriptions and
+	// initializes the admin rates from config.
+	mgr.GetRateLimitManager().SetAdminRateForTesting(25000.0)
 
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: tl,
@@ -2114,6 +2116,70 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
+}
+
+func (s *matchingEngineSuite) TestCreatePollActivityTaskQueueResponse_ActivityAttemptStamp() {
+	testCases := []struct {
+		name                  string
+		componentRef          []byte
+		wantActivityTaskStamp int32
+	}{
+		{
+			name: "WorkflowActivity",
+		},
+		{
+			name:                  "StandaloneActivity",
+			componentRef:          []byte("standalone-activity-component-ref"),
+			wantActivityTaskStamp: 17,
+		},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			namespaceID := uuid.NewString()
+			workflowID := "workflow1"
+			runID := uuid.NewString()
+			activityID := "activity1"
+			activityType := "activityType"
+			scheduledEventID := int64(10)
+			attempt := int32(1)
+			taskStamp := int32(17)
+
+			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+				NamespaceId:      namespaceID,
+				WorkflowId:       workflowID,
+				RunId:            runID,
+				ScheduledEventId: scheduledEventID,
+				Stamp:            taskStamp,
+				ComponentRef:     tc.componentRef,
+				CreateTime:       timestamppb.Now(),
+			}, nil, 0, nil)
+
+			resp := s.matchingEngine.createPollActivityTaskQueueResponse(task, &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: attempt,
+				ScheduledEvent: &historypb.HistoryEvent{
+					EventId: scheduledEventID,
+					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+							ActivityId:   activityID,
+							ActivityType: &commonpb.ActivityType{Name: activityType},
+						},
+					},
+				},
+			}, metrics.NoopMetricsHandler)
+
+			token, err := s.matchingEngine.tokenSerializer.Deserialize(resp.GetTaskToken())
+			s.NoError(err)
+			s.Equal(namespaceID, token.GetNamespaceId())
+			s.Equal(workflowID, token.GetWorkflowId())
+			s.Equal(runID, token.GetRunId())
+			s.Equal(scheduledEventID, token.GetScheduledEventId())
+			s.Equal(activityID, token.GetActivityId())
+			s.Equal(activityType, token.GetActivityType())
+			s.Equal(attempt, token.GetAttempt())
+			s.Equal(tc.componentRef, token.GetComponentRef())
+			s.Equal(tc.wantActivityTaskStamp, token.GetActivityAttemptStamp())
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
@@ -5501,6 +5567,14 @@ func (m *testTaskManager) CreateTasks(
 		return nil, &persistence.ConditionFailedError{Msg: "Fake ConditionFailedError"}
 	} else if m.fault("CreateTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailable("Fake Unavailable")
+	} else if m.fault("CreateTasks", "PersistenceLimit") {
+		return nil, persistence.ErrPersistenceNamespaceShardLimitExceeded
+	} else if m.fault("CreateTasks", "ConcurrentLimit") {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "Fake concurrent request limit exceeded",
+		}
 	}
 
 	tlm := m.getQueueData(taskQueue, namespaceID, taskType)

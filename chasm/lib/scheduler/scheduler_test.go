@@ -2,6 +2,7 @@ package scheduler_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,10 +18,10 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/tasks"
-	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -43,6 +44,49 @@ func TestListInfo(t *testing.T) {
 	require.NotNil(t, listInfo.WorkflowType)
 	require.NotEmpty(t, listInfo.FutureActionTimes)
 	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
+}
+
+// TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
+// hard-caps RecentActions. recentActions() includes running starts, which
+// aren't bounded by completed-action retention, so without the cap the
+// persisted memo would grow with the number of live starts. The cap keeps the
+// most recently started actions.
+func TestListInfo_RecentActionsCapped(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	// Anchor in the past so every start/close time is a plausible already-happened
+	// action; the +i minutes below stay well before now.
+	base := time.Now().UTC().Add(-time.Hour)
+	// Twelve started workflows, more than the memo cap. StartTimes are inserted
+	// out of order to prove selection is by recency, not buffer position.
+	order := []int{7, 2, 11, 0, 5, 9, 1, 8, 3, 10, 4, 6}
+	var starts []*schedulespb.BufferedStart
+	for _, i := range order {
+		start := &schedulespb.BufferedStart{
+			RequestId:  fmt.Sprintf("req-%d", i),
+			WorkflowId: fmt.Sprintf("wf-%d", i),
+			RunId:      fmt.Sprintf("run-%d", i),
+			StartTime:  timestamppb.New(base.Add(time.Duration(i) * time.Minute)),
+		}
+		// Mix in some completed starts alongside running ones; the cap spans both.
+		if i%2 == 0 {
+			start.Completed = &schedulespb.CompletedResult{
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				CloseTime: timestamppb.New(base.Add(time.Duration(i) * time.Minute)),
+			}
+		}
+		starts = append(starts, start)
+	}
+	sched.Invoker.Get(ctx).BufferedStarts = starts
+
+	listInfo := sched.ListInfo(ctx)
+
+	// Capped to the memo limit, keeping the most recent by start time, ascending.
+	require.Len(t, listInfo.RecentActions, 5)
+	for idx, action := range listInfo.RecentActions {
+		wantIdx := 7 + idx // most recent five: wf-7 .. wf-11
+		require.Equal(t, fmt.Sprintf("wf-%d", wantIdx), action.GetStartWorkflowResult().GetWorkflowId())
+	}
 }
 
 func TestCreateSchedulerFromMigration(t *testing.T) {
@@ -567,6 +611,57 @@ func TestSearchAttributes_BufferedStartsCount(t *testing.T) {
 	})
 }
 
+// TestTerminate verifies that terminating a schedule flips its published
+// ExecutionStatus search attribute closed, so it leaves the CHASM ListSchedules
+// query (service/worker/scheduler.VisibilityListQueryChasm).
+func TestTerminate(t *testing.T) {
+	t.Run("closes the schedule and flips ExecutionStatus to Completed", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		require.False(t, sched.Closed)
+		require.Equal(t, chasm.LifecycleStateRunning, sched.LifecycleState(ctx))
+		status, ok := findSearchAttribute(t, sched.SearchAttributes(ctx), sadefs.ExecutionStatus)
+		require.True(t, ok)
+		require.Equal(t, scheduler.ExecutionStatusRunning, status)
+
+		_, err := sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		// Closed at both altitudes: lifecycle state (MS-level status) and the SA.
+		require.True(t, sched.Closed)
+		require.Equal(t, chasm.LifecycleStateCompleted, sched.LifecycleState(ctx))
+		status, ok = findSearchAttribute(t, sched.SearchAttributes(ctx), sadefs.ExecutionStatus)
+		require.True(t, ok)
+		require.Equal(t, scheduler.ExecutionStatusCompleted, status)
+	})
+
+	t.Run("returns ErrClosed when already closed", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+
+		_, err := sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		_, err = sched.Terminate(ctx, chasm.TerminateComponentRequest{})
+		require.ErrorIs(t, err, scheduler.ErrClosed)
+	})
+
+	t.Run("closing after terminate enqueues a visibility task", func(t *testing.T) {
+		env := newTestEnv(t)
+		sched := env.Scheduler
+
+		_, err := sched.Terminate(env.MutableContext(), chasm.TerminateComponentRequest{})
+		require.NoError(t, err)
+
+		// Discard setup tasks; assert only on what closing the terminated schedule emits.
+		env.NodeBackend.TasksByCategory = nil
+		require.NoError(t, env.Node.SetRootComponent(sched))
+		require.NoError(t, env.CloseTransaction())
+
+		require.NotEmpty(t, env.NodeBackend.TasksByCategory[tasks.CategoryVisibility],
+			"terminate must enqueue a visibility task so the closed status reaches ListSchedules")
+	})
+}
+
 func findSearchAttribute(t *testing.T, sas []chasm.SearchAttributeKeyValue, alias string) (any, bool) {
 	t.Helper()
 	for _, sa := range sas {
@@ -610,7 +705,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 // component maps untouched. Before the fix this assertion fails because the maps are shared.
 func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
-	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder := newLegacySpecBuilder(0, 0)
 
 	vis := sched.Visibility.Get(ctx)
 	vis.MergeCustomMemo(ctx, map[string]*commonpb.Payload{"memoKey": payload.EncodeString("v")})
@@ -637,4 +732,40 @@ func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 		"DescribeSchedule response Memo must be a copy, not the live Visibility map")
 	require.NotContains(t, vis.CustomSearchAttributes(ctx), "injectedSA",
 		"DescribeSchedule response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+// TestScheduler_Describe_DoesNotMutateCachedComponent proves Describe defaults and
+// computes for the response only.
+func TestScheduler_Describe_DoesNotMutateCachedComponent(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	specBuilder := newLegacySpecBuilder(0, 0)
+
+	// Set state on the cached CHASM component directly.
+	sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED
+	sched.Schedule.Policies.CatchupWindow = nil
+	generator := sched.Generator.Get(ctx)
+	generator.FutureActionTimes = nil
+
+	// Call Describe, which shouldn't mutate any cached fields.
+	resp, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DescribeScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	}, specBuilder)
+	require.NoError(t, err)
+
+	fr := resp.GetFrontendResponse()
+	require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, fr.GetSchedule().GetPolicies().GetOverlapPolicy())
+	require.Equal(t, 365*24*time.Hour, fr.GetSchedule().GetPolicies().GetCatchupWindow().AsDuration())
+	require.NotEmpty(t, fr.GetInfo().GetFutureActionTimes(), "Describe should compute future action times on-demand")
+
+	// Assert cached component state wasn't touched.
+	require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.Schedule.GetPolicies().GetOverlapPolicy(),
+		"Describe must not write the default overlap policy back onto the cached component")
+	require.Nil(t, sched.Schedule.GetPolicies().GetCatchupWindow(),
+		"Describe must not write the default catch-up window back onto the cached component")
+	require.Nil(t, generator.GetFutureActionTimes(),
+		"Describe must not store computed FutureActionTimes back onto the Generator")
 }

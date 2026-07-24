@@ -628,6 +628,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -729,6 +730,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 					ai.Version,
 					ai.StartVersion,
 					nil,
+					0,
 				))
 				if err != nil {
 					return nil, err
@@ -1189,6 +1191,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
+	}
+
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {

@@ -171,6 +171,50 @@ func TestExecuteTask_Basic(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime: startTime,
+			ActualTime:  startTime,
+			DesiredTime: startTime,
+			RequestId:   "automatic-request",
+			WorkflowId:  "workflow-id",
+			Attempt:     1,
+			RunId:       "completed-run",
+			StartTime:   startTime,
+			Completed:   &schedulespb.CompletedResult{},
+		},
+		{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        true,
+			RequestId:     "backfill-request",
+			WorkflowId:    "workflow-id",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			Attempt:       1,
+		},
+	}
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("backfill-request")).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "backfill-run"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:    bufferedStarts,
+		ExpectedBufferedStarts:   2,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, "completed-run", invoker.BufferedStarts[0].GetRunId())
+			require.Equal(t, "backfill-run", invoker.BufferedStarts[1].GetRunId())
+		},
+	})
+}
+
 // Execute is scheduled with an empty buffer.
 func TestExecuteTask_Empty(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
@@ -507,6 +551,83 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
 }
 
+func TestExecuteTask_EventLog(t *testing.T) {
+	newStart := func(requestID, runID string) *schedulespb.BufferedStart {
+		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID}
+	}
+
+	cases := []struct {
+		name       string
+		buffered   []*schedulespb.BufferedStart
+		cancels    []*commonpb.WorkflowExecution
+		terminates []*commonpb.WorkflowExecution
+		completed  []*schedulespb.BufferedStart
+		retryable  []*schedulespb.BufferedStart
+		wantLog    string
+	}{
+		{
+			name:      "kicked off counts newly started",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			completed: []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			wantLog:   "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:      "retried counts retryable starts",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			retryable: []*schedulespb.BufferedStart{newStart("s1", "")},
+			wantLog:   "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 1 starts",
+		},
+		{
+			name:     "surviving buffered starts are not counted as removed",
+			buffered: []*schedulespb.BufferedStart{newStart("a", ""), newStart("b", ""), newStart("c", "")},
+			wantLog:  "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:    "surviving cancels are not counted as removed",
+			cancels: []*commonpb.WorkflowExecution{{RunId: "c1"}, {RunId: "c2"}},
+			wantLog: "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "surviving terminates are not counted as removed",
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			wantLog:    "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "survivors alongside real work count independently",
+			buffered:   []*schedulespb.BufferedStart{newStart("s1", ""), newStart("s2", "")},
+			cancels:    []*commonpb.WorkflowExecution{{RunId: "c1"}},
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			completed:  []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			retryable:  []*schedulespb.BufferedStart{newStart("s2", "")},
+			wantLog:    "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 1 starts",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := env.MutableContext()
+			invoker := env.Scheduler.Invoker.Get(ctx)
+
+			invoker.BufferedStarts = tc.buffered
+			invoker.CancelWorkflows = tc.cancels
+			invoker.TerminateWorkflows = tc.terminates
+			invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+			eventLog := invoker.EventLog.Get(ctx)
+			eventLog.Events = nil
+
+			invoker.RecordExecuteResult(ctx, tc.completed, tc.retryable)
+
+			var messages []string
+			for _, e := range eventLog.Events {
+				messages = append(messages, e.Message)
+			}
+			require.Contains(t, messages, tc.wantLog)
+		})
+	}
+}
+
 // A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
 // Regression for the strict-Before check, which excluded equal-time entries
 // and stranded retries that landed precisely at the HWM boundary.
@@ -526,6 +647,18 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
+}
+
+func TestExecuteTask_Validate_MigrationPending(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "ready", Attempt: 1}}
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
 }
 
 // Validate must skip Execute when no work is ready.

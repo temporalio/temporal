@@ -32,6 +32,8 @@ func scalerEnvOptions(dcPartitions int) []testcore.TestOption {
 			BatchSize:          1,           // always go directly to scaler
 			BackgroundInterval: time.Second, // ping scaler often and drain faster
 			DrainBufferTime:    time.Second, // drain faster
+			ShrinkRatio:        1.0,         // allow fast shrinking
+			ShrinkDelta:        100,         // allow fast shrinking
 		}),
 	}
 }
@@ -99,8 +101,9 @@ func TestPartitionScaling_Down(t *testing.T) {
 		Fixed:   4,
 	})
 
-	t.Log("wait until 4,5 see no new tasks over a 1s window")
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
+	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
@@ -175,8 +178,9 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 		Fixed:   4,
 	})
 
-	t.Log("wait until 4,5 see no new tasks over a 1s window")
-	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), time.Second, 4, 5), 15*time.Second, time.Millisecond)
+	t.Log("wait until 4,5 see no new tasks over a 2s window")
+	// nolint:staticcheck // until we rewrite the test
+	await.Require(s.Context(), t, scalerBacklogUnchanged(s, s.Tv(), 2*time.Second, 4, 5), 15*time.Second, time.Millisecond)
 
 	t.Log("stop sending tasks")
 	stopTasks()
@@ -245,6 +249,43 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 		t.Log("polls(3)", diff)
 		require.Len(c, diff, 3)
 	}, 15*time.Second, time.Second)
+}
+
+// TestPartitionScaling_Backlog exercises backlog-count-based scaling (as opposed
+// to add-rate-based scaling). Unlike the add-rate tests, this is not timing
+// sensitive: partitions open once their accumulated backlog crosses BacklogBase,
+// regardless of how fast tasks arrive. We build a backlog by sending tasks
+// without polling, watch the scaler open partitions up to Max, then drain and
+// confirm everything empties out.
+func TestPartitionScaling_Backlog(t *testing.T) {
+	// default dynamic config to 1 to ensure we turn on managed scaling immediately
+	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+
+	t.Log("enable backlog-based scaling (no fixed target, no add-rate windows)")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled:      true,
+		BacklogReset: 2,  // clear once backlog drops below 2
+		BacklogBase:  5,  // open a partition once backlog grows above 5
+		BacklogCap:   20, // soft cap used to spread new tasks
+		Max:          4,  // bound growth so the test stays fast and deterministic
+	})
+
+	t.Log("start sending 10 tasks/s without polling to build a backlog")
+	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	defer stopTasks()
+
+	t.Log("wait until backlog-based scaling has opened all 4 partitions (each has backlog)")
+	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 1, 0, 1, 2, 3), 30*time.Second, time.Second)
+
+	t.Log("stop sending tasks")
+	stopTasks()
+
+	t.Log("start background polls to drain")
+	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	defer stopPolls()
+
+	t.Log("wait until all partitions drain (backlog releases, scaler shrinks target)")
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 30*time.Second, time.Second)
 }
 
 // TODO: test disabling scaler

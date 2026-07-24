@@ -141,6 +141,9 @@ func (h *InvokerExecuteTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	// If another execute task already happened to kick everything off, we don't need
 	// this one.
 	eligibleStarts := invoker.getEligibleBufferedStarts()
@@ -205,6 +208,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
+	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
 	}
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
@@ -358,13 +364,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Check if this start is already started. If so, we crashed after
-		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
-			continue
-		}
-
 		// Clone start before concurrent access. The clone will have RunId/StartTime
 		// set by startWorkflow, then copied back to the original in recordExecuteResult.
 		start = common.CloneProto(start)
@@ -412,6 +411,9 @@ func (h *InvokerProcessBufferTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err
@@ -785,6 +787,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,

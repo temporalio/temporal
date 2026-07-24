@@ -63,8 +63,9 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
-		testScheduleToStartTimeout := 2 * time.Minute
-		testStartToCloseTimeout := 3 * time.Minute
+		testScheduleToCloseTimeout := 24 * time.Hour
+		testScheduleToStartTimeout := 24 * time.Hour
+		testStartToCloseTimeout := 24 * time.Hour
 		testUserMetadata := &sdkpb.UserMetadata{
 			Summary: payload.EncodeString("test-summary"),
 			Details: payload.EncodeString("test-details"),
@@ -79,6 +80,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 			Endpoint:               endpointName,
 			Input:                  testInput,
 			NexusHeader:            testHeader,
+			ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 			UserMetadata:           testUserMetadata,
@@ -88,13 +90,14 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.True(startResp.GetStarted())
 
 		// Ensure the operation is in a stable STARTED state.
-		_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		pollResp, err := env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
 		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
 
 		for _, tc := range []struct {
 			name  string
@@ -113,7 +116,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 				s.Equal(startResp.RunId, descResp.RunId)
 
 				info := descResp.GetInfo()
-				protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionInfo{
+				s.ProtoEqual(&nexuspb.NexusOperationExecutionInfo{
 					OperationId:            "test-op",
 					RunId:                  startResp.RunId,
 					Endpoint:               endpointName,
@@ -121,7 +124,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 					Operation:              "test-operation",
 					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
-					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 					NexusHeader:            testHeader,
@@ -2164,7 +2167,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 	})
 }
 
-func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {
+func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransitionInCallbackToken() {
 	env := s.newTestEnv()
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  env.Namespace().String(),
@@ -2223,8 +2226,11 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	completionToken, err := gen.DecodeCompletion(decodedToken)
 	s.NoError(err)
 
-	// Deliberately corrupt transition fields in the callback token. Completion should
-	// still succeed because the handler strips these fields before validation.
+	// Deliberately corrupt the execution transition in the callback token. Completion should still
+	// succeed: it resolves at RefConsistencyLevelComponentCreation, which ignores the execution
+	// transition (staleness is checked against the component's creation transition instead) and
+	// re-establishes identity by request ID. The creation transition is left valid, as the framework
+	// legitimately relies on it to guarantee the loaded state knows about the operation.
 	ref := &persistencespb.ChasmComponentRef{}
 	s.NoError(ref.Unmarshal(completionToken.GetComponentRef()))
 	s.NotNil(ref.ExecutionVersionedTransition)
@@ -2232,10 +2238,6 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	ref.ExecutionVersionedTransition = &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: ref.ExecutionVersionedTransition.NamespaceFailoverVersion + 1000,
 		TransitionCount:          ref.ExecutionVersionedTransition.TransitionCount + 1000,
-	}
-	ref.ComponentInitialVersionedTransition = &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: ref.ComponentInitialVersionedTransition.NamespaceFailoverVersion + 1000,
-		TransitionCount:          ref.ComponentInitialVersionedTransition.TransitionCount + 1000,
 	}
 	completionToken.ComponentRef, err = ref.Marshal()
 	s.NoError(err)

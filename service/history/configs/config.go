@@ -2,6 +2,7 @@ package configs
 
 import (
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -59,26 +60,28 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
-	HistoryCacheLimitSizeBased            bool
-	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
-	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
-	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
-	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
-	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
-	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
-	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
-	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMSignalBacklinks            dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkflowUpdateCallbacks         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
-	EnableCHASMSchedulerCreation          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCHASMSchedulerMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ExternalPayloadsEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HistoryCacheLimitSizeBased                 bool
+	HistoryHostLevelCacheMaxSize               dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes          dynamicconfig.IntPropertyFn
+	HistoryCacheTTL                            dynamicconfig.DurationPropertyFn
+	HistoryCacheNonUserContextLockTimeout      dynamicconfig.DurationPropertyFn
+	HistoryCacheBackgroundEvict                dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
+	EnableWorkflowExecutionTimeoutTimer        dynamicconfig.BoolPropertyFn
+	EnableUpdateWorkflowModeIgnoreCurrent      dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableCHASMCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSignalBacklinks                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowUpdateCallbacks              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChasmMaxInMemoryPureTasks                  dynamicconfig.IntPropertyFn
+	EnableCHASMSchedulerCreation               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSchedulerMigration              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ExternalPayloadsEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -412,13 +415,14 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
-	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
-	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyPercentiles     dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
-	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
-	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
-	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
+	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
+	HealthPersistenceErrorRatio         dynamicconfig.FloatPropertyFn
+	HealthRPCLatencyFailure             dynamicconfig.FloatPropertyFn
+	HealthRPCLatencyPercentiles         dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
+	HealthRPCErrorRatio                 dynamicconfig.FloatPropertyFn
+	HealthHistoryInitializationTime     dynamicconfig.DurationPropertyFn
+	BreakdownMetricsByTaskQueue         dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -486,20 +490,22 @@ func NewConfig(
 		EmitShardLagLog:       dynamicconfig.EmitShardLagLog.Get(dc),
 		EnableDataLossMetrics: dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
-		HistoryCacheLimitSizeBased:            dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
-		HistoryHostLevelCacheMaxSize:          dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
-		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
-		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
-		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
-		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
-		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
-		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
-		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
-		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
-		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
-		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
-		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
+		HistoryCacheLimitSizeBased:                 dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
+		HistoryHostLevelCacheMaxSize:               dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
+		HistoryHostLevelCacheMaxSizeBytes:          dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
+		HistoryCacheTTL:                            dynamicconfig.HistoryCacheTTL.Get(dc),
+		HistoryCacheNonUserContextLockTimeout:      dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
+		HistoryCacheBackgroundEvict:                dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
+		EnableWorkflowExecutionTimeoutTimer:        dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
+		EnableUpdateWorkflowModeIgnoreCurrent:      dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
+		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
+		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
+		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
+		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
+		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
+		ChasmNexusWorkflowOperationsRolloutPercent: nexusoperation.ChasmWorkflowOperationsRolloutPercent.Get(dc),
+		ChasmMaxInMemoryPureTasks:                  dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
@@ -801,12 +807,13 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
-		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
-		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
-		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
-		HealthRPCLatencyPercentiles:     dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
-		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
-		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
+		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
+		HealthPersistenceLatencyPercentiles: dynamicconfig.PersistenceHealthSignalPercentileLatencySettings.Get(dc),
+		HealthPersistenceErrorRatio:         dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
+		HealthRPCLatencyFailure:             dynamicconfig.HealthRPCLatencyFailure.Get(dc),
+		HealthRPCLatencyPercentiles:         dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
+		HealthRPCErrorRatio:                 dynamicconfig.HealthRPCErrorRatio.Get(dc),
+		HealthHistoryInitializationTime:     dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 

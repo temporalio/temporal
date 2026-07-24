@@ -13,8 +13,14 @@ import (
 
 // Export unexported methods for testing.
 
+// ExecutionStatus search-attribute values, exported for tests.
+var (
+	ExecutionStatusRunning   = executionStatusRunning
+	ExecutionStatusCompleted = executionStatusCompleted
+)
+
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder())
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {
@@ -38,6 +44,14 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
 }
 
+// RecentActionCount exposes the completed-retention limit for tests.
+const RecentActionCount = recentActionCount
+
+// ApplyCompletedRetention exposes applyCompletedRetention for tests.
+func (i *Invoker) ApplyCompletedRetention() {
+	i.applyCompletedRetention()
+}
+
 // RecordExecuteResult exposes recordExecuteResult so tests can pin the
 // per-RequestId idempotency guard against concurrent ExecuteTasks.
 func (i *Invoker) RecordExecuteResult(
@@ -49,4 +63,13 @@ func (i *Invoker) RecordExecuteResult(
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+}
+
+func (b *BackfillerTaskHandler) AllowedBufferedStarts(
+	ctx chasm.Context,
+	scheduler *Scheduler,
+	invoker *Invoker,
+	tweakables Tweakables,
+) (int, error) {
+	return b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 }

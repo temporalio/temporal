@@ -250,7 +250,6 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 
 		if IsTaskExpired(t) {
 			// task expired when we read it
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 			return true
 		}
@@ -480,6 +479,10 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
 		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
 		tr.ackLevel = newReadLevel
+		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
+		// wouldn't reach the db until another task is written and acked, which could be far in the
+		// future. This also lets the approximate backlog count reset if we've reached max read level.
+		tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, 0, tr.backlogAge.oldestTime())
 	}
 	tr.readLevel = newReadLevel
 }

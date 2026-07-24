@@ -51,9 +51,9 @@ const (
 //     *temporal.CanceledError. Permanent — the worker contract requires success for all
 //     defined commands, so this indicates a bug or version incompatibility.
 //
-// Retryable errors are capped at MaxTaskAttempts attempts (in-memory). These
-// commands are best-effort — the activity will eventually time out anyway — so excessive
-// retries waste resources. The counter resets on shard movement, which is acceptable.
+// Callers are responsible for enforcing retry limits (see MaxTaskAttempts).
+// These commands are best-effort — the activity will eventually time out anyway —
+// so excessive retries waste resources.
 type Dispatcher struct {
 	matchingClient resource.MatchingClient
 	config         *configs.Config
@@ -78,20 +78,8 @@ func NewDispatcher(
 func (d *Dispatcher) Execute(
 	ctx context.Context,
 	task *tasks.WorkerCommandsTask,
-	attempt int,
 	namespaceName string,
 ) error {
-	if attempt > MaxTaskAttempts {
-		d.logger.Info("Worker commands task exceeded max attempts, dropping",
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
-			tag.NewStringTag("control_queue", task.Destination),
-			tag.Attempt(int32(attempt)),
-		)
-		d.recordCommandMetrics(task.Commands, namespaceName, "max_attempts_exceeded")
-		return nil
-	}
-
 	if !d.config.EnableCancelActivityWorkerCommand(namespaceName) {
 		d.logger.Info("Worker commands feature disabled, dropping task",
 			tag.WorkflowNamespace(namespaceName),
@@ -212,8 +200,13 @@ func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask,
 }
 
 func (d *Dispatcher) recordCommandMetrics(commands []*workerpb.WorkerCommand, namespaceName string, outcome string) {
+	RecordCommandMetrics(commands, d.metricsHandler, namespaceName, outcome)
+}
+
+// RecordCommandMetrics records per-command metrics with the given outcome.
+func RecordCommandMetrics(commands []*workerpb.WorkerCommand, metricsHandler metrics.Handler, namespaceName string, outcome string) {
 	for _, cmd := range commands {
-		metrics.WorkerCommandsSent.With(d.metricsHandler).Record(
+		metrics.WorkerCommandsSent.With(metricsHandler).Record(
 			1,
 			metrics.NamespaceTag(namespaceName),
 			metrics.OutcomeTag(outcome),

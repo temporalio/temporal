@@ -67,7 +67,10 @@ func TestBacklogManager_Fair_Suite(t *testing.T) {
 }
 
 func (s *BacklogManagerTestSuite) SetupTest() {
+	s.capturedTasksLock.Lock()
 	s.capturedTasksSlice = nil
+	s.capturedTasksLock.Unlock()
+
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	if s.fairness {
@@ -391,6 +394,50 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 		"backlog count should not be incremented")
 }
 
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_PersistenceLimit() {
+	// A write dropped by the persistence rate limiter definitely didn't reach the database,
+	// so it should not count towards the backlog.
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.addFault("CreateTasks", "PersistenceLimit", 1.0)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	for range 10 {
+		s.Require().Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
+		"backlog count should not be incremented for rate-limited writes")
+}
+
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_ConcurrentLimit() {
+	// A write rejected by the ConcurrentRequestLimiter interceptor definitely didn't reach the
+	// database, so it should not count towards the backlog.
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.addFault("CreateTasks", "ConcurrentLimit", 1.0)
+
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	for range 10 {
+		s.Require().Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
+	}
+
+	s.Equal(int64(0), totalApproximateBacklogCount(s.blm),
+		"backlog count should not be incremented for concurrency-limited writes")
+}
+
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	if !s.newMatcher || s.fairness {
 		s.T().Skip("only for priority backlog manager")
@@ -451,6 +498,51 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+
+	blm := s.blm.(*priBacklogManagerImpl)
+	db := blm.db
+
+	// Initialize the db/subqueues without starting the background reader pump, so the test can
+	// drive the reader deterministically.
+	_, err := db.RenewLease(blm.tqCtx)
+	s.Require().NoError(err)
+
+	// Simulate a diverged backlog count with no real tasks in persistence, e.g. a stale count
+	// carried across a reload. Since nothing is spooled, there are no outstanding tasks and
+	// completeTask never runs, so the only thing that can reset the count is the gap-drain path
+	// (setReadLevelAfterGap), not the completeTask path.
+	db.updateBacklogStats(5, time.Time{})
+	s.Require().EqualValues(5, db.getTotalApproximateBacklogCount())
+
+	// Advance maxReadLevel past the ack level to simulate a range renewal that left a gap of
+	// task IDs that were never actually written.
+	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
+	db.setMaxReadLevelForTesting(subqueueZero, maxRL)
+
+	// Drive a reader through the empty range exactly as getTasksPump does, but synchronously.
+	// Each empty batch advances the ack level via setReadLevelAfterGap.
+	tr := newPriTaskReader(blm, subqueueZero, 0)
+	for {
+		batch, err := tr.getTaskBatch(blm.tqCtx)
+		s.Require().NoError(err)
+		s.Require().Empty(batch.tasks)
+		tr.setReadLevelAfterGap(batch.readLevel)
+		if batch.isReadBatchDone {
+			break
+		}
+	}
+
+	// Having read to maxReadLevel with everything acked, setReadLevelAfterGap must have pushed
+	// the advanced ack level into the db, which resets the diverged count to 0.
+	_, ackLevel := tr.getLevels()
+	s.Equal(maxRL, ackLevel)
+	s.Zero(db.getTotalApproximateBacklogCount())
 }
 
 func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {

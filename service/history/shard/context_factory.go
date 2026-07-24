@@ -3,6 +3,7 @@ package shard
 import (
 	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -62,6 +63,7 @@ type (
 
 		StateMachineRegistry   *hsm.Registry
 		ChasmRegistry          *chasm.Registry
+		ChasmWorkflowRegistry  *chasmworkflow.Registry
 		EndpointRegistry       commonnexus.EndpointRegistry
 		HandoverTrackerFactory HandoverTrackerFactory
 	}
@@ -107,6 +109,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.EventsCache,
 		c.StateMachineRegistry,
 		c.ChasmRegistry,
+		c.ChasmWorkflowRegistry,
 		c.EndpointRegistry,
 		c.HandoverTrackerFactory,
 	)
