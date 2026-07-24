@@ -128,42 +128,34 @@ func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationp
 
 // -- Propagation Methods of Time Skipping
 
-// propagateTimeSkippingToNextRun propagates both time skipping config and state to the next run in
-// the chain (CaN, retry, cron). The config is deep-cloned so the next run can mutate it without
-// affecting the source.
+// propagateTimeSkippingToNextRun propagates both the time-skipping config and state to the next run
+// in the chain of runs(continue-as-new, retry, cron). The config is propagated regardless of whether time
+// skipping is actively running or what config.enabled is set to, so the latest run always reflects
+// the configuration most recently set by the customer.
 func propagateTimeSkippingToNextRun(
 	source *persistencespb.WorkflowExecutionInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
 
 	tsi := source.GetTimeSkippingInfo()
+	if tsi == nil {
+		return nil, nil
+	}
 	util := NewTimeSkippingInfoUtil(tsi)
 
-	// if disabled, we just return nil for the new TSC
 	var newTSC *commonpb.TimeSkippingConfig
-	if util.IsEnabled() {
+	if tsi.Config != nil {
 		newTSC = common.CloneProto(tsi.GetConfig())
 	}
 
 	// state propagation (virtual time, fast forward, skip count)
-	var stateProp *commonpb.TimeSkippingStatePropagation
+	stateProp := &commonpb.TimeSkippingStatePropagation{
+		InitialSkipCount: tsi.GetSessionSkipCount(),
+	}
 	if accum := util.GetAccumulatedSkippedDuration(); accum > 0 {
-		stateProp = &commonpb.TimeSkippingStatePropagation{
-			InitialSkippedDuration: durationpb.New(accum),
-		}
+		stateProp.InitialSkippedDuration = durationpb.New(accum)
 	}
 	if util.HasPendingFastForward() {
-		if stateProp == nil {
-			stateProp = &commonpb.TimeSkippingStatePropagation{}
-		}
 		stateProp.FastForwardTargetTime = tsi.GetFastForwardInfo().GetTargetTime()
-	}
-	// The skip count is scoped to a session; once time skipping is disabled the session has
-	// ended, so the count does not carry to the next run.
-	if skipCount := tsi.GetSessionSkipCount(); skipCount > 0 && util.IsEnabled() {
-		if stateProp == nil {
-			stateProp = &commonpb.TimeSkippingStatePropagation{}
-		}
-		stateProp.InitialSkipCount = skipCount
 	}
 	return newTSC, stateProp
 }
