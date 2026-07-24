@@ -1095,16 +1095,70 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	}
 	s.True(temporalproto.DeepEqual(expectedResp, resp))
 
+	// Grouping by TemporalNamespaceDivision suppresses the default namespace
+	// division filter (no "must not exist" clause) so results span all divisions.
+	request.Query = "GROUP BY TemporalNamespaceDivision"
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
+				),
+			sadefs.TemporalNamespaceDivision,
+			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision).Missing(""),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					// The empty-string bucket comes from Missing("") and
+					// represents default-division (NULL) workflows.
+					sadefs.TemporalNamespaceDivision: json.RawMessage(
+						`{"buckets":[{"key":"","doc_count":50},{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	expectedResp = &store.InternalCountExecutionsResponse{
+		Count: 160,
+		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 50,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionA", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 100,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionB", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 10,
+			},
+		},
+	}
+	s.True(temporalproto.DeepEqual(expectedResp, resp))
+
 	// test only allowed to group by a single field
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.ErrorContains(err, "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
-	// test only allowed to group by ExecutionStatus and LowCardinalityKeyword fields
+	// test only allowed to group by ExecutionStatus, TemporalNamespaceDivision,
+	// and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+	s.ErrorContains(err, "'GROUP BY' clause is not supported for this search attribute")
 	s.Nil(resp)
 }
 

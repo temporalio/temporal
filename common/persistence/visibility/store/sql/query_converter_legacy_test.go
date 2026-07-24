@@ -116,11 +116,23 @@ func (s *queryConverterSuite) TestConvertWhereString() {
 			),
 		},
 		{
+			// Grouping by TemporalNamespaceDivision suppresses the default
+			// "TemporalNamespaceDivision is null" filter so results span all
+			// divisions, leaving the query string empty.
+			name:  "group by TemporalNamespaceDivision",
+			input: "GROUP BY TemporalNamespaceDivision",
+			output: &queryParamsLegacy{
+				queryString: "",
+				groupBy:     []string{sadefs.TemporalNamespaceDivision},
+			},
+			err: nil,
+		},
+		{
 			name:   "group by non ExecutionStatus",
 			input:  "GROUP BY WorkflowType",
 			output: nil,
 			err: query.NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for this search attribute",
 				query.NotSupportedErrMessage,
 			),
 		},

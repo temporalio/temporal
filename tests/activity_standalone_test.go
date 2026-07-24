@@ -5296,7 +5296,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			Query:     "GROUP BY ActivityType",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.Contains(err.Error(), "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.Contains(err.Error(), "'GROUP BY' clause is not supported for this search attribute")
 	})
 
 	t.Run("InvalidQuery", func(t *testing.T) {
