@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ func (s *LostTaskTestSuite) SetupSuite() {
 // 3. A worker polls the task queue and gets an empty response
 // 4. Umpire detects that a task was stored but never successfully polled
 func (s *LostTaskTestSuite) TestLostTaskDetection() {
+	s.AllowUmpireViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -130,6 +132,7 @@ func (s *LostTaskTestSuite) TestLostTaskDetection() {
 // 2. The workflow never receives a RespondWorkflowTaskCompleted response
 // 3. Umpire detects the workflow is stuck in the "started" state
 func (s *LostTaskTestSuite) TestStuckWorkflowDetection() {
+	s.AllowUmpireViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -199,6 +202,7 @@ func stuckAwaitWorkflow(ctx workflow.Context) error {
 // 4. Stop the worker immediately to prevent workflow task completion
 // 5. Wait for umpire to detect the workflow is stuck (no RespondWorkflowTaskCompleted)
 func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
+	s.AllowUmpireViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -243,7 +247,13 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
 			for _, vi := range violations {
 				if v, ok := vi.(umpire.Violation); ok {
 					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
-					if v.Rule == "WorkflowTaskStarvationRule" && v.Tags["workflowID"] == workflowID {
+					// The first workflow task WAS polled (the worker ran the
+					// workflow up to Await), so this is workflow-completion
+					// liveness — the workflow is stuck in "started" — not task
+					// starvation. EntityProgress detects it via MustProgress.
+					if v.Rule == "EntityProgressRule" &&
+						v.Tags["state"] == "started" &&
+						strings.Contains(v.Tags["entity"], workflowID) {
 						return true
 					}
 				}

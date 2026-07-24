@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/umpire/entity"
-	"go.temporal.io/server/tests/umpire/fact"
 	"go.temporal.io/server/tests/umpire/rule"
 	"google.golang.org/grpc"
 )
@@ -140,11 +139,6 @@ func (u *Umpire) RecordResponse(ctx context.Context, req, resp any) {
 // true, liveness rules promote pending items to violations.
 func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
 	f := len(final) > 0 && final[0]
-	if f {
-		// At teardown, broadcast WorkflowTerminated for all workflows so
-		// child entities (WorkflowTask) settle to terminal state.
-		u.settleWorkflows(ctx, nil)
-	}
 	violations := u.rulebook.Check(ctx, f, nil)
 	result := make([]any, len(violations))
 	for i, v := range violations {
@@ -159,7 +153,6 @@ func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
 // at teardown, then PurgeNamespace to drop the collected data.
 func (u *Umpire) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
-	u.settleWorkflows(ctx, &root)
 	return u.rulebook.Check(ctx, true, &root)
 }
 
@@ -174,31 +167,6 @@ func (u *Umpire) PurgeNamespace(namespaceID string) {
 
 func (u *Umpire) namespaceRoot(namespaceID string) umpirefw.EntityID {
 	return umpirefw.NewEntityID(entity.NamespaceType, namespaceID)
-}
-
-// settleWorkflows broadcasts WorkflowTerminated facts for each unique
-// (namespace, workflowID) seen across WorkflowTask entities, allowing them to
-// transition to terminal states at test teardown. When scope is non-nil, only
-// tasks in that namespace are settled. The terminated facts carry the namespace
-// so tasks in other namespaces ignore the broadcast.
-func (u *Umpire) settleWorkflows(ctx context.Context, scope *umpirefw.EntityID) {
-	seen := make(map[string]bool)
-	var facts []umpirefw.Fact
-	for _, e := range u.registry.QueryEntities(entity.WorkflowTaskType, 0, scope) {
-		if wt, ok := e.Entity.(*entity.WorkflowTask); ok && wt.WorkflowID != "" {
-			key := wt.NamespaceID + "/" + wt.WorkflowID
-			if !seen[key] {
-				seen[key] = true
-				facts = append(facts, &fact.WorkflowTerminated{
-					WorkflowID:  wt.WorkflowID,
-					NamespaceID: wt.NamespaceID,
-				})
-			}
-		}
-	}
-	if len(facts) > 0 {
-		_ = u.registry.RouteFacts(ctx, facts)
-	}
 }
 
 // Reset clears state between tests.

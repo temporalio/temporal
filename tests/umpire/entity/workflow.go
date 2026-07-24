@@ -70,9 +70,10 @@ func NewWorkflow() *Workflow {
 			{Event: "start", From: []string{"created"}, To: "started"},
 			{Event: "complete", From: []string{"started"}, To: "completed"},
 		},
-		// "started" is not marked must-progress: not all close paths are observed
-		// yet (only CompleteWorkflowExecution), so requiring completion would
-		// false-positive. See the close-signal gap in UMPIRE_PLAN.md.
+		// A started workflow must eventually close: EntityProgress flags one left
+		// in "started" at teardown (workflow-completion liveness). Benign in-flight
+		// closes are settled by the observed-close signal, not teardown timing.
+		MustProgress: []string{"started"},
 	})
 	return wf
 }

@@ -52,6 +52,73 @@ concrete, not hypothetical:
 Until the suite has been run under enforcement and every violation triaged, this change is
 not safe to merge on. **That triage is now the whole game.**
 
+## Observation tiers: black / grey / white box (strategic)
+
+Rules and facts differ in *how much of the system they need to see*. This must be a
+first-class, explicit distinction — it decides what the umpire can run in each deployment
+(functional test vs. nightly vs. **canary / Temporal Cloud**, where we have no internal
+insight).
+
+| Tier | What is observable | Available in |
+|---|---|---|
+| **Black box** | Only the public **frontend gRPC API** a client can call: Start/Signal/Update requests + responses (incl. errors), `PollWorkflowExecutionUpdate`, `DescribeWorkflowExecution`, `GetWorkflowHistory`. | anywhere — **canary, Cloud, prod** |
+| **Grey box** | Black box **+ internal service RPCs** (history/matching interceptors) **+ emitted OTEL spans**. | in-process functional tests |
+| **White box** | Grey box **+ persistence interception** and mutable-state internals (DB writes, registry state). | test harness only |
+
+Tiers form a total order (`black ⊂ grey ⊂ white`) and describe the **deployment's**
+observability, not the rule's cleverness.
+
+### Why it must be explicit
+1. **False confidence in canary.** Run a grey-box rule where its facts never arrive and the
+   entity simply never advances — the rule *passes*. "Observed nothing → no violation" reads
+   as "healthy," the worst possible canary outcome. Tiers must make "not observable here" an
+   **explicit skip**, never a silent pass.
+2. **Accidental unportability.** The umpire today leans grey/white without anyone deciding it,
+   so almost nothing is canary-ready even where it could be.
+
+### Mechanism (proposed)
+- **Facts carry a provenance tier**, set at the importer/decoder (tier is a property of the
+  channel, not the invariant): `registerRequestFact(BlackBox, …)`, `registerSpanFact(GreyBox, …)`,
+  future `registerPersistenceFact(WhiteBox, …)`.
+- **A run enables only importers ≤ its tier** — a canary literally cannot produce white-box
+  facts, so they are never registered (no silent no-ops).
+- **Each rule declares `RequiredTier()`** = max tier of the entity states it reads.
+  `InitRules(availableTier)` runs only rules ≤ that tier and emits a **coverage report**
+  (“black-box: N active; grey-only: M skipped; white-only: K skipped”), so we always know
+  what is and isn’t being checked in a given environment.
+- **Entities and rules stay identical across tiers** — only the *fact sources* change. Tier
+  is an observability filter over one unified model, not a fork.
+
+### The reclassification insight (payoff)
+Mapping the current rules onto tiers shows the umpire is needlessly grey-box:
+- **Update-lifecycle + workflow-completion rules** (progress, dedup, closure, history-ordering,
+  continue-as-new) read states that are **all black-box observable** via `GetWorkflowHistory`
+  + `PollWorkflowExecutionUpdate` + response errors — yet are currently sourced from **server
+  OTEL spans (grey)**. Re-sourcing them black-box makes the *flagship* invariants
+  **canary-portable** *and* removes the production-span coupling that is the #1 structural
+  risk.
+- **Speculative + task rules** (creation, conversion, rollback, starvation) read
+  `IsSpeculative`, task `stored`/`discarded`, matching internals — **intrinsically grey/white**;
+  they correctly stay functional-test-only.
+
+Target end-state: a **black-box rule set** (update + workflow lifecycle) that runs in
+canary/Cloud, and a **grey/white superset** (speculative, task-internal, persistence) for
+functional tests — same model, tier-gated.
+
+### How it reframes fidelity
+The fidelity gaps split by tier, which also resolves the settle-vs-detect tension:
+- **Close observation** has a *black-box form* (history terminal event / Describe status /
+  update "already completed" error) and a *white-box form* (persistence write / mutable-state
+  status). Prefer black-box so closure & liveness run in canary; use white-box only to sharpen
+  or for internal-only invariants.
+- **Persistence interception (STAMP)** *is* the white-box tier — powerful, but tagged so no
+  rule depending on it is ever expected to run in canary.
+- Black-box close removes the need for the synthetic `settleWorkflows` hack entirely (real
+  close becomes observable from the client API).
+
+Discipline: **push every invariant down to the lowest tier that can express it**, so the
+maximum number of rules run in the maximum number of environments.
+
 ## Gaps
 
 **Resolved by the latest changes**
@@ -63,6 +130,13 @@ not safe to merge on. **That triage is now the whole game.**
 1. **Close signals cover only `CompleteWorkflowExecution`** — fail/cancel/timeout/terminate/
    continue-as-new emit nothing. Now a correctness *and* false-positive issue (above), and it
    leaves `ContinueAsNew` unable to fire on its real trigger.
+   - This also subsumes the apparent "test ended vs. genuinely stuck" worry: the umpire does
+     **not** expect all entities to reach terminal — progress is opt-in via `MustProgress`
+     (only `WorkflowUpdate = {admitted, accepted}` today; workflows/tasks have none). An
+     in-flight update only *looks* stuck at teardown because we don't observe the workflow
+     close that aborts it server-side. Fix = observe close→abort, and judge update-progress
+     **relative to observed workflow close, not to test-teardown timing** — so an update on a
+     still-running workflow is never flagged. No "test intent" mechanism is needed.
 2. **Observation-time, not event-time, timestamps** (`time.Now()` ×15).
 3. **Dead instrumentation in `cache.go`** — emits via the global tracer (never wired to the
    umpire) and no fact decodes it.
@@ -167,6 +241,100 @@ missing close-signal fidelity, not the rules themselves.
 3. **Consolidate overlapping rules** so a single defect yields one clear violation.
 4. **Housekeeping.** Remove dead `cache.go` instrumentation and unused symbols; confirm the
    teardown wiring covers each test exactly once.
+
+## Scenarios & coverage (planned)
+
+A **scenario** is a named, documented *situation of interest* plus a predicate that
+recognizes it in the observed model. It is a third subsystem alongside facts→entities→rules,
+with inverted semantics from a rule:
+
+| | fires on | absence means | lifetime |
+|---|---|---|---|
+| Rule | model in a *bad* state | (presence = bug) | per-namespace, purged |
+| One-off assert | a specific expected value | test fails locally | per-test |
+| **Scenario** | model reaching an *interesting* state | **coverage gap** (missing test or dead behaviour), not a bug | **process-global, survives purge** |
+
+A rule says "if this situation happens it must resolve"; a scenario says "this situation
+should happen to *someone* during the run." This directly serves two goals the rules can't:
+*tests as living docs* (a named catalog of what the system can do) and a *foundation for
+fuzzing* (detection is the reward signal a future generator optimizes toward).
+
+**Highest-value use — prove the rules aren't dead.** A rule's *precondition* is a scenario
+worth covering; a rule whose precondition is never reached passes vacuously and gives false
+confidence. Seeding the catalog from each registered rule's trigger turns "are our rules even
+exercised?" into a mechanical report — which is exactly the validation this doc keeps flagging
+as the whole game (`ContinueAsNew` almost certainly never fires today, since its CAN close
+signal is missing).
+
+### Model
+
+```
+Scenario     = { Name, Doc, MinHits, Detect(*ScenarioContext) }
+ScenarioBook — registers scenarios (mirrors Rulebook; name-validated)
+Coverage     — process-global sink: name → set{occurrenceKey}; hits = |set|.
+               thread-safe, NOT cleared by PurgeNamespace, mergeable across shards.
+```
+
+Marked seen two ways, both feeding `Coverage`:
+- **Detected** — `Detect` runs over the scoped model (via `ChangedEntities`/`QueryAll`,
+  mostly `Lifecycle.Reached(state)` / `EnteredAt`) and calls `c.Reached(key)`. Objective.
+- **Declared** — a test calls `env.Umpire().Reached(name)`; cross-checked against the
+  predicate when one exists (declared-but-never-detected ⇒ fail: the test's model is wrong).
+
+Occurrence key (usually the entity registry key) dedups so one long-lived entity counts once.
+
+### Exhaustiveness — which kind
+
+This buys **catalog coverage** (hand-curated equivalence classes, QuickCheck-`cover` style),
+*not* true state-space exhaustiveness (that needs the active/generator side). Catalog coverage
+is the pragmatic target now and the down payment on generation later.
+
+### Phases
+
+0. **Framework core** (`common/testing/umpire`): `scenario.go` (`Scenario`, `ScenarioBook`,
+   `ScenarioContext` reusing the dirty-query plumbing + scope) and `coverage.go` (`Coverage`:
+   `Reached`, `Hits`, `Unmet`, dedup, mutex). Unit-tested in isolation.
+1. **Wire into the Umpire.** `Umpire` owns a `ScenarioBook` + shared `Coverage`;
+   `CheckNamespace`/`Check` run detection over the scoped model *before* purge into the
+   *unpurged* `Coverage`. `PurgeNamespace` leaves coverage intact (assert it). Add
+   `Umpire.Reached` + `Coverage()`.
+2. **Seed the catalog from rule preconditions** (the payoff): one scenario per registered
+   rule trigger (`update.admitted/accepted/completed/rejected`, `update.aborted_on_close`,
+   `update.accept_complete_same_wft`, `speculative.rolled_back`/`converted`,
+   `workflow.completed_with_pending_update`, `task.sync_match`/`async_match`). Most reduce to
+   `EnteredAt`/`Reached` at teardown — no transition hooks needed. Output: which rule
+   preconditions were never reached ⇒ dead-rule report.
+3. **Completeness gate + reporting.** `Coverage.WriteReport(path)` (JSON) + merge helper; a
+   `TestMain` gate behind an env flag (e.g. `UMPIRE_SCENARIO_COVERAGE=1`) that fails on any
+   scenario `< MinHits` **only in a full run** (never under `-run`); per-shard reports merged
+   in a final CI step (exhaustiveness is whole-suite + cross-shard).
+4. **Declaration verification + living docs.** Cross-check declared vs detected; generate the
+   catalog → markdown (name, doc, hits, covering tests).
+5. **(future, out of scope) Generation seam.** Expose `Coverage.Unmet()` as targets for the
+   active side; don't build it.
+
+### Decisions to lock before Phase 0
+
+1. Exhaustiveness = catalog coverage (recommended), not state-space.
+2. Gate granularity: start "≥1 hit = alive" (dead-rule detection); defer statistical
+   `MinHits > 1` until generation exists.
+3. CI aggregation: confirm a per-shard-report + merge step is acceptable (required for a real
+   suite-wide gate; without it the gate only works in a single-process full run).
+4. Naming: `ScenarioBook`/`Coverage` (literal, consistent with `Rulebook`/`FactLog`) vs a
+   metaphor. Leaning literal.
+5. Require every rule to carry a paired precondition-scenario, enforced at registration
+   (a lint against vacuous rules)? Leaning yes.
+
+### Guardrails
+
+- Counters live at a different layer than entities/facts — must survive `PurgeNamespace`.
+- Gate only in full CI runs; never break filtered/local runs.
+- Predicate fidelity depends on emit-site completeness, same as rules — an unemitted signal
+  makes a scenario silently uncoverable (the close-signal gap bites here too).
+- Curate meaningful combinations; don't auto-cross-product labels.
+
+**First cut:** Phases 0–2 alone deliver the dead-rule report and are shippable independently
+of the CI gate (Phase 3).
 
 ## Rule inventory (12 registered + 1 built-unregistered)
 

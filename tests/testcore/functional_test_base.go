@@ -69,6 +69,10 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 		umpire       *umpiretest.Umpire
+		// umpireViolationsExpected suppresses teardown enforcement for the current
+		// test (set via AllowUmpireViolations). Used only by the umpire's own
+		// detector tests, which deliberately drive the system into a bad state.
+		umpireViolationsExpected bool
 
 		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
 
@@ -528,9 +532,22 @@ func (s *FunctionalTestBase) CheckAndPurgeUmpire(t *testing.T, namespaceID strin
 		return
 	}
 	for _, v := range s.umpire.CheckNamespace(context.Background(), namespaceID) {
+		if s.umpireViolationsExpected {
+			t.Logf("umpire violation (expected) [%s]: %s %v", v.Rule, v.Message, v.Tags)
+			continue
+		}
 		t.Errorf("umpire violation [%s]: %s %v", v.Rule, v.Message, v.Tags)
 	}
 	s.umpire.PurgeNamespace(namespaceID)
+	s.umpireViolationsExpected = false
+}
+
+// AllowUmpireViolations disables teardown enforcement for the current test:
+// CheckAndPurgeUmpire still purges but does not fail the test on violations. Use
+// it only in tests that deliberately drive the system into a bad state to
+// exercise the umpire's own detection; the flag resets after each teardown.
+func (s *FunctionalTestBase) AllowUmpireViolations() {
+	s.umpireViolationsExpected = true
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
