@@ -1,8 +1,6 @@
 package internal
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -14,6 +12,8 @@ const lowestKnownSchemaRequestIDColumnLimit = 255
 // GenerateRequestID generates a deterministic request ID for a buffered action's
 // time. The request ID is deterministic because the jittered actual time (as
 // well as the spec's nominal time) is, in turn, also deterministic.
+// Its total length must not exceed SQLite's request ID VARCHAR size, the
+// smallest known persistence limit.
 //
 // backfillID should be left blank for actions that are being started
 // automatically, based on the schedule spec. It must be set for backfills,
@@ -31,25 +31,13 @@ func GenerateRequestID(
 		backfillID = "auto"
 	}
 
-	requestID := fmt.Sprintf(
-		"sched-%s-%s-%s-%d-%d-%d",
-		backfillID,
-		namespaceID,
-		scheduleID,
-		conflictToken,
-		nominal.UnixMilli(),
-		actual.UnixMilli(),
-	)
-	if len(requestID) <= lowestKnownSchemaRequestIDColumnLimit {
-		return requestID
-	}
-
-	scheduleIDHash := sha256.Sum256([]byte(scheduleID))
+	// Keep request IDs bounded and deterministic even when schedule IDs are long.
+	scheduleIDUUID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scheduleID))
 	return fmt.Sprintf(
 		"sched-%s-%s-%s-%d-%d-%d",
 		backfillID,
 		namespaceID,
-		hex.EncodeToString(scheduleIDHash[:16]),
+		scheduleIDUUID,
 		conflictToken,
 		nominal.UnixMilli(),
 		actual.UnixMilli(),
