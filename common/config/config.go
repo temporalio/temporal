@@ -386,6 +386,12 @@ type (
 		Consistency *CassandraStoreConsistency `yaml:"consistency"`
 		// DisableInitialHostLookup instructs the gocql client to connect only using the supplied hosts
 		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
+		// IgnorePeerAddr instructs the gocql client to use the supplied address instead
+		// of the address in system.peers, useful when behind NAT or port-forwarding.
+		IgnorePeerAddr bool `yaml:"ignorePeerAddr"`
+		// DisableShardAwarePort disables connecting to ScyllaDB's shard-aware port,
+		// which is required when running behind NAT or port-forwarding.
+		DisableShardAwarePort bool `yaml:"disableShardAwarePort"`
 		// AddressTranslator translates Cassandra IP addresses, used for cases when IP addresses gocql driver returns are not accessible from the server
 		AddressTranslator *CassandraAddressTranslator `yaml:"addressTranslator"`
 	}
