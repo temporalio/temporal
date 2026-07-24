@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,12 @@ type (
 		ExecutionManager  p.ExecutionManager
 		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
+
+		// MutableStateTableCounts reports surviving row counts per table that SQL
+		// uses to persist a WorkflowMutableState's sub-collections. SQL entrypoints
+		// wire it from the raw DB; nil on Cassandra, where these live as columns on
+		// the executions row and can't be queried alone.
+		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -2691,6 +2698,23 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
+
+	// GetWorkflowExecution short-circuits on the missing executions row, so it
+	// can't see orphaned child-table rows; check them directly where possible.
+	if s.MutableStateTableCounts != nil {
+		counts, err := s.MutableStateTableCounts(s.Ctx, s.ShardID, namespaceID, workflowID, runID)
+		s.NoError(err)
+		// Collect all offending tables into one assertion so every leak is
+		// reported, not just the first (a per-table require would stop at one).
+		var orphaned []string
+		for table, n := range counts {
+			if n != 0 {
+				orphaned = append(orphaned, fmt.Sprintf("%s=%d", table, n))
+			}
+		}
+		sort.Strings(orphaned)
+		s.Emptyf(orphaned, "orphaned rows after delete: %v", orphaned)
+	}
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {

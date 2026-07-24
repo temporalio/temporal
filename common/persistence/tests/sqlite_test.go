@@ -111,7 +111,12 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -122,6 +127,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
@@ -327,7 +333,12 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
 	defer func() {
+		_ = db.Close()
 		factory.Close()
 	}()
 
@@ -338,6 +349,7 @@ func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
