@@ -1912,20 +1912,20 @@ func (a *Activity) StoreOrSelf(ctx chasm.Context) ActivityStore {
 
 // validateActivityTaskToken validates a task token against the current activity state.
 //
-// allowForceCompleteFromScheduled permits a by-ID token to pass even though the activity has no
-// attempt in progress yet, as long as it is Scheduled. Only HandleCompleted sets this, mirroring
-// the workflow-activity behavior of letting RespondActivityTaskCompletedById force-complete an
+// allowForceCompleteWithNoAttempt permits a by-ID token to pass even though the activity has no
+// attempt in progress (Scheduled or Paused). Only HandleCompleted sets this, mirroring the
+// workflow-activity behavior of letting RespondActivityTaskCompletedById force-complete an
 // activity before any worker has started it.
 func (a *Activity) validateActivityTaskToken(
 	ctx chasm.Context,
 	token *tokenspb.Task,
 	requestNamespaceID string,
-	allowForceCompleteFromScheduled bool,
+	allowForceCompleteWithNoAttempt bool,
 ) error {
-	forceCompleteFromScheduled := allowForceCompleteFromScheduled &&
+	forceCompleteWithNoAttempt := allowForceCompleteWithNoAttempt &&
 		token.Attempt == ByIDTokenAttempt &&
-		a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED
-	if !a.hasAttemptInProgress() && !forceCompleteFromScheduled {
+		!a.hasAttemptInProgress()
+	if !a.hasAttemptInProgress() && !forceCompleteWithNoAttempt {
 		return serviceerror.NewNotFound("activity task not found")
 	}
 	if token.Attempt != ByIDTokenAttempt && token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
@@ -1998,11 +1998,11 @@ func (a *Activity) emitOnAttemptFailedMetrics(ctx chasm.Context, handler metrics
 	metrics.ActivityTaskFail.With(handler).Record(1)
 }
 
-func (a *Activity) emitOnCompletedMetrics(ctx chasm.Context, handler metrics.Handler) {
+func (a *Activity) emitOnCompletedMetrics(ctx chasm.Context, handler metrics.Handler, attemptWasStarted bool) {
 	attempt := a.LastAttempt.Get(ctx)
 	startedTime := attempt.GetStartedTime().AsTime()
 
-	if a.GetStatus() != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+	if attemptWasStarted {
 		startToCloseLatency := time.Since(startedTime)
 		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
 	}

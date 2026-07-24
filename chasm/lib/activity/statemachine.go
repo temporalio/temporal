@@ -185,10 +185,13 @@ type completeEvent struct {
 	metricsHandler metrics.Handler
 }
 
-// TransitionCompleted transitions to Completed status.
+// TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
+// RespondActivityTaskCompletedById can force-complete an activity that has no attempt in
+// progress, mirroring workflow-activity behavior.
 var TransitionCompleted = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -199,8 +202,11 @@ var TransitionCompleted = chasm.NewTransition(
 		return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 			req := event.req.GetCompleteRequest()
 
+			attemptWasStarted := a.hasAttemptInProgress()
 			attempt := a.LastAttempt.Get(ctx)
-			if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+			if !attemptWasStarted {
+				// RespondActivityTaskCompletedById can complete an activity when no attempt is in
+				// progress.
 				attempt.StartedTime = timestamppb.New(ctx.Now(a))
 				if a.FirstAttemptStartedTime == nil {
 					a.FirstAttemptStartedTime = attempt.StartedTime
@@ -215,7 +221,7 @@ var TransitionCompleted = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnCompletedMetrics(ctx, event.metricsHandler)
+			a.emitOnCompletedMetrics(ctx, event.metricsHandler, attemptWasStarted)
 
 			return nil
 		})
