@@ -125,22 +125,77 @@ workload for us.
 
 ### The `project` harness — native SDK code, driven over gRPC
 
-Beyond the DSL, Omes has a second execution mode
-([`workers/proto/harness/api/api.proto`](../omes/workers/proto/harness/api/api.proto)) for when
-you want to drive **hand-written, Temporal-native** code in any language rather than the DSL:
+Beyond the DSL, Omes has a **second execution mode**
+([`workers/proto/harness/api/api.proto`](../omes/workers/proto/harness/api/api.proto)) for
+driving **hand-written, Temporal-native** code in any language. Where Kitchen Sink has Omes own
+the workflow (a generic interpreter) and drive it through *its own* client, `project` mode
+**hands both the workflow and the driver logic to the project** and lets Omes own only the
+*cadence* (run one iteration N times) and the *transport* (a gRPC contract):
 
 ```
-service ProjectService {         // a language-agnostic gRPC contract Omes speaks to
-  rpc Init(InitRequest)    returns (InitResponse)   // build client, register worker, setup
-  rpc Execute(ExecuteRequest) returns (ExecuteResponse)  // one iteration: start + verify
+service ProjectService {         // language-agnostic; each SDK implements the server side
+  rpc Init(InitRequest)       returns (InitResponse)       // build client, project-specific setup
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse)    // one iteration: start + drive + verify
 }
 ```
 
-Omes builds and launches the project's worker *and* a `project-server` (the gRPC server), then
-calls `Execute` once per iteration to generate load. Each language's harness (e.g.
-`workers/python/harness`) dispatches between "worker mode" and "project-server mode." This is
-the ready-made **"any language, driven by an external orchestrator over a stable gRPC
-seam"** pattern — the same shape the Pitcher would need to drive SDK workloads it doesn't own.
+**One program, two roles.** A project builds into a single language program (selected with
+`--app <name>` via `workers/<lang>/apps/registry.*`) that runs in two modes, dispatched on the
+subcommand (`harness.Run(app)` on `argv[0]`):
+
+- **`worker`** — a normal SDK worker: registers the app's workflows/activities and polls the task
+  queue (`app.Worker`).
+- **`project-server`** — a gRPC server implementing `ProjectService` (`app.Project`).
+
+A full run has both processes; because they are the same program, the workflows the driver starts
+are exactly the ones the worker serves — coherent by construction.
+
+**The call sequence.** The runner (`scenarios/project/`, always Go, speaks gRPC to any language):
+
+```
+1. validate --option language / project-name / [version | prebuilt-project-dir | project-config-file]
+2. build (workerctl.Builder) or load the project program
+3. findAvailablePort(); exec  <prog> --app <name> project-server --port <p>   (startProjectProcess)
+4. TCP-poll until listening (project-server-ready-timeout, 15s), then dial gRPC
+5. Init(InitRequest{ execution_id, run_id, task_queue, ConnectOptions{ns, address, TLS, auth},
+                     config_json })                                   ← once
+6. a steady-rate GenericExecutor calls Execute(ExecuteRequest{iteration, task_queue}) per iteration
+   → Omes's normal Iterations / Duration / MaxConcurrent / rate machinery drives the loop
+7. teardown: close conn; SIGINT the project-server process group
+```
+
+On the harness side, `Init` builds an SDK client from `ConnectOptions` via the app's
+`ClientFactory` and runs the app's optional `ProjectHandlers.Init` (search attributes, Nexus
+endpoints, …); `Execute` calls the app's `ProjectHandlers.Execute(client, ctx)` — the user's
+per-iteration code (start a workflow, drive it, verify). Returning an error is the only failure
+channel (→ gRPC `Internal` → the iteration fails). `helloworld.App` is the reference: `Execute`
+runs `HelloWorldWorkflow("World")` and checks the result.
+
+| | Kitchen Sink mode | `project` mode |
+|---|---|---|
+| Workflow code | Omes (generic DSL interpreter) | **the project** (native, real-ish app) |
+| Driver / client actions | Omes DSL (`ClientActionsExecutor`) | **the project** (`Execute`, native SDK client) |
+| Load pattern & concurrency | Omes | Omes (**steady-rate only**, today) |
+| Cross-language mechanism | one workflow reimplemented per SDK | one gRPC contract (`Init`/`Execute`) per SDK |
+
+**How it fits the marriage.** `project` mode is the third realizer (`project adapter →
+ProjectService.Execute` in the seam diagram above), and its role is specific:
+
+- It is the vehicle for **Mode 2's intent-carrying menu** (see "Two modes" below): a real
+  application's own signal/update state machine for the driver to walk, in any language, with
+  Umpire observing on the wire — model-based testing against realistic code rather than a generic
+  interpreter.
+- It is the only realizer that exercises a **specific SDK's client plumbing** (update-with-start,
+  signal-with-start, …), because the client calls run through the app's real SDK client in its
+  language — not the Go raw-RPC driver.
+- **The one generalization it needs to become reactive.** As-is, `Execute` is coarse — "do one
+  whole iteration and verify," open-loop within the iteration. A reactive Mode-2 driver (the SAA
+  explorer / Pitcher, guarding over the Umpire model) needs to choose the *next single action*
+  after observing. That is the *"extend the `project` harness into a streaming `Step`-per-action
+  RPC"* note under "Reconciling…": generalize `Execute` → a `Step(action) → effect` stream, the
+  runner picking each action from the model and the harness realizing it through the SDK client.
+  The `Init` / gRPC / two-role skeleton is already the right shape; only the granularity of the
+  drive RPC changes.
 
 ## Why this matters to Umpire / Pitcher / SAA
 
