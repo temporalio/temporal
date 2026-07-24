@@ -925,6 +925,230 @@ func (s *chasmEngineSuite) TestUpdateComponent_SetsContextMetadata() {
 	s.assertTestContextMetadata(requestCtx, newActivityID, "update-request")
 }
 
+func (s *chasmEngineSuite) TestUpdateComponent_RequestIDIdempotency() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	requestID := tv.RequestID()
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+				ActivityId: "",
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1) // the duplicate update reads the cached, post-first-update state
+	// Only the first (non-duplicate) update persists and notifies; it must durably record the ID.
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Contains(request.UpdateWorkflowMutation.ExecutionState.RequestIds, requestID,
+				"the accepted request ID must be persisted for durable dedup")
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	updateCount := 0
+	update := func() ([]byte, error) {
+		return s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				updateCount++
+				tc, ok := component.(*testComponent)
+				s.True(ok)
+				tc.ActivityInfo.ActivityId = tv.ActivityID()
+				return nil
+			},
+			chasm.WithRequestID(requestID),
+		)
+	}
+
+	// First call runs updateFn and records the request ID.
+	firstRef, err := update()
+	s.NoError(err)
+	s.NotEmpty(firstRef)
+	s.Equal(1, updateCount)
+
+	// Second call with the same request ID is rejected with a FailedPrecondition error: updateFn does
+	// not run and nothing is persisted.
+	dupRef, err := update()
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.Nil(dupRef)
+	s.Equal(1, updateCount, "updateFn must not run again for a duplicate request ID")
+}
+
+// TestUpdateComponent_NoRequestID verifies that without WithRequestID (or with an empty request ID)
+// updates are not deduplicated - updateFn runs every time and no request ID is recorded. This guards
+// the deliberate choice not to auto-generate a request ID on the update path.
+func (s *chasmEngineSuite) TestUpdateComponent_NoRequestID() {
+	testCases := []struct {
+		name string
+		opts []chasm.TransitionOption
+	}{
+		{"no option", nil},
+		{"empty request ID", []chasm.TransitionOption{chasm.WithRequestID("")}},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  tv.WorkflowID(),
+				RunID:       tv.RunID(),
+			})
+
+			s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{
+					State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+						enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+				}, nil).Times(1)
+			s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					s.Empty(request.UpdateWorkflowMutation.ExecutionState.RequestIds,
+						"no request ID should be recorded when none is supplied")
+					return tests.UpdateWorkflowExecutionResponse, nil
+				}).Times(2)
+			s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(2)
+
+			updateCount := 0
+			for range 2 {
+				_, err := s.engine.UpdateComponent(
+					context.Background(),
+					ref,
+					func(ctx chasm.MutableContext, component chasm.Component) error {
+						updateCount++
+						component.(*testComponent).ActivityInfo.ActivityId = fmt.Sprintf("act-%d", updateCount)
+						return nil
+					},
+					tc.opts...,
+				)
+				s.NoError(err)
+			}
+			s.Equal(2, updateCount, "updateFn must run on every call when not deduplicated")
+		})
+	}
+}
+
+// TestUpdateComponent_DifferentRequestIDsWithEviction verifies that distinct request IDs each run and
+// are recorded, and that the lazy sweep fires end-to-end through the transaction: with a limit of 1,
+// the older request ID is evicted from the persisted map when the second is recorded.
+func (s *chasmEngineSuite) TestUpdateComponent_DifferentRequestIDsWithEviction() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+	s.config.MaximumRequestIDsPerExecution = func(string) int { return 1 }
+	requestID1 := "request-id-1"
+	requestID2 := "request-id-2"
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+	var persisted []map[string]struct{}
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			snap := map[string]struct{}{}
+			for id := range request.UpdateWorkflowMutation.ExecutionState.RequestIds {
+				snap[id] = struct{}{}
+			}
+			persisted = append(persisted, snap)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(2)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(2)
+
+	updateCount := 0
+	for _, id := range []string{requestID1, requestID2} {
+		_, err := s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				updateCount++
+				component.(*testComponent).ActivityInfo.ActivityId = fmt.Sprintf("act-%d", updateCount)
+				return nil
+			},
+			chasm.WithRequestID(id),
+		)
+		s.NoError(err)
+	}
+
+	s.Equal(2, updateCount, "distinct request IDs must each run updateFn")
+	s.Contains(persisted[0], requestID1)
+	// With a limit of 1, recording the second request ID sweeps the first.
+	s.Contains(persisted[1], requestID2)
+	s.NotContains(persisted[1], requestID1, "the older request ID must be swept when over the limit")
+}
+
+// TestUpdateComponent_FailedUpdateNotRecorded verifies that when updateFn returns an error the request
+// ID is not recorded, so a retry with the same request ID is not deduplicated and runs again.
+func (s *chasmEngineSuite) TestUpdateComponent_FailedUpdateNotRecorded() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+	requestID := tv.RequestID()
+
+	// The failed update releases the lease with an error, clearing the cache, so the retry reloads.
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			return &persistence.GetWorkflowExecutionResponse{
+				State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+					enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+			}, nil
+		}).Times(2)
+	// Only the successful retry persists, and it records the request ID.
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Contains(request.UpdateWorkflowMutation.ExecutionState.RequestIds, requestID)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	updateErr := errors.New("update failed")
+	updateCount := 0
+	update := func(fail bool) error {
+		_, err := s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				updateCount++
+				if fail {
+					return updateErr
+				}
+				component.(*testComponent).ActivityInfo.ActivityId = tv.ActivityID()
+				return nil
+			},
+			chasm.WithRequestID(requestID),
+		)
+		return err
+	}
+
+	// The update fails inside updateFn: nothing is persisted and the request ID is not recorded.
+	s.ErrorIs(update(true), updateErr)
+	s.Equal(1, updateCount)
+
+	// Retrying with the same request ID is not deduplicated (the failure recorded nothing), so
+	// updateFn runs again and the update succeeds.
+	s.NoError(update(false))
+	s.Equal(2, updateCount)
+}
+
 func (s *chasmEngineSuite) TestReadComponent_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())

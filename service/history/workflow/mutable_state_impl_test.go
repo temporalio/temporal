@@ -6458,6 +6458,292 @@ func (s *mutableStateSuite) TestHasRequestID_EmptyExecutionState() {
 	}
 }
 
+func (s *mutableStateSuite) TestAttachChasmRequestID() {
+	ts := clock.NewEventTimeSource()
+	baseTime := time.Now().UTC().Truncate(time.Second)
+	ts.Update(baseTime)
+	s.mutableState.timeSource = ts
+
+	// A pre-existing create request ID must never be treated as CHASM-attached.
+	s.mutableState.AttachRequestID("create-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 1)
+	s.Equal("create-req", s.mutableState.executionState.CreateRequestId)
+
+	sizeBefore := s.mutableState.approximateSize
+	s.mutableState.AttachChasmRequestID("chasm-req")
+
+	info, ok := s.mutableState.executionState.RequestIds["chasm-req"]
+	s.True(ok)
+	s.NotNil(info.GetAttachTime(), "CHASM-attached entry must carry an attach time (the sweepable marker)")
+	s.Equal(baseTime, info.GetAttachTime().AsTime())
+	s.Equal(enumspb.EVENT_TYPE_UNSPECIFIED, info.GetEventType())
+	s.Zero(info.GetEventId())
+
+	// CreateRequestId is left untouched.
+	s.Equal("create-req", s.mutableState.executionState.CreateRequestId)
+
+	// Forces persistence and gates the lazy sweep on this transaction.
+	s.True(s.mutableState.executionStateUpdated)
+	s.True(s.mutableState.chasmRequestIDsAdded)
+	s.Greater(s.mutableState.approximateSize, sizeBefore)
+
+	// An empty request ID is a no-op.
+	s.mutableState.AttachChasmRequestID("")
+	_, ok = s.mutableState.executionState.RequestIds[""]
+	s.False(ok)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionSweepChasmRequestIDs() {
+	baseTime := time.Now().UTC().Truncate(time.Second)
+
+	// seedPriorRequestIDs records n sweepable CHASM request IDs "prior-00".."prior-(n-1)" directly,
+	// with strictly increasing attach times, as if attached in earlier (already-closed) transactions.
+	seedPriorRequestIDs := func(n int) {
+		if s.mutableState.executionState.RequestIds == nil {
+			s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		}
+		for i := range n {
+			s.mutableState.executionState.RequestIds[fmt.Sprintf("prior-%02d", i)] = &persistencespb.RequestIDInfo{
+				AttachTime: timestamppb.New(baseTime.Add(time.Duration(i) * time.Second)),
+			}
+		}
+	}
+	// seedPriorAt records a single sweepable CHASM request ID at attach time t, as if attached in an
+	// earlier (already-closed) transaction.
+	seedPriorAt := func(id string, t time.Time) {
+		if s.mutableState.executionState.RequestIds == nil {
+			s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		}
+		s.mutableState.executionState.RequestIds[id] = &persistencespb.RequestIDInfo{
+			AttachTime: timestamppb.New(t),
+		}
+	}
+	// attachNow records a request ID via the real path at time t, marking it attached-this-transaction
+	// (satisfying the sweep gate).
+	attachNow := func(id string, t time.Time) {
+		ts := clock.NewEventTimeSource()
+		ts.Update(t)
+		s.mutableState.timeSource = ts
+		s.mutableState.AttachChasmRequestID(id)
+	}
+	countSweepable := func() int {
+		n := 0
+		for _, info := range s.mutableState.executionState.RequestIds {
+			if info.GetAttachTime() != nil {
+				n++
+			}
+		}
+		return n
+	}
+	// setLimits sets both sweep knobs. Count-focused subtests pass a large maxAge (nothing is old
+	// enough to be aged out); age-focused subtests pass a small one. Set explicitly in every subtest
+	// because SetupSubTest resets only the mutable state, not mockConfig, so values leak otherwise.
+	setLimits := func(count int, maxAge time.Duration) {
+		s.mockConfig.MaximumRequestIDsPerExecution = func(string) int { return count }
+		s.mockConfig.RequestIDMaxAge = func(string) time.Duration { return maxAge }
+	}
+	const nonTriggeringAge = 7 * 24 * time.Hour
+
+	s.Run("active + attached: count cap evicts oldest, never create/event-backed", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		s.mutableState.AttachRequestID("create-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, 1)
+		s.mutableState.AttachRequestID("event-req", enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, 5)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour)) // newest
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// limit=3: the 3 newest sweepable entries are kept (current-req plus the two newest priors).
+		s.False(s.mutableState.HasRequestID("prior-00"))
+		s.False(s.mutableState.HasRequestID("prior-01"))
+		s.True(s.mutableState.HasRequestID("prior-02"))
+		s.True(s.mutableState.HasRequestID("prior-03"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		// Create and event-backed request IDs (nil attach time) are never swept.
+		s.True(s.mutableState.HasRequestID("create-req"))
+		s.True(s.mutableState.HasRequestID("event-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("active + attached but at count cap: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		seedPriorRequestIDs(2)                            // 2 priors
+		attachNow("current-req", baseTime.Add(time.Hour)) // + 1 attached = 3 sweepable == limit
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// The gate fires, but the total is at the cap and nothing is aged, so nothing is evicted.
+		s.True(s.mutableState.HasRequestID("prior-00"))
+		s.True(s.mutableState.HasRequestID("prior-01"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("age batch evicts entries below the count cap", func() {
+		s.SetupSubTest()
+		setLimits(100, 30*time.Minute) // count cap never binds
+		seedPriorRequestIDs(4)         // attached near baseTime, so older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// cutoff = now(baseTime+1h) - 30m: the priors are older and swept even though we're far under
+		// the count cap; current-req is younger and kept.
+		for i := range 4 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("age batch exceeds count overflow: reclaims whole batch, drops below cap", func() {
+		s.SetupSubTest()
+		setLimits(3, 30*time.Minute)
+		seedPriorRequestIDs(6) // all older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// overLimit=7-3=4, aged=6; max(4,6)=6 evicts the whole aged batch, leaving 1 (below the cap).
+		// This is the point of the age knob: headroom, not one-at-a-time eviction while pinned at the cap.
+		for i := range 6 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("count overflow exceeds age batch: count cap dominates", func() {
+		s.SetupSubTest()
+		setLimits(3, 30*time.Minute)
+		seedPriorAt("aged-0", baseTime)                       // older than cutoff
+		seedPriorAt("aged-1", baseTime.Add(time.Second))      // older than cutoff
+		seedPriorAt("recent-0", baseTime.Add(40*time.Minute)) // younger than cutoff
+		seedPriorAt("recent-1", baseTime.Add(41*time.Minute)) // younger than cutoff
+		seedPriorAt("recent-2", baseTime.Add(42*time.Minute)) // younger than cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// overLimit=6-3=3, aged=2; max(3,2)=3 evicts the 3 oldest - both aged entries plus the oldest
+		// still-fresh one - to hold the hard cap.
+		s.False(s.mutableState.HasRequestID("aged-0"))
+		s.False(s.mutableState.HasRequestID("aged-1"))
+		s.False(s.mutableState.HasRequestID("recent-0"))
+		s.True(s.mutableState.HasRequestID("recent-1"))
+		s.True(s.mutableState.HasRequestID("recent-2"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(3, countSweepable())
+	})
+
+	s.Run("count cap disabled (limit<=0): age still sweeps", func() {
+		s.SetupSubTest()
+		setLimits(0, 30*time.Minute)
+		seedPriorRequestIDs(4) // older than the cutoff
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.False(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(1, countSweepable())
+	})
+
+	s.Run("age disabled (maxAge<=0): count cap only", func() {
+		s.SetupSubTest()
+		setLimits(100, 0)      // count cap never binds, age disabled
+		seedPriorRequestIDs(4) // old, but age sweeping is off
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+		s.Equal(5, countSweepable())
+	})
+
+	s.Run("count cap and age both disabled: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(0, 0)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("passive: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(1, 30*time.Minute)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyPassive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("active but nothing attached this transaction: no sweep", func() {
+		s.SetupSubTest()
+		setLimits(1, 30*time.Minute)
+		seedPriorRequestIDs(4) // over both limits, but none attached this transaction
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		for i := range 4 {
+			s.True(s.mutableState.HasRequestID(fmt.Sprintf("prior-%02d", i)))
+		}
+	})
+
+	s.Run("deterministic tie-break on equal attach time", func() {
+		s.SetupSubTest()
+		setLimits(3, nonTriggeringAge)
+		// All priors share one attach time; ties break lexicographically (largest survive).
+		s.mutableState.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo)
+		for _, id := range []string{"c", "a", "e", "b", "d"} {
+			s.mutableState.executionState.RequestIds[id] = &persistencespb.RequestIDInfo{
+				AttachTime: timestamppb.New(baseTime),
+			}
+		}
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		// limit=3: current-req is strictly newest; among the equal-time priors the lexicographically
+		// largest ("d", "e") survive and the rest are evicted.
+		s.True(s.mutableState.HasRequestID("d"))
+		s.True(s.mutableState.HasRequestID("e"))
+		s.False(s.mutableState.HasRequestID("a"))
+		s.False(s.mutableState.HasRequestID("b"))
+		s.False(s.mutableState.HasRequestID("c"))
+		s.True(s.mutableState.HasRequestID("current-req"))
+	})
+
+	s.Run("eviction shrinks approximateSize", func() {
+		s.SetupSubTest()
+		setLimits(1, nonTriggeringAge)
+		seedPriorRequestIDs(4)
+		attachNow("current-req", baseTime.Add(time.Hour))
+
+		sizeBefore := s.mutableState.approximateSize
+		s.mutableState.closeTransactionSweepChasmRequestIDs(historyi.TransactionPolicyActive)
+
+		s.Less(s.mutableState.approximateSize, sizeBefore)
+	})
+}
+
 func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	s.mockConfig.ChasmMaxInMemoryPureTasks = dynamicconfig.GetIntPropertyFn(5)
 	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
