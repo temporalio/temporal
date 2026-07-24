@@ -141,6 +141,53 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 	s.NoError(err)
 }
 
+// TestSendPendingRetirements_OrderedAfterLaneSends pins the marker-ordering rules: a
+// retirement marker is deferred while the member's lane has an in-flight tier send
+// (the marker must be the lane's last message), and dropped entirely when the
+// namespace re-split before the marker went out (it would retire the NEW lane).
+func (s *streamSenderSuite) TestSendPendingRetirements_OrderedAfterLaneSends() {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(100)
+	s.streamSender.isolation = m
+
+	// Two members graduate in the same reconcile; "a" still has a tier send in
+	// flight, "b" is quiescent.
+	m.Reconcile([]string{"a", "b"}, 100, nil)
+	m.Reconcile(nil, 100, map[string]int64{"a": 100, "b": 100})
+	s.False(s.streamSender.beginMemberLaneSend("a", 0)) // graduated: no lease
+	s.streamSender.laneSendMu.Lock()
+	s.streamSender.activeLaneSends["a"] = 1 // a send that leased before graduation
+	s.streamSender.laneSendMu.Unlock()
+
+	var sentMarkers []string
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.True(msgs.GetRetireIsolatedLane())
+			sentMarkers = append(sentMarkers, msgs.GetIsolatedNamespaceId())
+			return nil
+		}).Times(2)
+
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b"}, sentMarkers, "marker for a lane with an in-flight send must wait")
+	s.Equal([]string{"a"}, s.streamSender.pendingRetires)
+
+	// The in-flight send finishes: the deferred marker goes out on the next ack.
+	s.streamSender.endMemberLaneSend("a")
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b", "a"}, sentMarkers)
+	s.Empty(s.streamSender.pendingRetires)
+
+	// A pending marker for a namespace that re-split is obsolete: dropped unsent.
+	s.streamSender.pendingRetires = []string{"c"}
+	m.Reconcile([]string{"c"}, 100, nil)
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b", "a"}, sentMarkers)
+	s.Empty(s.streamSender.pendingRetires)
+
+	s.streamSender.isolation = nil
+}
+
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
 // every ack shape, the reader-group path persists exactly the QueueReaderState and
 // failover watermark the legacy path does.
@@ -765,6 +812,10 @@ func (s *streamSenderSuite) TestSendTasks_Noop() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -794,6 +845,10 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -886,6 +941,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -964,6 +1023,10 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		enumsspb.TASK_PRIORITY_HIGH,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1059,6 +1122,10 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		enumsspb.TASK_PRIORITY_LOW,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1091,6 +1158,10 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.Error(err, "rpc error")
 	s.ErrorAs(err, new(*StreamError))

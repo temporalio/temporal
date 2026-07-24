@@ -224,6 +224,17 @@ func (m *isolationManager) IsMember(namespaceID string) bool {
 	return ok
 }
 
+// IsMemberGeneration reports whether the namespace's isolated lane is still the
+// given incarnation. Tier send loops verify their snapshot with this before (and
+// again just after) taking a send lease, so a lane incarnation that graduated or
+// re-split sends nothing more.
+func (m *isolationManager) IsMemberGeneration(namespaceID string, generation int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st, ok := m.members[namespaceID]
+	return ok && st.generation == generation
+}
+
 // DefaultFilter returns the task filter for the shared HIGH lane: it excludes every
 // isolated namespace. Returns nil (admit all) when no namespace is isolated. The
 // filter is an immutable snapshot; re-snapshot per batch.
