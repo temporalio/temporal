@@ -1094,7 +1094,8 @@ func (s *ExecutionMutableStateSuite) deleteCurrentAndAssertMissing(runID string)
 		WorkflowID:  s.WorkflowID,
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	})
-	s.IsType(&serviceerror.NotFound{}, err)
+	var notFoundErr *serviceerror.NotFound
+	s.ErrorAs(err, &notFoundErr)
 }
 
 func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
