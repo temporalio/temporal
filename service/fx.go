@@ -179,7 +179,9 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
 	}
 
-	interceptors = append(interceptors, faultinjection.GRPCUnaryServerInterceptor(params.TestHooks))
+	if faultInterceptor := faultinjection.GRPCUnaryServerInterceptor(params.TestHooks); faultInterceptor != nil {
+		interceptors = append(interceptors, faultInterceptor)
+	}
 
 	return append(interceptors, params.RetryableInterceptor.Intercept)
 }
