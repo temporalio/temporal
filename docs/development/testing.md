@@ -191,7 +191,7 @@ _NOTE_: The previous `testcore.TaskPoller` has been deprecated and should not be
 
 The `testcore` package injects faults into gRPC calls by intercepting requests and responses.
 The fault function determines which RPCs trigger a fault and returns the error to inject.
-Every matching request is affected until the fault is unregistered.
+`InjectRPCFault` returns a cleanup function that can be used to remove the fault again.
 
 **Example:**
 
