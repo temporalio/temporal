@@ -38,16 +38,16 @@ func (o rpcFaultOptions) matchesNamespace(req any) bool {
 	return false
 }
 
-// WithNamespaceID filters faults to only fire for requests whose GetNamespaceId()
-// matches the given namespace ID.
+// WithNamespaceID matches requests that expose the given namespace ID.
+// When combined with [WithNamespaceName], matching either option is sufficient.
 func WithNamespaceID(id string) RPCFaultOption {
 	return func(o *rpcFaultOptions) {
 		o.namespaceID = id
 	}
 }
 
-// WithNamespaceName filters faults to only fire for requests whose GetNamespace()
-// matches the given namespace name.
+// WithNamespaceName matches requests that expose the given namespace name.
+// When combined with [WithNamespaceID], matching either option is sufficient.
 func WithNamespaceName(name string) RPCFaultOption {
 	return func(o *rpcFaultOptions) {
 		o.namespaceName = name
