@@ -23,6 +23,40 @@ reached) is what the Planner's guided mode steers toward. The server under test 
 Workloads are reused from **Omes** (kitchensink workflows; see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)) rather
 than a bespoke DSL.
 
+## Glossary
+
+**Parts**
+- **Umpire** — the whole system: the closed loop of Planner + Driver + Monitor over one shared model.
+- **Monitor** — the passive half; observes traffic, maintains the model, and judges it with rules. Never drives.
+- **Planner** — the active brains; plans routes over the model to reach target states, and hosts coverage-guided fuzzing.
+- **Driver** — the active mechanics; realizes each planned event as real traffic and injects faults.
+
+**Model (Monitor)**
+- **Fact** — a normalized unit of observation (a request, response, span event, or history event) addressed to one entity.
+- **Entity / model** — a per-entity executable state machine (an *oracle*) built up from facts.
+- **Classify** — an entity's total transition function: every (state, event) → `Advance` / `NoOp` / `Illegal`. The source of "no vacuous pass."
+- **Registry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
+- **FactLog** — an append-only, queryable record of every fact.
+
+**Judging (Monitor)**
+- **Rule** — an invariant over model state. **Safety** rules must hold at every observation; **Liveness** rules must eventually hold.
+- **Rulebook** — the name-validated registry of rules.
+- **Violation** — a rule's output when an invariant fails; the Monitor's only product.
+- **Coverage / Scenario** — the catalog of interesting states worth reaching; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
+
+**Driving (Planner + Driver)**
+- **event** — an abstract model transition name (`admit`, `accept`); the unit a route is made of.
+- **route / Plan** — an ordered sequence of events reaching a target state; a `Plan` is validated before any traffic runs.
+- **Constraints** — allow/deny events or states to carve the sub-graph a plan may use.
+- **action** — the real traffic (an RPC, worker poll, or injected fault) the Driver produces to realize one event.
+- **FaultInjector** — the interceptor hook the Driver uses to drop/delay/corrupt requests.
+
+**Cross-cutting**
+- **Environment** — a named capability profile (`local-chasm`, `local-rpc`, `cicd`, `canary`) granting a subset of capabilities.
+- **Capability** — a flag on the observe (`rpc`/`traces`/`internals`), drive (`rpcDrive`/`faults`/`directDrive`), or transport axis.
+- **SUT** — the system under test: the real Temporal server.
+- **Omes** — external kitchen-sink workflows, reused as the workload substrate.
+
 ## Goals
 
 - **Separate actions from assertions.** The Driver drives; the Monitor judges. Each is reusable
