@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // WorkflowUpdateDeduplication detects duplicate update requests not resolved.
@@ -15,7 +15,7 @@ func (m *WorkflowUpdateDeduplication) Name() string {
 }
 
 func (m *WorkflowUpdateDeduplication) CheckLiveness(c *umpire.LivenessContext) {
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.UpdateID == "" || wu.RequestCount <= 1 {
 			continue

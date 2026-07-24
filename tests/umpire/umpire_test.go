@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
 	"go.temporal.io/server/tests/umpire/fact"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // admittedUpdateIn builds a "stuck in admitted" WorkflowUpdate fact rooted at the
@@ -21,18 +21,18 @@ func admittedUpdateIn(namespaceID, workflowID, updateID string) umpirefw.Fact {
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
 		EntityPath: &umpirefw.EntityPath{
-			EntityID: umpirefw.NewEntityID(entity.WorkflowUpdateType, updateID),
+			EntityID: umpirefw.NewEntityID(model.WorkflowUpdateType, updateID),
 			Ancestors: []umpirefw.EntityID{
-				umpirefw.NewEntityID(entity.NamespaceType, namespaceID),
-				umpirefw.NewEntityID(entity.WorkflowType, workflowID),
+				umpirefw.NewEntityID(model.NamespaceType, namespaceID),
+				umpirefw.NewEntityID(model.WorkflowType, workflowID),
 			},
 		},
 	}
 }
 
 func countUpdates(u *Umpire, namespaceID string) int {
-	root := umpirefw.NewEntityID(entity.NamespaceType, namespaceID)
-	return len(u.Registry().QueryEntities(entity.WorkflowUpdateType, 0, &root))
+	root := umpirefw.NewEntityID(model.NamespaceType, namespaceID)
+	return len(u.Registry().QueryEntities(model.WorkflowUpdateType, 0, &root))
 }
 
 func TestUmpire_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {

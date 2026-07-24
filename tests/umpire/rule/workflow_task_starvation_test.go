@@ -9,8 +9,8 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
 	"go.temporal.io/server/tests/umpire/fact"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // TestWorkflowTaskStarvationRule_NonSpeculative_ViaImporter verifies that
@@ -18,7 +18,7 @@ import (
 // so the WorkflowTask entity enters the "added" FSM state and the starvation model fires.
 func TestWorkflowTaskStarvationRule_NonSpeculative_ViaImporter(t *testing.T) {
 	reg := newTestRegistry()
-	imp := entity.NewFactDecoder()
+	imp := model.NewFactDecoder()
 
 	req := &matchingservice.AddWorkflowTaskRequest{
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "tq"},

@@ -12,13 +12,13 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
 	"go.temporal.io/server/tests/umpire/fact"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 func newTestRegistry() *umpire.Registry {
 	r := umpire.NewRegistry()
-	entity.RegisterDefaultEntities(r)
+	model.RegisterDefaultEntities(r)
 	return r
 }
 
@@ -38,8 +38,8 @@ func routeFact(t *testing.T, r *umpire.Registry, m umpire.Fact) {
 }
 
 func makeWorkflowTaskAdded(taskQueue, workflowID, runID string) *fact.WorkflowTaskAdded {
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
-	tqID := umpire.NewEntityID(entity.TaskQueueType, taskQueue)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	tqID := umpire.NewEntityID(model.TaskQueueType, taskQueue)
 	return &fact.WorkflowTaskAdded{
 		Request: &matchingservice.AddWorkflowTaskRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -50,8 +50,8 @@ func makeWorkflowTaskAdded(taskQueue, workflowID, runID string) *fact.WorkflowTa
 }
 
 func makeWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.WorkflowTaskStored {
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
-	tqID := umpire.NewEntityID(entity.TaskQueueType, taskQueue)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	tqID := umpire.NewEntityID(model.TaskQueueType, taskQueue)
 	return &fact.WorkflowTaskStored{
 		TaskQueue:  taskQueue,
 		WorkflowID: workflowID,
@@ -61,8 +61,8 @@ func makeWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.WorkflowT
 }
 
 func makeSpecWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.WorkflowTaskStored {
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
 	return &fact.WorkflowTaskStored{
 		TaskQueue:  taskQueue,
 		WorkflowID: workflowID,
@@ -72,8 +72,8 @@ func makeSpecWorkflowTaskStored(taskQueue, workflowID, runID string) *fact.Workf
 }
 
 func makeSpeculativeScheduled(taskQueue, workflowID, runID string) *fact.SpeculativeWorkflowTaskScheduled {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
 	return &fact.SpeculativeWorkflowTaskScheduled{
 		WorkflowID: workflowID,
 		RunID:      runID,
@@ -83,8 +83,8 @@ func makeSpeculativeScheduled(taskQueue, workflowID, runID string) *fact.Specula
 }
 
 func makeWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturned bool) *fact.WorkflowTaskPolled {
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
-	tqID := umpire.NewEntityID(entity.TaskQueueType, taskQueue)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	tqID := umpire.NewEntityID(model.TaskQueueType, taskQueue)
 	return &fact.WorkflowTaskPolled{
 		Request: &matchingservice.PollWorkflowTaskQueueRequest{
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -97,8 +97,8 @@ func makeWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturned bo
 }
 
 func makeSpecWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturned bool) *fact.WorkflowTaskPolled {
-	wtID := umpire.NewEntityID(entity.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
+	wtID := umpire.NewEntityID(model.WorkflowTaskType, taskQueue+":"+workflowID+":"+runID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
 	return &fact.WorkflowTaskPolled{
 		Request: &matchingservice.PollWorkflowTaskQueueRequest{
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -111,8 +111,8 @@ func makeSpecWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturne
 }
 
 func makeWorkflowUpdateAdmitted(workflowID, updateID string) *fact.WorkflowUpdateAdmitted {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateAdmitted{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
@@ -121,8 +121,8 @@ func makeWorkflowUpdateAdmitted(workflowID, updateID string) *fact.WorkflowUpdat
 }
 
 func makeWorkflowUpdateAccepted(workflowID, updateID string) *fact.WorkflowUpdateAccepted {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateAccepted{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
@@ -131,8 +131,8 @@ func makeWorkflowUpdateAccepted(workflowID, updateID string) *fact.WorkflowUpdat
 }
 
 func makeWorkflowUpdateCompleted(workflowID, updateID string) *fact.WorkflowUpdateCompleted {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateCompleted{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
@@ -142,8 +142,8 @@ func makeWorkflowUpdateCompleted(workflowID, updateID string) *fact.WorkflowUpda
 }
 
 func makeWorkflowUpdateRejected(workflowID, updateID string) *fact.WorkflowUpdateRejected {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateRejected{
 		UpdateID:   updateID,
 		WorkflowID: workflowID,
@@ -152,8 +152,8 @@ func makeWorkflowUpdateRejected(workflowID, updateID string) *fact.WorkflowUpdat
 }
 
 func makeWorkflowUpdateRequested(workflowID, updateID string) *fact.WorkflowUpdateRequested {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(entity.WorkflowUpdateType, updateID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
+	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
 	return &fact.WorkflowUpdateRequested{
 		Request: &historyservice.UpdateWorkflowExecutionRequest{
 			Request: &workflowservice.UpdateWorkflowExecutionRequest{
@@ -169,7 +169,7 @@ func makeWorkflowUpdateRequested(workflowID, updateID string) *fact.WorkflowUpda
 }
 
 func makeWorkflowStarted(workflowID string) *fact.WorkflowStarted {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
 	return &fact.WorkflowStarted{
 		Request: &historyservice.StartWorkflowExecutionRequest{
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
@@ -181,7 +181,7 @@ func makeWorkflowStarted(workflowID string) *fact.WorkflowStarted {
 }
 
 func makeWorkflowCompleted(workflowID string) *fact.WorkflowExecutionCompleted {
-	wfID := umpire.NewEntityID(entity.WorkflowType, workflowID)
+	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
 	return &fact.WorkflowExecutionCompleted{
 		WorkflowID: workflowID,
 		EntityPath: &umpire.EntityPath{EntityID: wfID},

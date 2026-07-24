@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
-	wu := entity.NewWorkflowUpdate()
+	wu := model.NewWorkflowUpdate()
 	if wu.FSM.Current() != "unspecified" {
 		t.Fatalf("expected initial state 'unspecified', got %s", wu.FSM.Current())
 	}
@@ -17,7 +17,7 @@ func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
 		t.Fatal("expected 'admit' to be possible from 'unspecified'")
 	}
 
-	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(entity.WorkflowUpdateType, "upd1")}
+	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowUpdateType, "upd1")}
 	wu.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
 		yield(makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	})
@@ -50,12 +50,12 @@ func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
 }
 
 func TestWorkflowTask_FSM_AddThenPoll(t *testing.T) {
-	wt := entity.NewWorkflowTask()
+	wt := model.NewWorkflowTask()
 	if wt.FSM.Current() != "created" {
 		t.Fatalf("expected 'created', got %s", wt.FSM.Current())
 	}
 
-	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(entity.WorkflowTaskType, "tq:wf1:run1")}
+	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowTaskType, "tq:wf1:run1")}
 	wt.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
 		yield(makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	})
@@ -78,8 +78,8 @@ func TestWorkflowTask_FSM_AddThenPoll(t *testing.T) {
 }
 
 func TestWorkflowTask_FSM_SpeculativeTask(t *testing.T) {
-	wt := entity.NewWorkflowTask()
-	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(entity.WorkflowTaskType, "tq:wf1:run1")}
+	wt := model.NewWorkflowTask()
+	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowTaskType, "tq:wf1:run1")}
 	wt.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
 		yield(makeSpeculativeScheduled("tq", "wf1", "run1"))
 	})
@@ -92,8 +92,8 @@ func TestWorkflowTask_FSM_SpeculativeTask(t *testing.T) {
 }
 
 func TestWorkflowTask_FSM_PollWithoutReturn_NoTransition(t *testing.T) {
-	wt := entity.NewWorkflowTask()
-	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(entity.WorkflowTaskType, "tq:wf1:run1")}
+	wt := model.NewWorkflowTask()
+	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowTaskType, "tq:wf1:run1")}
 	wt.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
 		yield(makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	})

@@ -145,7 +145,7 @@ func (e *NexusOperationStarted) ImportSpanEvent(attrs attribute.Set) bool {
 Terminal facts (`NexusOperationSucceeded/Failed/Canceled/TimedOut`) additionally read
 `AttrNexusOutcome` to record the outcome on the entity.
 
-### 4. Entity — `tests/umpire/entity/nexus_operation.go`
+### 4. Entity — `tests/umpire/model/nexus_operation.go`
 
 A `Lifecycled` entity mirroring the HSM (same shape as `WorkflowUpdate`):
 
@@ -174,7 +174,7 @@ func NewNexusOperation() *NexusOperation {
 `OnFact` fires the matching event per fact type — the exact shape of `WorkflowUpdate.OnFact`,
 deriving `*At` accessors from `FSM.EnteredAt(...)` so state ⇔ timestamp holds by construction.
 
-### 5. Registration — `tests/umpire/entity/register.go`
+### 5. Registration — `tests/umpire/model/register.go`
 
 Register the 7 span facts and `NewNexusOperation` (subscribing to those facts).
 

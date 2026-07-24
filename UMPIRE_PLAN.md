@@ -192,7 +192,7 @@ forward edge), `NoOp` (a benign duplicate / late / out-of-order / post-terminal
 re-observation), or `Illegal` (impossible given the observed history) — and `Fire` is defined
 in terms of it. Modelling the benign re-observations as `NoOp` (rather than lumping every
 non-edge into "illegal") is what removed the false-positive vector. `States`/`Events`/
-`Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpire/entity`
+`Reachable`/`Validate` expose the graph for Tier-1 static validation (`tests/umpire/model`
 checks every default lifecycle is sound and `Classify` is total, server-free in ms — the
 analog of the SAA model's `validate` package). This realizes item #1 of `SAAMODEL.md`.
 
@@ -214,6 +214,51 @@ analog of the SAA model's `validate` package). This realizes item #1 of `SAAMODE
 from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp set" holds by
 construction — there is nothing left to check. Remaining: close the close-signal / event-time
 fidelity gaps to sharpen the residual cross-branch-reorder case for `EntityTransitionLegality`.
+
+## How rules map onto the model (north star: complete models)
+
+The direction of travel (`SAAMODEL.md` #1) is a **complete, executable model per entity**: a
+total transition function (`Classify`: every state × event → `Advance`/`NoOp`/`Illegal`) plus
+the state-derived predictions (terminal, must-progress, timestamps, and eventually the expected
+API result per edge). "Complete" is a *means*, not the goal — it buys the SPEC goals (no vacuous
+passes, model-derived coverage, cheap bug-finding). The crucial caveat: **a complete model is
+per-entity; most of our rules are cross-entity.** So the rulebook does not collapse into one
+model — it splits into three buckets.
+
+| Bucket | What it is | Rules | Fate |
+|---|---|---|---|
+| **Is the model** | single-entity conformance | `EntityTransitionLegality` | *becomes* the generic model-conformance check (built). Not a hand-written rule anymore. |
+| **Property of a model** | liveness/structure derived from one FSM's annotations | `EntityProgress`, `WorkflowTaskStarvation`, `WorkflowUpdateDeduplication` (+ already-absorbed `StageMonotone`, `StateConsistency`) | collapse into model annotations (terminal / must-progress / state-derived), checked generically. |
+| **Relation between models** | invariant over two-or-more entities | `SpeculativeTaskCreation`, `WorkflowUpdateHistoryOrdering`, `WorkflowUpdateClosure`, `WorkflowUpdateContinueAsNew`, `WorkflowUpdateWorkerSkipped`, `WorkflowUpdateContextClear`, `SpeculativeTaskRollback`, `SpeculativeConversion` | **not subsumed.** Stay bespoke — this is where the interesting bugs live. |
+
+A per-entity complete model absorbs ~4–5 of the 12 registered rules; the other ~7 remain rules.
+That is not a shortfall: even the SAA model is single-archetype and has **no** cross-entity
+story (`SAAMODEL.md`, "where Umpire's approach is genuinely different"). Cross-entity correlation
+is Umpire's differentiator, not a gap in it.
+
+### The boundary is movable
+A cross-entity rule can be pulled **into** a single entity's complete model by adding the other
+entity's transitions as **events in that entity's alphabet** — exactly how SAA folds
+timeouts/backoff into the activity model. Feed the update model an `owning_workflow_closed`
+event and `Closure` / `ContinueAsNew` / `HistoryOrdering` stop being relational rules and become
+ordinary transition / must-progress properties of the (now richer) update model. This is the
+same move as broadening close signals in the fidelity work — it does double duty. What stays
+**irreducibly** relational is invariants over a *set* of peer entities: `SpeculativeTaskCreation`
+("at most one pending normal task alongside a speculative one for a workflow") is about the
+collection, not any one entity's history, and no single-entity model can state it.
+
+### Why the goal is "models *plus* relational invariants," not one monolith
+Replacing rules with a single global model would forfeit Umpire's three edges: cross-entity
+reach, portability (black/grey/white-box, canary — see the tiers section), and ride-along
+enforcement over the whole suite. A complete *global* product automaton (TLA+-style) is a much
+larger lift and out of scope. The practical target:
+1. **Per-entity complete models** — total `Classify` + state predictions (+ expected API result)
+   → generic conformance + generic liveness. Vacuous passes gone for single-entity behavior.
+2. **Enrich event alphabets** with cross-entity facts (workflow-close first) to fold as many
+   correlations as possible into single models.
+3. **Keep the residual set-level relational invariants** as explicit rules — sharper now, since
+   they read validated model state and their preconditions are model-derived (so a dead/vacuous
+   rule becomes detectable rather than silently passing).
 
 ## Gate run (priority 0) — first result
 

@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/rule"
 	"google.golang.org/grpc"
 )
@@ -24,7 +24,7 @@ import (
 type Umpire struct {
 	logger   log.Logger
 	registry *umpirefw.Registry
-	decoder  *entity.FactDecoder
+	decoder  *model.FactDecoder
 	rulebook *umpirefw.Rulebook
 	factLog  *umpirefw.FactLog
 }
@@ -36,9 +36,9 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	}
 
 	registry := umpirefw.NewRegistry()
-	entity.RegisterDefaultEntities(registry)
+	model.RegisterDefaultEntities(registry)
 
-	decoder := entity.NewFactDecoder()
+	decoder := model.NewFactDecoder()
 	el := umpirefw.NewFactLog()
 	rb := umpirefw.NewRulebook()
 
@@ -166,7 +166,7 @@ func (u *Umpire) PurgeNamespace(namespaceID string) {
 }
 
 func (u *Umpire) namespaceRoot(namespaceID string) umpirefw.EntityID {
-	return umpirefw.NewEntityID(entity.NamespaceType, namespaceID)
+	return umpirefw.NewEntityID(model.NamespaceType, namespaceID)
 }
 
 // Reset clears state between tests.

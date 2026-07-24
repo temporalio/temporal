@@ -2,7 +2,7 @@ package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // SpeculativeConversion detects updates that remain stuck in admitted
@@ -18,7 +18,7 @@ func (m *SpeculativeConversion) Name() string {
 func (m *SpeculativeConversion) CheckLiveness(c *umpire.LivenessContext) {
 	// Find workflows where a speculative task was converted (stored).
 	converted := make(map[string]bool)
-	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue
@@ -32,7 +32,7 @@ func (m *SpeculativeConversion) CheckLiveness(c *umpire.LivenessContext) {
 		return
 	}
 
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

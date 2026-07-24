@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // WorkflowUpdateContextClear detects updates stranded in a
@@ -20,7 +20,7 @@ func (m *WorkflowUpdateContextClear) Name() string {
 func (m *WorkflowUpdateContextClear) CheckLiveness(c *umpire.LivenessContext) {
 	// Build set of workflows that have a pending (non-polled) task.
 	workflowsWithPendingTask := make(map[string]bool)
-	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue
@@ -33,7 +33,7 @@ func (m *WorkflowUpdateContextClear) CheckLiveness(c *umpire.LivenessContext) {
 
 	// Build set of completed workflows.
 	completedWorkflows := make(map[string]bool)
-	for r := range umpire.ChangedEntities[entity.Workflow](c) {
+	for r := range umpire.ChangedEntities[model.Workflow](c) {
 		wf := r.Entity
 		if wf.WorkflowID == "" {
 			continue
@@ -43,7 +43,7 @@ func (m *WorkflowUpdateContextClear) CheckLiveness(c *umpire.LivenessContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

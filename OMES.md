@@ -193,6 +193,139 @@ That triangle — **model / realizer / observer** — is how Umpire and SAA marr
 both raw-RPC and cross-language-SDK execution. It is written up separately; this doc is the
 reference for the Omes half of it.
 
+## Reconciling the ahead-of-time DSL with reactive RPCs
+
+The central tension when the two realizers coexist: an Omes `TestInput` is **specified ahead
+of time** (hand it a program, walk away — open-loop), whereas model-guided raw-RPC driving is
+inherently **reactive** (observe the model → decide → act — closed-loop, the SAA driver's
+`driveTrace`/`driveEvent` already work this way, reading state back between steps). If a
+`TestInput` were "the whole test," the two could not both hold.
+
+### The tension is asymmetric between the two DSL halves
+
+"Ahead of time" is not one property — it binds the two halves of the DSL differently:
+
+| Half | Why it looks static | Is it really? |
+|---|---|---|
+| `WorkflowInput.initial_actions` (the *inside*) | workflow code must be deterministic — you cannot inject new commands from outside mid-run | **genuinely constrained** — except via signals/updates |
+| `ClientSequence` (the *outside*) | a pre-declared list `ClientActionsExecutor` walks | **incidentally static** — it is ordinary live code in the Omes process; it *can* be reactive |
+
+So the client plane can be made fully reactive; the workflow plane is reactive only at
+signal/update granularity. Design around the asymmetry instead of fighting it.
+
+### The move: Kitchen Sink is an *interpreter*, not a *script*
+
+Stop treating one `TestInput` as the test. The fixed, pre-compiled-in-every-language thing is
+the **instruction set** (the DSL grammar); the unit specified ahead of time is **one
+instruction**, and instructions can be minted reactively and streamed in at runtime.
+Reactivity becomes planning latency, not a new language. Three mechanisms, all already
+present:
+
+1. **Long-lived servant workflow, fed by signal/update (per-round reactive planning).** The
+   workflow already loops on the `do_actions_signal` channel and the `do_actions_update`
+   handler, each carrying a *fresh* `ActionSet` piped through the same `handleActionSet`. The
+   driver loops: observe the Umpire model → plan the next `ActionSet` → deliver it via signal
+   (fire-and-forget) or update (synchronous, returns a value) → observe → repeat. "Ahead of
+   time" shrinks from *the whole test* to *one round's actions*, each round chosen reactively.
+   The workflow ends when a round returns a result/error/CAN.
+2. **Compile locally-decidable guards into the DSL.** Kitchen Sink already encodes reactivity
+   declaratively: `AwaitableChoice` (`cancel_after_started`, `wait_started`) is *"observe my
+   command reached STARTED, then act"*; `AwaitWorkflowState` blocks on a k/v predicate;
+   `await_pending_actions`, `wait_for_current_run_to_finish_at_end`. These are predicate-guarded
+   actions evaluated *at the interpreter*, driven by the SUT's own signals — deterministic and
+   cheap, no round trip.
+3. **A separate reactive raw-RPC / fault plane for everything else.** Cross-entity guards
+   (*"wait until this update is admitted, then drop the WFT carrying it"*), precise-instant
+   timing, malformed requests, and fault injection cannot be baked into a deterministic
+   workflow anyway. They stay in the SAA-style closed-loop driver, fired as black-box frontend
+   RPCs (canary-portable) or grey/white-box injections.
+
+### The static/reactive line (a decision rule)
+
+Per action, ask: **can the decision to fire it be made from information one SUT participant
+already has locally?**
+
+```
+ statically known               → initial_actions        (open-loop, portable, replayable)
+ depends on this participant's   → DSL blocking primitive  (AwaitableChoice / AwaitWorkflowState)
+   own runtime state               reactive-at-interpreter, deterministic
+ depends on cross-entity model,  → reactive driver plane   (raw RPC / inject, planned per-round,
+   a precise instant, or a fault    delivered via signal/update or issued directly)
+```
+
+Maximize the top two — that is what buys any-language execution and replay; use the bottom only
+where you must — those are the "interesting" pitches. This is the TigerBeetle/VOPR shape
+`PITCHER.md` gestures at: a cheap **declarative background plane** (Kitchen Sink `TestInput`,
+open-loop, any language) carries the boring ambient traffic, while the interesting scenario is a
+**reactive foreground plane** of predicate-guarded raw-RPC pitches on top. The two planes share
+`EntityPath` addressing and deterministic IDs, so a raw-RPC pitch can target an entity the
+Kitchen Sink workload created.
+
+### Two consequences
+
+- **Cross-language reactivity is nearly free on the client side.** Most reactive client pitches
+  — signal, update, describe, cancel, terminate, standalone activity — are just frontend RPCs
+  the *driver* fires in Go against a raw client, regardless of worker language. The worker's
+  language governs only workflow-*internal* behaviour. Extending the `project` harness into a
+  streaming `Step`-per-action RPC (generalizing `ClientActionsExecutor` from "interpret a fixed
+  list" to "serve one action on request") is needed only when a client action must run through a
+  *particular SDK's* client plumbing.
+- **Replay the realized trace, not the plan.** Reactive decisions depend on observed timing, so
+  the *plan* is not reproducible but the *sequence that actually fired* is. Record the driver's
+  decisions + the `TestInput`/`ActionSet`s it delivered and replay that exact trace — Omes' own
+  discipline (*"save the binary, not just the seed"*, since a seed only reproduces under an
+  identical config) and `PITCHER.md`'s *"separate run from eval."*
+
+The tension dissolves once Kitchen Sink stops being the whole test and becomes a **pre-installed,
+any-language interpreter fed reactively**, with a principled line between declarative and reactive
+and replay anchored on the realized trace.
+
+### Two modes: randomize the program vs. choose the path
+
+The declarative and reactive planes correspond to two ways of using the SDK worker, and they are
+**duals**:
+
+- **Mode 1 — randomize the *program*, observe one fixed path.** Generate a random `TestInput`
+  (à la `kitchen-sink-gen`), run it open-loop, judge it. Generative/fuzz; breadth.
+- **Mode 2 — fix the *program* as a branch space, reactively choose the *path*.** Install a worker
+  that exposes a menu of behaviours (all the signals/updates it *could* accept), and let the driver
+  pick a path through it at runtime by which interactions it sends. Model-directed exploration;
+  depth.
+
+Mode 1 pins the trajectory and varies the code; Mode 2 pins the code and varies the trajectory —
+same machinery, opposite knob.
+
+| | Mode 1 — random behaviour | Mode 2 — chosen path over a branch space |
+|---|---|---|
+| **Loop** | open-loop (bake `TestInput`, walk away) | closed-loop (driver navigates — "interpreter not script") |
+| **Plane** | declarative background | reactive foreground — *this is* predicate-guarded driving |
+| **Who chooses** | generator, ahead of time | the driver, at each observed step |
+| **Intent** | unknown per run | known per path |
+| **Oracle it needs** | **must** be the total-function model — a random program has no hand-written expected values, so only a total oracle can judge (this is where "total function kills the vacuous pass" matters most) | model oracle *plus* the path's own known intent as a second, independent check, and cross-SDK parity |
+| **Coverage** | breadth by luck, measured after the fact | intrinsic: the branch space *is* `Reachable()`; choosing paths *is* `traverse()`/`randomWalk()`; unreached branches = coverage gap |
+| **Replay** | save the binary (`TestInput`) | save the realized trace (the choices made) |
+| **Maps to** | SAA fuzzer / `PITCHER.md` P4; the Omes fuzzer *with an oracle attached* | SAA explorer (BFS/random-walk) realized through the any-language worker; `PITCHER.md` P2/P3 |
+
+**Mode 2 is the SAA explorer generalized to drive the any-language worker instead of only the
+in-process engine.** SAA's `traverse()`/`randomWalk()` walk the model graph and realize each event
+against a real engine; Mode 2 installs a worker that exposes the whole event menu, then lets that
+same explorer pick the path and realize it via signals/updates. Umpire observes on the wire, so it
+stays language-agnostic. It is also the honest resolution of the ahead-of-time/reactive tension:
+the **capability** is installed ahead of time (the full branch space, deterministic, compiled into
+every SDK), while the **selection** is reactive (the driver picks the branch by which signal/update
+it sends) — the worker's guards (`AwaitWorkflowState`, `AwaitableChoice`) offer the choices; the
+driver's guard over the Umpire model decides which to take when.
+
+The Mode-2 "menu" can carry more or less intent:
+
+- **Generic Kitchen Sink interpreter** — `do_actions_signal`/`do_actions_update` run *any*
+  `ActionSet` sent, so the menu is the whole grammar, unbounded and implicit. Maximal flexibility,
+  but the worker carries no intent — Mode-1 breadth applied reactively.
+- **A `project`-harness app** — a real-ish application with specific named handlers. The menu is
+  bounded and intent-carrying, and the driver walks the app's own signal/update state machine
+  (classic model-based testing). This is what makes "observe behaviour along that path" meaningful
+  for a *real application's* state space rather than an arbitrary interpreter.
+
 ## What to steal (concrete)
 
 1. **Adopt `TestInput` as the SDK realizer's target format**, not a new grammar. A Pitcher

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // WorkflowUpdateClosure checks that no update transitions occur after
@@ -18,7 +18,7 @@ func (m *WorkflowUpdateClosure) Name() string {
 func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 	// Build set of completed workflow IDs with their completion times.
 	completedWorkflows := make(map[string]time.Time)
-	for r := range umpire.ChangedEntities[entity.Workflow](c) {
+	for r := range umpire.ChangedEntities[model.Workflow](c) {
 		wf := r.Entity
 		if wf.WorkflowID == "" {
 			continue
@@ -28,7 +28,7 @@ func (m *WorkflowUpdateClosure) CheckSafety(c *umpire.SafetyContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // WorkflowUpdateContinueAsNew detects updates that remain admitted
@@ -20,7 +20,7 @@ func (m *WorkflowUpdateContinueAsNew) Name() string {
 func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 	// Build set of completed workflows.
 	completedWorkflows := make(map[string]time.Time)
-	for r := range umpire.ChangedEntities[entity.Workflow](c) {
+	for r := range umpire.ChangedEntities[model.Workflow](c) {
 		wf := r.Entity
 		if wf.WorkflowID == "" {
 			continue
@@ -30,7 +30,7 @@ func (m *WorkflowUpdateContinueAsNew) CheckLiveness(c *umpire.LivenessContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

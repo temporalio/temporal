@@ -1,4 +1,4 @@
-package entity
+package model
 
 import (
 	"go.opentelemetry.io/otel/attribute"

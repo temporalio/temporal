@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // WorkflowUpdateWorkerSkipped detects updates that remain admitted
@@ -20,7 +20,7 @@ func (m *WorkflowUpdateWorkerSkipped) Name() string {
 func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 	// Build map of workflow→latest polled time.
 	latestPoll := make(map[string]time.Time)
-	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue
@@ -32,7 +32,7 @@ func (m *WorkflowUpdateWorkerSkipped) CheckLiveness(c *umpire.LivenessContext) {
 		}
 	}
 
-	for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowUpdate](c) {
 		wu := r.Entity
 		if wu.WorkflowID == "" || wu.UpdateID == "" {
 			continue

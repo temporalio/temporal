@@ -158,7 +158,7 @@ Tests call `Check(ctx, final…)` to collect violations, and at teardown `settle
 broadcasts a `WorkflowTerminated` for every seen workflow so child FSMs reach terminal
 states before the final liveness sweep.
 
-### `FactDecoder` — wire/span → `Fact` (`entity/fact_decoder.go`)
+### `FactDecoder` — wire/span → `Fact` (`model/fact_decoder.go`)
 
 The single place that understands Temporal wire formats. It holds registered importers and
 tries each:
@@ -168,7 +168,7 @@ tries each:
 - **`SpanFact.ImportSpanEvent(attrs)`** — builds a fact from an OTEL span event whose name
   matches the fact's `Name()`.
 
-### Entities — Temporal FSMs (`entity/`)
+### Entities — Temporal FSMs (`model/`)
 
 `Workflow`, `WorkflowTask`, `WorkflowUpdate`, `TaskQueue` (with `Namespace` also defined).
 Each implements `Entity`, backs its state with a `looplab/fsm` machine, and exposes `Flag`s

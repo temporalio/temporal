@@ -2,7 +2,7 @@ package rule
 
 import (
 	"go.temporal.io/server/common/testing/umpire"
-	"go.temporal.io/server/tests/umpire/entity"
+	"go.temporal.io/server/tests/umpire/model"
 )
 
 // SpeculativeTaskCreation detects when a speculative workflow task is
@@ -24,7 +24,7 @@ func (m *SpeculativeTaskCreation) CheckSafety(c *umpire.SafetyContext) {
 	}
 	byWorkflow := make(map[string]*taskPair)
 
-	for r := range umpire.ChangedEntities[entity.WorkflowTask](c) {
+	for r := range umpire.ChangedEntities[model.WorkflowTask](c) {
 		wt := r.Entity
 		if wt.WorkflowID == "" {
 			continue

@@ -1,4 +1,4 @@
-package entity
+package model
 
 import (
 	"go.temporal.io/server/common/testing/umpire"

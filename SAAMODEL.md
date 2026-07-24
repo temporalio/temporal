@@ -169,7 +169,7 @@ Umpire = broad, opportunistic, cheap, many entities, portable.** Complementary, 
    kept the generic conformance rule unregistered. The generic `EntityTransitionLegality` is now
    registered and **replaces** `WorkflowUpdateStageMonotone` (deleted) — a regression is just not
    a legal edge — checking every `Lifecycled` type at once. `States`/`Events`/`Reachable`/
-   `Validate` expose the graph for **Tier-1 static validation** (`tests/umpire/entity` proves each
+   `Validate` expose the graph for **Tier-1 static validation** (`tests/umpire/model` proves each
    default lifecycle is sound and `Classify` total, server-free in ms — the analog of the SAA
    `validate` package). Remaining next step toward full parity: predict the *API result* per edge
    too (see item 5), not just the state transition. See `UMPIRE_PLAN.md`.
