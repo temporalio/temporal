@@ -244,7 +244,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_InheritsBudgetFreshC
 		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: maxSkip},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: maxSkip},
 	})
 	s.NoError(err)
 	parentRunID := parentStart.RunId
@@ -309,7 +309,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_InheritsBudgetFreshC
 	childTSI := childMS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(childTSI)
 	s.True(childTSI.GetConfig().GetEnabled(), "child skipping stayed enabled across both skips")
-	s.Equal(int32(maxSkip), childTSI.GetConfig().GetMaxSkipPerSession(),
+	s.Equal(int32(maxSkip), childTSI.GetConfig().GetMaxSessionSkipCount(),
 		"child inherits the parent's per-session budget")
 	s.Equal(int32(2), childTSI.GetSessionSkipCount(),
 		"child ran a fresh session: only its own two skips, not the parent's count")
@@ -318,14 +318,14 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_InheritsBudgetFreshC
 	parentMS := s.getMutableState(env, parentWFID, parentRunID)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, parentMS.State.ExecutionState.State)
 	parentTSI := parentMS.State.ExecutionInfo.GetTimeSkippingInfo()
-	s.Equal(int32(maxSkip), parentTSI.GetConfig().GetMaxSkipPerSession())
+	s.Equal(int32(maxSkip), parentTSI.GetConfig().GetMaxSessionSkipCount())
 	s.Equal(int32(2), parentTSI.GetSessionSkipCount(), "parent skipped t1 and t2")
 
 	// The initiated event's TimeSkippingConfig snapshot carries the inherited budget but no count.
 	initEvents := s.initiatedChildEvents(ctx, env, parentWFID, parentRunID)
 	s.Len(initEvents, 1)
 	initAttrs := initEvents[0].GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	s.Equal(int32(maxSkip), initAttrs.GetTimeSkippingConfig().GetMaxSkipPerSession(),
+	s.Equal(int32(maxSkip), initAttrs.GetTimeSkippingConfig().GetMaxSessionSkipCount(),
 		"initiated-event snapshot carries the inherited budget")
 	s.Equal(int32(0), initAttrs.GetTimeSkippingStatePropagation().GetInitialSkipCount(),
 		"child does not inherit the parent's running skip count")
@@ -1339,7 +1339,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 		TaskQueue:           tq,
 		WorkflowRunTimeout:  durationpb.New(24 * time.Hour),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: maxSkip},
+		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: maxSkip},
 	})
 	s.NoError(err)
 	run1ID := start1.RunId
@@ -1372,7 +1372,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, run1MS.State.ExecutionState.Status)
 	run1TSI := run1MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run1TSI)
-	s.Equal(int32(maxSkip), run1TSI.GetConfig().GetMaxSkipPerSession())
+	s.Equal(int32(maxSkip), run1TSI.GetConfig().GetMaxSessionSkipCount())
 	s.Equal(int32(1), run1TSI.GetSessionSkipCount(), "run 1 skipped once for t1")
 
 	// ---- Run 2: inherits both the budget and the running count ----
@@ -1382,7 +1382,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, run2MS.State.ExecutionState.Status)
 	run2TSI := run2MS.State.ExecutionInfo.GetTimeSkippingInfo()
 	s.NotNil(run2TSI, "run 2 should have TimeSkippingInfo propagated from run 1")
-	s.Equal(int32(maxSkip), run2TSI.GetConfig().GetMaxSkipPerSession(),
+	s.Equal(int32(maxSkip), run2TSI.GetConfig().GetMaxSessionSkipCount(),
 		"run 2 inherits the same per-session budget from run 1's cloned config")
 	s.Equal(int32(2), run2TSI.GetSessionSkipCount(),
 		"run 2 count = 1 inherited from run 1 + 1 for its own skip (t2)")
@@ -1396,7 +1396,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
-	s.Equal(int32(maxSkip), startedAttr.GetTimeSkippingConfig().GetMaxSkipPerSession(),
+	s.Equal(int32(maxSkip), startedAttr.GetTimeSkippingConfig().GetMaxSessionSkipCount(),
 		"started event TSC carries the propagated budget")
 	s.Equal(int32(1), startedAttr.GetTimeSkippingStatePropagation().GetInitialSkipCount(),
 		"started event carries run 1's SessionSkipCount as InitialSkipCount")
@@ -1577,7 +1577,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	inputCfg := &commonpb.TimeSkippingConfig{
 		Enabled:           true,
 		FastForward:       durationpb.New(time.Hour),
-		MaxSkipPerSession: 50,
+		MaxSessionSkipCount: 50,
 	}
 
 	startWall := time.Now()

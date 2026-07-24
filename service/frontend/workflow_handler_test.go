@@ -3724,17 +3724,17 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	// namespace with a per-namespace override uses that value
 	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(7), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
 
 	// namespace without a per-namespace setting falls back to the per-cell value
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
-	s.Require().Equal(int32(42), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
 
 	// a value already on the request is preserved, not overwritten by dynamic config
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 999}
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(999), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
