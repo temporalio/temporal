@@ -6,7 +6,7 @@ The branch adds a **behavioral model + conformance explorer** for the CHASM *act
 archetype. It overlaps Umpire's territory but attacks it from the opposite direction, and on
 several of Umpire's open problems (`UMPIRE_PLAN.md`) it is simply further along. This doc ranks
 the ideas by how directly they hit our gaps. For the other design references see
-[`STAMP_IMPORT.md`](./STAMP_IMPORT.md) and [`PITCHER.md`](./PITCHER.md).
+[`STAMP_IMPORT.md`](./STAMP_IMPORT.md) and [`PLAYER.md`](./PLAYER.md).
 
 ## What the SAA model is
 
@@ -61,7 +61,7 @@ model instead.
 |---|---|---|
 | **What the model is** | entity FSMs + partial invariant rules | total `Transition` function + response predictors |
 | **Judging** | rules fire on *bad* states (anticipated) | equality vs predicted `Outcome` every edge (exhaustive) |
-| **Active side** | deferred to Pitcher (unbuilt) | **built**: BFS traversal + random walk generate the scenarios |
+| **Active side** | deferred to Player (unbuilt) | **built**: BFS traversal + random walk generate the scenarios |
 | **Coverage** | planned Scenario/Coverage subsystem (phased) | intrinsic: `Reachable()` *is* the target; BFS covers it |
 | **State source** | reconstructed from gRPC + OTEL (fidelity gap) | read directly via `ReadComponent` (exact) |
 | **Time** | `time.Now()` at fact-processing (the event-time gap) | **virtual clock**; timeouts realized by advancing it |
@@ -83,7 +83,7 @@ for free and with a specific diff.
 `Reachable(cfg, events)` computes every reachable `(state, event)` cell purely from the model.
 `traverse()` does a fingerprint-deduped, depth-bounded BFS over it against a real engine;
 `randomWalk()` drives deep interaction sequences the bounded BFS never reaches. This is exactly
-what `UMPIRE_PLAN.md` wants from **Pitcher** (the generator) *and* the **Scenario/Coverage**
+what `UMPIRE_PLAN.md` wants from **Player** (the generator) *and* the **Scenario/Coverage**
 subsystem (seed the catalog from the model, report unreached cells) — but derived from the model
 for free instead of hand-curated and bolted on as a third subsystem. `TEMPORAL_SAASPEC_COMPLETENESS=1`
 prints reachable-but-unexercised cells: the dead-rule report, already shipping.
@@ -220,6 +220,6 @@ total transition function**, checked by
 - a **reconstruct-from-wire driver** (black-box, ride-along) for canary/Cloud — maximum
   portability, à la today's Umpire —
 
-against the *same* model. That collapses Umpire's rulebook, the deferred Pitcher generator, and
+against the *same* model. That collapses Umpire's rulebook, the deferred Player generator, and
 the planned Scenario/Coverage subsystem into a single construct, and it is the direction the SAA
 branch is pointing.

@@ -1,7 +1,7 @@
-# Pitcher — the active side (spec & plan)
+# Player — the active side (spec & plan)
 
 The flip side of the Umpire. Where the Umpire **observes, models, and judges** a
-running Temporal server, the Pitcher **drives** it: it generates actions, injects
+running Temporal server, the Player **drives** it: it generates actions, injects
 faults, and steers the system into the states the Umpire is there to rule on.
 
 For the passive half read [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md),
@@ -11,11 +11,11 @@ into, and the order to build them.
 
 ## The one sentence
 
-> Tests drive behaviour and Umpire judges it — the Pitcher **is** the test that
+> Tests drive behaviour and Umpire judges it — the Player **is** the test that
 > drives, made reusable, generative, and fault-aware.
 
 Today "the driver" is hand-written functional-test code plus SDK pollers. The
-Pitcher's job is to become that driver as a first-class, reusable subsystem so the
+Player's job is to become that driver as a first-class, reusable subsystem so the
 same *actions* run across functional tests, nightly exploration, and canary — the
 same way the same *rules* already do.
 
@@ -24,7 +24,7 @@ same way the same *rules* already do.
 ## Where it fits in the vision (BATS)
 
 BATS (*Bespoke Acceptance TeSting*) names five subsystems. The Umpire is one of
-them; the Pitcher is its active counterpart. Baseball naming from the BATS doc:
+them; the Player is its active counterpart. Baseball naming from the BATS doc:
 
 | Subsystem | BATS role | Half |
 |---|---|---|
@@ -32,9 +32,9 @@ them; the Pitcher is its active counterpart. Baseball naming from the BATS doc:
 | **Lineup** (Entity Model) | model of entities & relationships | passive — *Umpire's `Registry`* |
 | **Catcher** (Middleman) | observes everything; hook point for chaos | the seam between halves |
 | **Umpire** (Model Checker) | updates the model, makes rulings | **passive (built)** |
-| **Pitcher** (Scenario Runner) | throws pitches — creates plays / scenarios | **active (this doc)** |
+| **Player** (Scenario Runner; BATS: *Pitcher*) | throws pitches — creates plays / scenarios | **active (this doc)** |
 
-And the Pitcher's own vocabulary (baseball, from the BATS glossary):
+And the Player's own vocabulary (baseball, from the BATS glossary):
 
 | Term | Meaning |
 |---|---|
@@ -46,14 +46,14 @@ And the Pitcher's own vocabulary (baseball, from the BATS glossary):
 | **Skipper** | the strategist that *chooses* which Plays/Pitches to throw (fuzzing/coverage-guided). Deliberately **later**. |
 | **Batter** | the SUT — the real Temporal server under injected conditions. |
 
-> The Pitcher is a **mechanical executor**; the Skipper is the brain. Build the arm
+> The Player is a **mechanical executor**; the Skipper is the brain. Build the arm
 > first (deterministic, replayable Pitches), grow the brain (Skipper) once there is
 > a reward signal to be smart about — which is exactly what the Umpire's coverage
 > catalog provides (see *Closing the loop*).
 
-## The loop the Pitcher closes
+## The loop the Player closes
 
-The Umpire diagram runs left-to-right and stops at Violations. The Pitcher wraps it
+The Umpire diagram runs left-to-right and stops at Violations. The Player wraps it
 into a cycle: **drive → observe → model → judge → steer**.
 
 ```
@@ -61,7 +61,7 @@ into a cycle: **drive → observe → model → judge → steer**.
         │                                                                                     │
         ▼                                                                                     │
    ┌─────────┐  Pitches (RPCs)   ┌──────────┐   gRPC+OTEL   ┌─────────┐  Facts  ┌──────────┐  │
-   │ Pitcher │ ────────────────▶ │  Server  │ ────────────▶ │ Umpire  │ ──────▶ │ Registry │  │
+   │ Player │ ────────────────▶ │  Server  │ ────────────▶ │ Umpire  │ ──────▶ │ Registry │  │
    │ (drive) │  faults (Inject)  │ (Batter) │               │(observe)│         │  (model) │  │
    └─────────┘ ◀──── predicates read the SAME model ──────────────────────────  └──────────┘  │
         │                                                              │                       │
@@ -71,12 +71,12 @@ into a cycle: **drive → observe → model → judge → steer**.
 
 Two properties fall out of this shape and drive the whole design:
 
-1. **The Pitcher reads the model the Umpire builds.** Action guards are *predicates
+1. **The Player reads the model the Umpire builds.** Action guards are *predicates
    over entity state* (`Update.Reached("admitted")`), not sleeps. This is the
    TigerBeetle/VOPR idea from the BATS notes: run a "perfect network" that handles
    the boring auxiliary traffic, then write the interesting scenario in a prolog-ish
    *predicate* style — "drop all WFTs, wait until the update is admitted, then …".
-2. **The Umpire's coverage catalog is the Pitcher's reward signal.** The Scenario /
+2. **The Umpire's coverage catalog is the Player's reward signal.** The Scenario /
    Coverage subsystem planned in `UMPIRE_PLAN.md` exists precisely so the active side
    has targets: `Coverage.Unmet()` is the list of interesting states nobody reached.
    That is the seam a Skipper optimises toward.
@@ -89,7 +89,7 @@ Two properties fall out of this shape and drive the whole design:
   composable Pitches/Plays, so one scenario runs per-PR, nightly, and in canary —
   mirroring the reuse the rulebook already has.
 - **Separate action from assertion (the other half).** The Umpire delivered the
-  assertion half of this split; the Pitcher delivers the action half. Together they
+  assertion half of this split; the Player delivers the action half. Together they
   make STAMP's "deconstructed test" real: Scenario (given) / Action (when) /
   Property (then) are three independent, recombinable things.
 - **Predicate-guarded driving.** A Pitch fires when a *predicate over the model* is
@@ -109,7 +109,7 @@ Two properties fall out of this shape and drive the whole design:
 
 - **The Skipper / smart exploration.** Coverage- and code-guided fuzzing is the
   end state (STAMP phase 4), not the start. Build the deterministic arm first.
-- **Replacing the Umpire's rules.** The Pitcher drives and may *declare* which
+- **Replacing the Umpire's rules.** The Player drives and may *declare* which
   scenarios it intended to hit; it does not judge. Judgement stays in the rulebook.
 - **A new persistence/proxy stack.** Reuse the existing gRPC interceptor + OTEL
   processor seams. (BATS notes lean toward SQLite for durable coverage/almanac — a
@@ -172,17 +172,17 @@ Skipper  = (later) chooses Plays/Pitches/params to maximise Coverage.Unmet() red
 ## Design decisions
 
 - **Actions and facts are symmetric.** The Umpire has a `FactDecoder` that turns
-  wire/spans **into** facts. The Pitcher has the inverse: Pitches turn intent
+  wire/spans **into** facts. The Player has the inverse: Pitches turn intent
   **into** wire calls. They meet at the same `EntityPath` addressing and the same
   deterministic identifiers, so a Pitch on `Workflow(id).Update(id)` and the fact it
   provokes name the same entity. Reuse `entity_key.go`.
 - **Guards read the Umpire model directly — one model, two consumers.** No second
-  state store. The Registry the Umpire fills is the Registry the Pitcher queries.
+  state store. The Registry the Umpire fills is the Registry the Player queries.
   This is the whole reason the two halves live together.
 - **Fault injection rides the dormant hook that already exists.** The framework's
   `FaultInjector.Inject(ctx, info, request) error` and the interceptor's
   `inj` slot (`common/testing/umpire/interceptor.go`, `NewUnaryServerInterceptor`)
-  are built and wired but no-op. The Pitcher is the first real `FaultInjector`:
+  are built and wired but no-op. The Player is the first real `FaultInjector`:
   drop → return error; delay → sleep-then-proceed; corrupt → mutate request. This is
   a *grey-box* reach (server-side RPC seam).
 - **Timing control is a Pitch class of its own.** From the BATS notes: remove client
@@ -203,29 +203,29 @@ Skipper  = (later) chooses Plays/Pitches/params to maximise Coverage.Unmet() red
 
 ## Integration needs (the seams it plugs into)
 
-These already exist or are half-built in the Umpire code; the Pitcher consumes them.
+These already exist or are half-built in the Umpire code; the Player consumes them.
 
 1. **`FaultInjector` (the active hook).** `interceptor.go` already threads an
    `inj FaultInjector` through `NewUnaryServerInterceptor`; `tests/umpire`'s
    `NewUnaryServerInterceptor(u, inj)` already accepts it and passes `nil` today.
-   *Need:* a `Pitcher` type implementing `Inject`, and to pass it where `nil` is
+   *Need:* a `Player` type implementing `Inject`, and to pass it where `nil` is
    passed now. **No framework change to start** — this is the cleanest entry point.
-2. **Read access to the model.** The Pitcher needs `Registry.QueryEntities` /
+2. **Read access to the model.** The Player needs `Registry.QueryEntities` /
    `ChangedEntities[T]` to evaluate guards. `Umpire.Registry()` already exposes it.
    *Need:* a small read-only façade so Plays express guards without importing the
    whole registry (e.g. `model.Update(id).Reached("admitted")`).
 3. **A client handle.** Pitches that are RPCs need a frontend client (and, for
-   worker-based Plays, an SDK worker hook). *Need:* the Pitcher owns/receives the
+   worker-based Plays, an SDK worker hook). *Need:* the Player owns/receives the
    same client the test would have used; per-namespace, matching the Umpire's
    namespace scoping so a Game and its checks share a namespace.
 4. **Coverage feedback (the reward signal).** The Scenario/Coverage subsystem in
-   `UMPIRE_PLAN.md` (phases 0–3) must land for the Pitcher's generative modes to have
+   `UMPIRE_PLAN.md` (phases 0–3) must land for the Player's generative modes to have
    targets. `Coverage.Unmet()` is explicitly called out there as the *"generation
-   seam … expose as targets for the active side; don't build it (yet)."* The Pitcher
+   seam … expose as targets for the active side; don't build it (yet)."* The Player
    is the thing that was being deferred to.
 5. **Namespace lifecycle.** Reuse `CheckNamespace` / `PurgeNamespace`: a Game runs in
    a namespace, the Umpire checks it, then it's purged — coverage survives the purge
-   (already specced). The Pitcher must create/own that namespace per Game.
+   (already specced). The Player must create/own that namespace per Game.
 6. **Timing interceptors (later).** Client+server interceptors for deadline/timer
    control don't exist yet — a genuine new seam, needed only for white-box timing
    Plays.
@@ -237,7 +237,7 @@ These already exist or are half-built in the Umpire code; the Pitcher consumes t
 Mapped onto STAMP's four phases and the Umpire's current state (Umpire is at STAMP
 phase 1: passive models, enforced but not yet driving).
 
-| Phase | Pitcher mode | What the user provides | Runs | Umpire counterpart |
+| Phase | Player mode | What the user provides | Runs | Umpire counterpart |
 |---|---|---|---|---|
 | **P1 — Manual** | one concrete Play | exact inputs, one path | per-PR | passive model (done) |
 | **P2 — Acceptance** | parameterised Play | inputs + a Game Plan (scenarios to cover) | per-PR / nightly | rules + scenarios |
@@ -246,7 +246,7 @@ phase 1: passive models, enforced but not yet driving).
 
 **Build order:**
 
-0. **Deterministic arm.** A `Pitcher` that runs a single hand-written Play (RPC
+0. **Deterministic arm.** A `Player` that runs a single hand-written Play (RPC
    Pitches only, black-box, guards over the Umpire model). Wire it as the driver for
    *one* existing functional test; let the Umpire judge. Proves drive+judge in one
    process with zero framework change beyond a read façade. *(This is the mirror of
@@ -270,14 +270,14 @@ phase 1: passive models, enforced but not yet driving).
 The two halves are designed to feed each other (BATS: *"passive observations fed
 back into the active part to inform its effectiveness"*):
 
-- **Umpire → Pitcher:** the model (for guards) and the coverage catalog (for targets
+- **Umpire → Player:** the model (for guards) and the coverage catalog (for targets
   and for the declared-vs-detected sanity check).
-- **Pitcher → Umpire:** it manufactures the *preconditions* the Umpire's rules need.
+- **Player → Umpire:** it manufactures the *preconditions* the Umpire's rules need.
   `UMPIRE_PLAN.md` warns that a rule whose precondition is never reached "passes
   vacuously and gives false confidence" (it names `ContinueAsNew` as almost certainly
-  never firing today). The Pitcher is the mechanism that *reaches those
+  never firing today). The Player is the mechanism that *reaches those
   preconditions on purpose* — turning "are our rules even exercised?" from hope into a
-  driven, mechanical fact. That is the single highest-value thing the Pitcher does
+  driven, mechanical fact. That is the single highest-value thing the Player does
   before any fuzzing: **make the existing rules non-vacuous.**
 
 ---
@@ -287,7 +287,7 @@ back into the active part to inform its effectiveness"*):
 1. **Guard polling vs. event-driven.** Do guards poll the Registry, or does the
    Registry notify on generation bumps? Polling is simplest and matches the existing
    generation watermark; a notify seam may be needed for tight timing Plays.
-2. **Where does the Pitcher live relative to the proxy?** BATS puts Skipper+Umpire
+2. **Where does the Player live relative to the proxy?** BATS puts Skipper+Umpire
    "inside the proxy." In-process functional tests have no proxy. Decide the canary
    deployment shape (sidecar proxy driving black-box Pitches) separately from the
    in-process one — but keep Play definitions identical across both (tier is a
@@ -296,9 +296,9 @@ back into the active part to inform its effectiveness"*):
    interleaving of injected faults against a live multi-goroutine server is the hard
    part (the STAMP linearizability note). May need the fault seams to expose
    synchronization points ("hold request between points X and Y").
-4. **Omes coupling.** Reusing kitchensink lowers maintenance but couples the Pitcher
+4. **Omes coupling.** Reusing kitchensink lowers maintenance but couples the Player
    to Omes' model; confirm the dependency direction is acceptable.
-5. **Overlap with existing pollers/testvars.** The Pitcher should *replace* the
+5. **Overlap with existing pollers/testvars.** The Player should *replace* the
    fragmented poller/testvars style (a stated BATS goal), not become a fourth style
    beside them. Plan a migration, not an addition.
 6. **Coverage must land first for P2+.** The generative modes are blocked on the

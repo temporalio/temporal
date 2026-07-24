@@ -18,8 +18,8 @@ assertions.
 
 ## Non-goals (for now)
 
-- Driving actions / generating scenarios (the "active" side — Pitcher/Skipper). Tests
-  drive. See `PITCHER.md`.
+- Driving actions / generating scenarios (the "active" side — Player/Skipper). Tests
+  drive. See `PLAYER.md`.
 - Fuzzing, coverage-guided exploration. The Scenario/Coverage catalog is specced
   (`UMPIRE_PLAN.md`) but unbuilt.
 - Persistence. State is in-memory and per-test.
