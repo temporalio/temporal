@@ -461,6 +461,7 @@ func (s *activityParityTestSuite) TestCompleteByID_WhilePaused() {
 		env := testcore.NewEnv(s.T(),
 			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 			testcore.WithDynamicConfig(activity.Enabled, true),
+			testcore.WithDynamicConfig(activity.EnableStandaloneActivityOperatorCommands, true),
 		)
 		tv := env.Tv()
 
