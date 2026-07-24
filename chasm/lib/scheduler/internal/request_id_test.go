@@ -23,7 +23,7 @@ func TestGenerateRequestID(t *testing.T) {
 	nominalTime := time.Now()
 	actualTime := time.Now()
 	scheduleID := "mysched"
-	scheduleIDUUID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scheduleID))
+	scheduleIDUUID := uuid.NewSHA1(uuid.Nil, []byte(scheduleID))
 
 	actual := GenerateRequestID("nsid", scheduleID, 10, "", nominalTime, actualTime)
 	expected := fmt.Sprintf(
@@ -48,7 +48,7 @@ func TestGenerateRequestIDUsesUUIDv5ForScheduleID(t *testing.T) {
 	nominalTime := time.UnixMilli(1_700_000_000_000)
 	actualTime := time.UnixMilli(1_700_000_000_001)
 	scheduleID := strings.Repeat("a", 1000)
-	scheduleIDUUID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scheduleID))
+	scheduleIDUUID := uuid.NewSHA1(uuid.Nil, []byte(scheduleID))
 	require.Equal(t, uuid.Version(5), scheduleIDUUID.Version())
 
 	for _, tc := range []struct {

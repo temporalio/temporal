@@ -32,7 +32,7 @@ func GenerateRequestID(
 	}
 
 	// Keep request IDs bounded and deterministic even when schedule IDs are long.
-	scheduleIDUUID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scheduleID))
+	scheduleIDUUID := uuid.NewSHA1(uuid.Nil, []byte(scheduleID))
 	return fmt.Sprintf(
 		"sched-%s-%s-%s-%d-%d-%d",
 		backfillID,
