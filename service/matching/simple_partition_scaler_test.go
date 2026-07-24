@@ -150,7 +150,7 @@ func TestSimplePartitionScalerScalesDown(t *testing.T) {
 	t.Parallel()
 
 	ts := clock.NewEventTimeSource()
-	scaler := primedScaler(t, ts, dynamicconfig.SimplePartitionScalerSettings{
+	scaler := newTestScaler(ts, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Downs: []dynamicconfig.SimplePartitionScalerThreshold{
 			{Window: scalerWindow, TargetRate: 100},
@@ -158,9 +158,13 @@ func TestSimplePartitionScalerScalesDown(t *testing.T) {
 	})
 
 	// Current target 20, only 300 tasks/s against TargetRate 100 => target 3.
-	dec := onTasksLoop(20, scaler, ts, 300, 1, 100*time.Millisecond)
+	_ = onTasksLoop(20, scaler, ts, 30, 10, 100*time.Millisecond)
+
+	// A full window has now elapsed (t=1s) and the buckets hold 300 tasks, so
+	// this is the first full read. Add no tasks so the rate is exactly 300.
+	dec := scaler.OnTasks(PartitionScalerInput{NumTasks: 0, CurrentTarget: 20})
 	require.False(t, dec.NoChange)
-	require.Equal(t, 3, dec.NewTarget) // TODO: this works with 300 tasks and 1 repetition, not sure why it is 1 with 30 tasks 10 reps (in 1 second)
+	require.Equal(t, 3, dec.NewTarget)
 }
 
 // TestSimplePartitionScalerScalesDownFlooredAtOne verifies the max(1, ...) floor:
