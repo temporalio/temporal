@@ -129,6 +129,7 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 	elapsed := time.Since(startTime)
 	if elapsed > m.slowQueryThreshold() {
 		m.logger.Warn("List query exceeded threshold",
+			tag.Operation(metrics.VisibilityPersistenceListWorkflowExecutionsScope),
 			tag.Duration("duration", elapsed),
 			tag.String("visibility-query", request.Query),
 			tag.Stringer("namespace", request.Namespace),
@@ -148,6 +149,7 @@ func (m *visibilityManagerMetrics) ListChasmExecutions(
 	elapsed := time.Since(startTime)
 	if elapsed > m.slowQueryThreshold() {
 		m.logger.Warn("List query exceeded threshold",
+			tag.Operation(metrics.VisibilityPersistenceListChasmExecutionsScope),
 			tag.Duration("duration", elapsed),
 			tag.String("visibility-query", request.Query),
 			tag.String("namespace", request.Namespace),
@@ -165,6 +167,14 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope)
 	response, err := m.delegate.CountWorkflowExecutions(ctx, request)
 	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("Count query exceeded threshold",
+			tag.Operation(metrics.VisibilityPersistenceCountWorkflowExecutionsScope),
+			tag.Duration("duration", elapsed),
+			tag.String("visibility-query", request.Query),
+			tag.Stringer("namespace", request.Namespace),
+		)
+	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
@@ -177,6 +187,14 @@ func (m *visibilityManagerMetrics) CountChasmExecutions(
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountChasmExecutionsScope)
 	response, err := m.delegate.CountChasmExecutions(ctx, request)
 	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("Count query exceeded threshold",
+			tag.Operation(metrics.VisibilityPersistenceCountWorkflowExecutionsScope),
+			tag.Duration("duration", elapsed),
+			tag.String("visibility-query", request.Query),
+			tag.String("namespace", request.Namespace),
+		)
+	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
@@ -189,6 +207,13 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceGetWorkflowExecutionScope)
 	response, err := m.delegate.GetWorkflowExecution(ctx, request)
 	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("Get query exceeded threshold",
+			tag.Operation(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
+			tag.Duration("duration", elapsed),
+			tag.Stringer("namespace", request.Namespace),
+		)
+	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)

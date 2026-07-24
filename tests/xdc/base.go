@@ -54,6 +54,11 @@ type (
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]any
 
+		// clusterNames, if set, overrides the default two-cluster ("active"/"standby")
+		// topology. setupSuite provisions one TestCluster per name and connects every
+		// pair, so any count is supported. Leave empty for the historical two clusters.
+		clusterNames []string
+
 		startTime          time.Time
 		onceClusterConnect sync.Once
 
@@ -65,7 +70,7 @@ type (
 
 // TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
-	config := make([]*replicationpb.ClusterReplicationConfig, 2)
+	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusters))
 	for ci, c := range s.clusters {
 		config[ci] = &replicationpb.ClusterReplicationConfig{
 			ClusterName: c.ClusterName(),
@@ -102,55 +107,54 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
-	clusterConfigs := []*testcore.TestClusterConfig{
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
-			},
-			Persistence: persistenceDefaults,
-		},
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
-			},
-			Persistence: persistenceDefaults,
-		},
+
+	// The default topology is two clusters, named "active" and "standby". Suites
+	// that need a different number of clusters set s.clusterNames before calling
+	// setupSuite; everything below (including the connect-every-pair loop) scales
+	// to any cluster count.
+	clusterBaseNames := s.clusterNames
+	if len(clusterBaseNames) == 0 {
+		clusterBaseNames = []string{"active", "standby"}
 	}
 
-	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
 	suffix := common.GenerateRandomString(5)
+	clusterConfigs := make([]*testcore.TestClusterConfig, len(clusterBaseNames))
+	s.clusters = make([]*testcore.TestCluster, len(clusterBaseNames))
 
 	testClusterFactory := testcore.NewTestClusterFactory()
-	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
-		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
-		clusterConfigs[clusterIndex].DCRedirectionPolicy = params.DCRedirectionPolicy
-		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[clusterIndex].Persistence.DBName += "_" + clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
-			clusterName: {
-				Enabled:                true,
-				InitialFailoverVersion: int64(clusterIndex + 1),
-				// RPCAddress and HTTPAddress will be filled in
+	for clusterIndex, baseName := range clusterBaseNames {
+		clusterName := baseName + "_" + suffix
+		clusterConfig := &testcore.TestClusterConfig{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+				MasterClusterName:        clusterName,
+				CurrentClusterName:       clusterName,
+				ClusterInformation: map[string]cluster.ClusterInformation{
+					clusterName: {
+						Enabled:                true,
+						InitialFailoverVersion: int64(clusterIndex + 1),
+						// RPCAddress and HTTPAddress will be filled in
+					},
+				},
 			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+			},
+			Persistence:               persistenceDefaults,
+			DynamicConfigOverrides:    s.dynamicConfigOverrides,
+			DCRedirectionPolicy:       params.DCRedirectionPolicy,
+			EnableArchival:            params.EnableArchival,
+			AdditionalServerOptions:   params.AdditionalServerOptions,
+			EnableMetricsCapture:      true,
+			EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+			EnableReplicationRecorder: params.EnableReplicationRecorder,
 		}
-		clusterConfigs[clusterIndex].EnableArchival = params.EnableArchival
-		clusterConfigs[clusterIndex].AdditionalServerOptions = params.AdditionalServerOptions
-		clusterConfigs[clusterIndex].EnableMetricsCapture = true
-		clusterConfigs[clusterIndex].EnableHistoryTaskRecorder = params.EnableHistoryTaskRecorder
-		clusterConfigs[clusterIndex].EnableReplicationRecorder = params.EnableReplicationRecorder
+		clusterConfig.Persistence.DBName += "_" + clusterName
+		clusterConfigs[clusterIndex] = clusterConfig
 
 		var err error
-		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
+		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfig, log.With(s.logger, tag.ClusterName(clusterName)))
 		s.Require().NoError(err)
 	}
 
