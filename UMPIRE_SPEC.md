@@ -45,11 +45,15 @@ than a bespoke DSL.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
 - **Coverage / Scenario** — the catalog of interesting states worth reaching; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
 
-**Driving (Planner + Driver)**
-- **event** — an abstract model transition name (`admit`, `accept`); the unit a route is made of.
-- **route / Plan** — an ordered sequence of events reaching a target state; a `Plan` is validated before any traffic runs.
+**Planning (Planner) — high-level, over the model**
+- **target** — the state you ask the Planner to reach, fully-qualified by entity (e.g. `WorkflowUpdate:completed`).
+- **route / Plan** — an ordered sequence of events reaching a target; a `Plan` is validated (reviewable, replayable) before any traffic runs.
 - **Constraints** — allow/deny events or states to carve the sub-graph a plan may use.
+
+**Driving (Driver) — the primitives, against the SUT**
+- **event** — an abstract model transition (`admit`, `accept`); the atomic unit the Planner sequences and the Driver realizes.
 - **action** — the real traffic (an RPC, worker poll, or injected fault) the Driver produces to realize one event.
+- **`Do(ctx, event)`** — the Driver's single seam: realize one event as traffic against the SUT.
 - **FaultInjector** — the interceptor hook the Driver uses to drop/delay/corrupt requests.
 
 **Cross-cutting**

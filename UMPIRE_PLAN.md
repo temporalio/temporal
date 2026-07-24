@@ -329,9 +329,9 @@ missing close-signal fidelity, not the rules themselves.
 4. **Housekeeping.** Remove dead `cache.go` instrumentation and unused symbols; confirm the
    teardown wiring covers each test exactly once.
 
-## Scenarios & coverage (planned)
+## Coverpoints & coverage (planned)
 
-A **scenario** is a named, documented *situation of interest* plus a predicate that
+A **coverpoint** is a named, documented *situation of interest* plus a predicate that
 recognizes it in the observed model. It is a third subsystem alongside facts→entities→rules,
 with inverted semantics from a rule:
 
@@ -339,14 +339,14 @@ with inverted semantics from a rule:
 |---|---|---|---|
 | Rule | model in a *bad* state | (presence = bug) | per-namespace, purged |
 | One-off assert | a specific expected value | test fails locally | per-test |
-| **Scenario** | model reaching an *interesting* state | **coverage gap** (missing test or dead behaviour), not a bug | **process-global, survives purge** |
+| **Coverpoint** | model reaching an *interesting* state | **coverage gap** (missing test or dead behaviour), not a bug | **process-global, survives purge** |
 
-A rule says "if this situation happens it must resolve"; a scenario says "this situation
+A rule says "if this situation happens it must resolve"; a coverpoint says "this situation
 should happen to *someone* during the run." This directly serves two goals the rules can't:
 *tests as living docs* (a named catalog of what the system can do) and a *foundation for
 fuzzing* (detection is the reward signal a future generator optimizes toward).
 
-**Highest-value use — prove the rules aren't dead.** A rule's *precondition* is a scenario
+**Highest-value use — prove the rules aren't dead.** A rule's *precondition* is a coverpoint
 worth covering; a rule whose precondition is never reached passes vacuously and gives false
 confidence. Seeding the catalog from each registered rule's trigger turns "are our rules even
 exercised?" into a mechanical report — which is exactly the validation this doc keeps flagging
@@ -356,8 +356,8 @@ signal is missing).
 ### Model
 
 ```
-Scenario     = { Name, Doc, MinHits, Detect(*ScenarioContext) }
-ScenarioBook — registers scenarios (mirrors Rulebook; name-validated)
+Coverpoint     = { Name, Doc, MinHits, Detect(*CoverpointContext) }
+Catalog — registers coverpoints (mirrors Rulebook; name-validated)
 Coverage     — process-global sink: name → set{occurrenceKey}; hits = |set|.
                thread-safe, NOT cleared by PurgeNamespace, mergeable across shards.
 ```
@@ -378,22 +378,22 @@ is the pragmatic target now and the down payment on generation later.
 
 ### Phases
 
-0. **Framework core** (`common/testing/umpire`): `scenario.go` (`Scenario`, `ScenarioBook`,
-   `ScenarioContext` reusing the dirty-query plumbing + scope) and `coverage.go` (`Coverage`:
+0. **Framework core** (`common/testing/umpire`): `coverpoint.go` (`Coverpoint`, `Catalog`,
+   `CoverpointContext` reusing the dirty-query plumbing + scope) and `coverage.go` (`Coverage`:
    `Reached`, `Hits`, `Unmet`, dedup, mutex). Unit-tested in isolation.
-1. **Wire into the Umpire.** `Umpire` owns a `ScenarioBook` + shared `Coverage`;
+1. **Wire into the Umpire.** `Umpire` owns a `Catalog` + shared `Coverage`;
    `CheckNamespace`/`Check` run detection over the scoped model *before* purge into the
    *unpurged* `Coverage`. `PurgeNamespace` leaves coverage intact (assert it). Add
    `Umpire.Reached` + `Coverage()`.
-2. **Seed the catalog from rule preconditions** (the payoff): one scenario per registered
+2. **Seed the catalog from rule preconditions** (the payoff): one coverpoint per registered
    rule trigger (`update.admitted/accepted/completed/rejected`, `update.aborted_on_close`,
    `update.accept_complete_same_wft`, `speculative.rolled_back`/`converted`,
    `workflow.completed_with_pending_update`, `task.sync_match`/`async_match`). Most reduce to
    `EnteredAt`/`Reached` at teardown — no transition hooks needed. Output: which rule
    preconditions were never reached ⇒ dead-rule report.
 3. **Completeness gate + reporting.** `Coverage.WriteReport(path)` (JSON) + merge helper; a
-   `TestMain` gate behind an env flag (e.g. `UMPIRE_SCENARIO_COVERAGE=1`) that fails on any
-   scenario `< MinHits` **only in a full run** (never under `-run`); per-shard reports merged
+   `TestMain` gate behind an env flag (e.g. `UMPIRE_COVERAGE=1`) that fails on any
+   coverpoint `< MinHits` **only in a full run** (never under `-run`); per-shard reports merged
    in a final CI step (exhaustiveness is whole-suite + cross-shard).
 4. **Declaration verification + living docs.** Cross-check declared vs detected; generate the
    catalog → markdown (name, doc, hits, covering tests).
@@ -407,9 +407,9 @@ is the pragmatic target now and the down payment on generation later.
    `MinHits > 1` until generation exists.
 3. CI aggregation: confirm a per-shard-report + merge step is acceptable (required for a real
    suite-wide gate; without it the gate only works in a single-process full run).
-4. Naming: `ScenarioBook`/`Coverage` (literal, consistent with `Rulebook`/`FactLog`) vs a
+4. Naming: `Catalog`/`Coverage` (literal, consistent with `Rulebook`/`FactLog`) vs a
    metaphor. Leaning literal.
-5. Require every rule to carry a paired precondition-scenario, enforced at registration
+5. Require every rule to carry a paired precondition-coverpoint, enforced at registration
    (a lint against vacuous rules)? Leaning yes.
 
 ### Guardrails
@@ -417,7 +417,7 @@ is the pragmatic target now and the down payment on generation later.
 - Counters live at a different layer than entities/facts — must survive `PurgeNamespace`.
 - Gate only in full CI runs; never break filtered/local runs.
 - Predicate fidelity depends on emit-site completeness, same as rules — an unemitted signal
-  makes a scenario silently uncoverable (the close-signal gap bites here too).
+  makes a coverpoint silently uncoverable (the close-signal gap bites here too).
 - Curate meaningful combinations; don't auto-cross-product labels.
 
 **First cut:** Phases 0–2 alone deliver the dead-rule report and are shippable independently

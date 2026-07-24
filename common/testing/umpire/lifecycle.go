@@ -26,7 +26,8 @@ type Transition struct {
 type TransitionKind int
 
 const (
-	// Advance: the event is a legal edge to a different state; the machine moves.
+	// Advance: the event is a legal edge to a new state, or a forward jump to a
+	// reachable state over intermediate states that were not observed; the machine moves.
 	Advance TransitionKind = iota
 	// NoOp: the event is not a forward edge, but it is a benign re-observation — a
 	// duplicate / late / out-of-order fact consistent with the progress already
@@ -35,7 +36,8 @@ const (
 	// transition-legality rule too noisy to enforce before it was modelled.
 	NoOp
 	// Illegal: the event is impossible given the observed history — neither a legal
-	// edge nor consistent with the progress already made. A real violation.
+	// edge, a benign re-observation, nor a reachable forward jump (its target is in
+	// a branch unreachable from and unable to reach the current state). A real violation.
 	Illegal
 )
 
@@ -236,18 +238,25 @@ func (l *Lifecycle) classifyFrom(from, event string) Outcome {
 		}
 		return Outcome{Kind: kind, From: from, Event: event, To: to}
 	}
-	// No forward edge. Decide whether this is a benign re-observation or illegal.
+	// No direct edge. Decide whether this is a benign re-observation, a forward
+	// jump over unobserved states, or a genuinely illegal transition.
 	if l.terminal[from] {
 		// A terminal entity absorbs every further event as a stale no-op: once
 		// closed, late/duplicate facts about it carry no new legal transition.
 		return Outcome{Kind: NoOp, From: from, Event: event, To: from}
 	}
 	for _, d := range l.eventDests[event] {
-		// The event announces reaching d. If we are already at d, or d lies behind
-		// our current state, this is a duplicate / late / out-of-order fact that is
-		// consistent with the progress we have already made — benign, not illegal.
-		if d == from || l.canReach[d][from] {
+		switch {
+		case d == from || l.canReach[d][from]:
+			// The event announces reaching d, but we are already at d or past it:
+			// a duplicate / late / out-of-order fact consistent with our progress.
 			return Outcome{Kind: NoOp, From: from, Event: event, To: from}
+		case l.canReach[from][d]:
+			// d lies ahead of us and is reachable: a forward jump over intermediate
+			// states we did not observe. Observe-only cannot tell a missed
+			// observation from an illegal skip, so this is treated as legal —
+			// advance to the observed target so the model reflects it.
+			return Outcome{Kind: Advance, From: from, Event: event, To: d}
 		}
 	}
 	return Outcome{Kind: Illegal, From: from, Event: event, To: from}
@@ -262,7 +271,11 @@ func (l *Lifecycle) classifyFrom(from, event string) Outcome {
 func (l *Lifecycle) Fire(ctx context.Context, event string) bool {
 	switch o := l.Classify(event); o.Kind {
 	case Advance:
-		_ = l.fsm.Event(ctx, event)
+		if _, isEdge := l.edges[o.From][event]; isEdge {
+			_ = l.fsm.Event(ctx, event) // direct legal edge
+		} else {
+			l.fsm.SetState(o.To) // forward jump over unobserved intermediate states
+		}
 		l.stampEntry()
 		return true
 	case NoOp:
