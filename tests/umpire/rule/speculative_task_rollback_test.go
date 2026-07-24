@@ -5,7 +5,7 @@ import (
 )
 
 func TestSpeculativeTaskRollbackRule_DetectsRollback(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 	routeFact(t, reg, makeSpecWorkflowTaskPolled("tq", "wf1", "run1", true))
@@ -25,7 +25,7 @@ func TestSpeculativeTaskRollbackRule_DetectsRollback(t *testing.T) {
 }
 
 func TestSpeculativeTaskRollbackRule_NoViolation_UpdateCompleted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 	routeFact(t, reg, makeSpecWorkflowTaskPolled("tq", "wf1", "run1", true))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
@@ -39,7 +39,7 @@ func TestSpeculativeTaskRollbackRule_NoViolation_UpdateCompleted(t *testing.T) {
 }
 
 func TestSpeculativeTaskRollbackRule_NoViolation_NoSpeculativeTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 

@@ -5,7 +5,7 @@ import (
 )
 
 func TestEntityTransitionLegality_NoViolationOnLegalOrder(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1"))
@@ -23,7 +23,7 @@ func TestEntityTransitionLegality_NoViolationOnLegalOrder(t *testing.T) {
 // is covered at the framework level in lifecycle_test.go; none of the real entity
 // lifecycles, being converging DAGs, can produce one.)
 func TestEntityTransitionLegality_NoViolationOnForwardJump(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1")) // accept before admit
 
 	violations := checkSafetyRule(reg, &EntityTransitionLegality{})
@@ -36,7 +36,7 @@ func TestEntityTransitionLegality_NoViolationOnForwardJump(t *testing.T) {
 // unregistered) must not be flagged: re-observing "accepted" while already
 // accepted is a benign no-op, not an illegal transition.
 func TestEntityTransitionLegality_NoViolationOnDuplicateSpan(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1")) // duplicate accepted span
@@ -50,7 +50,7 @@ func TestEntityTransitionLegality_NoViolationOnDuplicateSpan(t *testing.T) {
 // A stale span arriving after the update reached a terminal state must not be
 // flagged: a terminal entity absorbs late/out-of-order facts as no-ops.
 func TestEntityTransitionLegality_NoViolationOnStaleAfterTerminal(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1")) // admitted -> completed (terminal)
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))  // stale accepted span
@@ -63,7 +63,7 @@ func TestEntityTransitionLegality_NoViolationOnStaleAfterTerminal(t *testing.T) 
 
 // Parity with the former WorkflowUpdateLossPrevention: stuck in "admitted".
 func TestEntityProgress_DetectsStuckAdmitted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
 	violations := checkLivenessRule(reg, &EntityProgress{})
@@ -74,7 +74,7 @@ func TestEntityProgress_DetectsStuckAdmitted(t *testing.T) {
 
 // Parity with the former WorkflowUpdateCompletion: stuck in "accepted".
 func TestEntityProgress_DetectsStuckAccepted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 
@@ -85,7 +85,7 @@ func TestEntityProgress_DetectsStuckAccepted(t *testing.T) {
 }
 
 func TestEntityProgress_NoViolationWhenTerminal(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateCompleted("wf1", "upd1")) // reaches terminal "completed"
@@ -99,7 +99,7 @@ func TestEntityProgress_NoViolationWhenTerminal(t *testing.T) {
 // A non-must-progress resting state ("unspecified": requested but not admitted)
 // must not fire — proving EntityProgress is not a blunt reach-terminal rule.
 func TestEntityProgress_NoViolationForUnspecified(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
 
 	violations := checkLivenessRule(reg, &EntityProgress{})

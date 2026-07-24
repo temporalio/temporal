@@ -13,9 +13,8 @@ import (
 )
 
 // admittedUpdateIn builds a "stuck in admitted" WorkflowUpdate fact rooted at the
-// given namespace, which the WorkflowUpdateLossPrevention liveness rule flags at
-// teardown. Unlike workflow tasks, updates are not settled by settleWorkflows,
-// so the violation survives to CheckNamespace.
+// given namespace, which the EntityProgress liveness rule flags at teardown
+// (admitted is a MustProgress state), so the violation survives to CheckNamespace.
 func admittedUpdateIn(namespaceID, workflowID, updateID string) umpirefw.Fact {
 	return &fact.WorkflowUpdateAdmitted{
 		UpdateID:   updateID,
@@ -32,7 +31,7 @@ func admittedUpdateIn(namespaceID, workflowID, updateID string) umpirefw.Fact {
 
 func countUpdates(u *Monitor, namespaceID string) int {
 	root := umpirefw.NewEntityID(model.NamespaceType, namespaceID)
-	return len(u.Registry().QueryEntities(model.WorkflowUpdateType, 0, &root))
+	return len(u.ModelState().QueryEntities(model.WorkflowUpdateType, 0, &root))
 }
 
 func TestMonitor_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
@@ -41,7 +40,7 @@ func TestMonitor_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
 	require.NoError(t, err)
 
 	const nsA, nsB = "ns-a", "ns-b"
-	require.NoError(t, u.Registry().RouteFacts(ctx, []umpirefw.Fact{
+	require.NoError(t, u.ModelState().RouteFacts(ctx, []umpirefw.Fact{
 		admittedUpdateIn(nsA, "wf-a", "upd-a"),
 		admittedUpdateIn(nsB, "wf-b", "upd-b"),
 	}))

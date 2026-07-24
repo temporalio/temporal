@@ -29,6 +29,14 @@ func NewFactDecoder() *FactDecoder {
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateRejected{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowExecutionCompleted{} })
 
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationScheduled{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationAttemptFailed{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationStarted{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationSucceeded{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationFailed{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationCanceled{} })
+	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationTimedOut{} })
+
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskAdded{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskPolled{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowStarted{} })

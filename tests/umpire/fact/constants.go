@@ -8,4 +8,5 @@ const (
 	TaskQueueType         umpire.EntityType = "TaskQueue"
 	WorkflowUpdateType    umpire.EntityType = "WorkflowUpdate"
 	NamespaceType         umpire.EntityType = "Namespace"
+	NexusOperationType    umpire.EntityType = "NexusOperation"
 )

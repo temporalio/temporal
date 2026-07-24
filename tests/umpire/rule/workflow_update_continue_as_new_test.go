@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateContinueAsNewRule_DetectsStuckOnCompletedWorkflow(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
@@ -17,7 +17,7 @@ func TestWorkflowUpdateContinueAsNewRule_DetectsStuckOnCompletedWorkflow(t *test
 }
 
 func TestWorkflowUpdateContinueAsNewRule_NoViolation_UpdateAccepted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -30,7 +30,7 @@ func TestWorkflowUpdateContinueAsNewRule_NoViolation_UpdateAccepted(t *testing.T
 }
 
 func TestWorkflowUpdateContinueAsNewRule_NoViolation_WorkflowNotCompleted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 

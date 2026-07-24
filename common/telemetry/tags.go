@@ -24,6 +24,12 @@ const (
 	AttrAbortReason   attribute.Key = "abort.reason"
 	AttrUpdateOutcome attribute.Key = "update.outcome"
 
+	AttrNexusEndpoint         attribute.Key = "nexus.endpoint"
+	AttrNexusService          attribute.Key = "nexus.service"
+	AttrNexusOperation        attribute.Key = "nexus.operation"
+	AttrNexusScheduledEventID attribute.Key = "nexus.scheduled_event_id"
+	AttrNexusOutcome          attribute.Key = "nexus.outcome"
+
 	EventSpeculativeWorkflowTaskScheduled = "SpeculativeWorkflowTaskScheduled"
 	EventWorkflowTaskStored               = "WorkflowTaskStored"
 	EventWorkflowTaskDiscarded            = "WorkflowTaskDiscarded"
@@ -34,6 +40,14 @@ const (
 	EventWorkflowUpdateRejected           = "WorkflowUpdateRejected"
 	EventWorkflowExecutionCompleted       = "WorkflowExecutionCompleted"
 	EventWorkflowTerminated               = "WorkflowTerminated"
+
+	EventNexusOperationScheduled     = "NexusOperationScheduled"
+	EventNexusOperationAttemptFailed = "NexusOperationAttemptFailed" // scheduled -> backing_off
+	EventNexusOperationStarted       = "NexusOperationStarted"
+	EventNexusOperationSucceeded     = "NexusOperationSucceeded"
+	EventNexusOperationFailed        = "NexusOperationFailed"
+	EventNexusOperationCanceled      = "NexusOperationCanceled"
+	EventNexusOperationTimedOut      = "NexusOperationTimedOut"
 
 	// UpdateOutcomeSuccess / UpdateOutcomeFailure are values for AttrUpdateOutcome.
 	UpdateOutcomeSuccess = "success"

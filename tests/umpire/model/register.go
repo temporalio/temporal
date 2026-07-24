@@ -8,7 +8,7 @@ import (
 // DefaultEntity is one entry in the default entity set: an entity factory plus the
 // facts that route to it. DefaultEntities (below) is the single source of truth for
 // which entities the umpire models — both the passive side (RegisterDefaultEntities,
-// which routes facts to them) and the active side (driver.DefaultModels, which
+// which routes facts to them) and the active side (planner.DefaultModels, which
 // plans over them) derive from it, so adding an entity is a one-line change in one
 // place, not two that can drift.
 type DefaultEntity struct {
@@ -46,6 +46,18 @@ func DefaultEntities() []DefaultEntity {
 				&fact.WorkflowUpdateRejected{},
 			},
 		},
+		{
+			New: func() umpire.Entity { return NewNexusOperation() },
+			Facts: []umpire.Fact{
+				&fact.NexusOperationScheduled{},
+				&fact.NexusOperationAttemptFailed{},
+				&fact.NexusOperationStarted{},
+				&fact.NexusOperationSucceeded{},
+				&fact.NexusOperationFailed{},
+				&fact.NexusOperationCanceled{},
+				&fact.NexusOperationTimedOut{},
+			},
+		},
 	}
 }
 
@@ -69,11 +81,18 @@ func defaultFacts() []umpire.Fact {
 		&fact.WorkflowUpdateCompleted{},
 		&fact.WorkflowUpdateRejected{},
 		&fact.WorkflowUpdateAborted{},
+		&fact.NexusOperationScheduled{},
+		&fact.NexusOperationAttemptFailed{},
+		&fact.NexusOperationStarted{},
+		&fact.NexusOperationSucceeded{},
+		&fact.NexusOperationFailed{},
+		&fact.NexusOperationCanceled{},
+		&fact.NexusOperationTimedOut{},
 	}
 }
 
 // RegisterDefaultEntities registers the default facts and entities with a registry.
-func RegisterDefaultEntities(r *umpire.Registry) {
+func RegisterDefaultEntities(r *umpire.ModelState) {
 	r.RegisterFact(defaultFacts()...)
 	for _, e := range DefaultEntities() {
 		r.RegisterEntity(e.New, e.Facts...)

@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateDeduplicationRule_DetectsUnresolvedDuplicates(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Send same update twice (RequestCount becomes 2), then admit but don't complete.
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
@@ -18,7 +18,7 @@ func TestWorkflowUpdateDeduplicationRule_DetectsUnresolvedDuplicates(t *testing.
 }
 
 func TestWorkflowUpdateDeduplicationRule_NoViolation_SingleRequest(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
@@ -29,7 +29,7 @@ func TestWorkflowUpdateDeduplicationRule_NoViolation_SingleRequest(t *testing.T)
 }
 
 func TestWorkflowUpdateDeduplicationRule_NoViolation_Completed(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateRequested("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))

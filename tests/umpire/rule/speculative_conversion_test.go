@@ -5,7 +5,7 @@ import (
 )
 
 func TestSpeculativeConversionRule_DetectsStuckAfterConversion(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Speculative task created and stored (converted).
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 	routeFact(t, reg, makeSpecWorkflowTaskStored("tq", "wf1", "run1"))
@@ -19,7 +19,7 @@ func TestSpeculativeConversionRule_DetectsStuckAfterConversion(t *testing.T) {
 }
 
 func TestSpeculativeConversionRule_NoViolation_UpdateAccepted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 	routeFact(t, reg, makeSpecWorkflowTaskStored("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
@@ -32,7 +32,7 @@ func TestSpeculativeConversionRule_NoViolation_UpdateAccepted(t *testing.T) {
 }
 
 func TestSpeculativeConversionRule_NoViolation_NoConversion(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
 	violations := checkLivenessRule(reg, &SpeculativeConversion{})

@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 )
 
-// Registry manages entities and routes facts to them.
-type Registry struct {
+// ModelState manages entities and routes facts to them.
+type ModelState struct {
 	mu         sync.RWMutex
 	factories  map[string]EntityFactory
 	facts      map[string]bool
@@ -26,9 +26,9 @@ type entityRecord struct {
 	root       EntityID // outermost ancestor (e.g. the namespace); used to scope Check/Purge
 }
 
-// NewRegistry creates a new in-memory entity registry.
-func NewRegistry() *Registry {
-	return &Registry{
+// NewModelState creates a new in-memory entity registry.
+func NewModelState() *ModelState {
+	return &ModelState{
 		factories: make(map[string]EntityFactory),
 		facts:     make(map[string]bool),
 		entities:  make(map[string]*entityRecord),
@@ -37,7 +37,7 @@ func NewRegistry() *Registry {
 
 // RegisterEntity registers an entity type with its factory.
 // Panics if the factory's entity Type() does not match the struct name.
-func (r *Registry) RegisterEntity(factory EntityFactory, subscribesTo ...Fact) {
+func (r *ModelState) RegisterEntity(factory EntityFactory, subscribesTo ...Fact) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -56,7 +56,7 @@ func (r *Registry) RegisterEntity(factory EntityFactory, subscribesTo ...Fact) {
 
 // RegisterFact validates and registers fact types.
 // Panics if Name() does not match the struct name.
-func (r *Registry) RegisterFact(probes ...Fact) {
+func (r *ModelState) RegisterFact(probes ...Fact) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, probe := range probes {
@@ -73,7 +73,7 @@ func (r *Registry) RegisterFact(probes ...Fact) {
 }
 
 // RouteFacts routes a batch of facts to the appropriate entities.
-func (r *Registry) RouteFacts(ctx context.Context, facts []Fact) error {
+func (r *ModelState) RouteFacts(ctx context.Context, facts []Fact) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -128,7 +128,7 @@ func (r *Registry) RouteFacts(ctx context.Context, facts []Fact) error {
 // Ancestor types without a factory (e.g. the namespace root) are keying-only:
 // they appear in the key and scoping root but hold no entity record.
 // Must be called with r.mu held.
-func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
+func (r *ModelState) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
 	if path == nil {
 		return nil, nil
 	}
@@ -158,14 +158,14 @@ func (r *Registry) getOrCreateRecord(path *EntityPath) (*entityRecord, error) {
 }
 
 // Generation returns the current global generation counter.
-func (r *Registry) Generation() uint64 {
+func (r *ModelState) Generation() uint64 {
 	return r.generation.Load()
 }
 
 // QueryEntities returns all entities of the given type with their registry key.
 // If sinceGeneration > 0, only entities changed after that generation are returned.
 // If scope is non-nil, only entities rooted at that ancestor are returned.
-func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64, scope *EntityID) []EntityEntry {
+func (r *ModelState) QueryEntities(et EntityType, sinceGeneration uint64, scope *EntityID) []EntityEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -188,7 +188,7 @@ func (r *Registry) QueryEntities(et EntityType, sinceGeneration uint64, scope *E
 // QueryAll returns entities of every type with their registry key, applying the
 // same dirty-generation and scope filters as QueryEntities. Used by rules that
 // judge entities by a shared interface (e.g. Lifecycled) rather than one type.
-func (r *Registry) QueryAll(sinceGeneration uint64, scope *EntityID) []EntityEntry {
+func (r *ModelState) QueryAll(sinceGeneration uint64, scope *EntityID) []EntityEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -207,7 +207,7 @@ func (r *Registry) QueryAll(sinceGeneration uint64, scope *EntityID) []EntityEnt
 
 // PurgeScope removes every entity rooted at the given ancestor and returns the
 // number removed. Use it to drop all data collected for one namespace.
-func (r *Registry) PurgeScope(root EntityID) int {
+func (r *ModelState) PurgeScope(root EntityID) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

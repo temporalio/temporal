@@ -5,7 +5,7 @@ import (
 )
 
 func TestSpeculativeTaskCreationRule_DetectsDuplicateTasks(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Normal task exists, then speculative scheduled for same workflow.
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
@@ -17,7 +17,7 @@ func TestSpeculativeTaskCreationRule_DetectsDuplicateTasks(t *testing.T) {
 }
 
 func TestSpeculativeTaskCreationRule_NoViolation_OnlyNormalTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
 	violations := checkSafetyRule(reg, &SpeculativeTaskCreation{})
@@ -27,7 +27,7 @@ func TestSpeculativeTaskCreationRule_NoViolation_OnlyNormalTask(t *testing.T) {
 }
 
 func TestSpeculativeTaskCreationRule_NoViolation_OnlySpeculativeTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 
 	violations := checkSafetyRule(reg, &SpeculativeTaskCreation{})
@@ -37,7 +37,7 @@ func TestSpeculativeTaskCreationRule_NoViolation_OnlySpeculativeTask(t *testing.
 }
 
 func TestSpeculativeTaskCreationRule_NoViolation_NormalTaskPolled(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Normal task already polled (not pending), then speculative created.
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))

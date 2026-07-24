@@ -75,7 +75,10 @@ state; they never see facts directly.
 
 ### `ModelState` — routing + dirty tracking (`registry.go`)
 
-The heart of the model layer. It:
+The heart of the model layer — the runtime `*State` counterpart to the declared `*Registry`s.
+(Today one `registry.go` type plays both the `ModelState` role below *and* the `EntityRegistry`
+role — the `RegisterEntity`/`RegisterFact` declarations at the end. The split is conceptual; the
+code merges them.) It:
 
 1. **Stores** entities keyed by `EntityPathKey`, each wrapped in an `entityRecord`
    `{entity, generation}`.
@@ -87,7 +90,7 @@ The heart of the model layer. It:
    avoid re-examining everything: `QueryEntities(type, sinceGeneration)` returns only
    entities stamped *after* a watermark.
 
-Registration is validated at wire-up time:
+Registration (the `EntityRegistry` role) is validated at wire-up time:
 - `RegisterEntity(factory, …)` panics unless `entity.Type() == structName`.
 - `RegisterFact(probes…)` panics unless `fact.Name() == structName`.
 

@@ -16,21 +16,21 @@ import (
 	"go.temporal.io/server/tests/umpire/model"
 )
 
-func newTestRegistry() *umpire.Registry {
-	r := umpire.NewRegistry()
+func newTestModelState() *umpire.ModelState {
+	r := umpire.NewModelState()
 	model.RegisterDefaultEntities(r)
 	return r
 }
 
-func checkSafetyRule(reg *umpire.Registry, m umpire.SafetyRule) []umpire.Violation {
+func checkSafetyRule(reg *umpire.ModelState, m umpire.SafetyRule) []umpire.Violation {
 	return umpire.CheckSafetyRule(context.Background(), m, reg, log.NewNoopLogger(), umpire.RuleConfig{})
 }
 
-func checkLivenessRule(reg *umpire.Registry, m umpire.LivenessRule) []umpire.Violation {
+func checkLivenessRule(reg *umpire.ModelState, m umpire.LivenessRule) []umpire.Violation {
 	return umpire.CheckLivenessRule(context.Background(), m, reg, log.NewNoopLogger(), umpire.RuleConfig{})
 }
 
-func routeFact(t *testing.T, r *umpire.Registry, m umpire.Fact) {
+func routeFact(t *testing.T, r *umpire.ModelState, m umpire.Fact) {
 	t.Helper()
 	if err := r.RouteFacts(context.Background(), []umpire.Fact{m}); err != nil {
 		t.Fatalf("RouteFacts failed: %v", err)

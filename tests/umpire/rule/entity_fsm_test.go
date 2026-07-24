@@ -27,9 +27,6 @@ func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
 	if wu.AdmittedAt().IsZero() {
 		t.Fatal("AdmittedAt should be set")
 	}
-	if !wu.Admitted.IsTrue() {
-		t.Fatal("Admitted marker should be set")
-	}
 
 	wu.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
 		yield(makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -64,9 +61,6 @@ func TestWorkflowTask_FSM_AddThenPoll(t *testing.T) {
 	}
 	if wt.AddedAt.IsZero() {
 		t.Fatal("AddedAt should be set")
-	}
-	if !wt.Added.IsTrue() {
-		t.Fatal("Added marker should be set")
 	}
 
 	wt.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {

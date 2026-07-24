@@ -474,7 +474,7 @@ type LifecycleResult struct {
 // a method on the embedded ruleContext, promoted to both rule contexts.
 func (c *ruleContext) ChangedLifecycles() iter.Seq[LifecycleResult] {
 	return func(yield func(LifecycleResult) bool) {
-		for _, e := range c.Registry.QueryAll(c.sinceGeneration, c.scope) {
+		for _, e := range c.ModelState.QueryAll(c.sinceGeneration, c.scope) {
 			if c.Err() != nil {
 				return
 			}

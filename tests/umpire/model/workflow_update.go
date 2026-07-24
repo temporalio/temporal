@@ -37,21 +37,10 @@ type WorkflowUpdate struct {
 	RequestCount int
 	FirstSeenAt  time.Time
 	LastSeenAt   time.Time
-
-	// Live Flags — set by FSM transitions.
-	Admitted  *umpire.Flag
-	Accepted  *umpire.Flag
-	Completed *umpire.Flag
-	Rejected  *umpire.Flag
 }
 
 func NewWorkflowUpdate() *WorkflowUpdate {
-	wu := &WorkflowUpdate{
-		Admitted:  umpire.NewFlag("WorkflowUpdate:Admitted"),
-		Accepted:  umpire.NewFlag("WorkflowUpdate:Accepted"),
-		Completed: umpire.NewFlag("WorkflowUpdate:Completed"),
-		Rejected:  umpire.NewFlag("WorkflowUpdate:Rejected"),
-	}
+	wu := &WorkflowUpdate{}
 	wu.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: "unspecified",
 		Transitions: []umpire.Transition{
@@ -111,18 +100,15 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "admit") {
-				wu.Admitted.Set()
 			}
 		case *fact.WorkflowUpdateAccepted:
 			if wu.FSM.Fire(ctx, "accept") {
-				wu.Accepted.Set()
 			}
 		case *fact.WorkflowUpdateCompleted:
 			if wu.UpdateID == "" {
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "complete") {
-				wu.Completed.Set()
 				if e.IsSuccess() {
 					wu.Outcome = "success"
 				} else {
@@ -136,7 +122,6 @@ func (wu *WorkflowUpdate) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 				wu.UpdateID = e.UpdateID
 			}
 			if wu.FSM.Fire(ctx, "reject") {
-				wu.Rejected.Set()
 			}
 		}
 	}

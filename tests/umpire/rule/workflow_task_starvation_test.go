@@ -17,7 +17,7 @@ import (
 // AddWorkflowTaskRequest is now imported as AddWorkflowTask (not StoreWorkflowTask),
 // so the WorkflowTask entity enters the "added" FSM state and the starvation model fires.
 func TestWorkflowTaskStarvationRule_NonSpeculative_ViaImporter(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	imp := model.NewFactDecoder()
 
 	req := &matchingservice.AddWorkflowTaskRequest{
@@ -44,7 +44,7 @@ func TestWorkflowTaskStarvationRule_NonSpeculative_ViaImporter(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_DetectsStuckTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
 	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
@@ -60,7 +60,7 @@ func TestWorkflowTaskStarvationRule_DetectsStuckTask(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_DetectsStoredTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskStored("tq", "wf1", "run1"))
 
@@ -77,7 +77,7 @@ func TestWorkflowTaskStarvationRule_DetectsStoredTask(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_NoViolation_StoredThenPolled(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskStored("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
@@ -89,7 +89,7 @@ func TestWorkflowTaskStarvationRule_NoViolation_StoredThenPolled(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_NoViolation_TaskPolled(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 	routeFact(t, reg, makeWorkflowTaskPolled("tq", "wf1", "run1", true))
 
@@ -100,7 +100,7 @@ func TestWorkflowTaskStarvationRule_NoViolation_TaskPolled(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_NoViolation_SpeculativeTask(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeSpeculativeScheduled("tq", "wf1", "run1"))
 
 	violations := checkLivenessRule(reg, &WorkflowTaskStarvation{})
@@ -110,10 +110,10 @@ func TestWorkflowTaskStarvationRule_NoViolation_SpeculativeTask(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
-	rb := umpire.NewRulebook()
+	rb := umpire.NewRuleRegistry()
 	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
 	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)
@@ -136,10 +136,10 @@ func TestWorkflowTaskStarvationRule_ResolvedByPoll(t *testing.T) {
 }
 
 func TestWorkflowTaskStarvationRule_UnresolvedAtTeardown(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
 
-	rb := umpire.NewRulebook()
+	rb := umpire.NewRuleRegistry()
 	rb.RegisterLiveness(func() umpire.LivenessRule { return &WorkflowTaskStarvation{} })
 	if err := rb.InitRules(reg, log.NewNoopLogger(), umpire.RuleConfig{}); err != nil {
 		t.Fatalf("InitRules failed: %v", err)

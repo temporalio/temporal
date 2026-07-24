@@ -16,7 +16,7 @@ import (
 
 // CheckSafetyRule is a test helper that runs a single safety rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible.
-func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
+func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *ModelState, logger log.Logger, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		reportTTL:    defaultReportTTL,
@@ -25,7 +25,7 @@ func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *Registry, l
 		ruleContext: ruleContext{
 			Context:  ctx,
 			Now:      time.Now(),
-			Registry: registry,
+			ModelState: registry,
 			Logger:   logger,
 			Config:   config,
 			state:    st,
@@ -38,7 +38,7 @@ func CheckSafetyRule(ctx context.Context, rule SafetyRule, registry *Registry, l
 
 // CheckLivenessRule is a test helper that runs a single liveness rule and returns violations.
 // It uses sinceGeneration=0 so all entities are visible, then collects pending items.
-func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *Registry, logger log.Logger, config RuleConfig) []Violation {
+func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *ModelState, logger log.Logger, config RuleConfig) []Violation {
 	st := &ruleState{
 		lastReported: make(map[string]time.Time),
 		pending:      make(map[string]Violation),
@@ -48,7 +48,7 @@ func CheckLivenessRule(ctx context.Context, rule LivenessRule, registry *Registr
 		ruleContext: ruleContext{
 			Context:  ctx,
 			Now:      time.Now(),
-			Registry: registry,
+			ModelState: registry,
 			Logger:   logger,
 			Config:   config,
 			state:    st,
@@ -107,7 +107,7 @@ type ruleState struct {
 type ruleContext struct {
 	context.Context
 	Now             time.Time
-	Registry        *Registry
+	ModelState        *ModelState
 	Logger          log.Logger
 	Config          RuleConfig
 	sinceGeneration uint64    // only query entities changed after this generation
@@ -192,7 +192,7 @@ type EntityResult[T any] struct {
 func (c *ruleContext) Changed[T any]() iter.Seq[EntityResult[T]] {
 	return func(yield func(EntityResult[T]) bool) {
 		et := EntityType(reflect.TypeOf((*T)(nil)).Elem().Name())
-		for _, e := range c.Registry.QueryEntities(et, c.sinceGeneration, c.scope) {
+		for _, e := range c.ModelState.QueryEntities(et, c.sinceGeneration, c.scope) {
 			if c.Err() != nil {
 				return
 			}
@@ -220,28 +220,28 @@ type ruleEntry struct {
 	liveness LivenessRule
 }
 
-// Rulebook manages rule registration, initialization, and state.
-type Rulebook struct {
+// RuleRegistry manages rule registration, initialization, and state.
+type RuleRegistry struct {
 	mu       sync.RWMutex
 	registry map[string]func() ruleEntry
 	rules    []ruleEntry
 	states   map[string]*ruleState
 
-	ruleRegistry *Registry
+	ruleModelState *ModelState
 	logger       log.Logger
 	config       RuleConfig
 }
 
-// NewRulebook creates a new rulebook.
-func NewRulebook() *Rulebook {
-	return &Rulebook{
+// NewRuleRegistry creates a new rulebook.
+func NewRuleRegistry() *RuleRegistry {
+	return &RuleRegistry{
 		registry: make(map[string]func() ruleEntry),
 		states:   make(map[string]*ruleState),
 	}
 }
 
 // RegisterSafety registers a safety rule factory.
-func (r *Rulebook) RegisterSafety(factory func() SafetyRule) {
+func (r *RuleRegistry) RegisterSafety(factory func() SafetyRule) {
 	probe := factory()
 	name := validateRuleName(probe, probe.Name())
 	r.mu.Lock()
@@ -252,7 +252,7 @@ func (r *Rulebook) RegisterSafety(factory func() SafetyRule) {
 }
 
 // RegisterLiveness registers a liveness rule factory.
-func (r *Rulebook) RegisterLiveness(factory func() LivenessRule) {
+func (r *RuleRegistry) RegisterLiveness(factory func() LivenessRule) {
 	probe := factory()
 	name := validateRuleName(probe, probe.Name())
 	r.mu.Lock()
@@ -272,7 +272,7 @@ func validateRuleName(probe any, name string) string {
 }
 
 // InitRules constructs rules. If names is empty, all registered rules are used.
-func (r *Rulebook) InitRules(registry *Registry, logger log.Logger, config RuleConfig, names ...string) error {
+func (r *RuleRegistry) InitRules(registry *ModelState, logger log.Logger, config RuleConfig, names ...string) error {
 	if registry == nil {
 		return fmt.Errorf("registry is required")
 	}
@@ -283,7 +283,7 @@ func (r *Rulebook) InitRules(registry *Registry, logger log.Logger, config RuleC
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.ruleRegistry = registry
+	r.ruleModelState = registry
 	r.logger = logger
 	r.config = config
 
@@ -323,12 +323,12 @@ func (r *Rulebook) InitRules(registry *Registry, logger log.Logger, config RuleC
 // run on every call (only on dirty entities). Liveness rules run on every call
 // (only on dirty entities) to update their pending set. When final is true,
 // unresolved pending items are collected as violations.
-func (r *Rulebook) Check(ctx context.Context, final bool, scope *EntityID) []Violation {
+func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) []Violation {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	now := time.Now()
-	currentGen := r.ruleRegistry.Generation()
+	currentGen := r.ruleModelState.Generation()
 	var allViolations []Violation
 
 	for _, entry := range r.rules {
@@ -338,7 +338,7 @@ func (r *Rulebook) Check(ctx context.Context, final bool, scope *EntityID) []Vio
 		base := ruleContext{
 			Context:         ctx,
 			Now:             now,
-			Registry:        r.ruleRegistry,
+			ModelState:        r.ruleModelState,
 			Logger:          r.logger,
 			Config:          r.config,
 			sinceGeneration: st.lastGeneration,
@@ -389,7 +389,7 @@ func keyInScope(key string, scope *EntityID) bool {
 
 // PurgeScope drops all per-rule state (pending, dedup, passed keys) for entities
 // rooted at the given ancestor, so a torn-down namespace leaves nothing behind.
-func (r *Rulebook) PurgeScope(root EntityID) {
+func (r *RuleRegistry) PurgeScope(root EntityID) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	scope := &root
@@ -411,7 +411,7 @@ func (r *Rulebook) PurgeScope(root EntityID) {
 }
 
 // RuleCount returns the count of initialized rules by kind.
-func (r *Rulebook) RuleCount() (safety, liveness int) {
+func (r *RuleRegistry) RuleCount() (safety, liveness int) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, entry := range r.rules {
@@ -426,7 +426,7 @@ func (r *Rulebook) RuleCount() (safety, liveness int) {
 }
 
 // Stats returns per-rule evaluation statistics.
-func (r *Rulebook) Stats() []RuleStats {
+func (r *RuleRegistry) Stats() []RuleStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	stats := make([]RuleStats, 0, len(r.rules))
@@ -441,7 +441,7 @@ func (r *Rulebook) Stats() []RuleStats {
 }
 
 // PassedKeys returns entity keys that the named rule evaluated and found healthy.
-func (r *Rulebook) PassedKeys(ruleName string) []string {
+func (r *RuleRegistry) PassedKeys(ruleName string) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	st, ok := r.states[ruleName]

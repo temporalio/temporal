@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateHistoryOrderingRule_DetectsAcceptedAfterClose(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -18,7 +18,7 @@ func TestWorkflowUpdateHistoryOrderingRule_DetectsAcceptedAfterClose(t *testing.
 }
 
 func TestWorkflowUpdateHistoryOrderingRule_NoViolation_UpdateCompleted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -32,7 +32,7 @@ func TestWorkflowUpdateHistoryOrderingRule_NoViolation_UpdateCompleted(t *testin
 }
 
 func TestWorkflowUpdateHistoryOrderingRule_NoViolation_WorkflowNotClosed(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))

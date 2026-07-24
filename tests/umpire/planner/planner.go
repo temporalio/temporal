@@ -1,14 +1,14 @@
-// Package driver is the active side's test-authoring surface: a developer
-// describes the entity states they want exercised, and the driver computes a
+// Package planner is the active side's test-authoring surface: a developer
+// describes the entity states they want exercised, and the planner computes a
 // Plan (route[s] through the model graph) before driving anything. The planner is
 // a pure function over the shared model (umpire.Lifecycle's Reachable/Cells), so a
 // test's target reachability, its routes, and its constraints are all checkable
 // before a single RPC is sent. Realizing an abstract event as real traffic is the
-// Actuator seam.
+// Driver seam.
 //
-// See UMPIRE_DRIVER_TEST_UX.md for the developer guide and UMPIRE_DRIVER.md for the broader
+// See UMPIRE_PLANNER.md for the developer guide and UMPIRE_DRIVER.md for the broader
 // architecture.
-package driver
+package planner
 
 import (
 	"context"
@@ -102,7 +102,7 @@ func apply(opts []Option) options {
 // test primitive: a negative/reachability assertion is just an expected failure here.
 func PlanTo(lc *umpire.Lifecycle, target string, mode RouteMode, c Constraints, opts ...Option) (*Plan, error) {
 	if !lc.Reachable()[target] {
-		return nil, fmt.Errorf("driver: %q is not a reachable state of this model", target)
+		return nil, fmt.Errorf("planner: %q is not a reachable state of this model", target)
 	}
 	adj := advanceEdges(lc, c)
 	start := lc.Initial()
@@ -121,10 +121,10 @@ func PlanTo(lc *umpire.Lifecycle, target string, mode RouteMode, c Constraints, 
 			routes = [][]string{r}
 		}
 	default:
-		return nil, fmt.Errorf("driver: unknown route mode %d", mode)
+		return nil, fmt.Errorf("planner: unknown route mode %d", mode)
 	}
 	if len(routes) == 0 {
-		return nil, fmt.Errorf("driver: %q is unreachable under the given constraints", target)
+		return nil, fmt.Errorf("planner: %q is unreachable under the given constraints", target)
 	}
 	return &Plan{Target: target, Routes: routes}, nil
 }
@@ -154,15 +154,15 @@ func Explore(lc *umpire.Lifecycle, c Constraints, opts ...Option) *Plan {
 	return &Plan{Routes: [][]string{route}}
 }
 
-// Actuator realizes one abstract model event against the system under test, turning
+// Driver realizes one abstract model event against the system under test, turning
 // intent into real traffic (RPCs, worker polls, fault injection). Real drivers are
 // Temporal-specific and per-entity; tests supply a fake. This is the seam between
 // the pure planner above and a live server.
-type Actuator interface {
+type Driver interface {
 	Do(ctx context.Context, event string) error
 }
 
-// Resetter is an optional Actuator capability: when a Plan has several routes
+// Resetter is an optional Driver capability: when a Plan has several routes
 // (AllRoutes), Run calls Reset between them to return the SUT to a fresh start.
 type Resetter interface {
 	Reset(ctx context.Context) error
@@ -171,18 +171,18 @@ type Resetter interface {
 // Run drives every route in the plan through d, in order. For multi-route plans it
 // resets the driver between routes (if it is a Resetter). The monitor judges the
 // resulting traffic out of band; Run only drives.
-func (p *Plan) Run(ctx context.Context, d Actuator) error {
+func (p *Plan) Run(ctx context.Context, d Driver) error {
 	for i, route := range p.Routes {
 		if i > 0 {
 			if r, ok := d.(Resetter); ok {
 				if err := r.Reset(ctx); err != nil {
-					return fmt.Errorf("driver: reset before route %d: %w", i, err)
+					return fmt.Errorf("planner: reset before route %d: %w", i, err)
 				}
 			}
 		}
 		for _, ev := range route {
 			if err := d.Do(ctx, ev); err != nil {
-				return fmt.Errorf("driver: route %d event %q: %w", i, ev, err)
+				return fmt.Errorf("planner: route %d event %q: %w", i, ev, err)
 			}
 		}
 	}

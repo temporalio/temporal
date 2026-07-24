@@ -51,7 +51,7 @@ concrete, not hypothetical:
   from the `CompleteWorkflowExecution` command handler. A test whose workflow fails, times
   out, is cancelled/terminated, or continues-as-new leaves its updates non-terminal in the
   model → `LossPrevention`/`Completion`/`ContinueAsNew` fire at `CheckNamespace` → the test
-  fails for a non-bug. `settleWorkflows` only settles *tasks*, not workflows/updates.
+  fails for a non-bug.
 - **Observation-time timestamps.** Entity `…At` fields are `time.Now()` at fact processing,
   not event time; timestamp-comparison rules (`Closure`) rely on span arrival order.
 - **Model fidelity generally.** Any behaviour the model reconstructs imperfectly can trip a
@@ -143,8 +143,8 @@ The fidelity gaps split by capability, which also resolves the settle-vs-detect 
 - **Persistence / CHASM interception** *is* the `internals` capability — powerful, but tagged so
   no rule depending on it is ever expected to run in `canary`. In `local-chasm` it is also the
   *drive* path (`directDrive`).
-- `rpc`-sourced close removes the need for the synthetic `settleWorkflows` hack entirely (real
-  close becomes observable from the client API).
+- `rpc`-sourced close removed the need for the old teardown-settle hack (`settleWorkflows`,
+  since deleted) — real close is now observed from close/terminate facts.
 
 Discipline: **push every rule and action to the widest set of environments its capabilities
 allow**, so the maximum number run in the maximum number of environments.
@@ -176,14 +176,25 @@ allow**, so the maximum number run in the maximum number of environments.
 
 ## Complexity / cleanup
 
-- **Overlapping rules** now mean one real defect fails a test with several violations (noisy,
-  not wrong): `HistoryOrdering` ⊂ `Closure`; `Completion` ≈ `LossPrevention`; the admitted-
-  stuck family (`LossPrevention`/`SpeculativeConversion`/`ContinueAsNew`/`WorkerSkipped`);
-  `SpeculativeTaskRollback` ⊂ `Completion`. Consolidate to reduce noise.
-- `WorkflowUpdateStateConsistency` (92 LoC, 5 branches) — could be table-driven.
-- `settleWorkflows` teardown hack — still papers over missing real terminal signals, and now
-  its incompleteness (tasks only) is a false-positive source.
-- Dead/thin surface: `TaskQueue` (no FSM), dormant `FaultInjector`, leftover ID helpers.
+Done in the latest cleanup pass:
+- **Dead `Flag` removed** — per-entity `Flag` markers were set on every transition but read by
+  no rule (state comes from `Lifecycle.Reached` / `EnteredAt`); `flag.go` and all fields deleted.
+- **Dead `Monitor.Check` / `Reset` removed** — superseded by `CheckNamespace` / `PurgeNamespace`.
+- **`settleWorkflows` gone** — the teardown-settle hack was deleted; closes now settle via
+  observed close/terminate facts (`WorkflowExecutionCompleted` / `WorkflowTerminated` routed to
+  entities), not teardown timing.
+- **Naming aligned to the docs** — framework `Registry`→`ModelState`, `Rulebook`→`RuleRegistry`;
+  active package `driver`→`planner` with the realizer interface `Actuator`→`Driver`; the
+  speculative rule files renamed to match their types.
+
+Still open:
+- **Overlapping rules** (one defect → several violations): `HistoryOrdering` ⊂ `Closure`; the
+  admitted-stuck family (`EntityProgress` / `SpeculativeConversion` / `ContinueAsNew` /
+  `WorkerSkipped`); `SpeculativeTaskRollback` ⊂ `Closure`. Consolidate to reduce noise.
+- **`TaskQueue`** — modelled and fact-decoded but read by no rule; kept only as `WorkflowTask`'s
+  structural parent. Either give it a rule (it carries `LastEmptyPollTime`) or re-parent tasks
+  and drop it.
+- **Dormant `FaultInjector`** — reserved for the Driver's fault actions; intentional, not dead.
 
 ## Design note: a shared FSM abstraction?
 
@@ -299,6 +310,10 @@ larger lift and out of scope. The practical target:
    rule becomes detectable rather than silently passing).
 
 ## Gate run (priority 0) — first result
+
+**Update:** the settle-vs-detect design discussed below has since been resolved — `settleWorkflows`
+was removed and closes now settle via observed close/terminate facts (`workflow.go`). The finding
+below is kept as history; re-run the gate to confirm current detection.
 
 Ran the umpire's own functional suite (`tests/lost_task_test.go`, `FunctionalTestBase` +
 enforcement) under a live in-process cluster. **All three tests fail — the umpire detects

@@ -23,9 +23,9 @@ import (
 // synchronously (no batching delay) and process them inline.
 type Monitor struct {
 	logger   log.Logger
-	registry *umpirefw.Registry
+	registry *umpirefw.ModelState
 	decoder  *model.FactDecoder
-	rulebook *umpirefw.Rulebook
+	rulebook *umpirefw.RuleRegistry
 	factLog  *umpirefw.FactLog
 }
 
@@ -35,12 +35,12 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 		panic("logger is required")
 	}
 
-	registry := umpirefw.NewRegistry()
+	registry := umpirefw.NewModelState()
 	model.RegisterDefaultEntities(registry)
 
 	decoder := model.NewFactDecoder()
 	el := umpirefw.NewFactLog()
-	rb := umpirefw.NewRulebook()
+	rb := umpirefw.NewRuleRegistry()
 
 	// Safety rules — checked on every observation.
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
@@ -48,6 +48,7 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// are derived from the lifecycle's entry times, so they cannot drift.)
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
+	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
 	// rule.EntityTransitionLegality (generic, over any Lifecycled entity) is built
 	// and unit-tested but NOT registered: now that Classify treats forward jumps
 	// over unobserved states as legal (observe-only cannot distinguish a missed
@@ -136,18 +137,6 @@ func (u *Monitor) RecordResponse(ctx context.Context, req, resp any) {
 	}
 }
 
-// Check runs all rules and returns detected violations. When final is
-// true, liveness rules promote pending items to violations.
-func (u *Monitor) Check(ctx context.Context, final ...bool) []any {
-	f := len(final) > 0 && final[0]
-	violations := u.rulebook.Check(ctx, f, nil)
-	result := make([]any, len(violations))
-	for i, v := range violations {
-		result[i] = v
-	}
-	return result
-}
-
 // CheckNamespace runs a final check scoped to a single namespace: only entities
 // rooted at that namespace are evaluated, and their unresolved liveness
 // conditions are promoted to violations. Use it to validate one test's namespace
@@ -170,18 +159,13 @@ func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
 	return umpirefw.NewEntityID(model.NamespaceType, namespaceID)
 }
 
-// Reset clears state between tests.
-func (u *Monitor) Reset() {
-	// No-op for now; state is stateless across checks.
-}
-
 // FactLog returns the event log for querying events in tests.
 func (u *Monitor) FactLog() *umpirefw.FactLog {
 	return u.factLog
 }
 
-// Registry returns the entity registry for querying entities in tests.
-func (u *Monitor) Registry() *umpirefw.Registry {
+// ModelState returns the entity registry for querying entities in tests.
+func (u *Monitor) ModelState() *umpirefw.ModelState {
 	return u.registry
 }
 

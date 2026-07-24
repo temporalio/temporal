@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -100,13 +99,11 @@ func (s *LostTaskTestSuite) TestLostTaskDetection() {
 	s.T().Logf("Waiting for umpire to detect lost task...")
 
 	s.Eventually(func() bool {
-		violations := s.GetMonitor().Check(ctx, true)
+		violations := s.GetMonitor().CheckNamespace(ctx, s.NamespaceID().String())
 		if len(violations) > 0 {
 			s.T().Logf("Monitor detected %d violation(s):", len(violations))
-			for _, vi := range violations {
-				if v, ok := vi.(umpire.Violation); ok {
-					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
-				}
+			for _, v := range violations {
+				s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
 			}
 			return true
 		}
@@ -155,15 +152,13 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetection() {
 	s.T().Logf("Waiting for umpire to detect stuck workflow...")
 
 	s.Eventually(func() bool {
-		violations := s.GetMonitor().Check(ctx, true)
+		violations := s.GetMonitor().CheckNamespace(ctx, s.NamespaceID().String())
 		if len(violations) > 0 {
 			s.T().Logf("Monitor detected %d violation(s):", len(violations))
-			for _, vi := range violations {
-				if v, ok := vi.(umpire.Violation); ok {
-					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
-					if v.Rule == "WorkflowTaskStarvationRule" {
-						return true
-					}
+			for _, v := range violations {
+				s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
+				if v.Rule == "WorkflowTaskStarvationRule" {
+					return true
 				}
 			}
 		}
@@ -241,21 +236,19 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
 	s.T().Logf("Waiting for umpire to detect stuck workflow...")
 
 	s.Eventually(func() bool {
-		violations := s.GetMonitor().Check(ctx, true)
+		violations := s.GetMonitor().CheckNamespace(ctx, s.NamespaceID().String())
 		if len(violations) > 0 {
 			s.T().Logf("Monitor detected %d violation(s):", len(violations))
-			for _, vi := range violations {
-				if v, ok := vi.(umpire.Violation); ok {
-					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
-					// The first workflow task WAS polled (the worker ran the
-					// workflow up to Await), so this is workflow-completion
-					// liveness — the workflow is stuck in "started" — not task
-					// starvation. EntityProgress detects it via MustProgress.
-					if v.Rule == "EntityProgressRule" &&
-						v.Tags["state"] == "started" &&
-						strings.Contains(v.Tags["entity"], workflowID) {
-						return true
-					}
+			for _, v := range violations {
+				s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
+				// The first workflow task WAS polled (the worker ran the
+				// workflow up to Await), so this is workflow-completion
+				// liveness — the workflow is stuck in "started" — not task
+				// starvation. EntityProgress detects it via MustProgress.
+				if v.Rule == "EntityProgressRule" &&
+					v.Tags["state"] == "started" &&
+					strings.Contains(v.Tags["entity"], workflowID) {
+					return true
 				}
 			}
 		}

@@ -1,4 +1,4 @@
-package driver
+package planner
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/server/tests/umpire/model"
 )
 
-// Models is the authoring surface: a catalog of every entity model the driver can
+// Models is the authoring surface: a catalog of every entity model the planner can
 // plan over, keyed by entity type. A developer names targets fully-qualified by
 // entity ("WorkflowUpdate", "completed") instead of first fetching a Lifecycle by
 // hand — which also disambiguates states that several entities share (both
@@ -56,7 +56,7 @@ func (m *Models) Lifecycle(entityType string) (*umpire.Lifecycle, bool) {
 func (m *Models) PlanTo(entityType, target string, mode RouteMode, c Constraints, opts ...Option) (*Plan, error) {
 	lc, ok := m.byType[entityType]
 	if !ok {
-		return nil, fmt.Errorf("driver: unknown entity model %q", entityType)
+		return nil, fmt.Errorf("planner: unknown entity model %q", entityType)
 	}
 	return PlanTo(lc, target, mode, c, opts...)
 }
@@ -65,7 +65,7 @@ func (m *Models) PlanTo(entityType, target string, mode RouteMode, c Constraints
 func (m *Models) Explore(entityType string, c Constraints, opts ...Option) (*Plan, error) {
 	lc, ok := m.byType[entityType]
 	if !ok {
-		return nil, fmt.Errorf("driver: unknown entity model %q", entityType)
+		return nil, fmt.Errorf("planner: unknown entity model %q", entityType)
 	}
 	return Explore(lc, c, opts...), nil
 }

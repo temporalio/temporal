@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateWorkerSkippedRule_DetectsSkippedUpdate(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Admit update, then poll a task (worker ignores the update).
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
@@ -18,7 +18,7 @@ func TestWorkflowUpdateWorkerSkippedRule_DetectsSkippedUpdate(t *testing.T) {
 }
 
 func TestWorkflowUpdateWorkerSkippedRule_NoViolation_UpdateAccepted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowTaskAdded("tq", "wf1", "run1"))
@@ -31,7 +31,7 @@ func TestWorkflowUpdateWorkerSkippedRule_NoViolation_UpdateAccepted(t *testing.T
 }
 
 func TestWorkflowUpdateWorkerSkippedRule_NoViolation_NoPolls(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 
 	violations := checkLivenessRule(reg, &WorkflowUpdateWorkerSkipped{})

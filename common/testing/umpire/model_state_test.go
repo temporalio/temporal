@@ -66,8 +66,8 @@ func newFact(factType string, entityType EntityType, id string) *testFact {
 
 // ── RouteFacts creates entities on demand ────────────────────────────────────
 
-func TestRegistry_RouteFacts_CreatesEntity(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_CreatesEntity(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -83,8 +83,8 @@ func TestRegistry_RouteFacts_CreatesEntity(t *testing.T) {
 	}
 }
 
-func TestRegistry_RouteFacts_ReusesSameEntity(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_ReusesSameEntity(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -99,8 +99,8 @@ func TestRegistry_RouteFacts_ReusesSameEntity(t *testing.T) {
 	}
 }
 
-func TestRegistry_RouteFacts_DifferentIDsCreateDifferentEntities(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_DifferentIDsCreateDifferentEntities(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -115,8 +115,8 @@ func TestRegistry_RouteFacts_DifferentIDsCreateDifferentEntities(t *testing.T) {
 
 // ── Nil identity is silently skipped ─────────────────────────────────────────
 
-func TestRegistry_RouteFacts_NilIdentity_NoError(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_NilIdentity_NoError(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -131,8 +131,8 @@ func TestRegistry_RouteFacts_NilIdentity_NoError(t *testing.T) {
 
 // ── Unregistered entity type is silently skipped ──────────────────────────────
 
-func TestRegistry_RouteFacts_UnregisteredType_NoError(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_UnregisteredType_NoError(t *testing.T) {
+	r := NewModelState()
 	// No factory registered for TypeA
 
 	m := newFact("event", "TypeA", "id1")
@@ -143,8 +143,8 @@ func TestRegistry_RouteFacts_UnregisteredType_NoError(t *testing.T) {
 
 // ── QueryEntities ─────────────────────────────────────────────────────────────
 
-func TestRegistry_QueryEntities_ReturnsAllOfType(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_QueryEntities_ReturnsAllOfType(t *testing.T) {
+	r := NewModelState()
 	var createdA []*TypeA
 	var createdB []*TypeB
 	r.RegisterEntity(newFactoryA(t, &createdA))
@@ -166,8 +166,8 @@ func TestRegistry_QueryEntities_ReturnsAllOfType(t *testing.T) {
 	}
 }
 
-func TestRegistry_QueryEntities_EmptyRegistry(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_QueryEntities_EmptyModelState(t *testing.T) {
+	r := NewModelState()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
 	results := r.QueryEntities("TypeA", 0, nil)
@@ -178,8 +178,8 @@ func TestRegistry_QueryEntities_EmptyRegistry(t *testing.T) {
 
 // ── Parent entity auto-creation ───────────────────────────────────────────────
 
-func TestRegistry_RouteFacts_CreatesParentEntity(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_CreatesParentEntity(t *testing.T) {
+	r := NewModelState()
 	var createdA []*TypeA
 	var createdB []*TypeB
 	r.RegisterEntity(newFactoryA(t, &createdA))
@@ -205,8 +205,8 @@ func TestRegistry_RouteFacts_CreatesParentEntity(t *testing.T) {
 
 // ── Scoped query + purge ──────────────────────────────────────────────────────
 
-func TestRegistry_QueryEntities_ScopeFiltersByRoot(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_QueryEntities_ScopeFiltersByRoot(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -226,8 +226,8 @@ func TestRegistry_QueryEntities_ScopeFiltersByRoot(t *testing.T) {
 	}
 }
 
-func TestRegistry_PurgeScope_RemovesOnlyMatchingRoot(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_PurgeScope_RemovesOnlyMatchingRoot(t *testing.T) {
+	r := NewModelState()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
 	rootX := NewEntityID("TypeB", "x")
@@ -252,8 +252,8 @@ func TestRegistry_PurgeScope_RemovesOnlyMatchingRoot(t *testing.T) {
 
 // ── Multiple events batched to same entity ─────────────────────────────────────
 
-func TestRegistry_RouteFacts_BatchedMovesDeliveredInOrder(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_RouteFacts_BatchedMovesDeliveredInOrder(t *testing.T) {
+	r := NewModelState()
 	var created []*TypeA
 	r.RegisterEntity(newFactoryA(t, &created))
 
@@ -271,8 +271,8 @@ func TestRegistry_RouteFacts_BatchedMovesDeliveredInOrder(t *testing.T) {
 
 // ── Generation tracking (dirty-tracking) ──────────────────────────────────────
 
-func TestRegistry_Generation_IncreasesOnRouteFacts(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_Generation_IncreasesOnRouteFacts(t *testing.T) {
+	r := NewModelState()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
 	if r.Generation() != 0 {
@@ -292,8 +292,8 @@ func TestRegistry_Generation_IncreasesOnRouteFacts(t *testing.T) {
 	}
 }
 
-func TestRegistry_QueryEntities_SinceGeneration_FiltersDirty(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_QueryEntities_SinceGeneration_FiltersDirty(t *testing.T) {
+	r := NewModelState()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
 	// Create entity A.
@@ -316,8 +316,8 @@ func TestRegistry_QueryEntities_SinceGeneration_FiltersDirty(t *testing.T) {
 	}
 }
 
-func TestRegistry_QueryEntities_SinceGeneration_UpdatedEntityBecomesDirty(t *testing.T) {
-	r := NewRegistry()
+func TestModelState_QueryEntities_SinceGeneration_UpdatedEntityBecomesDirty(t *testing.T) {
+	r := NewModelState()
 	r.RegisterEntity(newFactoryA(t, &[]*TypeA{}))
 
 	// Create both entities.

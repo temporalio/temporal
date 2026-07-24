@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateContextClearRule_DetectsStrandedUpdate(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Update admitted, but no pending task and workflow not completed.
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
@@ -17,7 +17,7 @@ func TestWorkflowUpdateContextClearRule_DetectsStrandedUpdate(t *testing.T) {
 }
 
 func TestWorkflowUpdateContextClearRule_DetectsStrandedAcceptedUpdate(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -32,7 +32,7 @@ func TestWorkflowUpdateContextClearRule_DetectsStrandedAcceptedUpdate(t *testing
 }
 
 func TestWorkflowUpdateContextClearRule_NoViolation_PendingTaskExists(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	// Pending task exists.
@@ -45,7 +45,7 @@ func TestWorkflowUpdateContextClearRule_NoViolation_PendingTaskExists(t *testing
 }
 
 func TestWorkflowUpdateContextClearRule_NoViolation_WorkflowCompleted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
@@ -58,7 +58,7 @@ func TestWorkflowUpdateContextClearRule_NoViolation_WorkflowCompleted(t *testing
 }
 
 func TestWorkflowUpdateContextClearRule_NoViolation_UpdateCompleted(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))

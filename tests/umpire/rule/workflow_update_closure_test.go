@@ -5,7 +5,7 @@ import (
 )
 
 func TestWorkflowUpdateClosureRule_DetectsAcceptedAfterClose(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Start and complete workflow.
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
@@ -20,7 +20,7 @@ func TestWorkflowUpdateClosureRule_DetectsAcceptedAfterClose(t *testing.T) {
 }
 
 func TestWorkflowUpdateClosureRule_DetectsCompletedAfterClose(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowCompleted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
@@ -34,7 +34,7 @@ func TestWorkflowUpdateClosureRule_DetectsCompletedAfterClose(t *testing.T) {
 }
 
 func TestWorkflowUpdateClosureRule_NoViolation_WorkflowNotClosed(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	routeFact(t, reg, makeWorkflowStarted("wf1"))
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
@@ -46,7 +46,7 @@ func TestWorkflowUpdateClosureRule_NoViolation_WorkflowNotClosed(t *testing.T) {
 }
 
 func TestWorkflowUpdateClosureRule_NoViolation_UpdateBeforeClose(t *testing.T) {
-	reg := newTestRegistry()
+	reg := newTestModelState()
 	// Update completes before workflow closes.
 	routeFact(t, reg, makeWorkflowUpdateAdmitted("wf1", "upd1"))
 	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))

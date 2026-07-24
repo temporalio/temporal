@@ -1,29 +1,29 @@
-package driver_test
+package planner_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/tests/umpire/driver"
 	"go.temporal.io/server/tests/umpire/model"
+	"go.temporal.io/server/tests/umpire/planner"
 )
 
-// recordingActuator is a fake Actuator: instead of sending RPCs it records the events
+// recordingDriver is a fake Driver: instead of sending RPCs it records the events
 // it was asked to realize, so tests can assert what a Plan drives. A real driver
-// would map each event onto Temporal traffic (see UMPIRE_DRIVER_TEST_UX.md).
-type recordingActuator struct{ events []string }
+// would map each event onto Temporal traffic (see UMPIRE_PLANNER.md).
+type recordingDriver struct{ events []string }
 
-func (d *recordingActuator) Do(_ context.Context, event string) error {
+func (d *recordingDriver) Do(_ context.Context, event string) error {
 	d.events = append(d.events, event)
 	return nil
 }
 
-// A fixed regression test: describe the target state; the driver finds the route.
+// A fixed regression test: describe the target state; the planner finds the route.
 func TestPlanTo_ShortestRouteIsDeterministic(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
-	plan, err := driver.PlanTo(lc, "completed", driver.Shortest, driver.Constraints{})
+	plan, err := planner.PlanTo(lc, "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
 	require.True(t, plan.Reaches("completed"))
 	require.Equal(t, [][]string{{"admit", "complete"}}, plan.Routes)
@@ -34,7 +34,7 @@ func TestPlanTo_ShortestRouteIsDeterministic(t *testing.T) {
 func TestPlanTo_AllRoutes(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
-	plan, err := driver.PlanTo(lc, "completed", driver.AllRoutes, driver.Constraints{})
+	plan, err := planner.PlanTo(lc, "completed", planner.AllRoutes, planner.Constraints{})
 	require.NoError(t, err)
 	require.ElementsMatch(t, [][]string{
 		{"admit", "complete"},           // accept+complete in one WFT
@@ -46,9 +46,9 @@ func TestPlanTo_AllRoutes(t *testing.T) {
 func TestPlanTo_RandomIsSeeded(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
-	a, err := driver.PlanTo(lc, "completed", driver.Random, driver.Constraints{}, driver.WithSeed(42))
+	a, err := planner.PlanTo(lc, "completed", planner.Random, planner.Constraints{}, planner.WithSeed(42))
 	require.NoError(t, err)
-	b, err := driver.PlanTo(lc, "completed", driver.Random, driver.Constraints{}, driver.WithSeed(42))
+	b, err := planner.PlanTo(lc, "completed", planner.Random, planner.Constraints{}, planner.WithSeed(42))
 	require.NoError(t, err)
 	require.Equal(t, a.Routes, b.Routes, "same seed must yield the same route")
 }
@@ -59,12 +59,12 @@ func TestPlanTo_UnreachableFailsFast(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
 	// "accepted" is reachable in general, but not if "accept" is forbidden.
-	_, err := driver.PlanTo(lc, "accepted", driver.Shortest,
-		driver.Constraints{DenyEvents: []string{"accept"}})
+	_, err := planner.PlanTo(lc, "accepted", planner.Shortest,
+		planner.Constraints{DenyEvents: []string{"accept"}})
 	require.Error(t, err)
 
 	// A state the model simply does not have is rejected outright.
-	_, err = driver.PlanTo(lc, "no_such_state", driver.Shortest, driver.Constraints{})
+	_, err = planner.PlanTo(lc, "no_such_state", planner.Shortest, planner.Constraints{})
 	require.Error(t, err)
 }
 
@@ -73,20 +73,20 @@ func TestPlanTo_UnreachableFailsFast(t *testing.T) {
 func TestPlanTo_ConstraintsShapeTheRoute(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
-	plan, err := driver.PlanTo(lc, "completed", driver.Shortest,
-		driver.Constraints{DenyStates: []string{"rejected", "aborted"}})
+	plan, err := planner.PlanTo(lc, "completed", planner.Shortest,
+		planner.Constraints{DenyStates: []string{"rejected", "aborted"}})
 	require.NoError(t, err)
 	require.NotContains(t, flatten(plan.Routes), "reject")
 	require.NotContains(t, flatten(plan.Routes), "abort")
 }
 
-// Run drives the planned route through an Actuator, in order.
+// Run drives the planned route through an Driver, in order.
 func TestPlan_RunDrivesTheRoute(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
-	plan, err := driver.PlanTo(lc, "completed", driver.Shortest, driver.Constraints{})
+	plan, err := planner.PlanTo(lc, "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
 
-	d := &recordingActuator{}
+	d := &recordingDriver{}
 	require.NoError(t, plan.Run(context.Background(), d))
 	require.Equal(t, []string{"admit", "complete"}, d.events)
 }
@@ -96,9 +96,9 @@ func TestPlan_RunDrivesTheRoute(t *testing.T) {
 func TestExplore_StaysWithinConstraints(t *testing.T) {
 	lc := model.NewWorkflowUpdate().Lifecycle()
 
-	plan := driver.Explore(lc,
-		driver.Constraints{DenyEvents: []string{"reject", "abort"}, MaxDepth: 5},
-		driver.WithSeed(1))
+	plan := planner.Explore(lc,
+		planner.Constraints{DenyEvents: []string{"reject", "abort"}, MaxDepth: 5},
+		planner.WithSeed(1))
 
 	require.NotEmpty(t, plan.Routes[0])
 	for _, ev := range plan.Routes[0] {
@@ -109,9 +109,9 @@ func TestExplore_StaysWithinConstraints(t *testing.T) {
 // The catalog is the ergonomic surface: no hand-fetched Lifecycle, and states are
 // named fully-qualified by entity.
 func TestModels_PlanByQualifiedState(t *testing.T) {
-	models := driver.DefaultModels()
+	models := planner.DefaultModels()
 
-	plan, err := models.PlanTo("WorkflowUpdate", "completed", driver.Shortest, driver.Constraints{})
+	plan, err := models.PlanTo("WorkflowUpdate", "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"admit", "complete"}}, plan.Routes)
 }
@@ -119,19 +119,19 @@ func TestModels_PlanByQualifiedState(t *testing.T) {
 // "completed" is ambiguous across entities — qualifying by entity disambiguates it.
 // Workflow reaches completed via start->complete; WorkflowUpdate via admit->complete.
 func TestModels_QualifiedStateDisambiguates(t *testing.T) {
-	models := driver.DefaultModels()
+	models := planner.DefaultModels()
 
-	wf, err := models.PlanTo("Workflow", "completed", driver.Shortest, driver.Constraints{})
+	wf, err := models.PlanTo("Workflow", "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"start", "complete"}}, wf.Routes)
 
-	upd, err := models.PlanTo("WorkflowUpdate", "completed", driver.Shortest, driver.Constraints{})
+	upd, err := models.PlanTo("WorkflowUpdate", "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"admit", "complete"}}, upd.Routes)
 }
 
 func TestModels_UnknownEntity(t *testing.T) {
-	_, err := driver.DefaultModels().PlanTo("Nope", "completed", driver.Shortest, driver.Constraints{})
+	_, err := planner.DefaultModels().PlanTo("Nope", "completed", planner.Shortest, planner.Constraints{})
 	require.Error(t, err)
 }
 

@@ -52,6 +52,18 @@ func (p WorkflowPath) Update(updateID string) string {
 	})
 }
 
+// NexusOperation returns the registry key for a Nexus operation entity, keyed
+// under its caller workflow. The operation's own ID is "<workflowID>:<schedEventID>",
+// matching the HSM node identity.
+func (p WorkflowPath) NexusOperation(scheduledEventID string) string {
+	ancestors := Namespace(p.namespaceID).ancestors()
+	ancestors = append(ancestors, umpirefw.NewEntityID(fact.WorkflowType, p.workflowID))
+	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
+		EntityID:  umpirefw.NewEntityID(fact.NexusOperationType, p.workflowID+":"+scheduledEventID),
+		Ancestors: ancestors,
+	})
+}
+
 // Task returns the registry key for a workflow task entity
 // (keyed under its task queue).
 func (p WorkflowPath) Task(taskQueue, runID string) string {

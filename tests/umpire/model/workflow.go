@@ -53,17 +53,10 @@ type Workflow struct {
 	StartedAt   time.Time
 	CompletedAt time.Time
 	LastSeenAt  time.Time
-
-	// Live Flags
-	Running     *umpire.Flag
-	WfCompleted *umpire.Flag
 }
 
 func NewWorkflow() *Workflow {
-	wf := &Workflow{
-		Running:     umpire.NewFlag("Workflow:Running"),
-		WfCompleted: umpire.NewFlag("Workflow:Completed"),
-	}
+	wf := &Workflow{}
 	wf.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: "created",
 		Transitions: []umpire.Transition{
@@ -97,7 +90,6 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 			}
 			if wf.FSM.Fire(ctx, "start") {
 				wf.StartedAt = time.Now()
-				wf.Running.Set()
 			}
 			wf.LastSeenAt = time.Now()
 		case *fact.WorkflowExecutionCompleted:
@@ -106,8 +98,6 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 			}
 			if wf.FSM.Fire(ctx, "complete") {
 				wf.CompletedAt = time.Now()
-				wf.Running.Clear()
-				wf.WfCompleted.Set()
 			}
 			wf.LastSeenAt = time.Now()
 		}

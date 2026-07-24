@@ -36,19 +36,10 @@ type WorkflowTask struct {
 	StoredAt      time.Time
 	IsSpeculative bool
 	ScheduledAt   time.Time
-
-	// Live Flags — set by FSM transitions.
-	Added  *umpire.Flag
-	Polled *umpire.Flag
-	Stored *umpire.Flag
 }
 
 func NewWorkflowTask() *WorkflowTask {
-	wt := &WorkflowTask{
-		Added:  umpire.NewFlag("WorkflowTask:Added"),
-		Polled: umpire.NewFlag("WorkflowTask:Polled"),
-		Stored: umpire.NewFlag("WorkflowTask:Stored"),
-	}
+	wt := &WorkflowTask{}
 	wt.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: "created",
 		Transitions: []umpire.Transition{
@@ -93,17 +84,14 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 			}
 			if wt.FSM.Fire(ctx, "add") {
 				wt.AddedAt = time.Now()
-				wt.Added.Set()
 			}
 		case *fact.WorkflowTaskPolled:
 			if e.TaskReturned && wt.FSM.Fire(ctx, "poll") {
 				wt.PolledAt = time.Now()
-				wt.Polled.Set()
 			}
 		case *fact.WorkflowTaskStored:
 			if wt.FSM.Fire(ctx, "store") {
 				wt.StoredAt = time.Now()
-				wt.Stored.Set()
 			}
 		case *fact.WorkflowTaskDiscarded:
 			// Best-effort settle: use the guarded form so discarding an already
@@ -126,7 +114,6 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 			wt.ScheduledAt = time.Now()
 			if wt.FSM.Fire(ctx, "add") {
 				wt.AddedAt = wt.ScheduledAt
-				wt.Added.Set()
 			}
 		}
 	}
