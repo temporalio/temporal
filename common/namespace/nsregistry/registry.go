@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -276,6 +277,32 @@ func (r *registry) GetAllNamespaces() []*namespace.Namespace {
 	return expmaps.Values(r.idToNamespace)
 }
 
+// formatCallbackKey renders a state-change callback key for logging. Keys are arbitrary values,
+// often the registrant itself (e.g. *WorkflowHandler). Formatting a struct or pointer with %v
+// deep-prints its fields via reflection, which can race with concurrent mutation of an internal
+// map and crash the process ("concurrent map iteration and map write"). To stay safe, only scalar
+// values and fmt.Stringer keys (e.g. uuid.UUID) are printed by value; anything else is rendered as
+// its type and address.
+func formatCallbackKey(key any) string {
+	if s, ok := key.(fmt.Stringer); ok {
+		return s.String()
+	}
+	v := reflect.ValueOf(key)
+	switch v.Kind() {
+	case reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return fmt.Sprintf("%v", key)
+	case reflect.Pointer, reflect.Chan, reflect.Map, reflect.Func, reflect.UnsafePointer:
+		// Type + address only; never traverse fields.
+		return fmt.Sprintf("%T(0x%x)", key, v.Pointer())
+	default:
+		// Non-scalar, non-pointer value (e.g. a struct passed by value): type only.
+		return fmt.Sprintf("%T", key)
+	}
+}
+
 func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChangeCallbackFn) {
 	// Store callback first to avoid race where watch events arrive between reading the namespace snapshot and storing the
 	// callback. This ensures no events are missed, but introduces a different trade-off: The callback may receive duplicate
@@ -295,7 +322,7 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 				metrics.NamespaceRegistrySlowCallbacks.With(r.metricsHandler).Record(1)
 				r.logger.Warn(
 					"Namespace registry callback slow",
-					tag.Key(fmt.Sprintf("%v", key)),
+					tag.Key(formatCallbackKey(key)),
 					tag.Duration("duration", duration),
 				)
 			}
