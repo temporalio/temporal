@@ -309,17 +309,54 @@ func (util *TimeSkippingInfoUtil) HasPendingFastForward() bool {
 		return false
 	}
 	ff := util.tsi.GetFastForwardInfo()
-	return ff != nil &&
-		!ff.GetHasReached() &&
-		ff.GetTargetTime() != nil &&
-		!ff.GetTargetTime().AsTime().IsZero()
+	ffTargetTime := util.GetFastForwardTargetTime()
+	if ff == nil || ffTargetTime == nil {
+		return false
+	}
+	return !ff.GetHasReached()
+}
+
+func (util *TimeSkippingInfoUtil) GetFastForwardTargetTime() *timestamppb.Timestamp {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil || ff.GetTargetTime() == nil {
+		return nil
+	}
+	targetTime := ff.GetTargetTime().AsTime()
+	if targetTime.IsZero() {
+		return nil
+	}
+	return ff.TargetTime
 }
 
 // IsEnabled reports whether time skipping is enabled. Nil-safe: a nil util, nil info, or nil config
 // all yield false.
+//
+// Deprecated: use IsRunning instead
 func (util *TimeSkippingInfoUtil) IsEnabled() bool {
 	if util == nil || util.tsi == nil {
 		return false
+	}
+	return util.tsi.GetConfig().GetEnabled()
+}
+
+func (util *TimeSkippingInfoUtil) IsRunning(now time.Time) bool {
+	if util == nil || util.tsi == nil {
+		return false
+	}
+	hasSkipQuota := util.tsi.Config.GetMaxSkipPerSession() > util.tsi.GetSessionSkipCount()
+	if !hasSkipQuota {
+		return false
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	ffTargetTime := util.GetFastForwardTargetTime()
+	if ff != nil && ffTargetTime != nil {
+		hasFfQuota := ffTargetTime.AsTime().After(now)
+		if !hasFfQuota {
+			return false
+		}
 	}
 	return util.tsi.GetConfig().GetEnabled()
 }
@@ -330,7 +367,7 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 	}
 	return &commonpb.TimeSkippingInfo{
 		CurrentTime:     timestamppb.New(currentTime),
-		IsRunning:       util.IsEnabled(),
+		IsRunning:       util.IsRunning(currentTime),
 		FastForwardInfo: util.ToFastForwardInfo(),
 		StopReason:      util.tsi.GetStopReason(),
 	}
