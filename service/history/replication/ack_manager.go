@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -68,6 +69,7 @@ type (
 		syncVersionedTransitionTaskConverter *syncVersionedTransitionTaskConverter
 		pageSize                             dynamicconfig.IntPropertyFn
 		maxSkipTaskCount                     dynamicconfig.IntPropertyFn
+		readBuffer                           *readBuffer
 
 		sync.Mutex
 		// largest replication task ID generated
@@ -102,6 +104,8 @@ func NewAckManager(
 
 	currentClusterName := shardContext.GetClusterMetadata().GetCurrentClusterName()
 	config := shardContext.GetConfig()
+	metricsHandler := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope))
+	taggedLogger := log.With(logger, tag.ComponentReplicatorQueue)
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
 		WithMaximumAttempts(5).
@@ -115,13 +119,14 @@ func NewAckManager(
 		eventBlobCache:                       eventBlobCache,
 		replicationProgressCache:             replicationProgressCache,
 		executionMgr:                         executionMgr,
-		metricsHandler:                       shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
-		logger:                               log.With(logger, tag.ComponentReplicatorQueue),
+		metricsHandler:                       metricsHandler,
+		logger:                               taggedLogger,
 		retryPolicy:                          retryPolicy,
 		namespaceRegistry:                    shardContext.GetNamespaceRegistry(),
 		syncVersionedTransitionTaskConverter: newSyncVersionedTransitionTaskConverter(shardContext, workflowCache, eventBlobCache, replicationProgressCache, executionMgr, syncStateRetriever, logger),
 		pageSize:                             config.ReplicatorProcessorFetchTasksBatchSize,
 		maxSkipTaskCount:                     config.ReplicatorProcessorMaxSkipTaskCount,
+		readBuffer:                           &readBuffer{capacityFn: config.ReplicationStreamReadBufferSize, metricsHandler: metricsHandler, logger: taggedLogger, serializer: serialization.NewSerializer()},
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
@@ -521,21 +526,60 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 	minInclusiveTaskID int64,
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
-	return collection.NewPagingIterator(func(paginationToken []byte) ([]tasks.Task, []byte, error) {
-		ctx1, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		response, err := p.executionMgr.GetHistoryTasks(ctx1, &persistence.GetHistoryTasksRequest{
-			ShardID:             p.shardContext.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.NewImmediateKey(minInclusiveTaskID),
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxExclusiveTaskID),
-			BatchSize:           p.config.ReplicatorProcessorFetchTasksBatchSize(),
-			NextPageToken:       paginationToken,
-		})
+	// Reads go through the shard's replication read buffer, so the overlapping tip
+	// scans of every stream and lane share one persistence read. Pagination is by
+	// task id (the buffer serves covered ranges from memory); a non-empty token just
+	// marks that the range is not exhausted.
+	nextMinTaskID := minInclusiveTaskID
+	return collection.NewPagingIterator(func(_ []byte) ([]tasks.Task, []byte, error) {
+		page, next, err := p.readBuffer.readPage(
+			nextMinTaskID,
+			maxExclusiveTaskID,
+			func(fetchMinInclusive int64, fetchMaxExclusive int64) ([]tasks.Task, int64, error) {
+				// A store may legally return an empty page with a continuation
+				// token (e.g. Cassandra paging); an empty page is only
+				// authoritative for the range when the token is empty too, so
+				// keep paging until tasks arrive or the token runs out.
+				var pageToken []byte
+				for {
+					response, err := func() (*persistence.GetHistoryTasksResponse, error) {
+						ctx1, cancel := context.WithTimeout(ctx, 30*time.Second)
+						defer cancel()
+						return p.executionMgr.GetHistoryTasks(ctx1, &persistence.GetHistoryTasksRequest{
+							ShardID:             p.shardContext.GetShardID(),
+							TaskCategory:        tasks.CategoryReplication,
+							InclusiveMinTaskKey: tasks.NewImmediateKey(fetchMinInclusive),
+							ExclusiveMaxTaskKey: tasks.NewImmediateKey(fetchMaxExclusive),
+							BatchSize:           p.config.ReplicatorProcessorFetchTasksBatchSize(),
+							NextPageToken:       pageToken,
+						})
+					}()
+					if err != nil {
+						return nil, 0, err
+					}
+					metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
+					if len(response.Tasks) == 0 && len(response.NextPageToken) > 0 {
+						pageToken = response.NextPageToken
+						continue
+					}
+					coveredTo := fetchMaxExclusive
+					if len(response.NextPageToken) > 0 {
+						// Page-size truncation: the read is only authoritative
+						// through the last task it returned.
+						coveredTo = response.Tasks[len(response.Tasks)-1].GetTaskID() + 1
+					}
+					return response.Tasks, coveredTo, nil
+				}
+			},
+		)
 		if err != nil {
 			return nil, nil, err
 		}
-		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
-		return response.Tasks, response.NextPageToken, nil
+		nextMinTaskID = next
+		var token []byte
+		if next != 0 {
+			token = []byte{1}
+		}
+		return page, token, nil
 	}), nil
 }
