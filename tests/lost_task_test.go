@@ -24,7 +24,7 @@ type LostTaskTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestUmpireLostTaskTestSuite(t *testing.T) {
+func TestMonitorLostTaskTestSuite(t *testing.T) {
 	// Enable OTEL debug mode to capture proto payloads in spans
 	t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 	suite.Run(t, new(LostTaskTestSuite))
@@ -41,9 +41,9 @@ func (s *LostTaskTestSuite) SetupSuite() {
 // 1. A workflow task is stored to persistence
 // 2. The task is deleted from persistence via CompleteTasksLessThan
 // 3. A worker polls the task queue and gets an empty response
-// 4. Umpire detects that a task was stored but never successfully polled
+// 4. Monitor detects that a task was stored but never successfully polled
 func (s *LostTaskTestSuite) TestLostTaskDetection() {
-	s.AllowUmpireViolations()
+	s.AllowMonitorViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -100,9 +100,9 @@ func (s *LostTaskTestSuite) TestLostTaskDetection() {
 	s.T().Logf("Waiting for umpire to detect lost task...")
 
 	s.Eventually(func() bool {
-		violations := s.GetUmpire().Check(ctx, true)
+		violations := s.GetMonitor().Check(ctx, true)
 		if len(violations) > 0 {
-			s.T().Logf("Umpire detected %d violation(s):", len(violations))
+			s.T().Logf("Monitor detected %d violation(s):", len(violations))
 			for _, vi := range violations {
 				if v, ok := vi.(umpire.Violation); ok {
 					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
@@ -110,7 +110,7 @@ func (s *LostTaskTestSuite) TestLostTaskDetection() {
 			}
 			return true
 		}
-		s.T().Logf("Umpire Check returned 0 violations, waiting...")
+		s.T().Logf("Monitor Check returned 0 violations, waiting...")
 		return false
 	}, 30*time.Second, 1*time.Second, "Expected umpire to detect lost task")
 
@@ -130,9 +130,9 @@ func (s *LostTaskTestSuite) TestLostTaskDetection() {
 // This test simulates a scenario where:
 // 1. A workflow is started
 // 2. The workflow never receives a RespondWorkflowTaskCompleted response
-// 3. Umpire detects the workflow is stuck in the "started" state
+// 3. Monitor detects the workflow is stuck in the "started" state
 func (s *LostTaskTestSuite) TestStuckWorkflowDetection() {
-	s.AllowUmpireViolations()
+	s.AllowMonitorViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -155,9 +155,9 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetection() {
 	s.T().Logf("Waiting for umpire to detect stuck workflow...")
 
 	s.Eventually(func() bool {
-		violations := s.GetUmpire().Check(ctx, true)
+		violations := s.GetMonitor().Check(ctx, true)
 		if len(violations) > 0 {
-			s.T().Logf("Umpire detected %d violation(s):", len(violations))
+			s.T().Logf("Monitor detected %d violation(s):", len(violations))
 			for _, vi := range violations {
 				if v, ok := vi.(umpire.Violation); ok {
 					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
@@ -167,7 +167,7 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetection() {
 				}
 			}
 		}
-		s.T().Logf("Umpire Check returned 0 stuck workflow violations, waiting...")
+		s.T().Logf("Monitor Check returned 0 stuck workflow violations, waiting...")
 		return false
 	}, 60*time.Second, 1*time.Second, "Expected umpire to detect stuck workflow")
 
@@ -202,7 +202,7 @@ func stuckAwaitWorkflow(ctx workflow.Context) error {
 // 4. Stop the worker immediately to prevent workflow task completion
 // 5. Wait for umpire to detect the workflow is stuck (no RespondWorkflowTaskCompleted)
 func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
-	s.AllowUmpireViolations()
+	s.AllowMonitorViolations()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -241,9 +241,9 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
 	s.T().Logf("Waiting for umpire to detect stuck workflow...")
 
 	s.Eventually(func() bool {
-		violations := s.GetUmpire().Check(ctx, true)
+		violations := s.GetMonitor().Check(ctx, true)
 		if len(violations) > 0 {
-			s.T().Logf("Umpire detected %d violation(s):", len(violations))
+			s.T().Logf("Monitor detected %d violation(s):", len(violations))
 			for _, vi := range violations {
 				if v, ok := vi.(umpire.Violation); ok {
 					s.T().Logf("  [%s] %s - Tags: %v", v.Rule, v.Message, v.Tags)
@@ -259,7 +259,7 @@ func (s *LostTaskTestSuite) TestStuckWorkflowDetectionWithSDK() {
 				}
 			}
 		}
-		s.T().Logf("Umpire Check returned 0 stuck workflow violations for %s, waiting...", workflowID)
+		s.T().Logf("Monitor Check returned 0 stuck workflow violations for %s, waiting...", workflowID)
 		return false
 	}, 70*time.Second, 2*time.Second, "Expected umpire to detect stuck workflow with Await")
 

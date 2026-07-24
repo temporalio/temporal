@@ -4,8 +4,8 @@ Notes from reading the [Omes](../omes) load generator, focused on its **Kitchen 
 workflow and the machinery around it. Omes is Temporal's load/benchmark generator, but the
 part that matters to us is orthogonal to load: it is the one place in the ecosystem that has
 already solved **"drive arbitrary Temporal behaviour, in every SDK language, from a single
-declarative description."** That is exactly the workload substrate the Pitcher wants
-([`PITCHER.md`](./PITCHER.md) observation #2: *"Reuse Omes kitchensink workflows as the
+declarative description."** That is exactly the workload substrate the Driver wants
+([`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md) observation #2: *"Reuse Omes kitchensink workflows as the
 workload rather than a bespoke DSL"*), and it is the language-agnostic execution surface the
 SAA model's "drivers" abstraction ([`SAAMODEL.md`](./SAAMODEL.md)) needs to reach beyond one
 white-box engine. For the other design references see [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
@@ -190,21 +190,21 @@ ProjectService.Execute` in the seam diagram above), and its role is specific:
   language — not the Go raw-RPC driver.
 - **The one generalization it needs to become reactive.** As-is, `Execute` is coarse — "do one
   whole iteration and verify," open-loop within the iteration. A reactive Mode-2 driver (the SAA
-  explorer / Pitcher, guarding over the Umpire model) needs to choose the *next single action*
+  explorer / Driver, guarding over the Umpire model) needs to choose the *next single action*
   after observing. That is the *"extend the `project` harness into a streaming `Step`-per-action
   RPC"* note under "Reconciling…": generalize `Execute` → a `Step(action) → effect` stream, the
   runner picking each action from the model and the harness realizing it through the SDK client.
   The `Init` / gRPC / two-role skeleton is already the right shape; only the granularity of the
   drive RPC changes.
 
-## Why this matters to Umpire / Pitcher / SAA
+## Why this matters to Umpire / Driver / SAA
 
-Omes solves three problems the active side (Pitcher) and the model side (SAA) would otherwise
+Omes solves three problems the active side (Driver) and the model side (SAA) would otherwise
 have to re-solve:
 
 1. **A declarative, replayable workload.** `TestInput` is data: hand-write it for a targeted
    case, generate + save it for fuzzing, replay a binary for regression. A Play in
-   `PITCHER.md` is *"ordered/guarded []Pitch + input parameters"* — structurally the same idea
+   `UMPIRE_DRIVER.md` is *"ordered/guarded []Action + input parameters"* — structurally the same idea
    at the client layer. Reusing the DSL means not inventing a second workflow-authoring
    grammar.
 2. **One workload, every SDK, for free.** The Kitchen Sink is implemented once per language
@@ -216,7 +216,7 @@ have to re-solve:
    `DoStandaloneNexusOperation` / `do_query` / `do_describe` are frontend RPCs with **no
    workflow or worker involved** — black-box by construction, canary-portable. They line up
    directly with the SAA *standalone-activity* archetype (raw `StartActivityExecution` +
-   poll) and with the Pitcher's black-box Pitches.
+   poll) and with the Driver's black-box actions.
 
 ### The seam that unifies it (see the marriage design)
 
@@ -310,7 +310,7 @@ already has locally?**
 
 Maximize the top two — that is what buys any-language execution and replay; use the bottom only
 where you must — those are the "interesting" pitches. This is the TigerBeetle/VOPR shape
-`PITCHER.md` gestures at: a cheap **declarative background plane** (Kitchen Sink `TestInput`,
+`UMPIRE_DRIVER.md` gestures at: a cheap **declarative background plane** (Kitchen Sink `TestInput`,
 open-loop, any language) carries the boring ambient traffic, while the interesting scenario is a
 **reactive foreground plane** of predicate-guarded raw-RPC pitches on top. The two planes share
 `EntityPath` addressing and deterministic IDs, so a raw-RPC pitch can target an entity the
@@ -329,7 +329,7 @@ Kitchen Sink workload created.
   the *plan* is not reproducible but the *sequence that actually fired* is. Record the driver's
   decisions + the `TestInput`/`ActionSet`s it delivered and replay that exact trace — Omes' own
   discipline (*"save the binary, not just the seed"*, since a seed only reproduces under an
-  identical config) and `PITCHER.md`'s *"separate run from eval."*
+  identical config) and `UMPIRE_DRIVER.md`'s *"separate run from eval."*
 
 The tension dissolves once Kitchen Sink stops being the whole test and becomes a **pre-installed,
 any-language interpreter fed reactively**, with a principled line between declarative and reactive
@@ -359,7 +359,7 @@ same machinery, opposite knob.
 | **Oracle it needs** | **must** be the total-function model — a random program has no hand-written expected values, so only a total oracle can judge (this is where "total function kills the vacuous pass" matters most) | model oracle *plus* the path's own known intent as a second, independent check, and cross-SDK parity |
 | **Coverage** | breadth by luck, measured after the fact | intrinsic: the branch space *is* `Reachable()`; choosing paths *is* `traverse()`/`randomWalk()`; unreached branches = coverage gap |
 | **Replay** | save the binary (`TestInput`) | save the realized trace (the choices made) |
-| **Maps to** | SAA fuzzer / `PITCHER.md` P4; the Omes fuzzer *with an oracle attached* | SAA explorer (BFS/random-walk) realized through the any-language worker; `PITCHER.md` P2/P3 |
+| **Maps to** | SAA fuzzer / `UMPIRE_DRIVER.md` P4; the Omes fuzzer *with an oracle attached* | SAA explorer (BFS/random-walk) realized through the any-language worker; `UMPIRE_DRIVER.md` P2/P3 |
 
 **Mode 2 is the SAA explorer generalized to drive the any-language worker instead of only the
 in-process engine.** SAA's `traverse()`/`randomWalk()` walk the model graph and realize each event
@@ -383,16 +383,16 @@ The Mode-2 "menu" can carry more or less intent:
 
 ## What to steal (concrete)
 
-1. **Adopt `TestInput` as the SDK realizer's target format**, not a new grammar. A Pitcher
+1. **Adopt `TestInput` as the SDK realizer's target format**, not a new grammar. A Driver
    "Omes adapter" compiles an abstract trace (or a Play) into `TestInput` and hands it to
    `KitchenSinkExecutor` / a language worker. Free multi-language reach.
-2. **Reuse the standalone/client RPC actions as black-box Pitches.** `DoStandaloneActivity`
-   and friends are already worker-free frontend calls — the canary-portable Pitch set, and the
+2. **Reuse the standalone/client RPC actions as black-box actions.** `DoStandaloneActivity`
+   and friends are already worker-free frontend calls — the canary-portable action set, and the
    direct analogue of the SAA standalone driver.
 3. **Copy the replayability discipline.** Saved binary programs (not just seeds) + a curated
    `fuzz_cases.yaml` + a trophy case. This is exactly the *"separate run from eval, capture the
-   Game, re-check offline"* constraint in `PITCHER.md`, already proven in Omes.
-4. **Reuse the `project` gRPC harness shape** for driving native SDK code the Pitcher doesn't
+   run, re-check offline"* constraint in `UMPIRE_DRIVER.md`, already proven in Omes.
+4. **Reuse the `project` gRPC harness shape** for driving native SDK code the Driver doesn't
    own — an existing, language-agnostic "external orchestrator drives a worker process over
    gRPC" contract.
 5. **Treat the per-language behavioural-equivalence of Kitchen Sink as a differential oracle.**
@@ -411,8 +411,8 @@ The Mode-2 "menu" can carry more or less intent:
   actions (or to a raw RPC when no workflow is involved) — the DSL is a target, not a drop-in
   replacement for the event alphabet.
 - **No fault injection.** Omes cannot drop/delay/corrupt an RPC; it only issues well-formed
-  calls. The grey/white-box Pitches (`FaultInjector`) remain ours to build.
+  calls. The grey/white-box actions (`FaultInjector`) remain ours to build.
 - **Load-shaped, not exploration-shaped.** `GenericExecutor` is a steady-rate concurrency
   driver; it has no notion of predicate-guarded steps or model-directed BFS. The
-  guard-over-the-model driving (`PITCHER.md`) and the `Reachable`-derived traversal
+  guard-over-the-model driving (`UMPIRE_DRIVER.md`) and the `Reachable`-derived traversal
   (`SAAMODEL.md`) sit above Omes, using it only as the execution backend.

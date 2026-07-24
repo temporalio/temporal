@@ -304,12 +304,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
-	// Validate and purge this env's namespace against the umpire when the test
+	// Validate and purge this env's namespace against the monitor when the test
 	// ends. Registered here (not in the testify TearDownTest hook, which does not
 	// run for NewEnv-based tests) so every test env is checked and its data is
-	// dropped from the shared cluster's umpire.
+	// dropped from the shared cluster's monitor.
 	t.Cleanup(func() {
-		env.CheckAndPurgeUmpire(t, nsID.String())
+		env.CheckAndPurgeMonitor(t, nsID.String())
 	})
 	t.Cleanup(func() {
 		defer func() { dedicatedGuard = nil }()

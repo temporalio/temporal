@@ -68,11 +68,11 @@ type (
 
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
-		umpire       *umpiretest.Umpire
-		// umpireViolationsExpected suppresses teardown enforcement for the current
-		// test (set via AllowUmpireViolations). Used only by the umpire's own
+		monitor      *umpiretest.Monitor
+		// monitorViolationsExpected suppresses teardown enforcement for the current
+		// test (set via AllowMonitorViolations). Used only by the monitor's own
 		// detector tests, which deliberately drive the system into a bad state.
-		umpireViolationsExpected bool
+		monitorViolationsExpected bool
 
 		t *sharedClusterT // proxy T backing Logger; tracks active tests and cluster poison state
 
@@ -267,18 +267,18 @@ func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
 }
 
-func (s *FunctionalTestBase) GetUmpire() *umpiretest.Umpire {
-	if s.umpire == nil {
-		panic("Umpire not initialized - did you forget to call SetupSuite()?")
+func (s *FunctionalTestBase) GetMonitor() *umpiretest.Monitor {
+	if s.monitor == nil {
+		panic("Monitor not initialized - did you forget to call SetupSuite()?")
 	}
-	return s.umpire
+	return s.monitor
 }
 
 // RequireRulePassed asserts that the given rule evaluated the entity identified
 // by entityKey and found no violation.
 func (s *FunctionalTestBase) RequireRulePassed(rule interface{ Name() string }, entityKey string) {
 	s.T().Helper()
-	s.GetUmpire().RequireRulePassed(s.T(), rule, entityKey)
+	s.GetMonitor().RequireRulePassed(s.T(), rule, entityKey)
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
@@ -326,14 +326,14 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 
 	var err error
 
-	// The umpire (property-based test observer) is enabled by default on every
+	// The monitor (property-based test observer) is enabled by default on every
 	// cluster: it observes gRPC calls and OTEL spans and validates property rules.
-	// Access it via GetUmpire().
-	s.umpire, err = umpiretest.NewUmpire(s.Logger)
+	// Access it via GetMonitor().
+	s.monitor, err = umpiretest.NewMonitor(s.Logger)
 	s.Require().NoError(err)
 
 	additionalInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(params.AdditionalInterceptors)+1)
-	additionalInterceptors = append(additionalInterceptors, umpiretest.NewUnaryServerInterceptor(s.umpire, nil))
+	additionalInterceptors = append(additionalInterceptors, umpiretest.NewUnaryServerInterceptor(s.monitor, nil))
 	additionalInterceptors = append(additionalInterceptors, params.AdditionalInterceptors...)
 
 	s.testClusterConfig = &TestClusterConfig{
@@ -371,7 +371,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		}
 	}
 
-	s.testClusterConfig.SpanProcessors = append(s.testClusterConfig.SpanProcessors, s.umpire)
+	s.testClusterConfig.SpanProcessors = append(s.testClusterConfig.SpanProcessors, s.monitor)
 
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
@@ -511,43 +511,43 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
-	if s.umpire != nil {
-		s.CheckAndPurgeUmpire(s.T(), s.namespaceID.String())
-		if err := s.umpire.Shutdown(context.Background()); err != nil {
-			s.T().Logf("umpire shutdown error: %v", err)
+	if s.monitor != nil {
+		s.CheckAndPurgeMonitor(s.T(), s.namespaceID.String())
+		if err := s.monitor.Shutdown(context.Background()); err != nil {
+			s.T().Logf("monitor shutdown error: %v", err)
 		}
 	}
 	s.tearDownSdk()
 }
 
-// CheckAndPurgeUmpire runs the property rules against the given namespace, fails
+// CheckAndPurgeMonitor runs the property rules against the given namespace, fails
 // t on any violation, then purges that namespace's collected data so a shared
-// cluster's umpire carries nothing into the next test. It is a no-op when the
-// umpire is disabled or the namespace is empty.
+// cluster's monitor carries nothing into the next test. It is a no-op when the
+// monitor is disabled or the namespace is empty.
 //
 // Most tests reach this via the TestEnv teardown (registered in NewEnv), since
 // the testify TearDownTest hook does not run for tests that use NewEnv directly.
-func (s *FunctionalTestBase) CheckAndPurgeUmpire(t *testing.T, namespaceID string) {
-	if s.umpire == nil || namespaceID == "" {
+func (s *FunctionalTestBase) CheckAndPurgeMonitor(t *testing.T, namespaceID string) {
+	if s.monitor == nil || namespaceID == "" {
 		return
 	}
-	for _, v := range s.umpire.CheckNamespace(context.Background(), namespaceID) {
-		if s.umpireViolationsExpected {
-			t.Logf("umpire violation (expected) [%s]: %s %v", v.Rule, v.Message, v.Tags)
+	for _, v := range s.monitor.CheckNamespace(context.Background(), namespaceID) {
+		if s.monitorViolationsExpected {
+			t.Logf("monitor violation (expected) [%s]: %s %v", v.Rule, v.Message, v.Tags)
 			continue
 		}
-		t.Errorf("umpire violation [%s]: %s %v", v.Rule, v.Message, v.Tags)
+		t.Errorf("monitor violation [%s]: %s %v", v.Rule, v.Message, v.Tags)
 	}
-	s.umpire.PurgeNamespace(namespaceID)
-	s.umpireViolationsExpected = false
+	s.monitor.PurgeNamespace(namespaceID)
+	s.monitorViolationsExpected = false
 }
 
-// AllowUmpireViolations disables teardown enforcement for the current test:
-// CheckAndPurgeUmpire still purges but does not fail the test on violations. Use
+// AllowMonitorViolations disables teardown enforcement for the current test:
+// CheckAndPurgeMonitor still purges but does not fail the test on violations. Use
 // it only in tests that deliberately drive the system into a bad state to
-// exercise the umpire's own detection; the flag resets after each teardown.
-func (s *FunctionalTestBase) AllowUmpireViolations() {
-	s.umpireViolationsExpected = true
+// exercise the monitor's own detection; the flag resets after each teardown.
+func (s *FunctionalTestBase) AllowMonitorViolations() {
+	s.monitorViolationsExpected = true
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.

@@ -84,7 +84,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
   1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
   2 WorkflowTaskScheduled`, historyEvents)
 
-		// Umpire records events automatically via the gRPC interceptor.
+		// The monitor records events automatically via the gRPC interceptor.
 	})
 
 	s.Run("start twice - same request", func(s *WorkflowTestSuite) {
@@ -1030,7 +1030,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 	})
 	s.NoError(err)
 
-	// Umpire records events automatically via the gRPC interceptor.
+	// The monitor records events automatically via the gRPC interceptor.
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
@@ -1249,7 +1249,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 	s.NoError(err)
 	s.True(workflowComplete)
 
-	// Umpire records events automatically via the gRPC interceptor.
+	// The monitor records events automatically via the gRPC interceptor.
 }
 
 func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {

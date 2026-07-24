@@ -283,6 +283,10 @@ func (l *Lifecycle) stampEntry() {
 // Current returns the current state.
 func (l *Lifecycle) Current() string { return l.fsm.Current() }
 
+// Initial returns the state the entity starts in — the root of the model graph a
+// planner routes from.
+func (l *Lifecycle) Initial() string { return l.initial }
+
 // Can reports whether event is a legal transition from the current state.
 func (l *Lifecycle) Can(event string) bool { return l.fsm.Can(event) }
 

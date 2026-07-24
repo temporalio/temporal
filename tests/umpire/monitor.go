@@ -15,13 +15,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Umpire is the property-based test monitoring system.
+// Monitor is the property-based test monitoring system.
 // It receives gRPC events and OTEL traces, routes them to entity FSMs, and
 // runs pluggable verification rules that detect invariant violations.
 //
-// Umpire implements sdktrace.SpanProcessor so it can receive spans
+// Monitor implements sdktrace.SpanProcessor so it can receive spans
 // synchronously (no batching delay) and process them inline.
-type Umpire struct {
+type Monitor struct {
 	logger   log.Logger
 	registry *umpirefw.Registry
 	decoder  *model.FactDecoder
@@ -29,8 +29,8 @@ type Umpire struct {
 	factLog  *umpirefw.FactLog
 }
 
-// NewUmpire creates a new Umpire with all default rules registered.
-func NewUmpire(logger log.Logger) (*Umpire, error) {
+// NewMonitor creates a new Monitor with all default rules registered.
+func NewMonitor(logger log.Logger) (*Monitor, error) {
 	if logger == nil {
 		panic("logger is required")
 	}
@@ -69,16 +69,16 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContextClear{} })
 
 	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
-		return nil, fmt.Errorf("umpire: failed to initialize rules: %w", err)
+		return nil, fmt.Errorf("monitor: failed to initialize rules: %w", err)
 	}
 
 	safety, liveness := rb.RuleCount()
-	logger.Info("umpire initialized",
+	logger.Info("monitor initialized",
 		tag.NewInt("safetyRules", safety),
 		tag.NewInt("livenessRules", liveness),
 	)
 
-	u := &Umpire{
+	u := &Monitor{
 		logger:   logger,
 		registry: registry,
 		decoder:  decoder,
@@ -89,55 +89,55 @@ func NewUmpire(logger log.Logger) (*Umpire, error) {
 	return u, nil
 }
 
-var _ sdktrace.SpanProcessor = (*Umpire)(nil)
+var _ sdktrace.SpanProcessor = (*Monitor)(nil)
 
 // OnStart is a no-op; we only care about completed spans.
-func (u *Umpire) OnStart(_ context.Context, _ sdktrace.ReadWriteSpan) {}
+func (u *Monitor) OnStart(_ context.Context, _ sdktrace.ReadWriteSpan) {}
 
 // OnEnd receives completed spans synchronously and routes them to entities.
-func (u *Umpire) OnEnd(span sdktrace.ReadOnlySpan) {
+func (u *Monitor) OnEnd(span sdktrace.ReadOnlySpan) {
 	events := u.decoder.ImportSpan(span)
 	if len(events) == 0 {
 		return
 	}
 	if err := u.registry.RouteFacts(context.Background(), events); err != nil {
-		u.logger.Warn("umpire: failed to route OTEL events", tag.Error(err))
+		u.logger.Warn("monitor: failed to route OTEL events", tag.Error(err))
 	}
 }
 
 // ForceFlush is a no-op; spans are processed synchronously.
-func (u *Umpire) ForceFlush(_ context.Context) error {
+func (u *Monitor) ForceFlush(_ context.Context) error {
 	return nil
 }
 
 // RecordFact converts a gRPC request to an event, adds it to the event log,
 // and routes it to entities.
-func (u *Umpire) RecordFact(ctx context.Context, request any) {
+func (u *Monitor) RecordFact(ctx context.Context, request any) {
 	ev := u.decoder.ImportRequest(request)
 	if ev == nil {
 		return
 	}
 	u.factLog.Add(ev)
 	if err := u.registry.RouteFacts(ctx, []umpirefw.Fact{ev}); err != nil {
-		u.logger.Warn("umpire: failed to route gRPC event", tag.Error(err))
+		u.logger.Warn("monitor: failed to route gRPC event", tag.Error(err))
 	}
 }
 
 // RecordResponse converts a gRPC response to an event (if any) and routes it.
-func (u *Umpire) RecordResponse(ctx context.Context, req, resp any) {
+func (u *Monitor) RecordResponse(ctx context.Context, req, resp any) {
 	ev := u.decoder.ImportResponse(req, resp)
 	if ev == nil {
 		return
 	}
 	u.factLog.Add(ev)
 	if err := u.registry.RouteFacts(ctx, []umpirefw.Fact{ev}); err != nil {
-		u.logger.Warn("umpire: failed to route response event", tag.Error(err))
+		u.logger.Warn("monitor: failed to route response event", tag.Error(err))
 	}
 }
 
 // Check runs all rules and returns detected violations. When final is
 // true, liveness rules promote pending items to violations.
-func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
+func (u *Monitor) Check(ctx context.Context, final ...bool) []any {
 	f := len(final) > 0 && final[0]
 	violations := u.rulebook.Check(ctx, f, nil)
 	result := make([]any, len(violations))
@@ -151,53 +151,53 @@ func (u *Umpire) Check(ctx context.Context, final ...bool) []any {
 // rooted at that namespace are evaluated, and their unresolved liveness
 // conditions are promoted to violations. Use it to validate one test's namespace
 // at teardown, then PurgeNamespace to drop the collected data.
-func (u *Umpire) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
+func (u *Monitor) CheckNamespace(ctx context.Context, namespaceID string) []umpirefw.Violation {
 	root := u.namespaceRoot(namespaceID)
 	return u.rulebook.Check(ctx, true, &root)
 }
 
 // PurgeNamespace removes all entities, facts, and rule state collected for the
-// given namespace, so a shared umpire carries nothing between tests.
-func (u *Umpire) PurgeNamespace(namespaceID string) {
+// given namespace, so a shared monitor carries nothing between tests.
+func (u *Monitor) PurgeNamespace(namespaceID string) {
 	root := u.namespaceRoot(namespaceID)
 	u.registry.PurgeScope(root)
 	u.factLog.PurgeScope(root)
 	u.rulebook.PurgeScope(root)
 }
 
-func (u *Umpire) namespaceRoot(namespaceID string) umpirefw.EntityID {
+func (u *Monitor) namespaceRoot(namespaceID string) umpirefw.EntityID {
 	return umpirefw.NewEntityID(model.NamespaceType, namespaceID)
 }
 
 // Reset clears state between tests.
-func (u *Umpire) Reset() {
+func (u *Monitor) Reset() {
 	// No-op for now; state is stateless across checks.
 }
 
 // FactLog returns the event log for querying events in tests.
-func (u *Umpire) FactLog() *umpirefw.FactLog {
+func (u *Monitor) FactLog() *umpirefw.FactLog {
 	return u.factLog
 }
 
 // Registry returns the entity registry for querying entities in tests.
-func (u *Umpire) Registry() *umpirefw.Registry {
+func (u *Monitor) Registry() *umpirefw.Registry {
 	return u.registry
 }
 
 // RuleStats returns per-rule evaluation statistics.
-func (u *Umpire) RuleStats() []umpirefw.RuleStats {
+func (u *Monitor) RuleStats() []umpirefw.RuleStats {
 	return u.rulebook.Stats()
 }
 
 // PassedKeys returns entity keys that the named rule evaluated and found healthy.
-func (u *Umpire) PassedKeys(ruleName string) []string {
+func (u *Monitor) PassedKeys(ruleName string) []string {
 	return u.rulebook.PassedKeys(ruleName)
 }
 
 // RequireRulePassed asserts that the given rule evaluated the entity identified
 // by entityKey and found no violation. Fails the test if the key is not found
 // in the rule's passed keys.
-func (u *Umpire) RequireRulePassed(t testing.TB, rule interface{ Name() string }, entityKey string) {
+func (u *Monitor) RequireRulePassed(t testing.TB, rule interface{ Name() string }, entityKey string) {
 	t.Helper()
 	name := rule.Name()
 	passed := u.rulebook.PassedKeys(name)
@@ -206,14 +206,14 @@ func (u *Umpire) RequireRulePassed(t testing.TB, rule interface{ Name() string }
 	}
 }
 
-// Shutdown cleanly shuts down all Umpire components.
-func (u *Umpire) Shutdown(_ context.Context) error {
-	u.logger.Info("umpire closed")
+// Shutdown cleanly shuts down all Monitor components.
+func (u *Monitor) Shutdown(_ context.Context) error {
+	u.logger.Info("monitor closed")
 	return nil
 }
 
 // NewUnaryServerInterceptor returns a gRPC interceptor that records events via u
 // and optionally injects faults via inj. Either may be nil.
-func NewUnaryServerInterceptor(u *Umpire, inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
+func NewUnaryServerInterceptor(u *Monitor, inj umpirefw.FaultInjector) grpc.UnaryServerInterceptor {
 	return umpirefw.NewUnaryServerInterceptor(u, inj)
 }

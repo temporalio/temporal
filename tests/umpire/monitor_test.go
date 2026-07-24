@@ -30,14 +30,14 @@ func admittedUpdateIn(namespaceID, workflowID, updateID string) umpirefw.Fact {
 	}
 }
 
-func countUpdates(u *Umpire, namespaceID string) int {
+func countUpdates(u *Monitor, namespaceID string) int {
 	root := umpirefw.NewEntityID(model.NamespaceType, namespaceID)
 	return len(u.Registry().QueryEntities(model.WorkflowUpdateType, 0, &root))
 }
 
-func TestUmpire_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
+func TestMonitor_CheckNamespace_IsScopedAndPurgeable(t *testing.T) {
 	ctx := context.Background()
-	u, err := NewUmpire(log.NewNoopLogger())
+	u, err := NewMonitor(log.NewNoopLogger())
 	require.NoError(t, err)
 
 	const nsA, nsB = "ns-a", "ns-b"

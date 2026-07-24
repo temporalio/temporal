@@ -5,9 +5,56 @@ import (
 	"go.temporal.io/server/tests/umpire/fact"
 )
 
-// RegisterDefaultEntities registers the default entity types with a registry.
-func RegisterDefaultEntities(r *umpire.Registry) {
-	r.RegisterFact(
+// DefaultEntity is one entry in the default entity set: an entity factory plus the
+// facts that route to it. DefaultEntities (below) is the single source of truth for
+// which entities the umpire models — both the passive side (RegisterDefaultEntities,
+// which routes facts to them) and the active side (pitcher.DefaultModels, which
+// plans over them) derive from it, so adding an entity is a one-line change in one
+// place, not two that can drift.
+type DefaultEntity struct {
+	New   umpire.EntityFactory
+	Facts []umpire.Fact
+}
+
+// DefaultEntities is the canonical default entity set.
+func DefaultEntities() []DefaultEntity {
+	return []DefaultEntity{
+		{
+			New:   func() umpire.Entity { return NewWorkflow() },
+			Facts: []umpire.Fact{&fact.WorkflowStarted{}, &fact.WorkflowExecutionCompleted{}},
+		},
+		{
+			New:   func() umpire.Entity { return NewTaskQueue() },
+			Facts: []umpire.Fact{&fact.WorkflowTaskAdded{}, &fact.WorkflowTaskPolled{}},
+		},
+		{
+			New: func() umpire.Entity { return NewWorkflowTask() },
+			Facts: []umpire.Fact{
+				&fact.WorkflowTaskAdded{},
+				&fact.WorkflowTaskPolled{},
+				&fact.WorkflowTaskStored{},
+				&fact.SpeculativeWorkflowTaskScheduled{},
+			},
+		},
+		{
+			New: func() umpire.Entity { return NewWorkflowUpdate() },
+			Facts: []umpire.Fact{
+				&fact.WorkflowUpdateRequested{},
+				&fact.WorkflowUpdateAdmitted{},
+				&fact.WorkflowUpdateAccepted{},
+				&fact.WorkflowUpdateCompleted{},
+				&fact.WorkflowUpdateRejected{},
+			},
+		},
+	}
+}
+
+// defaultFacts is the full set of fact probes the decoder must recognize. It is a
+// superset of the per-entity subscriptions in DefaultEntities: it also includes
+// broadcast / settle facts (e.g. WorkflowTerminated, WorkflowUpdateAborted) that no
+// single entity subscribes to but entities still handle in OnFact.
+func defaultFacts() []umpire.Fact {
+	return []umpire.Fact{
 		&fact.WorkflowStarted{},
 		&fact.WorkflowExecutionCompleted{},
 		&fact.WorkflowTaskAdded{},
@@ -22,34 +69,13 @@ func RegisterDefaultEntities(r *umpire.Registry) {
 		&fact.WorkflowUpdateCompleted{},
 		&fact.WorkflowUpdateRejected{},
 		&fact.WorkflowUpdateAborted{},
-	)
+	}
+}
 
-	r.RegisterEntity(
-		func() umpire.Entity { return NewWorkflow() },
-		&fact.WorkflowStarted{},
-		&fact.WorkflowExecutionCompleted{},
-	)
-
-	r.RegisterEntity(
-		func() umpire.Entity { return NewTaskQueue() },
-		&fact.WorkflowTaskAdded{},
-		&fact.WorkflowTaskPolled{},
-	)
-
-	r.RegisterEntity(
-		func() umpire.Entity { return NewWorkflowTask() },
-		&fact.WorkflowTaskAdded{},
-		&fact.WorkflowTaskPolled{},
-		&fact.WorkflowTaskStored{},
-		&fact.SpeculativeWorkflowTaskScheduled{},
-	)
-
-	r.RegisterEntity(
-		func() umpire.Entity { return NewWorkflowUpdate() },
-		&fact.WorkflowUpdateRequested{},
-		&fact.WorkflowUpdateAdmitted{},
-		&fact.WorkflowUpdateAccepted{},
-		&fact.WorkflowUpdateCompleted{},
-		&fact.WorkflowUpdateRejected{},
-	)
+// RegisterDefaultEntities registers the default facts and entities with a registry.
+func RegisterDefaultEntities(r *umpire.Registry) {
+	r.RegisterFact(defaultFacts()...)
+	for _, e := range DefaultEntities() {
+		r.RegisterEntity(e.New, e.Facts...)
+	}
 }
