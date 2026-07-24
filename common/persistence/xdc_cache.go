@@ -168,5 +168,7 @@ func CopyBaseWorkflowInfo(
 		RunId:                            baseWorkflowInfo.RunId,
 		LowestCommonAncestorEventId:      baseWorkflowInfo.LowestCommonAncestorEventId,
 		LowestCommonAncestorEventVersion: baseWorkflowInfo.LowestCommonAncestorEventVersion,
+		StartRequestId:                   baseWorkflowInfo.StartRequestId,
+		ResetRequestId:                   baseWorkflowInfo.ResetRequestId,
 	}
 }

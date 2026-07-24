@@ -2403,6 +2403,17 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	}
 
 	for _, postOp := range request.GetPostResetOperations() {
+		if signal := postOp.GetSignalWorkflow(); signal != nil {
+			if signal.GetSignalName() == "" {
+				return nil, errSignalNameNotSet
+			}
+			if len(signal.GetSignalName()) > wh.config.MaxIDLengthLimit() {
+				return nil, errSignalNameTooLong
+			}
+			if err := commonlinks.Validate(signal.GetLinks(), wh.config.MaxLinksPerRequest(request.GetNamespace()), wh.config.LinkMaxSize(request.GetNamespace())); err != nil {
+				return nil, err
+			}
+		}
 		if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
 			if err := wh.validateTimeSkippingConfig(
 				updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
@@ -2416,6 +2427,26 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	for _, postOp := range request.GetPostResetOperations() {
+		signal := postOp.GetSignalWorkflow()
+		if signal == nil {
+			continue
+		}
+		if err := common.CheckEventBlobSizeLimit(
+			signal.GetInput().Size(),
+			wh.config.BlobSizeLimitWarn(request.GetNamespace()),
+			wh.config.BlobSizeLimitError(request.GetNamespace()),
+			namespaceID.String(),
+			request.GetWorkflowExecution().GetWorkflowId(),
+			request.GetWorkflowExecution().GetRunId(),
+			wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			"ResetWorkflowExecution",
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	resp, err := wh.historyClient.ResetWorkflowExecution(ctx, &historyservice.ResetWorkflowExecutionRequest{

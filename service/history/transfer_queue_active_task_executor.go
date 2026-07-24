@@ -1816,6 +1816,8 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		"",
+		"",
 		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),

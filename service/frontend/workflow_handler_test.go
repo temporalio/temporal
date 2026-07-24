@@ -3945,6 +3945,106 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
 }
 
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostResetSignalForwarded() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	request := s.resetWorkflowExecutionRequestWithSignal("signal-name")
+	expectedRunID := uuid.NewString()
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().ResetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, forwarded *historyservice.ResetWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.ResetWorkflowExecutionResponse, error) {
+			s.Equal(s.testNamespaceID.String(), forwarded.GetNamespaceId())
+			s.Same(request, forwarded.GetResetRequest())
+			return &historyservice.ResetWorkflowExecutionResponse{RunId: expectedRunID}, nil
+		},
+	)
+
+	response, err := wh.ResetWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+	s.Equal(expectedRunID, response.GetRunId())
+}
+
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostResetSignalNameRequired() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	_, err := wh.ResetWorkflowExecution(
+		context.Background(),
+		s.resetWorkflowExecutionRequestWithSignal(""),
+	)
+
+	s.ErrorIs(err, errSignalNameNotSet)
+}
+
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostResetSignalNameTooLong() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.ResetWorkflowExecution(
+		context.Background(),
+		s.resetWorkflowExecutionRequestWithSignal(strings.Repeat("x", config.MaxIDLengthLimit()+1)),
+	)
+
+	s.ErrorIs(err, errSignalNameTooLong)
+}
+
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostResetSignalInvalidLinks() {
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
+	wh := s.getWorkflowHandler(config)
+	request := s.resetWorkflowExecutionRequestWithSignal("signal-name")
+	request.PostResetOperations[0].GetSignalWorkflow().Links = []*commonpb.Link{{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "namespace",
+				WorkflowId: strings.Repeat("x", 4000),
+				RunId:      uuid.NewString(),
+			},
+		},
+	}}
+
+	_, err := wh.ResetWorkflowExecution(context.Background(), request)
+
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "link exceeds allowed size")
+}
+
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostResetSignalInputTooLarge() {
+	config := s.newConfig()
+	config.BlobSizeLimitWarn = dc.GetIntPropertyFnFilteredByNamespace(1)
+	config.BlobSizeLimitError = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
+	request := s.resetWorkflowExecutionRequestWithSignal("signal-name")
+	request.PostResetOperations[0].GetSignalWorkflow().Input = payloads.EncodeString("large input")
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+
+	_, err := wh.ResetWorkflowExecution(context.Background(), request)
+
+	s.ErrorIs(err, common.ErrBlobSizeExceedsLimit)
+}
+
+func (s *WorkflowHandlerSuite) resetWorkflowExecutionRequestWithSignal(
+	signalName string,
+) *workflowservice.ResetWorkflowExecutionRequest {
+	return &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+			RunId:      uuid.NewString(),
+		},
+		RequestId: uuid.NewString(),
+		PostResetOperations: []*workflowpb.PostResetOperation{{
+			Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+				SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+					SignalName: signalName,
+					Input:      payloads.EncodeString("input"),
+				},
+			},
+		}},
+	}
+}
+
 // TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled verifies that when the DC gate
 // is off, a batch reset with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled() {

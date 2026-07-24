@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -124,6 +125,164 @@ func (s *workflowResetterSuite) SetupTest() {
 func (s *workflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
+}
+
+func (s *workflowResetterSuite) TestPerformPostResetOperations_SignalWorkflow() {
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	s.expectSignalValidation(resetMutableState, 0)
+	resetMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false).Times(2)
+
+	identity := "reset-requester"
+	firstInput := payloads.EncodeString("first-input")
+	secondInput := payloads.EncodeString("second-input")
+	firstHeader := &commonpb.Header{}
+	secondHeader := &commonpb.Header{}
+	firstLinks := []*commonpb.Link{{}}
+	secondLinks := []*commonpb.Link{{}}
+
+	gomock.InOrder(
+		resetMutableState.EXPECT().AddWorkflowExecutionSignaledEvent(
+			"first-signal",
+			firstInput,
+			identity,
+			firstHeader,
+			nil,
+			"",
+			firstLinks,
+		).Return(&historypb.HistoryEvent{}, nil),
+		resetMutableState.EXPECT().AddWorkflowExecutionSignaledEvent(
+			"second-signal",
+			secondInput,
+			identity,
+			secondHeader,
+			nil,
+			"",
+			secondLinks,
+		).Return(&historypb.HistoryEvent{}, nil),
+	)
+
+	err := s.workflowResetter.performPostResetOperations(
+		context.Background(),
+		resetMutableState,
+		identity,
+		[]*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+					SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+						SignalName: "first-signal",
+						Input:      firstInput,
+						Header:     firstHeader,
+						Links:      firstLinks,
+					},
+				},
+			},
+			{
+				Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+					SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+						SignalName: "second-signal",
+						Input:      secondInput,
+						Header:     secondHeader,
+						Links:      secondLinks,
+					},
+				},
+			},
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *workflowResetterSuite) TestPerformPostResetOperations_SignalWorkflowError() {
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	s.expectSignalValidation(resetMutableState, 0)
+	resetMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
+	expectedErr := errors.New("signal event failed")
+	resetMutableState.EXPECT().AddWorkflowExecutionSignaledEvent(
+		"signal-name",
+		gomock.Any(),
+		testIdentity,
+		nil,
+		nil,
+		"",
+		nil,
+	).Return(nil, expectedErr)
+
+	err := s.workflowResetter.performPostResetOperations(
+		context.Background(),
+		resetMutableState,
+		testIdentity,
+		[]*workflowpb.PostResetOperation{{
+			Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+				SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+					SignalName: "signal-name",
+					Input:      payloads.EncodeString("input"),
+				},
+			},
+		}},
+	)
+	s.ErrorIs(err, expectedErr)
+}
+
+func (s *workflowResetterSuite) TestPerformPostResetOperations_SignalLimit() {
+	s.mockShard.GetConfig().MaximumSignalsPerExecution = dc.GetIntPropertyFnFilteredByNamespace(1)
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+	s.expectSignalValidation(resetMutableState, 1)
+
+	err := s.workflowResetter.performPostResetOperations(
+		context.Background(),
+		resetMutableState,
+		testIdentity,
+		[]*workflowpb.PostResetOperation{{
+			Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+				SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+					SignalName: "signal-name",
+				},
+			},
+		}},
+	)
+	s.ErrorIs(err, consts.ErrSignalsLimitExceeded)
+}
+
+func (s *workflowResetterSuite) TestPerformPostResetOperations_RejectsUnsupportedOperation() {
+	err := s.workflowResetter.performPostResetOperations(
+		context.Background(),
+		historyi.NewMockMutableState(s.controller),
+		testIdentity,
+		[]*workflowpb.PostResetOperation{{}},
+	)
+	s.ErrorContains(err, "unsupported post reset operation")
+}
+
+func (s *workflowResetterSuite) TestFindStartRequestID_PrefersStartedRequest() {
+	executionState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: "reset-request-id",
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			"start-request-id": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+			"reset-request-id": {
+				EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+				EventId:   common.EmptyEventID,
+			},
+		},
+	}
+
+	s.Equal("start-request-id", findStartRequestID(executionState))
+}
+
+func (s *workflowResetterSuite) expectSignalValidation(
+	resetMutableState *historyi.MockMutableState,
+	signalCount int64,
+) {
+	resetMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	resetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: s.namespaceID.String(),
+		WorkflowId:  s.workflowID,
+		SignalCount: signalCount,
+	}).AnyTimes()
+	resetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: s.resetRunID,
+	}).AnyTimes()
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {

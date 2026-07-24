@@ -314,6 +314,86 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 	s.ProtoEqual(override, info.WorkflowExecutionInfo.GetVersioningInfo().GetVersioningOverride())
 }
 
+func (s *WorkflowResetSuite) TestResetWorkflowWithSignal() {
+	env := testcore.NewEnv(s.T())
+	workflowID := env.Tv().WorkflowID()
+	currentRunID := s.prepareWorkflowRuns(env, workflowID, 1, true, versioningConfig{})[0]
+	resetRequestID := uuid.NewString()
+	resetIdentity := "reset-requester"
+	signalName := "post-reset-signal"
+	signalInput := payloads.EncodeString("post-reset-input")
+	signalHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{
+			"header-key": {Data: []byte("header-value")},
+		},
+	}
+	signalLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: workflowID,
+				RunId:      currentRunID,
+			},
+		},
+	}
+	resetRequest := &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		Reason:                    "testing-reset-with-signal",
+		RequestId:                 resetRequestID,
+		Identity:                  resetIdentity,
+		WorkflowTaskFinishEventId: s.getFirstWFTaskCompleteEventID(env, workflowID, currentRunID),
+		PostResetOperations: []*workflowpb.PostResetOperation{{
+			Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+				SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+					SignalName: signalName,
+					Input:      signalInput,
+					Header:     signalHeader,
+					Links:      []*commonpb.Link{signalLink},
+				},
+			},
+		}},
+	}
+
+	resetResponse, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), resetRequest)
+	s.NoError(err)
+	retryResponse, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), resetRequest)
+	s.NoError(err)
+	s.Equal(resetResponse.GetRunId(), retryResponse.GetRunId())
+
+	events := s.getHistoryEvents(env, workflowID, resetResponse.GetRunId())
+	var signalEvent *historypb.HistoryEvent
+	var firstScheduledEventAfterSignal *historypb.HistoryEvent
+	signalEventCount := 0
+	for _, event := range events {
+		if attributes := event.GetWorkflowExecutionSignaledEventAttributes(); attributes.GetSignalName() == signalName {
+			signalEvent = event
+			signalEventCount++
+			continue
+		}
+		if signalEvent != nil &&
+			firstScheduledEventAfterSignal == nil &&
+			event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+			firstScheduledEventAfterSignal = event
+		}
+	}
+
+	s.Equal(1, signalEventCount)
+	s.NotNil(signalEvent)
+	s.NotNil(firstScheduledEventAfterSignal)
+	if signalEvent == nil || firstScheduledEventAfterSignal == nil {
+		return
+	}
+	s.Less(signalEvent.GetEventId(), firstScheduledEventAfterSignal.GetEventId())
+	attributes := signalEvent.GetWorkflowExecutionSignaledEventAttributes()
+	s.ProtoEqual(signalInput, attributes.GetInput())
+	s.ProtoEqual(signalHeader, attributes.GetHeader())
+	s.Equal(resetIdentity, attributes.GetIdentity())
+	s.Empty(attributes.GetRequestId())
+	s.Len(signalEvent.GetLinks(), 1)
+	s.ProtoEqual(signalLink, signalEvent.GetLinks()[0])
+}
+
 // Test batch reset operation with version update as post reset operation
 func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
@@ -433,6 +513,78 @@ func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
 	}
 }
 
+func (s *WorkflowResetSuite) TestBatchResetWithSignal() {
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	workflowIDs := []string{
+		env.Tv().Sub("workflow-1").WorkflowID(),
+		env.Tv().Sub("workflow-2").WorkflowID(),
+	}
+	runIDs := make([]string, len(workflowIDs))
+	for i, workflowID := range workflowIDs {
+		runIDs[i] = s.prepareWorkflowRuns(env, workflowID, 1, true, versioningConfig{})[0]
+	}
+
+	signalName := "batch-post-reset-signal"
+	signalInput := payloads.EncodeString("batch-signal-input")
+	resetIdentity := "batch-reset-requester"
+	batchJobID := "batch-reset-signal-" + uuid.NewString()
+	_, err := env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		JobId:     batchJobID,
+		Reason:    "testing-batch-reset-with-signal",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: workflowIDs[0], RunId: runIDs[0]},
+			{WorkflowId: workflowIDs[1], RunId: runIDs[1]},
+		},
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Identity: resetIdentity,
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{
+						WorkflowTaskId: s.getFirstWFTaskCompleteEventID(env, workflowIDs[0], runIDs[0]),
+					},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{{
+					Variant: &workflowpb.PostResetOperation_SignalWorkflow_{
+						SignalWorkflow: &workflowpb.PostResetOperation_SignalWorkflow{
+							SignalName: signalName,
+							Input:      signalInput,
+						},
+					},
+				}},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Await(func(s *WorkflowResetSuite) {
+		response, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     batchJobID,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, response.GetState())
+	}, 20*time.Second, time.Second)
+
+	resetRunIDs := s.getLatestRunsForWorkflows(env, workflowIDs)
+	for i, workflowID := range workflowIDs {
+		var signalEvent *historypb.HistoryEvent
+		for _, event := range s.getHistoryEvents(env, workflowID, resetRunIDs[i]) {
+			if event.GetWorkflowExecutionSignaledEventAttributes().GetSignalName() == signalName {
+				signalEvent = event
+				break
+			}
+		}
+		s.NotNil(signalEvent)
+		if signalEvent == nil {
+			continue
+		}
+		attributes := signalEvent.GetWorkflowExecutionSignaledEventAttributes()
+		s.ProtoEqual(signalInput, attributes.GetInput())
+		s.Equal(resetIdentity, attributes.GetIdentity())
+	}
+}
+
 // Helper methods
 
 // getFirstWFTaskCompleteEventID finds the first event corresponding to workflow task completion. This can be used as a good reset point for tests in this suite.
@@ -447,6 +599,27 @@ func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(env *testcore.TestEnv
 	}
 	s.Failf("couldn't find a workflow task complete event", "workflowID:[%s], runID:[%s]", workflowID, runID)
 	return 0
+}
+
+func (s *WorkflowResetSuite) getHistoryEvents(
+	env *testcore.TestEnv,
+	workflowID string,
+	runID string,
+) []*historypb.HistoryEvent {
+	var events []*historypb.HistoryEvent
+	historyIterator := env.SdkClient().GetWorkflowHistory(
+		s.Context(),
+		workflowID,
+		runID,
+		false,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	for historyIterator.HasNext() {
+		event, err := historyIterator.Next()
+		s.NoError(err)
+		events = append(events, event)
+	}
+	return events
 }
 
 // performReset is a helper method to reset the given workflow run and assert that it is successful.

@@ -273,6 +273,29 @@ func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
 	s.ProtoEqual(state, deserializedState)
 }
 
+func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState_ResetRequestID() {
+	state := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: "reset-request-id",
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			"start-request-id": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
+			},
+			"reset-request-id": {
+				EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+				EventId:   common.EmptyEventID,
+			},
+		},
+	}
+
+	blob, err := s.serializer.WorkflowExecutionStateToBlob(state)
+	s.NoError(err)
+	deserializedState, err := s.serializer.WorkflowExecutionStateFromBlob(blob)
+	s.NoError(err)
+
+	s.ProtoEqual(state, deserializedState)
+}
+
 // HistoryService returns a different GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistoryResponseWithRaw to
 // WorkflowHandler. Since HistoryClient is defined with the response type GetWorkflowExecutionHistoryResponse, grpc
 // will deserialize this message to GetWorkflowExecutionHistoryResponse. This is done to avoid the extra CPU usage in
