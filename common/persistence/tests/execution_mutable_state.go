@@ -1108,7 +1108,7 @@ func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
 	s.Equal(expectedRunID, resp.RunID)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent() {
+func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrent() {
 	// A closed run exists with no current execution record (the current record was deleted).
 	// BrandNewCurrent re-inserts the current record pointing at the updated run.
 	branchToken, snapshot, events := s.CreateWorkflow(
@@ -1151,7 +1151,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent() {
 	s.AssertHEEqualWithDB(branchToken, events)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent_WithNew() {
+func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentWithNew() {
 	// A base run exists with no current execution record; a continue-as-new arrives. BrandNewCurrent
 	// updates the base run and inserts the current record pointing at the new run, atomically.
 	branchToken, snapshot, events := s.CreateWorkflow(
@@ -1213,7 +1213,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent_WithNew() {
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestUpdateBrandNewCurrentCurrentConflict() {
 	// A current execution record already exists; BrandNewCurrent must fail with a current-condition
 	// error (not overwrite it, and not a retryable Unavailable).
 	branchToken, snapshot, events := s.CreateWorkflow(
@@ -1248,7 +1248,8 @@ func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent_CurrentConflict(
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	var conditionErr *p.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conditionErr)
 
 	// nothing was written: the run and its current record are unchanged
 	s.assertCurrentRunID(s.RunID)
@@ -1256,7 +1257,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_BrandNewCurrent_CurrentConflict(
 	s.AssertHEEqualWithDB(branchToken, events)
 }
 
-func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent() {
+func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrent() {
 	// Rebuilt run with no current execution record: conflict-resolve BrandNewCurrent re-inserts the
 	// current record pointing at the reset run.
 	branchToken, snapshot, events := s.CreateWorkflow(
@@ -1302,7 +1303,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent() {
 	s.AssertHEEqualWithDB(branchToken, events, resetEvents)
 }
 
-func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent_WithNew() {
+func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrentWithNew() {
 	// Rebuilt run with no current execution record + a new run: conflict-resolve BrandNewCurrent
 	// resolves the base run and inserts the current record pointing at the new run, atomically.
 	branchToken, snapshot, events := s.CreateWorkflow(
@@ -1366,7 +1367,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent_WithNew
 	s.AssertHEEqualWithDB(newBranchToken, newEvents)
 }
 
-func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolveBrandNewCurrentCurrentConflict() {
 	// A current execution record already exists; conflict-resolve BrandNewCurrent must fail with a
 	// current-condition error rather than overwrite it.
 	branchToken, snapshot, _ := s.CreateWorkflow(
@@ -1404,7 +1405,8 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_BrandNewCurrent_Current
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	var conditionErr *p.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conditionErr)
 
 	// The current record still points at the original run and the reset run's mutable state was not
 	// committed. (A rejected conflict-resolve may still append its history nodes, which is unrelated

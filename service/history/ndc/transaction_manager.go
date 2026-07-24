@@ -71,9 +71,9 @@ import (
 // 2. update from zombie to current & new created as current & suppress current	-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 
 // missing current record path (current execution record was deleted, current run ID is "")
-//  - reconstruct the current record by inserting a brand-new one, pointing at the new run if carried,
-//    otherwise the target run itself
-//    -> nDCTransactionPolicyUpdateAsCurrentBrandNew (mutation) / nDCTransactionPolicyConflictResolveAsCurrentBrandNew (rebuilt)
+//   - reconstruct the current record by inserting a brand-new one, pointing at the new run if carried,
+//     otherwise the target run itself
+//     -> nDCTransactionPolicyUpdateAsCurrentBrandNew (mutation) / nDCTransactionPolicyConflictResolveAsCurrentBrandNew (rebuilt)
 type nDCTransactionPolicy int
 
 const (
