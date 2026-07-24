@@ -378,12 +378,12 @@ func (r *workflowResetterImpl) persistToDB(
 
 	currentExecutionMissing := currentWorkflow == nil
 	if currentExecutionMissing {
-		// There is no current_executions row (the current run was deleted), so the base->reset link
-		// and the new current run cannot be committed atomically: re-establishing a missing current
-		// requires a brand-new insert, while the base run needs a bypass-current update, and no
-		// single Transaction method does both. Write base-first so retries are safe: if the create
-		// fails, a retry rewrites the base link and the brand-new insert still succeeds. Creating
-		// first would leave the reset run as current and permanently conflict with the create.
+		// There is no current_executions row (the current run was deleted). Update the base run (the
+		// base->reset link) and create the reset run as the new current in a single atomic transaction
+		// via UpdateWorkflowModeBrandNewCurrent: it updates the base run and inserts a brand-new current
+		// record pointing at the reset run, failing if a current record already exists. A concurrent
+		// current insert therefore surfaces as a condition failure rather than resurrecting a stale
+		// current, and there is no partial-write window between the base link and the new current.
 		baseWorkflowMutation, baseWorkflowEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
 			ctx,
 			historyi.TransactionPolicyActive,
@@ -391,28 +391,18 @@ func (r *workflowResetterImpl) persistToDB(
 		if err != nil {
 			return err
 		}
+		resetWorkflowVersion := resetWorkflow.GetMutableState().GetCurrentVersion()
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
-			persistence.UpdateWorkflowModeBypassCurrent,
+			persistence.UpdateWorkflowModeBrandNewCurrent,
 			chasm.WorkflowArchetypeID,
 			baseWorkflow.GetMutableState().GetCurrentVersion(),
 			baseWorkflowMutation,
 			baseWorkflowEventsSeq,
-			nil,
-			nil,
-			nil,
-			baseWorkflow.GetMutableState().IsWorkflow(),
-		); err != nil {
-			return err
-		}
-		if _, err := r.transaction.CreateWorkflowExecution(
-			ctx,
-			persistence.CreateWorkflowModeBrandNew,
-			chasm.WorkflowArchetypeID,
-			resetWorkflow.GetMutableState().GetCurrentVersion(),
+			&resetWorkflowVersion,
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
-			resetWorkflow.GetMutableState().IsWorkflow(),
+			baseWorkflow.GetMutableState().IsWorkflow(),
 		); err != nil {
 			return err
 		}

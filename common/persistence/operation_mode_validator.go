@@ -67,8 +67,9 @@ func ValidateUpdateWorkflowModeState(
 	}
 
 	switch mode {
-	case UpdateWorkflowModeUpdateCurrent:
-		// update current record
+	case UpdateWorkflowModeUpdateCurrent, UpdateWorkflowModeBrandNewCurrent:
+		// update current record (UpdateCurrent CAS's the existing current record, BrandNewCurrent
+		// inserts a fresh one) — the workflow-state constraints are identical either way
 		// 1. current workflow only ->
 		//  current workflow cannot be zombie
 		// 2. current workflow & new workflow ->
@@ -276,6 +277,35 @@ func ValidateConflictResolveWorkflowModeState(
 			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
 			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
 			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			return newInvalidConflictResolveWorkflowWithNewMode(
+				mode,
+				resetWorkflowState,
+				*newWorkflowState,
+			)
+		}
+		return nil
+
+	case ConflictResolveWorkflowModeBrandNewCurrent:
+		// insert a brand-new current record; there must be no current workflow to CAS against
+		if currentWorkflowMutation != nil {
+			return serviceerror.NewInternalf("Invalid workflow conflict resolve mode %v, encountered current workflow", mode)
+		}
+		// reset workflow (or new workflow) becomes current
+		// 1. reset workflow only ->
+		//  reset workflow cannot be zombie
+		if newWorkflowState == nil {
+			if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+				return newInvalidConflictResolveWorkflowMode(mode, resetWorkflowState)
+			}
+			return nil
+		}
+		// 2. reset workflow & new workflow ->
+		//  reset workflow cannot be created / running / zombie,
+		//  new workflow cannot be zombie
+		if resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
+			resetWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE ||
+			*newWorkflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 			return newInvalidConflictResolveWorkflowWithNewMode(
 				mode,
 				resetWorkflowState,
