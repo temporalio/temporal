@@ -39,6 +39,14 @@ type (
 		getCoalesceCloseTimeExpr() sqlparser.Expr
 	}
 
+	// pluginBoolValueConverterLegacy is an optional interface for plugins
+	// whose dialect has no boolean literal (e.g. SQL Server, which stores
+	// booleans as BIT) to rewrite boolean values into a dialect-legal
+	// expression.
+	pluginBoolValueConverterLegacy interface {
+		convertBoolValueExpr(v sqlparser.BoolVal) sqlparser.Expr
+	}
+
 	QueryConverterLegacy struct {
 		pluginQueryConverterLegacy
 		namespaceName namespace.Name
@@ -509,7 +517,11 @@ func (c *QueryConverterLegacy) convertValueExpr(
 		}
 		return nil
 	case sqlparser.BoolVal:
-		// no-op: no validation needed
+		// No validation needed, but dialects without boolean literals may
+		// rewrite the value (e.g. mssql rewrites true/false to 1/0).
+		if pvc, ok := c.pluginQueryConverterLegacy.(pluginBoolValueConverterLegacy); ok {
+			*exprRef = pvc.convertBoolValueExpr(e)
+		}
 		return nil
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.

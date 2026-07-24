@@ -35,6 +35,24 @@ services:
       POSTGRES_PASSWORD: temporal
     networks:
       - temporal-dev-network
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: temporal-dev-mssql
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Temporal123!"
+      MSSQL_PID: Developer
+      # NOTE: the stock image does NOT bundle Full-Text Search, which the
+      # visibility schema's CONTAINS() indexes require. Install it once:
+      #   docker exec -u root temporal-dev-mssql bash -c \
+      #     "curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/mssql-server-2022.list \
+      #       -o /etc/apt/sources.list.d/mssql-server-2022.list && apt-get update && \
+      #       ACCEPT_EULA=Y apt-get install -y mssql-server-fts"
+      #   docker restart temporal-dev-mssql
+    networks:
+      - temporal-dev-network
   elasticsearch:
     image: elasticsearch:7.10.1
     container_name: temporal-dev-elasticsearch
