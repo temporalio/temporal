@@ -36,6 +36,17 @@ GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
+# --- TEMPORARY: pin the Go toolchain to the RC that supports generic methods ---
+# This branch uses generic methods (Go 1.27+). go.mod already pins `toolchain go1.27rc2`,
+# so in-module commands (go build/test/vet/fix) use it. But `go install tool@version`
+# (gci, goimports, golangci-lint, the vettool, …) runs OUTSIDE this module and would
+# otherwise build those tools with the default toolchain, whose gofmt/parser cannot read
+# generic methods. Exporting GOTOOLCHAIN forces every make-invoked `go` — tool installs
+# included — to use rc2, so `make fmt` / `make fmt-imports` / `make lint-code` work.
+# Remove once Go 1.27 is the default toolchain. If tools were already built under an older
+# Go, run `make clean-tools` once to rebuild them under rc2.
+export GOTOOLCHAIN := go1.27rc2
+
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
 

@@ -37,7 +37,7 @@ than a bespoke DSL.
 - **Fact** — a normalized unit of observation (a request, response, span event, or history event) addressed to one entity.
 - **Classify** — an entity's total transition function: every (state, event) → `Advance` / `NoOp` / `Illegal`. The source of "no vacuous pass."
 - **EntityRegistry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
-- **FactRegistry** — an append-only, queryable record of every fact.
+- **FactLog** — an append-only, queryable record of every fact.
 
 **Judging (Monitor)**
 - **Rule** — an invariant over model state. **Safety** rules must hold at every observation; **Liveness** rules must eventually hold.
@@ -206,7 +206,7 @@ than a bespoke DSL.
         │                                       ┌──────────────────────────────────┐
         │  plans over the SAME model            │  EntityRegistry (entity models)         │
         │                                       │  Classify: Advance/NoOp/Illegal    │
-        │                                       │  (FactRegistry: record of every fact)   │
+        │                                       │  (FactLog: record of every fact)   │
         │                                       └──────────────────────────────────┘
         │                                                                        │
         │                                                                        ▼

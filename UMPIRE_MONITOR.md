@@ -16,7 +16,7 @@ emit violations).
 └────────────┘           │   generations)   │  query  │ liveness     │
       ▲                  └──────────────────┘         └──────────────┘
       │                          │
- gRPC + OTEL                  FactRegistry (queryable record of every fact)
+ gRPC + OTEL                  FactLog (queryable record of every fact)
 ```
 
 The central idea: **everything observed becomes a `Fact` addressed to one entity.**
@@ -128,7 +128,7 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 ### Supporting pieces
 
-- **`FactRegistry`** (`fact_log.go`) — an append-only, queryable record of every fact
+- **`FactLog`** (`fact_log.go`) — an append-only, queryable record of every fact
   (`QueryByType`, `QueryByID`, `All`). Independent of the FSMs; useful for test assertions.
 - **`interceptor.go`** — a gRPC unary interceptor built from two optional hooks:
   `FactRecorder.RecordFact` (observe requests), `ResponseRecorder.RecordResponse` (observe
@@ -146,13 +146,13 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 ### `Umpire` — the orchestrator (`umpire.go`)
 
 Wires the framework to Temporal and is the object tests hold. It owns a `EntityRegistry`, a
-`FactDecoder`, a `RuleRegistry` (with all default rules registered), and a `FactRegistry`.
+`FactDecoder`, a `RuleRegistry` (with all default rules registered), and a `FactLog`.
 
 It plugs into the server two ways:
 - **OTEL** — implements `sdktrace.SpanProcessor`. `OnEnd(span)` decodes span events →
   `RouteFacts`. Synchronous (no batch delay), so per-PR cost stays low.
 - **gRPC** — implements `FactRecorder`/`ResponseRecorder`. `RecordFact`/`RecordResponse`
-  decode the request/response → append to `FactRegistry` → `RouteFacts`.
+  decode the request/response → append to `FactLog` → `RouteFacts`.
 
 Tests call `Check(ctx, final…)` to collect violations, and at teardown `settleWorkflows`
 broadcasts a `WorkflowTerminated` for every seen workflow so child FSMs reach terminal

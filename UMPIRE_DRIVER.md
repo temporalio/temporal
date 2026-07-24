@@ -90,7 +90,7 @@ Driver's per-environment realizer enforces them.)
 - **Deterministic & replayable.** Given the same seed and inputs, a run reproduces —
   buying flaky-test *verification* and reproducible bug repro. Requires seeded randomness and
   the stable/derived identifiers the Monitor already uses.
-- **Separate run from eval.** A run records the events it realized + the Monitor's `FactRegistry`;
+- **Separate run from eval.** A run records the events it realized + the Monitor's `FactLog`;
   the rulebook check can run inline *or* be replayed offline against the capture, so checks are
   re-runnable and tweakable without re-driving the server.
 - **Known-bug dismissal.** A run can mark a specific expected violation as a known bug so an

@@ -9,7 +9,7 @@ Current state, a critical read against the goals, gap analysis, and rule invento
 The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
-  safety/liveness `RuleRegistry`, `FactRegistry`, gRPC interceptor, OTEL span processor. Unit-tested.
+  safety/liveness `RuleRegistry`, `FactLog`, gRPC interceptor, OTEL span processor. Unit-tested.
 - **Domain** (`tests/umpire/`): 4 entities, 14 facts, 11 registered rules (3 safety,
   8 liveness), each with a positive + negative test. The generic
   `EntityTransitionLegality` is built + unit-tested but **not registered**: a functional
@@ -419,7 +419,7 @@ is the pragmatic target now and the down payment on generation later.
    `MinHits > 1` until generation exists.
 3. CI aggregation: confirm a per-shard-report + merge step is acceptable (required for a real
    suite-wide gate; without it the gate only works in a single-process full run).
-4. Naming: `CoverpointRegistry`/`Coverage` (literal, consistent with `RuleRegistry`/`FactRegistry`) vs a
+4. Naming: `CoverpointRegistry`/`Coverage` (literal, consistent with `RuleRegistry`/`FactLog`) vs a
    metaphor. Leaning literal.
 5. Require every rule to carry a paired precondition-coverpoint, enforced at registration
    (a lint against vacuous rules)? Leaning yes.
