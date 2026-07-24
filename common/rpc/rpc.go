@@ -28,12 +28,16 @@ import (
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
+
+// Minimum interval between (traffic-triggered) sweeps of shut-down connections.
+const internodeConnCleanupInterval = 30 * time.Minute
 
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
@@ -56,8 +60,9 @@ type RPCFactory struct {
 	requireRemoteClusterAuth bool
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient      func() (*common.FrontendHTTPClient, error)
-	interNodeGrpcConnections cache.Cache
+	localFrontendClient        func() (*common.FrontendHTTPClient, error)
+	interNodeGrpcConnections   cache.Cache
+	internodeConnCleanupTicker *time.Ticker
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -107,6 +112,7 @@ func NewFactory(
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
 	f.interNodeGrpcConnections = cache.NewSimple(nil)
+	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
 	return f
 }
 
@@ -271,7 +277,11 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 
 // createInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
-	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
+	d.maybeCleanupInternodeConns()
+
+	// Reuse the cached connection unless it has been shut down by a downstream
+	// membership-aware cache, in which case re-dial.
+	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok && c.GetState() != connectivity.Shutdown {
 		return c
 	}
 	var tlsClientConfig *tls.Config
@@ -287,6 +297,36 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 	c := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
 	d.interNodeGrpcConnections.Put(hostName, c)
 	return c
+}
+
+// Triggers a sweep at most once per interval, off the connection path.
+func (d *RPCFactory) maybeCleanupInternodeConns() {
+	select {
+	case <-d.internodeConnCleanupTicker.C:
+		go d.cleanupInternodeConns()
+	default:
+	}
+}
+
+// Removes shut-down cached connections; never closes live ones. The iterator
+// holds a read lock until Close, so keys are collected first and deleted after.
+func (d *RPCFactory) cleanupInternodeConns() {
+	var shutdownHosts []any
+	iter := d.interNodeGrpcConnections.Iterator()
+	for iter.HasNext() {
+		entry := iter.Next()
+		if c, ok := entry.Value().(*grpc.ClientConn); ok && c.GetState() == connectivity.Shutdown {
+			shutdownHosts = append(shutdownHosts, entry.Key())
+		}
+	}
+	iter.Close()
+
+	for _, host := range shutdownHosts {
+		// Best-effort skip of a host re-dialed to a live conn since collection.
+		if c, ok := d.interNodeGrpcConnections.Get(host).(*grpc.ClientConn); ok && c.GetState() == connectivity.Shutdown {
+			d.interNodeGrpcConnections.Delete(host)
+		}
+	}
 }
 
 func (d *RPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
