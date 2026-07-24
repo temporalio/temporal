@@ -9,14 +9,17 @@ Current state, a critical read against the goals, gap analysis, and rule invento
 The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
-  safety/liveness rulebook, fact log, gRPC interceptor, OTEL span processor. Unit-tested.
+  safety/liveness `RuleRegistry`, `FactRegistry`, gRPC interceptor, OTEL span processor. Unit-tested.
 - **Domain** (`tests/umpire/`): 4 entities, 14 facts, 11 registered rules (3 safety,
   8 liveness), each with a positive + negative test. The generic
   `EntityTransitionLegality` is built + unit-tested but **not registered**: a functional
   suite run surfaced a false positive (a `Workflow` sees `complete` while still in
-  `created` because its `start` was unobserved — a forward jump, not an illegal edge),
-  so enforcing it suite-wide is unsafe until `Classify` handles forward jumps (or
-  event-time ordering lands).
+  `created` because its `start` was unobserved). `Classify` now treats such forward
+  jumps over unobserved states as legal — which fixed the false positive **and** made
+  the rule **vacuous**: the current lifecycles are all converging DAGs with zero
+  possible illegal transitions (measured: 0 illegal cells across all three entities),
+  so registering it would be a never-firing rule (false confidence). It regains teeth
+  only with event-time ordering, or a future lifecycle with isolated branches.
 - **All 14 facts decode from live traffic.** Facts now carry the namespace, so entities are
   rooted at a `Namespace` (`EntityPath.Ancestors`, root-first).
 - **Namespace-scoped, per-test enforcement is wired.** `CheckNamespace` + `PurgeNamespace`
@@ -226,15 +229,24 @@ analog of the SAA model's `validate` package). This realizes item #1 of `UMPIRE_
   `MustProgress = {admitted, accepted}`, so it fires on exactly the states those two rules
   did and stays silent on `unspecified`. Other entities declare no must-progress states, so
   the rule is a safe no-op for them.
-- `EntityTransitionLegality` (safety, generic) **replaces** `WorkflowUpdateStageMonotone`
-  (deleted): a stage regression is simply not a legal edge, so the generic conformance rule
-  subsumes it and checks every `Lifecycled` type at once. `Classify` returning `NoOp` for
-  benign races (duplicate accepted span, best-effort settle) removed the original blocker, and
-  it was briefly registered — but a functional suite run then surfaced a second false-positive
-  class: a **forward jump over an unobserved state** (a `Workflow` observes `complete` while
-  still in `created` because its `start` was never observed) is flagged illegal, though it is
-  benign under observe-only. So it is **unregistered again** pending a `Classify` fix that
-  treats forward-reachable jumps as legal (or event-time ordering). It stays built + unit-tested.
+- `EntityTransitionLegality` (safety, generic) **subsumes** the deleted `WorkflowUpdateStageMonotone`
+  (a stage regression is simply not a legal edge) and checks every `Lifecycled` type at once.
+  `Classify` returning `NoOp` for benign races (duplicate/stale/post-terminal spans) removed the
+  original blocker; treating **forward jumps over unobserved states** as legal removed a second
+  false-positive class (a `Workflow` seeing `complete` from `created` when `start` was unobserved).
+  But that second fix has a consequence: with forward jumps legal, the current converging-DAG
+  lifecycles have **zero** possible illegal transitions (0 illegal cells, measured), so the rule
+  is **vacuous** and stays **unregistered** — a never-firing rule is false confidence. The
+  mechanism is real and unit-tested (a branching lifecycle in `lifecycle_test.go` still produces
+  and flags an illegal transition); it needs **event-time ordering** to have teeth over these
+  lifecycles (event-time distinguishes a missed observation from a genuine illegal skip). The
+  forward-jump handling itself is kept — it is a fidelity win: entities now reach their true
+  observed state (e.g. `Workflow` → `completed`) instead of stalling on an unobserved intermediate.
+
+  Note the two consumers diverge here on purpose: the **Monitor** treats a forward jump as a legal
+  Advance (observe-only can't tell a missed observation from an illegal skip), while the **Driver**
+  planner routes only over **direct edges** (`Lifecycle.Edges()`), never jumps — a plan must drive
+  every real step.
 
 `WorkflowUpdateStateConsistency` is **deleted**: the update's `*At` accessors are now derived
 from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp set" holds by
@@ -357,7 +369,7 @@ signal is missing).
 
 ```
 Coverpoint     = { Name, Doc, MinHits, Detect(*CoverpointContext) }
-Catalog — registers coverpoints (mirrors Rulebook; name-validated)
+CoverpointRegistry — registers coverpoints (mirrors RuleRegistry; name-validated)
 Coverage     — process-global sink: name → set{occurrenceKey}; hits = |set|.
                thread-safe, NOT cleared by PurgeNamespace, mergeable across shards.
 ```
@@ -378,10 +390,10 @@ is the pragmatic target now and the down payment on generation later.
 
 ### Phases
 
-0. **Framework core** (`common/testing/umpire`): `coverpoint.go` (`Coverpoint`, `Catalog`,
+0. **Framework core** (`common/testing/umpire`): `coverpoint.go` (`Coverpoint`, `CoverpointRegistry`,
    `CoverpointContext` reusing the dirty-query plumbing + scope) and `coverage.go` (`Coverage`:
    `Reached`, `Hits`, `Unmet`, dedup, mutex). Unit-tested in isolation.
-1. **Wire into the Umpire.** `Umpire` owns a `Catalog` + shared `Coverage`;
+1. **Wire into the Umpire.** `Umpire` owns a `CoverpointRegistry` + shared `Coverage`;
    `CheckNamespace`/`Check` run detection over the scoped model *before* purge into the
    *unpurged* `Coverage`. `PurgeNamespace` leaves coverage intact (assert it). Add
    `Umpire.Reached` + `Coverage()`.
@@ -407,7 +419,7 @@ is the pragmatic target now and the down payment on generation later.
    `MinHits > 1` until generation exists.
 3. CI aggregation: confirm a per-shard-report + merge step is acceptable (required for a real
    suite-wide gate; without it the gate only works in a single-process full run).
-4. Naming: `Catalog`/`Coverage` (literal, consistent with `Rulebook`/`FactLog`) vs a
+4. Naming: `CoverpointRegistry`/`Coverage` (literal, consistent with `RuleRegistry`/`FactRegistry`) vs a
    metaphor. Leaning literal.
 5. Require every rule to carry a paired precondition-coverpoint, enforced at registration
    (a lint against vacuous rules)? Leaning yes.

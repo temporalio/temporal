@@ -11,12 +11,12 @@ emit violations).
 ```
    observe                     model                        judge
 ┌────────────┐   Facts   ┌──────────────────┐         ┌──────────────┐
-│  Decoder   │ ────────▶ │     Registry     │ ──────▶ │   Rulebook   │ ──▶ Violations
+│  Decoder   │ ────────▶ │     EntityRegistry     │ ──────▶ │   RuleRegistry   │ ──▶ Violations
 │ (wire+span)│           │  (entity FSMs +  │  dirty  │ safety +     │
 └────────────┘           │   generations)   │  query  │ liveness     │
       ▲                  └──────────────────┘         └──────────────┘
       │                          │
- gRPC + OTEL                  FactLog (queryable record of every fact)
+ gRPC + OTEL                  FactRegistry (queryable record of every fact)
 ```
 
 The central idea: **everything observed becomes a `Fact` addressed to one entity.**
@@ -73,7 +73,7 @@ type EntityFactory func() Entity
 An entity interprets a stream of facts and holds the resulting state. Rules read that
 state; they never see facts directly.
 
-### `Registry` — routing + dirty tracking (`registry.go`)
+### `EntityRegistry` — routing + dirty tracking (`registry.go`)
 
 The heart of the model layer. It:
 
@@ -91,7 +91,7 @@ Registration is validated at wire-up time:
 - `RegisterEntity(factory, …)` panics unless `entity.Type() == structName`.
 - `RegisterFact(probes…)` panics unless `fact.Name() == structName`.
 
-### `Rulebook` — the judges (`rulebook.go`)
+### `RuleRegistry` — the judges (`rulebook.go`)
 
 Two rule kinds, mapping to strong vs. eventual consistency:
 
@@ -116,7 +116,7 @@ for r := range umpire.ChangedEntities[entity.WorkflowUpdate](c) {
 }
 ```
 
-`Rulebook` responsibilities:
+`RuleRegistry` responsibilities:
 - **Register** rules by name (`RegisterSafety`/`RegisterLiveness`). A rule's `Name()` must
   equal `structName + "Rule"` — enforced at registration.
 - **Init** a selected subset (or all) against a registry + logger (`InitRules`).
@@ -128,7 +128,7 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 ### Supporting pieces
 
-- **`FactLog`** (`fact_log.go`) — an append-only, queryable record of every fact
+- **`FactRegistry`** (`fact_log.go`) — an append-only, queryable record of every fact
   (`QueryByType`, `QueryByID`, `All`). Independent of the FSMs; useful for test assertions.
 - **`interceptor.go`** — a gRPC unary interceptor built from two optional hooks:
   `FactRecorder.RecordFact` (observe requests), `ResponseRecorder.RecordResponse` (observe
@@ -145,14 +145,14 @@ A **`Violation`** is `{Rule, Message, Tags}` — the framework's only output.
 
 ### `Umpire` — the orchestrator (`umpire.go`)
 
-Wires the framework to Temporal and is the object tests hold. It owns a `Registry`, a
-`FactDecoder`, a `Rulebook` (with all default rules registered), and a `FactLog`.
+Wires the framework to Temporal and is the object tests hold. It owns a `EntityRegistry`, a
+`FactDecoder`, a `RuleRegistry` (with all default rules registered), and a `FactRegistry`.
 
 It plugs into the server two ways:
 - **OTEL** — implements `sdktrace.SpanProcessor`. `OnEnd(span)` decodes span events →
   `RouteFacts`. Synchronous (no batch delay), so per-PR cost stays low.
 - **gRPC** — implements `FactRecorder`/`ResponseRecorder`. `RecordFact`/`RecordResponse`
-  decode the request/response → append to `FactLog` → `RouteFacts`.
+  decode the request/response → append to `FactRegistry` → `RouteFacts`.
 
 Tests call `Check(ctx, final…)` to collect violations, and at teardown `settleWorkflows`
 broadcasts a `WorkflowTerminated` for every seen workflow so child FSMs reach terminal
@@ -196,9 +196,9 @@ to.
 2. The interceptor / `SpanProcessor` hands it to `Umpire`.
 3. `FactDecoder` turns it into a `Fact` targeting an `EntityPath` (or nothing, if
    unrecognised — most traffic is ignored).
-4. `Registry.RouteFacts` finds/creates the target entity (and parents), delivers the fact
+4. `EntityRegistry.RouteFacts` finds/creates the target entity (and parents), delivers the fact
    via `OnFact`, and bumps that entity's **generation**.
-5. On the next `Rulebook.Check`, each rule queries only entities changed since its last run
+5. On the next `RuleRegistry.Check`, each rule queries only entities changed since its last run
    (`ChangedEntities[T]`), then asserts (safety) or records `Pending`/`Resolve` (liveness).
 6. At teardown, `Check(ctx, true)` promotes any unresolved liveness conditions to
    violations. The test fails on any violation.
@@ -207,9 +207,9 @@ to.
 
 | Concept | `Name()` / `Type()` must equal | Validated by |
 |---|---|---|
-| Fact | struct name | `Registry.RegisterFact` |
-| Entity | struct name (via `Type()`) | `Registry.RegisterEntity` |
-| Rule | struct name **+ `"Rule"`** | `Rulebook.RegisterSafety`/`RegisterLiveness` |
+| Fact | struct name | `EntityRegistry.RegisterFact` |
+| Entity | struct name (via `Type()`) | `EntityRegistry.RegisterEntity` |
+| Rule | struct name **+ `"Rule"`** | `RuleRegistry.RegisterSafety`/`RegisterLiveness` |
 
 These panics catch copy-paste drift at wire-up rather than letting a mislabeled rule or
 fact fail silently at runtime.

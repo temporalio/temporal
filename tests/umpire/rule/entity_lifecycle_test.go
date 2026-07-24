@@ -61,18 +61,6 @@ func TestEntityTransitionLegality_NoViolationOnStaleAfterTerminal(t *testing.T) 
 	}
 }
 
-// Parity with the former WorkflowUpdateStageMonotone: an out-of-order forward span
-// (accept before admit, from the initial state) is a genuine illegal transition.
-func TestEntityTransitionLegality_DetectsRegressionFromInitial(t *testing.T) {
-	reg := newTestRegistry()
-	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1")) // accept from "unspecified"
-
-	violations := checkSafetyRule(reg, &EntityTransitionLegality{})
-	if len(violations) != 1 {
-		t.Fatalf("expected 1 violation for accept-before-admit, got %d", len(violations))
-	}
-}
-
 // Parity with the former WorkflowUpdateLossPrevention: stuck in "admitted".
 func TestEntityProgress_DetectsStuckAdmitted(t *testing.T) {
 	reg := newTestRegistry()

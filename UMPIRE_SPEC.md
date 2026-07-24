@@ -32,19 +32,19 @@ than a bespoke DSL.
 - **Driver** — the active mechanics; realizes each planned event as real traffic and injects faults.
 
 **Model (Monitor)**
-- **Model** — the whole: every entity and its current state, held in the `Registry`. What the Planner plans over and what rules read.
+- **Model** — the whole: every entity and its current state, held in the `EntityRegistry`. What the Planner plans over and what rules read.
 - **Entity** — one piece of the model: a single executable state machine / *oracle* (Workflow, WorkflowUpdate, WorkflowTask, TaskQueue, NexusOperation, …), built up from facts.
 - **Fact** — a normalized unit of observation (a request, response, span event, or history event) addressed to one entity.
 - **Classify** — an entity's total transition function: every (state, event) → `Advance` / `NoOp` / `Illegal`. The source of "no vacuous pass."
-- **Registry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
-- **FactLog** — an append-only, queryable record of every fact.
+- **EntityRegistry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
+- **FactRegistry** — an append-only, queryable record of every fact.
 
 **Judging (Monitor)**
 - **Rule** — an invariant over model state. **Safety** rules must hold at every observation; **Liveness** rules must eventually hold.
-- **Rulebook** — the name-validated registry of rules.
+- **RuleRegistry** — the name-validated registry of rules.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
 - **Coverpoint** — a named, interesting condition worth reaching at least once (e.g. a rule's precondition, or a notable state).
-- **Catalog** — the name-validated registry of coverpoints (mirrors the `Rulebook`).
+- **CoverpointRegistry** — the name-validated registry of coverpoints (mirrors the `RuleRegistry`).
 - **Coverage** — the tally of which coverpoints have been hit; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
 
 **Planning (Planner) — high-level, over the model**
@@ -163,7 +163,7 @@ than a bespoke DSL.
 
 ### Shared
 
-- **One model, shared by all three.** No second state store: the `Registry` the Monitor fills is
+- **One model, shared by all three.** No second state store: the `EntityRegistry` the Monitor fills is
   what the Planner plans routes over and the Driver polls while realizing them. This is why the
   parts live together.
 - **Environments & capabilities.** The model, rules, planned routes, and coverage catalog are all
@@ -189,8 +189,8 @@ than a bespoke DSL.
 - **Coverage is the reward signal.** The coverpoint catalog (planned, `UMPIRE_PLAN.md`)
   turns a rule's precondition into a coverpoint; `Coverage.Unmet()` is the list of
   interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
-- **Pluggable registries.** Rules register in a name-validated `Rulebook`, coverpoints in a
-  `Catalog`, and routes in a parallel registry. Adding one ≠ touching the framework.
+- **Pluggable registries.** Rules register in a name-validated `RuleRegistry`, coverpoints in a
+  `CoverpointRegistry`, and routes in a `RouteRegistry`. Adding one ≠ touching the framework.
 - **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpire`
   holds all Temporal specifics (entities, facts, rules, and — later — actions).
 
@@ -204,14 +204,14 @@ than a bespoke DSL.
         ▲                                                                        │ Facts
         │                                                                        ▼
         │                                       ┌──────────────────────────────────┐
-        │  plans over the SAME model            │  Registry (entity models)         │
+        │  plans over the SAME model            │  EntityRegistry (entity models)         │
         │                                       │  Classify: Advance/NoOp/Illegal    │
-        │                                       │  (FactLog: record of every fact)   │
+        │                                       │  (FactRegistry: record of every fact)   │
         │                                       └──────────────────────────────────┘
         │                                                                        │
         │                                                                        ▼
         │                                       ┌──────────────────────────────────┐
-        └──── Coverage.Unmet() (reward) ◀────── │  Rulebook: conformance + liveness │──▶ Violations
+        └──── Coverage.Unmet() (reward) ◀────── │  RuleRegistry: conformance + liveness │──▶ Violations
                                                 │  + relational rules                │
                                                 └──────────────────────────────────┘
 ```

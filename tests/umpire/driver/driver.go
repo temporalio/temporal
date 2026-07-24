@@ -196,25 +196,27 @@ type edge struct {
 	to    string
 }
 
-// advanceEdges builds the adjacency of legal (Advance) edges from the model's
-// decision table, filtered by the constraints. Because denied events/states are
-// dropped here, nothing downstream can produce a route that violates them.
+// advanceEdges builds the adjacency the planner routes over: the model's direct
+// transition edges, filtered by the constraints. It uses Edges (real transitions),
+// not Classify's forward-jump interpretation — a plan must drive each real step,
+// never "jump" over one. Because denied events/states are dropped here, nothing
+// downstream can produce a route that violates the constraints.
 func advanceEdges(lc *umpire.Lifecycle, c Constraints) map[string][]edge {
 	allow := toSet(c.AllowEvents)
 	denyEv := toSet(c.DenyEvents)
 	denySt := toSet(c.DenyStates)
 	adj := map[string][]edge{}
-	for _, cell := range lc.Cells() {
-		if cell.Kind != umpire.Advance {
+	for _, e := range lc.Edges() {
+		if e.To == e.From {
+			continue // self-loop: no progress
+		}
+		if len(allow) > 0 && !allow[e.Event] {
 			continue
 		}
-		if len(allow) > 0 && !allow[cell.Event] {
+		if denyEv[e.Event] || denySt[e.To] {
 			continue
 		}
-		if denyEv[cell.Event] || denySt[cell.To] {
-			continue
-		}
-		adj[cell.From] = append(adj[cell.From], edge{event: cell.Event, to: cell.To})
+		adj[e.From] = append(adj[e.From], edge{event: e.Event, to: e.To})
 	}
 	for s := range adj {
 		sort.Slice(adj[s], func(i, j int) bool { return adj[s][i].event < adj[s][j].event })

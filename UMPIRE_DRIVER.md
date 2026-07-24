@@ -90,7 +90,7 @@ Driver's per-environment realizer enforces them.)
 - **Deterministic & replayable.** Given the same seed and inputs, a run reproduces —
   buying flaky-test *verification* and reproducible bug repro. Requires seeded randomness and
   the stable/derived identifiers the Monitor already uses.
-- **Separate run from eval.** A run records the events it realized + the Monitor's `FactLog`;
+- **Separate run from eval.** A run records the events it realized + the Monitor's `FactRegistry`;
   the rulebook check can run inline *or* be replayed offline against the capture, so checks are
   re-runnable and tweakable without re-driving the server.
 - **Known-bug dismissal.** A run can mark a specific expected violation as a known bug so an
@@ -135,7 +135,7 @@ These already exist or are half-built in the Umpire code; the Driver consumes th
    of injected faults against a live multi-goroutine server is the hard part. May need the fault
    seams to expose synchronization points ("hold request between points X and Y").
 2. **Guard polling vs. event-driven.** When realizing an eventual-consistency event, does the
-   Driver poll the `Registry` or get notified on generation bumps? Polling is simplest and
+   Driver poll the `EntityRegistry` or get notified on generation bumps? Polling is simplest and
    matches the existing generation watermark; a notify seam may be needed for tight timing.
 3. **Overlap with existing pollers/testvars.** The Driver should *replace* the fragmented
    poller/testvars style, not become a fourth style beside them. Plan a migration, not an

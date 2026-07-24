@@ -49,12 +49,13 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
 	// rule.EntityTransitionLegality (generic, over any Lifecycled entity) is built
-	// and unit-tested but NOT registered: a suite run surfaced a false positive —
-	// a Workflow observes `complete` while still in `created` because its `start`
-	// was not observed on that path (a forward jump over an unobserved state, not an
-	// illegal transition). Classify treats duplicate/stale/post-terminal spans as
-	// NoOp, but not yet forward jumps; until that (or event-time ordering) lands,
-	// enforcing it suite-wide is unsafe. See UMPIRE_PLAN.md.
+	// and unit-tested but NOT registered: now that Classify treats forward jumps
+	// over unobserved states as legal (observe-only cannot distinguish a missed
+	// observation from an illegal skip), the current entity lifecycles — all
+	// converging DAGs — have ZERO possible illegal transitions, so the rule would
+	// be vacuous (a never-firing rule is false confidence). It regains teeth only
+	// with event-time ordering, or for a future lifecycle with isolated branches.
+	// See UMPIRE_PLAN.md.
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })

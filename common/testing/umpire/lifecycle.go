@@ -357,6 +357,36 @@ func (l *Lifecycle) Reachable() map[string]bool {
 	return out
 }
 
+// Edge is one direct transition of the model.
+type Edge struct {
+	From  string
+	Event string
+	To    string
+}
+
+// Edges returns every direct transition edge (from -> event -> to) declared by the
+// spec, in stable order. These are the actual transitions — distinct from
+// Classify's forward-jump interpretation — and are what a planner routes over.
+func (l *Lifecycle) Edges() []Edge {
+	froms := make([]string, 0, len(l.edges))
+	for f := range l.edges {
+		froms = append(froms, f)
+	}
+	sort.Strings(froms)
+	var out []Edge
+	for _, f := range froms {
+		evs := make([]string, 0, len(l.edges[f]))
+		for e := range l.edges[f] {
+			evs = append(evs, e)
+		}
+		sort.Strings(evs)
+		for _, e := range evs {
+			out = append(out, Edge{From: f, Event: e, To: l.edges[f][e]})
+		}
+	}
+	return out
+}
+
 // Cells returns the model's decision table over its reachable states: for every
 // reachable state × declared event, the predicted Outcome. It is the coverage
 // target (the denominator) for exploring the model and a readable, server-free
