@@ -281,8 +281,7 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName primitives.ServiceName) *grpc.ClientConn {
 	d.maybeCleanupInternodeConns()
 
-	// Reuse the cached connection unless it has been shut down by a downstream
-	// membership-aware cache, in which case re-dial.
+	// Reuse the cached connection unless it has been shut down, in which case re-dial.
 	d.internodeGRPCConnections.RLock()
 	conn, ok := d.internodeGRPCConnections.conns[hostName]
 	d.internodeGRPCConnections.RUnlock()
