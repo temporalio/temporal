@@ -7,11 +7,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 )
 
 func newCacheTestFactory() *RPCFactory {
 	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler, nil, "", "", 0, nil, nil, nil, nil, nil)
+}
+
+func (d *RPCFactory) cachedConn(hostName string) (*grpc.ClientConn, bool) {
+	d.internodeGRPCConnections.RLock()
+	defer d.internodeGRPCConnections.RUnlock()
+	c, ok := d.internodeGRPCConnections.conns[hostName]
+	return c, ok
 }
 
 func TestInternodeConnCache_SharesConnPerHost(t *testing.T) {
@@ -46,8 +54,11 @@ func TestInternodeConnCache_CleanupRemovesShutdownConns(t *testing.T) {
 
 	f.cleanupInternodeConns()
 
-	require.Nil(t, f.interNodeGrpcConnections.Get("127.0.0.1:7235"), "shut-down connection should be swept")
-	require.Same(t, live, f.interNodeGrpcConnections.Get("127.0.0.1:7234"), "live connection should be retained")
+	_, deadOK := f.cachedConn("127.0.0.1:7235")
+	require.False(t, deadOK, "shut-down connection should be swept")
+	liveConn, liveOK := f.cachedConn("127.0.0.1:7234")
+	require.True(t, liveOK, "live connection should be retained")
+	require.Same(t, live, liveConn)
 }
 
 func TestInternodeConnCache_ConcurrentCreate(t *testing.T) {
@@ -64,5 +75,7 @@ func TestInternodeConnCache_ConcurrentCreate(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.Equal(t, 1, f.interNodeGrpcConnections.Size())
+	f.internodeGRPCConnections.RLock()
+	require.Len(t, f.internodeGRPCConnections.conns, 1)
+	f.internodeGRPCConnections.RUnlock()
 }

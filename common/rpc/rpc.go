@@ -15,7 +15,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -60,8 +59,11 @@ type RPCFactory struct {
 	requireRemoteClusterAuth bool
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
-	localFrontendClient        func() (*common.FrontendHTTPClient, error)
-	interNodeGrpcConnections   cache.Cache
+	localFrontendClient      func() (*common.FrontendHTTPClient, error)
+	internodeGRPCConnections struct {
+		sync.RWMutex
+		conns map[string]*grpc.ClientConn
+	}
 	internodeConnCleanupTicker *time.Ticker
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
@@ -111,7 +113,7 @@ func NewFactory(
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
-	f.interNodeGrpcConnections = cache.NewSimple(nil)
+	f.internodeGRPCConnections.conns = make(map[string]*grpc.ClientConn)
 	f.internodeConnCleanupTicker = time.NewTicker(internodeConnCleanupInterval)
 	return f
 }
@@ -281,9 +283,13 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 
 	// Reuse the cached connection unless it has been shut down by a downstream
 	// membership-aware cache, in which case re-dial.
-	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok && c.GetState() != connectivity.Shutdown {
-		return c
+	d.internodeGRPCConnections.RLock()
+	conn, ok := d.internodeGRPCConnections.conns[hostName]
+	d.internodeGRPCConnections.RUnlock()
+	if ok && conn.GetState() != connectivity.Shutdown {
+		return conn
 	}
+
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -294,9 +300,16 @@ func (d *RPCFactory) createInternodeGRPCConnection(hostName string, serviceName 
 		}
 	}
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[serviceName]...)
-	c := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
-	d.interNodeGrpcConnections.Put(hostName, c)
-	return c
+	newConn := d.dial(hostName, tlsClientConfig, append(additionalDialOptions, d.getClientKeepAliveConfig(serviceName))...)
+
+	d.internodeGRPCConnections.Lock()
+	defer d.internodeGRPCConnections.Unlock()
+	if existing, ok := d.internodeGRPCConnections.conns[hostName]; ok && existing.GetState() != connectivity.Shutdown {
+		_ = newConn.Close()
+		return existing
+	}
+	d.internodeGRPCConnections.conns[hostName] = newConn
+	return newConn
 }
 
 // Triggers a sweep at most once per interval, off the connection path.
@@ -308,23 +321,13 @@ func (d *RPCFactory) maybeCleanupInternodeConns() {
 	}
 }
 
-// Removes shut-down cached connections; never closes live ones. The iterator
-// holds a read lock until Close, so keys are collected first and deleted after.
+// Removes shut-down cached connections; never closes live ones.
 func (d *RPCFactory) cleanupInternodeConns() {
-	var shutdownHosts []any
-	iter := d.interNodeGrpcConnections.Iterator()
-	for iter.HasNext() {
-		entry := iter.Next()
-		if c, ok := entry.Value().(*grpc.ClientConn); ok && c.GetState() == connectivity.Shutdown {
-			shutdownHosts = append(shutdownHosts, entry.Key())
-		}
-	}
-	iter.Close()
-
-	for _, host := range shutdownHosts {
-		// Best-effort skip of a host re-dialed to a live conn since collection.
-		if c, ok := d.interNodeGrpcConnections.Get(host).(*grpc.ClientConn); ok && c.GetState() == connectivity.Shutdown {
-			d.interNodeGrpcConnections.Delete(host)
+	d.internodeGRPCConnections.Lock()
+	defer d.internodeGRPCConnections.Unlock()
+	for hostName, conn := range d.internodeGRPCConnections.conns {
+		if conn.GetState() == connectivity.Shutdown {
+			delete(d.internodeGRPCConnections.conns, hostName)
 		}
 	}
 }
