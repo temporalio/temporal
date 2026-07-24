@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
 	"go.uber.org/multierr"
 )
 
@@ -81,6 +82,7 @@ type (
 		TokenProvider             auth.TokenProvider
 		TLSConfigProvider         *encryption.FixedTLSConfigProvider
 		AdditionalServerOptions   []temporal.ServerOption
+		ServiceFxOptions          map[primitives.ServiceName][]fx.Option
 	}
 
 	TestClusterFactory interface {
@@ -318,6 +320,10 @@ func newClusterWithPersistenceTestBaseFactory(
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
+	additionalServerOptions := clusterConfig.AdditionalServerOptions
+	for service, opts := range clusterConfig.ServiceFxOptions {
+		additionalServerOptions = append(additionalServerOptions, temporal.WithPerServiceFxOptions(service, opts...))
+	}
 	host := newTemporal(t, &temporalParams{
 		Config:                    serverConfig,
 		MetadataMgr:               testBase.MetadataManager,
@@ -333,7 +339,7 @@ func newClusterWithPersistenceTestBaseFactory(
 		EnableHistoryTaskRecorder: clusterConfig.EnableHistoryTaskRecorder,
 		EnableReplicationRecorder: clusterConfig.EnableReplicationRecorder,
 		WorkerConfig:              clusterConfig.WorkerConfig,
-		AdditionalServerOptions:   clusterConfig.AdditionalServerOptions,
+		AdditionalServerOptions:   additionalServerOptions,
 	})
 	if err = host.Start(); err != nil {
 		return nil, err
