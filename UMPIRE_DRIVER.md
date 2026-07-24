@@ -68,20 +68,22 @@ reachable; the Driver only has to realize one event at a time.
   receives WFT" so one driver works with and without a real worker and can stub work that isn't
   built yet. Keeps black-box realizations honest.
 
-## Tier-honest reach
+## Capability-honest reach
 
-Events have a *reach* just as the Monitor's facts have a *provenance tier* — the same
-black/grey/white discipline, mirrored on the active side:
+Each event declares the **drive-capability** it needs, mirroring the observe-capability the
+Monitor's facts carry (see *Environments & capabilities* in [`UMPIRE_SPEC.md`](./UMPIRE_SPEC.md)
+and [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md)):
 
-- **Black-box events** — realized only through the public frontend API
-  (Start/Signal/Update/Poll/Describe/GetHistory). Runnable **anywhere**, including canary/Cloud.
-- **Grey/white-box events** — fault injection at internal RPC / persistence / timing seams.
-  Functional-test & test-cell only.
+- **`rpcDrive`** — realized through the public frontend API / SDK
+  (Start/Signal/Update/Poll/Describe/GetHistory). Runnable **anywhere**, including `cicd` and
+  `canary`.
+- **`faults`** — injection at internal RPC / persistence / timing seams. `local-*` only.
+- **`directDrive`** — CHASM transitions called directly, no wire. `local-chasm` only.
 
-A run realizes only events whose reach ≤ its deployment tier, and **skips the rest
-explicitly** — never a silently-dropped action. A canary run literally cannot schedule a
-white-box event. (The Planner declares each route's max reach; the Driver enforces it at
-realization.)
+A run realizes only events whose capability its environment grants, and **skips the rest
+explicitly** — never a silently-dropped action. A `canary` run literally cannot schedule a
+`faults` or `directDrive` event. (The Planner declares each route's required capabilities; the
+Driver's per-environment realizer enforces them.)
 
 ## Determinism & replay
 

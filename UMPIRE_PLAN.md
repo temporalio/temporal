@@ -54,72 +54,94 @@ concrete, not hypothetical:
 Until the suite has been run under enforcement and every violation triaged, this change is
 not safe to merge on. **That triage is now the whole game.**
 
-## Observation tiers: black / grey / white box (strategic)
+## Environments & capabilities (strategic)
 
-Rules and facts differ in *how much of the system they need to see*. This must be a
-first-class, explicit distinction — it decides what the umpire can run in each deployment
-(functional test vs. nightly vs. **canary / Temporal Cloud**, where we have no internal
-insight).
+Rules, facts, and actions differ in *how much of the system they need* — to observe and to
+drive. This must be a first-class, explicit distinction: it decides what the umpire can run in
+each deployment (CHASM-direct, in-process RPC, CICD, **canary / Temporal Cloud**).
 
-| Tier | What is observable | Available in |
-|---|---|---|
-| **Black box** | Only the public **frontend gRPC API** a client can call: Start/Signal/Update requests + responses (incl. errors), `PollWorkflowExecutionUpdate`, `DescribeWorkflowExecution`, `GetWorkflowHistory`. | anywhere — **canary, Cloud, prod** |
-| **Grey box** | Black box **+ internal service RPCs** (history/matching interceptors) **+ emitted OTEL spans**. | in-process functional tests |
-| **White box** | Grey box **+ persistence interception** and mutable-state internals (DB writes, registry state). | test harness only |
+The old scalar tier (`black ⊂ grey ⊂ white`) was too coarse: it conflated observing with
+driving and assumed a total order the real environments don't obey — canary can't drive; CICD
+drives and sees traces but has no internals; CHASM-direct reads and drives internals with no
+wire at all. Model capabilities as **independent flags on three axes**; an **environment** is a
+named profile = the subset it grants.
 
-Tiers form a total order (`black ⊂ grey ⊂ white`) and describe the **deployment's**
-observability, not the rule's cleverness.
+| Axis | Capabilities |
+|---|---|
+| **Observe** (fact sources) | `rpc` (frontend req/resp/errors: Start/Signal/Update, `PollWorkflowExecutionUpdate`, `DescribeWorkflowExecution`, `GetWorkflowHistory`) · `traces` (OTEL spans + internal-service RPC interceptors) · `internals` (direct CHASM / persistence / mutable-state read) |
+| **Drive** (action realizers) | `rpcDrive` (public API / SDK calls) · `faults` (inject at internal RPC / persistence / timing seams) · `directDrive` (call CHASM transitions directly, no wire) |
+| **Transport** | `inproc-noserver` · `inproc-server` · `remote` |
+
+The four environments as profiles:
+
+| Environment | observe | drive | transport |
+|---|---|---|---|
+| `local-chasm` | `internals` | `directDrive` (+`faults`) | in-process, no server |
+| `local-rpc` | `rpc`+`traces`+`internals` | `rpcDrive`+`faults` | in-process server |
+| `cicd` | `rpc`+`traces` | `rpcDrive` | remote / onebox |
+| `canary` | `rpc` | observe-only (opt. `rpcDrive`) | remote |
+
+`black`/`grey`/`white` survive only as shorthand for common *observe* bundles
+(`rpc` / `+traces` / `+internals`); the mechanism is the flag set, not a scalar.
 
 ### Why it must be explicit
-1. **False confidence in canary.** Run a grey-box rule where its facts never arrive and the
-   entity simply never advances — the rule *passes*. "Observed nothing → no violation" reads
-   as "healthy," the worst possible canary outcome. Tiers must make "not observable here" an
-   **explicit skip**, never a silent pass.
-2. **Accidental unportability.** The umpire today leans grey/white without anyone deciding it,
-   so almost nothing is canary-ready even where it could be.
+1. **False confidence in canary.** Run a rule needing `traces` where those facts never arrive
+   and the entity simply never advances — the rule *passes*. "Observed nothing → no violation"
+   reads as "healthy," the worst possible canary outcome. A missing capability must be an
+   **explicit skip**, never a silent pass. Same on the drive side: a `faults` action a profile
+   can't inject must fail loudly, not silently no-op.
+2. **Accidental unportability.** The umpire today leans on `traces`/`internals` without anyone
+   deciding it, so almost nothing is canary-ready even where it could be.
 
 ### Mechanism (proposed)
-- **Facts carry a provenance tier**, set at the importer/decoder (tier is a property of the
-  channel, not the invariant): `registerRequestFact(BlackBox, …)`, `registerSpanFact(GreyBox, …)`,
-  future `registerPersistenceFact(WhiteBox, …)`.
-- **A run enables only importers ≤ its tier** — a canary literally cannot produce white-box
-  facts, so they are never registered (no silent no-ops).
-- **Each rule declares `RequiredTier()`** = max tier of the entity states it reads.
-  `InitRules(availableTier)` runs only rules ≤ that tier and emits a **coverage report**
-  (“black-box: N active; grey-only: M skipped; white-only: K skipped”), so we always know
-  what is and isn’t being checked in a given environment.
-- **Entities and rules stay identical across tiers** — only the *fact sources* change. Tier
-  is an observability filter over one unified model, not a fork.
+- **Facts carry the observe-capability they need**, set at the importer/decoder (a property of
+  the channel, not the invariant): `registerRequestFact(rpc, …)`, `registerSpanFact(traces, …)`,
+  future `registerComponentFact(internals, …)`.
+- **Actions carry the drive-capability they need** — `rpcDrive` / `faults` / `directDrive` —
+  and the Driver realizer for the environment executes them (a CHASM call, a frontend RPC, a
+  remote client call).
+- **A run enables only channels its profile grants** — a canary literally cannot produce
+  `internals` facts or `faults` actions, so they are never registered (no silent no-ops).
+- **Each rule declares its required observe-capabilities** = max of the entity states it reads;
+  **each planned route declares its required drive-capabilities**. `InitRules(profile)` and route
+  selection run only what the profile supports and emit a **coverage report** (“observe `rpc`: N
+  active; `traces`-only: M skipped; `internals`-only: K skipped; routes needing `faults`: J
+  skipped”), so we always know what is and isn’t exercised in a given environment.
+- **Entities, rules, and routes stay identical across environments** — only the *fact sources*
+  and *action realizers* (the edges) change. The profile is a capability filter over one unified
+  model, not a fork.
 
 ### The reclassification insight (payoff)
-Mapping the current rules onto tiers shows the umpire is needlessly grey-box:
+Mapping the current rules onto observe-capabilities shows the umpire is needlessly dependent on
+`traces`:
 - **Update-lifecycle + workflow-completion rules** (progress, dedup, closure, history-ordering,
-  continue-as-new) read states that are **all black-box observable** via `GetWorkflowHistory`
-  + `PollWorkflowExecutionUpdate` + response errors — yet are currently sourced from **server
-  OTEL spans (grey)**. Re-sourcing them black-box makes the *flagship* invariants
-  **canary-portable** *and* removes the production-span coupling that is the #1 structural
-  risk.
+  continue-as-new) read states that are all reconstructable from **`rpc` alone**
+  (`GetWorkflowHistory` + `PollWorkflowExecutionUpdate` + response errors) — yet are currently
+  sourced from **server OTEL spans (`traces`)**. Re-sourcing them `rpc` makes the *flagship*
+  invariants **runnable in `cicd` and `canary`** *and* removes the production-span coupling that
+  is the #1 structural risk.
 - **Speculative + task rules** (creation, conversion, rollback, starvation) read
-  `IsSpeculative`, task `stored`/`discarded`, matching internals — **intrinsically grey/white**;
-  they correctly stay functional-test-only.
+  `IsSpeculative`, task `stored`/`discarded`, matching internals — **intrinsically
+  `traces`/`internals`**; they correctly stay in the `local-*` environments.
 
-Target end-state: a **black-box rule set** (update + workflow lifecycle) that runs in
-canary/Cloud, and a **grey/white superset** (speculative, task-internal, persistence) for
-functional tests — same model, tier-gated.
+Target end-state: an **`rpc`-only rule set** (update + workflow lifecycle) that runs everywhere
+including `canary`, and a **`traces`/`internals` superset** (speculative, task-internal,
+persistence) for the local environments — same model, capability-gated.
 
 ### How it reframes fidelity
-The fidelity gaps split by tier, which also resolves the settle-vs-detect tension:
-- **Close observation** has a *black-box form* (history terminal event / Describe status /
-  update "already completed" error) and a *white-box form* (persistence write / mutable-state
-  status). Prefer black-box so closure & liveness run in canary; use white-box only to sharpen
-  or for internal-only invariants.
-- **Persistence interception (STAMP)** *is* the white-box tier — powerful, but tagged so no
-  rule depending on it is ever expected to run in canary.
-- Black-box close removes the need for the synthetic `settleWorkflows` hack entirely (real
+The fidelity gaps split by capability, which also resolves the settle-vs-detect tension:
+- **Close observation** has an `rpc` form (history terminal event / Describe status / update
+  "already completed" error) and an `internals` form (persistence write / mutable-state status).
+  Prefer the `rpc` form so closure & liveness run in `canary`; use `internals` only to sharpen or
+  for internal-only invariants.
+- **Persistence / CHASM interception** *is* the `internals` capability — powerful, but tagged so
+  no rule depending on it is ever expected to run in `canary`. In `local-chasm` it is also the
+  *drive* path (`directDrive`).
+- `rpc`-sourced close removes the need for the synthetic `settleWorkflows` hack entirely (real
   close becomes observable from the client API).
 
-Discipline: **push every invariant down to the lowest tier that can express it**, so the
-maximum number of rules run in the maximum number of environments.
+Discipline: **push every rule and action to the widest set of environments its capabilities
+allow**, so the maximum number run in the maximum number of environments.
 
 ## Gaps
 
@@ -249,7 +271,7 @@ collection, not any one entity's history, and no single-entity model can state i
 
 ### Why the goal is "models *plus* relational invariants," not one monolith
 Replacing rules with a single global model would forfeit Umpire's three edges: cross-entity
-reach, portability (black/grey/white-box, canary — see the tiers section), and ride-along
+reach, portability (capabilities & environments, canary — see that section), and ride-along
 enforcement over the whole suite. A complete *global* product automaton (TLA+-style) is a much
 larger lift and out of scope. The practical target:
 1. **Per-entity complete models** — total `Classify` + state predictions (+ expected API result)
