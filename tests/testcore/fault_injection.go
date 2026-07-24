@@ -25,28 +25,17 @@ func (o rpcFaultOptions) matchesNamespace(req any) bool {
 		return true
 	}
 
-	matched := false
 	if o.namespaceID != "" {
-		if r, ok := req.(interface{ GetNamespaceId() string }); ok {
-			if namespaceID := r.GetNamespaceId(); namespaceID != "" {
-				if namespaceID != o.namespaceID {
-					return false
-				}
-				matched = true
-			}
+		if r, ok := req.(interface{ GetNamespaceId() string }); ok && r.GetNamespaceId() == o.namespaceID {
+			return true
 		}
 	}
 	if o.namespaceName != "" {
-		if r, ok := req.(interface{ GetNamespace() string }); ok {
-			if namespaceName := r.GetNamespace(); namespaceName != "" {
-				if namespaceName != o.namespaceName {
-					return false
-				}
-				matched = true
-			}
+		if r, ok := req.(interface{ GetNamespace() string }); ok && r.GetNamespace() == o.namespaceName {
+			return true
 		}
 	}
-	return matched
+	return false
 }
 
 // WithNamespaceID filters faults to only fire for requests whose GetNamespaceId()

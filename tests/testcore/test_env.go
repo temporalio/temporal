@@ -442,7 +442,8 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 }
 
 // InjectRPCFault registers a fault injection scoped to this test's namespace.
-// Both namespace ID and name filters are applied automatically.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
 // Returns a cleanup function that disables the fault.
 func (e *TestEnv) InjectRPCFault(fault RPCFault, opts ...RPCFaultOption) func() {
 	opts = append([]RPCFaultOption{
