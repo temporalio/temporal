@@ -37,6 +37,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -507,7 +508,7 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 	}
 
 	key := ctx.ExecutionKey()
-	backLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
+	backLink := temporalnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
 		Namespace:  ctx.NamespaceEntry().Name().String(),
 		ActivityId: key.BusinessID,
 		RunId:      key.RunID,

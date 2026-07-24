@@ -17,6 +17,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -220,7 +221,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
 		name                  string
@@ -247,7 +248,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				if workflowEventLinkIdx == -1 {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing workflow event link")
 				}
-				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
+				link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
 				if err != nil {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to convert link: %v", err)
 				}
@@ -548,7 +549,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				})
 			}
 
-			callerLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			callerLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 				Namespace:  "ns-name",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",
@@ -1000,7 +1001,7 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 									OperationToken: "system-op-token",
 									Links: commonnexus.ConvertLinksToProto([]nexus.Link{
-										commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+										temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
 									}),
 								},
 							},
@@ -1183,7 +1184,7 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 				input = mustToPayload(t, "test")
 			}
 
-			callerLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+			callerLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 				Namespace:  "ns-name",
 				WorkflowId: "wf-id",
 				RunId:      "run-id",

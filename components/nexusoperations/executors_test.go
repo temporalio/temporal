@@ -17,6 +17,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/sdk/converter"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -81,7 +82,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 	}
-	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
 		name                       string
@@ -108,7 +109,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Len(t, options.Links, 1)
 				var links []*commonpb.Link
 				for _, nexusLink := range options.Links {
-					link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					require.NoError(t, err)
 					links = append(links, &commonpb.Link{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -1620,7 +1621,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
 									OperationToken: "system-op-token",
 									Links: commonnexus.ConvertLinksToProto([]nexus.Link{
-										commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
+										temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink),
 									}),
 								},
 							},

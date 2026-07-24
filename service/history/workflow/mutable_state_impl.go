@@ -23,6 +23,7 @@ import (
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/temporalnexus"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -800,7 +801,7 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 			},
 		}
 	}
-	startLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(link)
+	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
 
 	startTime := ms.executionState.GetStartTime().AsTime()
 	links := []nexus.Link{startLink}
@@ -899,7 +900,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		}
 	}
-	startLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(link)
+	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(link)
 
 	startTime := ms.executionState.GetStartTime().AsTime()
 	closeTime := ce.GetEventTime().AsTime()

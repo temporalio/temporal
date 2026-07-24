@@ -18,6 +18,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -395,7 +396,7 @@ func (e taskExecutor) loadOperationArgs(
 		attrs := event.GetNexusOperationScheduledEventAttributes()
 		args.payload = attrs.GetInput()
 		args.header = maps.Clone(attrs.GetNexusHeader())
-		args.nexusLink = commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
