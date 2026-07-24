@@ -10,10 +10,13 @@ The pipeline is built and, as of the latest changes, **enforced suite-wide**:
 
 - **Framework** (`common/testing/umpire/`): registry + generation dirty-tracking,
   safety/liveness rulebook, fact log, gRPC interceptor, OTEL span processor. Unit-tested.
-- **Domain** (`tests/umpire/`): 4 entities, 14 facts, 12 registered rules (4 safety,
+- **Domain** (`tests/umpire/`): 4 entities, 14 facts, 11 registered rules (3 safety,
   8 liveness), each with a positive + negative test. The generic
-  `EntityTransitionLegality` is now registered (see below), so there is no
-  built-but-unregistered rule left.
+  `EntityTransitionLegality` is built + unit-tested but **not registered**: a functional
+  suite run surfaced a false positive (a `Workflow` sees `complete` while still in
+  `created` because its `start` was unobserved — a forward jump, not an illegal edge),
+  so enforcing it suite-wide is unsafe until `Classify` handles forward jumps (or
+  event-time ordering lands).
 - **All 14 facts decode from live traffic.** Facts now carry the namespace, so entities are
   rooted at a `Namespace` (`EntityPath.Ancestors`, root-first).
 - **Namespace-scoped, per-test enforcement is wired.** `CheckNamespace` + `PurgeNamespace`
@@ -223,14 +226,15 @@ analog of the SAA model's `validate` package). This realizes item #1 of `UMPIRE_
   `MustProgress = {admitted, accepted}`, so it fires on exactly the states those two rules
   did and stays silent on `unspecified`. Other entities declare no must-progress states, so
   the rule is a safe no-op for them.
-- `EntityTransitionLegality` (safety, generic) is **now registered and replaces**
-  `WorkflowUpdateStageMonotone` (deleted): a stage regression is simply not a legal edge, so
-  the generic conformance rule subsumes it and checks every `Lifecycled` type at once. The
-  previous blocker — "illegal transition" over-capturing benign races (a duplicate accepted
-  span, a best-effort settle) — is gone now that `Classify` returns `NoOp` for those. A
-  genuinely impossible forward span from the initial state (e.g. accept-before-admit) is still
-  flagged. Residual gate: suite-wide validation under enforcement is still owed, since a true
-  cross-branch reorder without event-time could in principle still surface as illegal.
+- `EntityTransitionLegality` (safety, generic) **replaces** `WorkflowUpdateStageMonotone`
+  (deleted): a stage regression is simply not a legal edge, so the generic conformance rule
+  subsumes it and checks every `Lifecycled` type at once. `Classify` returning `NoOp` for
+  benign races (duplicate accepted span, best-effort settle) removed the original blocker, and
+  it was briefly registered — but a functional suite run then surfaced a second false-positive
+  class: a **forward jump over an unobserved state** (a `Workflow` observes `complete` while
+  still in `created` because its `start` was never observed) is flagged illegal, though it is
+  benign under observe-only. So it is **unregistered again** pending a `Classify` fix that
+  treats forward-reachable jumps as legal (or event-time ordering). It stays built + unit-tested.
 
 `WorkflowUpdateStateConsistency` is **deleted**: the update's `*At` accessors are now derived
 from the lifecycle's entry times (`EnteredAt`), so "state reached ⇔ timestamp set" holds by
@@ -419,7 +423,7 @@ is the pragmatic target now and the down payment on generation later.
 **First cut:** Phases 0–2 alone deliver the dead-rule report and are shippable independently
 of the CI gate (Phase 3).
 
-## Rule inventory (12 registered)
+## Rule inventory (11 registered + 1 built-unregistered)
 
 Naming: struct drops the `Rule` suffix; `Name()` returns struct name + `"Rule"` (enforced at
 registration).
@@ -431,7 +435,6 @@ registration).
 | `SpeculativeTaskCreation` | a speculative task must not coexist with a pending normal task for the same workflow | groups by `workflowID:runID` |
 | `WorkflowUpdateHistoryOrdering` | update not in `accepted` after workflow completed | subset of `Closure` |
 | `WorkflowUpdateClosure` | no update accepted/completed after workflow `CompletedAt` | needs live workflow completion |
-| `EntityTransitionLegality` (generic) | no `Lifecycled` entity observes an illegal transition | over `Lifecycle.Classify`; subsumes the former `WorkflowUpdateStageMonotone` (a regression is not a legal edge), all entity types at once |
 
 ### Liveness — must eventually hold; unresolved at teardown ⇒ violation
 
@@ -446,6 +449,12 @@ registration).
 | `WorkflowUpdateWorkerSkipped` | update not left `admitted` after a task was polled post-admit | admitted-stuck family |
 | `WorkflowUpdateContextClear` | non-terminal update not stranded with no pending task (workflow not completed) | defers completed case to `Closure` |
 
+### Built but not registered
+
+| Rule | Invariant | Why gated |
+|---|---|---|
+| `EntityTransitionLegality` (generic safety) | no `Lifecycled` entity observes an illegal transition | over `Lifecycle.Classify`; subsumes `WorkflowUpdateStageMonotone`. Unregistered: a suite run flagged a forward jump over an unobserved state (`Workflow` `complete` from `created`) as illegal. Register once `Classify` treats forward-reachable jumps as legal, or event-time lands. |
+
 Removed by consolidation: `WorkflowUpdateLossPrevention`, `WorkflowUpdateCompletion` (→ `EntityProgress`),
 `WorkflowUpdateStageMonotone` (→ `EntityTransitionLegality`), `WorkflowUpdateStateConsistency`
 (now structural via derived `*At` accessors).
@@ -455,9 +464,11 @@ Removed by consolidation: `WorkflowUpdateLossPrevention`, `WorkflowUpdateComplet
 `Lifecycle` upgraded to an **executable transition function**: pure three-valued
 `Classify` (`Advance`/`NoOp`/`Illegal`) with `Fire` defined over it, plus
 `States`/`Events`/`Reachable`/`Validate` and server-free Tier-1 static validation of every
-default lifecycle (`UMPIRE_PRIOR_ART.md` (SAA) #1). Generic `EntityTransitionLegality` **registered**,
-replacing (and deleting) `WorkflowUpdateStageMonotone` — benign duplicate/late/post-terminal
-spans now classify as `NoOp`, removing the false-positive that had gated it.
+default lifecycle (`UMPIRE_PRIOR_ART.md` (SAA) #1). Generic `EntityTransitionLegality` built
+(deleting `WorkflowUpdateStageMonotone`, which it subsumes) — benign duplicate/late/post-terminal
+spans now classify as `NoOp`. It was briefly registered, then **unregistered** after a functional
+suite run flagged a forward jump over an unobserved state as illegal (see the built-but-unregistered
+note above); it stays available pending a `Classify` forward-jump fix.
 Reusable `Lifecycle` FSM primitive (entry timestamps, derived terminals, `MustProgress`,
 illegal-transition capture) adopted by all entities; generic `EntityProgress` liveness rule
 registered, replacing `LossPrevention` + `Completion`; `WorkflowUpdateStateConsistency`

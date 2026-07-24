@@ -32,8 +32,9 @@ than a bespoke DSL.
 - **Driver** — the active mechanics; realizes each planned event as real traffic and injects faults.
 
 **Model (Monitor)**
+- **Model** — the whole: every entity and its current state, held in the `Registry`. What the Planner plans over and what rules read.
+- **Entity** — one piece of the model: a single executable state machine / *oracle* (Workflow, WorkflowUpdate, WorkflowTask, TaskQueue, NexusOperation, …), built up from facts.
 - **Fact** — a normalized unit of observation (a request, response, span event, or history event) addressed to one entity.
-- **Entity / model** — a per-entity executable state machine (an *oracle*) built up from facts.
 - **Classify** — an entity's total transition function: every (state, event) → `Advance` / `NoOp` / `Illegal`. The source of "no vacuous pass."
 - **Registry** — holds every entity, routes facts to them, and tracks changes by a generation counter.
 - **FactLog** — an append-only, queryable record of every fact.
