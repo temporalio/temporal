@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -1318,7 +1319,7 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 		testcore.WithSdkWorker(),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-migrate-no-dup")
 	wid := testcore.RandomizeStr("sched-migrate-no-dup-wf")
 	wt := testcore.RandomizeStr("sched-migrate-no-dup-wt")
@@ -1466,7 +1467,7 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
 
-	ctx := testcore.NewContext()
+	ctx := testcontext.GetOrCreate(t)
 	sid := testcore.RandomizeStr("sched-migrate-defer-running")
 	wid := testcore.RandomizeStr("sched-migrate-defer-running-wf")
 	wt := testcore.RandomizeStr("sched-migrate-defer-running-wt")
@@ -2292,7 +2293,7 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 	}
 
 	// Confirm the schedule is live on the CHASM stack before polling for closure.
-	await.Require(testcore.NewContext(), t, func(t *await.T) {
+	await.Require(ctx, t, func(t *await.T) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
 		require.NoError(t, err)
 	}, 6*time.Second, 100*time.Millisecond)
@@ -2300,7 +2301,7 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 	// If generator.Generate() was never called, the idle task is never scheduled
 	// and the schedule stays open indefinitely. Closing proves the generator ran.
 	var closedErr *serviceerror.FailedPrecondition
-	await.Require(testcore.NewContext(), t, func(t *await.T) {
+	await.Require(ctx, t, func(t *await.T) {
 		_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(t.Context(), descReq)
 		require.ErrorAs(t, err, &closedErr)
 	}, 6*time.Second, 100*time.Millisecond)

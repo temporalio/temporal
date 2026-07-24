@@ -301,6 +301,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
+	// Extend the test context deadline to account for environment setup time.
+	ctx := testcontext.GetOrCreate(t)
+	ctx = testcontext.EnsureRemaining(ctx, t, testcontext.DefaultTimeout())
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -311,7 +315,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 tv,
-		ctx:                testcontext.For(t),
+		ctx:                ctx,
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
