@@ -4,8 +4,8 @@ Notes from reading the [Omes](../omes) load generator, focused on its **Kitchen 
 workflow and the machinery around it. Omes is Temporal's load/benchmark generator, but the
 part that matters to us is orthogonal to load: it is the one place in the ecosystem that has
 already solved **"drive arbitrary Temporal behaviour, in every SDK language, from a single
-declarative description."** That is exactly the workload substrate the Driver wants
-([`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md) observation #2: *"Reuse Omes kitchensink workflows as the
+declarative description."** That is exactly the workload substrate the active side wants
+(as `UMPIRE_SPEC.md` notes: *"reuse Omes kitchensink workflows as the
 workload rather than a bespoke DSL"*), and it is the language-agnostic execution surface the
 SAA model's "drivers" abstraction ([`SAAMODEL.md`](./SAAMODEL.md)) needs to reach beyond one
 white-box engine. For the other design references see [`UMPIRE_PLAN.md`](./UMPIRE_PLAN.md).
@@ -190,16 +190,16 @@ ProjectService.Execute` in the seam diagram above), and its role is specific:
   language — not the Go raw-RPC driver.
 - **The one generalization it needs to become reactive.** As-is, `Execute` is coarse — "do one
   whole iteration and verify," open-loop within the iteration. A reactive Mode-2 driver (the SAA
-  explorer / Driver, guarding over the Umpire model) needs to choose the *next single action*
+  explorer / Planner, guarding over the Umpire model) needs to choose the *next single action*
   after observing. That is the *"extend the `project` harness into a streaming `Step`-per-action
   RPC"* note under "Reconciling…": generalize `Execute` → a `Step(action) → effect` stream, the
   runner picking each action from the model and the harness realizing it through the SDK client.
   The `Init` / gRPC / two-role skeleton is already the right shape; only the granularity of the
   drive RPC changes.
 
-## Why this matters to Umpire / Driver / SAA
+## Why this matters to Umpire / Planner & Driver / SAA
 
-Omes solves three problems the active side (Driver) and the model side (SAA) would otherwise
+Omes solves three problems the active side (Planner & Driver) and the model side (SAA) would otherwise
 have to re-solve:
 
 1. **A declarative, replayable workload.** `TestInput` is data: hand-write it for a targeted
@@ -359,7 +359,7 @@ same machinery, opposite knob.
 | **Oracle it needs** | **must** be the total-function model — a random program has no hand-written expected values, so only a total oracle can judge (this is where "total function kills the vacuous pass" matters most) | model oracle *plus* the path's own known intent as a second, independent check, and cross-SDK parity |
 | **Coverage** | breadth by luck, measured after the fact | intrinsic: the branch space *is* `Reachable()`; choosing paths *is* `traverse()`/`randomWalk()`; unreached branches = coverage gap |
 | **Replay** | save the binary (`TestInput`) | save the realized trace (the choices made) |
-| **Maps to** | SAA fuzzer / `UMPIRE_DRIVER.md` P4; the Omes fuzzer *with an oracle attached* | SAA explorer (BFS/random-walk) realized through the any-language worker; `UMPIRE_DRIVER.md` P2/P3 |
+| **Maps to** | SAA fuzzer / `UMPIRE_PLANNER.md` P4; the Omes fuzzer *with an oracle attached* | SAA explorer (BFS/random-walk) realized through the any-language worker; `UMPIRE_PLANNER.md` P2/P3 |
 
 **Mode 2 is the SAA explorer generalized to drive the any-language worker instead of only the
 in-process engine.** SAA's `traverse()`/`randomWalk()` walk the model graph and realize each event
@@ -414,5 +414,5 @@ The Mode-2 "menu" can carry more or less intent:
   calls. The grey/white-box actions (`FaultInjector`) remain ours to build.
 - **Load-shaped, not exploration-shaped.** `GenericExecutor` is a steady-rate concurrency
   driver; it has no notion of predicate-guarded steps or model-directed BFS. The
-  guard-over-the-model driving (`UMPIRE_DRIVER.md`) and the `Reachable`-derived traversal
+  guard-over-the-model driving (`UMPIRE_PLANNER.md`) and the `Reachable`-derived traversal
   (`SAAMODEL.md`) sit above Omes, using it only as the execution backend.

@@ -59,9 +59,9 @@ than a bespoke DSL.
 - **Rules stay dumb.** A rule queries entity state; it knows nothing of wire formats, change
   tracking, or how facts arrive. Symmetrically, an action declares intent; it knows nothing of
   how a fact is decoded.
-- **Tier-honest, both directions.** Facts carry an observation *tier* and actions carry a matching
-  *reach* (black / grey / white box). A run runs only what its deployment supports and **skips
-  the rest explicitly** — never a silent pass, never a silently-dropped action.
+- **Capability-honest, both directions.** Facts and actions each declare the capability they
+  require; a run enables only what its **environment** grants (see *Environments & capabilities*)
+  and **skips the rest explicitly** — never a silent pass, never a silently-dropped action.
 - **No SDK requirement** to describe behavior — facts come from the wire/spans, not test code.
 - **Deterministic & replayable.** Same seed + inputs ⇒ a run reproduces. Separate **run** from
   **eval**: capture the run, re-check offline.
@@ -124,11 +124,26 @@ than a bespoke DSL.
 - **One model, shared by all three.** No second state store: the `Registry` the Monitor fills is
   what the Planner plans routes over and the Driver polls while realizing them. This is why the
   parts live together.
-- **Observation tiers — black / grey / white box.** Facts carry a provenance *tier* (frontend
-  gRPC = black; internal RPC + OTEL = grey; persistence = white); actions carry a matching
-  *reach*. A run enables only channels ≤ its tier: the flagship lifecycle rules and black-box
-  actions run in canary/Cloud, while grey/white channels stay functional-test-only. One model,
-  tier-gated — portability is the axis a white-box-only model doesn't address.
+- **Environments & capabilities.** The model, rules, planned routes, and coverage catalog are all
+  *environment-independent*. An **environment** is a named profile granting a subset of
+  capabilities along three axes — **observe** (`rpc` / `traces` / `internals`), **drive**
+  (`rpcDrive` / `faults` / `directDrive`), and **transport** (`inproc-noserver` / `inproc-server`
+  / `remote`). Each fact source, rule, and action declares the capability it needs; a run enables
+  only what its profile grants and **explicitly reports what it skips** — "not available here,"
+  never a silent pass. Only the *edges* change per environment: the same event `admit` is realized
+  as a CHASM transition, a frontend RPC, or a remote client call (a different `Driver`); the same
+  fact `Update.admitted` is sourced from a direct component read, an OTEL span, or an RPC response
+  (a different importer). black/grey/white survive only as shorthand for common observe-bundles.
+
+  | Environment | observe | drive | transport |
+  |---|---|---|---|
+  | `local-chasm` | `internals` | `directDrive` (+`faults`) | in-process, no server |
+  | `local-rpc` | `rpc`+`traces`+`internals` | `rpcDrive`+`faults` | in-process server |
+  | `cicd` | `rpc`+`traces` | `rpcDrive` | remote |
+  | `canary` | `rpc` | observe-only (opt. `rpcDrive`) | remote |
+
+  Portability falls out: push each rule and action to the widest set of environments its
+  capabilities allow.
 - **Coverage is the reward signal.** The Scenario/Coverage catalog (planned, `UMPIRE_PLAN.md`)
   turns a rule's precondition into a coverage target; `Coverage.Unmet()` is the list of
   interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
