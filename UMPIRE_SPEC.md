@@ -19,7 +19,7 @@ pair that drives:
 The parts close a cycle: **plan → drive → observe → model → judge → steer**. The Planner plans
 over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
 judges the result; and the Monitor's coverage catalog (`Coverage.Unmet()` — the states nobody
-reached) is what the Planner's guided mode steers toward. The server under test is just the SUT.
+reached) is what the Planner's guided mode steers toward. The server under test is the SUT.
 Workloads are reused from **Omes** (kitchensink workflows; see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)) rather
 than a bespoke DSL.
 
@@ -43,12 +43,15 @@ than a bespoke DSL.
 - **Rule** — an invariant over model state. **Safety** rules must hold at every observation; **Liveness** rules must eventually hold.
 - **Rulebook** — the name-validated registry of rules.
 - **Violation** — a rule's output when an invariant fails; the Monitor's only product.
-- **Coverage / Scenario** — the catalog of interesting states worth reaching; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
+- **Coverpoint** — a named, interesting condition worth reaching at least once (e.g. a rule's precondition, or a notable state).
+- **Catalog** — the name-validated registry of coverpoints (mirrors the `Rulebook`).
+- **Coverage** — the tally of which coverpoints have been hit; `Coverage.Unmet()` is what nobody has reached yet (the reward signal).
 
 **Planning (Planner) — high-level, over the model**
 - **target** — the state you ask the Planner to reach, fully-qualified by entity (e.g. `WorkflowUpdate:completed`).
-- **route / Plan** — an ordered sequence of events reaching a target; a `Plan` is validated (reviewable, replayable) before any traffic runs.
-- **Constraints** — allow/deny events or states to carve the sub-graph a plan may use.
+- **Plan** — the Planner's output: a validated set of routes to a target, checked (reviewable, replayable) before any traffic runs.
+- **route** — one event-sequence within a `Plan`: a single way to reach the target.
+- **Constraints** — allow/deny events or states to carve the sub-graph a `Plan` may use.
 
 **Driving (Driver) — the primitives, against the SUT**
 - **event** — an abstract model transition (`admit`, `accept`); the atomic unit the Planner sequences and the Driver realizes.
@@ -68,9 +71,9 @@ than a bespoke DSL.
   independently, so the same *actions* and the same *rules* run across functional tests, nightly
   runs, and canary.
 - **Terse tests.** Replace per-test boilerplate — both the hand-written driver and the
-  hand-written assertions — with reusable scenarios and reusable rules over one model.
-- **Tests as living docs.** The model + rulebook describe how a feature behaves; the scenario
-  catalog + coverage catalog describe what it can be made to do.
+  hand-written assertions — with reusable Plans and reusable rules over one model.
+- **Tests as living docs.** The model + rulebook describe how a feature behaves; the coverpoint
+  catalog + its coverage describe what it can be made to do.
 - **Find bugs earlier.** Cheap enough to run per-PR; a foundation for later fuzzing.
 - **Fault injection is first-class.** Faults (latency, drops, errors, early timers) are ordinary
   actions, like any RPC, not a bolt-on — the `FaultInjector` hook is built into the interceptor
@@ -84,7 +87,7 @@ than a bespoke DSL.
 - **Coverage-guided fuzzing (the Planner's guided mode).** The Planner's fixed and exploratory
   planning is built; the guided, coverage-optimizing mode is deferred — build the deterministic
   core first, add guided fuzzing once the coverage signal it steers toward is trustworthy. The
-  Scenario/Coverage catalog it needs is specced (`UMPIRE_PLAN.md`) but unbuilt.
+  coverpoint catalog it needs is specced (`UMPIRE_PLAN.md`) but unbuilt.
 - **Persistence / durable stores.** Model state is in-memory and per-test; a durable coverage
   store is a later concern.
 - **A new proxy/interception stack.** Reuse the existing gRPC interceptor + OTEL processor seams
@@ -183,11 +186,11 @@ than a bespoke DSL.
 
   Portability falls out: push each rule and action to the widest set of environments its
   capabilities allow.
-- **Coverage is the reward signal.** The Scenario/Coverage catalog (planned, `UMPIRE_PLAN.md`)
-  turns a rule's precondition into a coverage target; `Coverage.Unmet()` is the list of
+- **Coverage is the reward signal.** The coverpoint catalog (planned, `UMPIRE_PLAN.md`)
+  turns a rule's precondition into a coverpoint; `Coverage.Unmet()` is the list of
   interesting states nobody reached — the seam the Planner's guided-fuzz mode steers toward.
-- **Pluggable registries.** Rules register in a name-validated `Rulebook`; actions and scenarios
-  get parallel registries. Adding one ≠ touching the framework.
+- **Pluggable registries.** Rules register in a name-validated `Rulebook`, coverpoints in a
+  `Catalog`, and routes in a parallel registry. Adding one ≠ touching the framework.
 - **Framework / domain split.** `common/testing/umpire` is generic and reusable; `tests/umpire`
   holds all Temporal specifics (entities, facts, rules, and — later — actions).
 

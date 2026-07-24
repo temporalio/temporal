@@ -20,6 +20,23 @@ func testSpec() LifecycleSpec {
 	}
 }
 
+// branchSpec is a lifecycle with two independent branches, so it has a genuinely
+// illegal transition: from "b" the event "toC" targets the sibling branch "c",
+// which is neither reachable from nor able to reach "b". (testSpec, a converging
+// DAG, has no such transition — every event's target is forward- or
+// backward-reachable, so nothing in it is ever illegal.)
+func branchSpec() LifecycleSpec {
+	return LifecycleSpec{
+		Initial: "a",
+		Transitions: []Transition{
+			{Event: "toB", From: []string{"a"}, To: "b"},
+			{Event: "toC", From: []string{"a"}, To: "c"},
+			{Event: "b2", From: []string{"b"}, To: "bEnd"},
+			{Event: "c2", From: []string{"c"}, To: "cEnd"},
+		},
+	}
+}
+
 func TestLifecycle_DerivesTerminalStates(t *testing.T) {
 	l := NewLifecycle(testSpec())
 	require.True(t, l.Terminal("completed"))
@@ -52,27 +69,49 @@ func TestLifecycle_FireLegalTransitionsStampsEntryAndTerminal(t *testing.T) {
 
 func TestLifecycle_FireIllegalTransitionIsRecordedNotApplied(t *testing.T) {
 	ctx := context.Background()
-	l := NewLifecycle(testSpec())
+	l := NewLifecycle(branchSpec())
 
-	// "accept" is illegal from the initial "unspecified" state.
-	require.False(t, l.Fire(ctx, "accept"))
-	require.Equal(t, "unspecified", l.Current(), "illegal transition must not change state")
+	require.True(t, l.Fire(ctx, "toB")) // a -> b
+	// "toC" from "b" targets the sibling branch "c": unreachable in either
+	// direction, so it is a genuinely illegal transition, not a forward jump.
+	require.False(t, l.Fire(ctx, "toC"))
+	require.Equal(t, "b", l.Current(), "illegal transition must not change state")
 	require.Len(t, l.Illegal(), 1)
-	require.Equal(t, "unspecified", l.Illegal()[0].From)
-	require.Equal(t, "accept", l.Illegal()[0].Event)
+	require.Equal(t, "b", l.Illegal()[0].From)
+	require.Equal(t, "toC", l.Illegal()[0].Event)
 
 	// A subsequent legal transition still works and is not recorded as illegal.
-	require.True(t, l.Fire(ctx, "admit"))
+	require.True(t, l.Fire(ctx, "b2"))
 	require.Len(t, l.Illegal(), 1)
 }
 
-func TestLifecycle_ClassifyAdvanceNoOpIllegal(t *testing.T) {
+func TestLifecycle_FireForwardJumpAdvancesToTarget(t *testing.T) {
+	ctx := context.Background()
+	l := NewLifecycle(testSpec())
+
+	// "complete" observed while still "unspecified" (admit/accept were never
+	// observed): a forward jump straight to the reachable target "completed".
+	require.True(t, l.Fire(ctx, "complete"))
+	require.Equal(t, "completed", l.Current())
+	require.True(t, l.IsTerminal())
+	require.Empty(t, l.Illegal(), "a forward jump is legal, not illegal")
+	require.True(t, l.Reached("completed"))
+	require.False(t, l.Reached("accepted"), "jumped-over states are not marked reached")
+}
+
+func TestLifecycle_ClassifyAdvanceForwardJumpIllegal(t *testing.T) {
 	l := NewLifecycle(testSpec())
 
 	// Advance: a legal forward edge.
 	require.Equal(t, Outcome{Kind: Advance, From: "unspecified", Event: "admit", To: "admitted"}, l.Classify("admit"))
-	// Illegal: an event whose destination lies neither ahead via an edge nor behind us.
-	require.Equal(t, Illegal, l.Classify("accept").Kind)
+	// Forward jump: no direct edge, but "accepted" is reachable ahead (admit was
+	// not observed) — legal, advancing to the observed target.
+	require.Equal(t, Outcome{Kind: Advance, From: "unspecified", Event: "accept", To: "accepted"}, l.Classify("accept"))
+
+	// Illegal: a transition into an unreachable sibling branch.
+	b := NewLifecycle(branchSpec())
+	b.SetState("b")
+	require.Equal(t, Illegal, b.Classify("toC").Kind)
 }
 
 func TestLifecycle_ClassifyBenignReObservationsAreNoOp(t *testing.T) {
@@ -142,9 +181,9 @@ func TestLifecycle_Cells(t *testing.T) {
 		return Cell{}
 	}
 	require.Equal(t, Cell{From: "unspecified", Event: "admit", Kind: Advance, To: "admitted"}, get("unspecified", "admit"))
-	require.Equal(t, Illegal, get("unspecified", "accept").Kind)
-	require.Equal(t, NoOp, get("completed", "accept").Kind) // terminal absorbs
-	require.Equal(t, NoOp, get("accepted", "admit").Kind)   // stale, behind current
+	require.Equal(t, Cell{From: "unspecified", Event: "accept", Kind: Advance, To: "accepted"}, get("unspecified", "accept")) // forward jump
+	require.Equal(t, NoOp, get("completed", "accept").Kind)                                                                   // terminal absorbs
+	require.Equal(t, NoOp, get("accepted", "admit").Kind)                                                                     // stale, behind current
 
 	// Every declared event must be an Advance from at least one reachable state —
 	// i.e. the model has no dead events.

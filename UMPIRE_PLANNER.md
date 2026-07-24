@@ -188,8 +188,8 @@ mode has a Monitor counterpart that judges the result.
 | Mode | What you provide | Runs | Monitor counterpart |
 |---|---|---|---|
 | **Fixed** | a target state (Kind 1) | per-PR | passive model (done) |
-| **Coverage goal** | targets + a covering-set goal | per-PR / nightly | rules + scenarios |
-| **Exploration** | constraints + seed (Kind 2) | nightly GHA | scenario coverage report |
+| **Coverage goal** | targets + a covering-set goal | per-PR / nightly | rules + coverpoints |
+| **Exploration** | constraints + seed (Kind 2) | nightly GHA | coverage report |
 | **Guided fuzz** | constraints + coverage hints | nightly GHA | `Coverage.Unmet()` as reward |
 
 ## Closing the loop with the Monitor

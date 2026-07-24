@@ -16,15 +16,19 @@ func TestEntityTransitionLegality_NoViolationOnLegalOrder(t *testing.T) {
 	}
 }
 
-func TestEntityTransitionLegality_DetectsIllegalTransition(t *testing.T) {
+// A forward jump — observing "accept" before "admit" from the initial state — is
+// NOT flagged: under observe-only we cannot distinguish a missed "admit"
+// observation from an illegal skip, so a jump to a reachable-ahead state is legal.
+// (The genuinely-illegal path — a transition into an unreachable sibling branch —
+// is covered at the framework level in lifecycle_test.go; none of the real entity
+// lifecycles, being converging DAGs, can produce one.)
+func TestEntityTransitionLegality_NoViolationOnForwardJump(t *testing.T) {
 	reg := newTestRegistry()
-	// "accept" before "admit" is illegal from the initial state; the Lifecycle
-	// records it instead of silently dropping it.
-	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1"))
+	routeFact(t, reg, makeWorkflowUpdateAccepted("wf1", "upd1")) // accept before admit
 
 	violations := checkSafetyRule(reg, &EntityTransitionLegality{})
-	if len(violations) != 1 {
-		t.Fatalf("expected 1 violation for an illegal transition, got %d", len(violations))
+	if len(violations) != 0 {
+		t.Fatalf("expected no violations for a forward jump, got %d: %+v", len(violations), violations)
 	}
 }
 
