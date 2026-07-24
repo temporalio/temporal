@@ -636,7 +636,13 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		}
 	})
 
-	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), nexusCompletionAPIName, c.metricsHandlerForInterceptors, request)
+	cleanup, err := c.NamespaceConcurrencyLimitInterceptor.AllowWithMetricKey(
+		c.namespace.Name(),
+		nexusCompletionAPIName,
+		nexusCompletionMethodNameForMetrics,
+		c.metricsHandlerForInterceptors,
+		request,
+	)
 	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
 	if err != nil {
 		c.outcomeTag = metrics.OutcomeTag("namespace_concurrency_limited")

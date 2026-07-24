@@ -2,18 +2,26 @@ package interceptor
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
+
+const pendingRequestLimitTestMethodName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
 
 type nsCountLimitTestCase struct {
 	// name of the test case
@@ -137,6 +145,323 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			tc.run(t)
 		})
 	}
+}
+
+func TestConcurrentRequestLimitInterceptor_AllowRecordsPendingRequestsOnCleanup(t *testing.T) {
+	t.Parallel()
+
+	t.Run("admitted request", func(t *testing.T) {
+		t.Parallel()
+
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+
+		cleanup, err := newConcurrentRequestLimitInterceptorForTest(1).Allow(
+			namespace.Name("test-namespace"),
+			pendingRequestLimitTestMethodName,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		cleanup()
+
+		requirePendingRequestRecordings(t, capture, 1, 0)
+	})
+
+	t.Run("rejected request", func(t *testing.T) {
+		t.Parallel()
+
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		interceptor := newConcurrentRequestLimitInterceptorForTest(1)
+
+		admittedCleanup, err := interceptor.Allow(
+			namespace.Name("test-namespace"),
+			pendingRequestLimitTestMethodName,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		rejectedCleanup, err := interceptor.Allow(
+			namespace.Name("test-namespace"),
+			pendingRequestLimitTestMethodName,
+			metricsHandler,
+			nil,
+		)
+		require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
+
+		rejectedCleanup()
+		requirePendingRequestRecordings(t, capture, 1, 2, 1)
+
+		admittedCleanup()
+		requirePendingRequestRecordings(t, capture, 1, 2, 1, 0)
+	})
+}
+
+func TestConcurrentRequestLimitInterceptor_AllowUsesEmittedOperationMetricKey(t *testing.T) {
+	t.Parallel()
+
+	const methodName = "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory"
+	interceptor := newConcurrentRequestLimitInterceptorWithTokensForTest(1, map[string]int{
+		methodName: 1,
+	})
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	cleanup, err := interceptor.Allow(
+		namespace.Name("test-namespace"),
+		methodName,
+		metricsHandler,
+		&workflowservice.GetWorkflowExecutionHistoryRequest{WaitNewEvent: true},
+	)
+	require.NoError(t, err)
+	cleanup()
+
+	require.Contains(
+		t,
+		interceptor.pendingRequestMetrics,
+		interceptor.getCounterKey(namespace.Name("test-namespace"), metrics.FrontendPollWorkflowExecutionHistoryScope),
+	)
+	requirePendingRequestRecordings(t, capture, 1, 0)
+}
+
+func TestPendingRequestCounter_AddSerializesRecordings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		initialCount int32
+		token        int
+		expected     []float64
+	}{
+		{name: "admissions", token: 1, expected: []float64{1, 2}},
+		{name: "cleanups", initialCount: 2, token: -1, expected: []float64{1, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+			metricsHandler := &blockingMetricsHandler{Handler: captureHandler}
+			counter := pendingRequestCounter{count: tc.initialCount}
+
+			blocked, release := metricsHandler.blockNextPendingRequestRecording()
+			defer release()
+
+			firstDone := runAsync(func() { counter.add(tc.token, metricsHandler) })
+			<-blocked
+			secondDone := runAsync(func() { counter.add(tc.token, metricsHandler) })
+
+			require.Never(t, func() bool {
+				return isClosed(secondDone)
+			}, 100*time.Millisecond, 10*time.Millisecond)
+
+			release()
+			await.RequireTrue(t, func() bool {
+				return isClosed(firstDone) && isClosed(secondDone)
+			}, time.Second, 10*time.Millisecond)
+
+			requirePendingRequestRecordings(t, capture, tc.expected...)
+		})
+	}
+}
+
+func TestConcurrentRequestLimitInterceptor_AllowWithMetricKeyTracksNexusSeries(t *testing.T) {
+	t.Parallel()
+
+	const (
+		endpointAPIName  = "/temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
+		namespaceAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
+		startMetricKey   = "StartNexusOperation"
+		cancelMetricKey  = "CancelNexusOperation"
+	)
+
+	t.Run("shared series across limiter buckets", func(t *testing.T) {
+		t.Parallel()
+
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+		metricsHandler := captureHandler.WithTags(metrics.OperationTag(startMetricKey))
+		interceptor := newConcurrentRequestLimitInterceptorWithTokensForTest(2, map[string]int{
+			endpointAPIName:  1,
+			namespaceAPIName: 1,
+		})
+
+		firstCleanup, err := interceptor.AllowWithMetricKey(
+			namespace.Name("test-namespace"),
+			endpointAPIName,
+			startMetricKey,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+		secondCleanup, err := interceptor.AllowWithMetricKey(
+			namespace.Name("test-namespace"),
+			namespaceAPIName,
+			startMetricKey,
+			metricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		firstCleanup()
+		secondCleanup()
+		requirePendingRequestRecordings(t, capture, 1, 2, 1, 0)
+	})
+
+	t.Run("separate operation series in one limiter bucket", func(t *testing.T) {
+		t.Parallel()
+
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+		startMetricsHandler := captureHandler.WithTags(metrics.OperationTag(startMetricKey))
+		cancelMetricsHandler := captureHandler.WithTags(metrics.OperationTag(cancelMetricKey))
+		interceptor := newConcurrentRequestLimitInterceptorWithTokensForTest(2, map[string]int{
+			endpointAPIName: 1,
+		})
+
+		startCleanup, err := interceptor.AllowWithMetricKey(
+			namespace.Name("test-namespace"),
+			endpointAPIName,
+			startMetricKey,
+			startMetricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+		cancelCleanup, err := interceptor.AllowWithMetricKey(
+			namespace.Name("test-namespace"),
+			endpointAPIName,
+			cancelMetricKey,
+			cancelMetricsHandler,
+			nil,
+		)
+		require.NoError(t, err)
+
+		startCleanup()
+		cancelCleanup()
+		requirePendingRequestRecordingsForOperation(t, capture, startMetricKey, 1, 0)
+		requirePendingRequestRecordingsForOperation(t, capture, cancelMetricKey, 1, 0)
+	})
+}
+
+func newConcurrentRequestLimitInterceptorForTest(limit int) *ConcurrentRequestLimitInterceptor {
+	return newConcurrentRequestLimitInterceptorWithTokensForTest(limit, map[string]int{
+		pendingRequestLimitTestMethodName: 1,
+	})
+}
+
+func newConcurrentRequestLimitInterceptorWithTokensForTest(
+	limit int,
+	tokens map[string]int,
+) *ConcurrentRequestLimitInterceptor {
+	return NewConcurrentRequestLimitInterceptor(
+		nil,
+		quotastest.NewFakeMemberCounter(1),
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(limit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
+		tokens,
+	)
+}
+
+func requirePendingRequestRecordings(t *testing.T, capture *metricstest.Capture, expected ...float64) {
+	t.Helper()
+
+	recordings := capture.Snapshot()[metrics.ServicePendingRequests.Name()]
+	require.Len(t, recordings, len(expected))
+	for i, expectedValue := range expected {
+		require.InDelta(t, expectedValue, recordings[i].Value, 0)
+	}
+}
+
+func requirePendingRequestRecordingsForOperation(
+	t *testing.T,
+	capture *metricstest.Capture,
+	operation string,
+	expected ...float64,
+) {
+	t.Helper()
+
+	var recordings []*metricstest.CapturedRecording
+	for _, recording := range capture.Snapshot()[metrics.ServicePendingRequests.Name()] {
+		if recording.Tags[metrics.OperationTagName] == operation {
+			recordings = append(recordings, recording)
+		}
+	}
+	require.Len(t, recordings, len(expected))
+	for i, expectedValue := range expected {
+		require.InDelta(t, expectedValue, recordings[i].Value, 0)
+	}
+}
+
+type blockingMetricsHandler struct {
+	metrics.Handler
+
+	mu        sync.Mutex
+	blockNext bool
+	blocked   chan struct{}
+	release   chan struct{}
+}
+
+func (h *blockingMetricsHandler) blockNextPendingRequestRecording() (<-chan struct{}, func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	blocked := make(chan struct{})
+	release := make(chan struct{})
+	h.blockNext = true
+	h.blocked = blocked
+	h.release = release
+
+	return blocked, sync.OnceFunc(func() { close(release) })
+}
+
+func (h *blockingMetricsHandler) Gauge(name string) metrics.GaugeIface {
+	gauge := h.Handler.Gauge(name)
+	if name != metrics.ServicePendingRequests.Name() {
+		return gauge
+	}
+
+	return metrics.GaugeFunc(func(value float64, tags ...metrics.Tag) {
+		h.mu.Lock()
+		block := h.blockNext
+		blocked := h.blocked
+		release := h.release
+		h.blockNext = false
+		h.mu.Unlock()
+
+		if block {
+			close(blocked)
+			<-release
+		}
+		gauge.Record(value, tags...)
+	})
+}
+
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+func runAsync(f func()) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f()
+	}()
+	return done
 }
 
 // run the test case by simulating a bunch of blocked pollers, sending a final request, and verifying that it is either
