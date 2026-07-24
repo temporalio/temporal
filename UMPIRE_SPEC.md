@@ -11,13 +11,17 @@ assertions.
 - **Terse tests.** Replace per-test boilerplate assertions with reusable rules over a model.
 - **Tests as living docs.** The model + rulebook describe how a feature behaves.
 - **Find bugs earlier.** Cheap enough to run per-PR; a foundation for later fuzzing.
+- **Fault injection is first-class.** Faults (latency, drops, errors, early timers) are
+  actions the framework must support natively, not a bolt-on — the `FaultInjector` hook is
+  built into the interceptor for exactly this. Steering the SUT into rare states is where
+  the interesting invariants get exercised.
 
 ## Non-goals (for now)
 
 - Driving actions / generating scenarios (the "active" side — Pitcher/Skipper). Tests
   drive. See `PITCHER.md`.
-- Fault injection, fuzzing, coverage-guided exploration. The Scenario/Coverage catalog is
-  specced (`UMPIRE_PLAN.md`) but unbuilt; the `FaultInjector` hook exists, logic does not.
+- Fuzzing, coverage-guided exploration. The Scenario/Coverage catalog is specced
+  (`UMPIRE_PLAN.md`) but unbuilt.
 - Persistence. State is in-memory and per-test.
 
 ## Constraints
