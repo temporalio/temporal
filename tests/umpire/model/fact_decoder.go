@@ -32,6 +32,10 @@ func NewFactDecoder() *FactDecoder {
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationCanceled{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationTimedOut{} })
 
+	// Generic CHASM transition telemetry — routes real CHASM Nexus operations (its
+	// Name() is the OTEL event name, so it is decoder-only; routing is by TargetEntity).
+	d.registerSpanFact(func() fact.SpanFact { return &fact.ChasmTransition{} })
+
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskAdded{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskPolled{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowStarted{} })

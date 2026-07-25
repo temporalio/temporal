@@ -107,9 +107,42 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			if op.FSM.Fire(ctx, "timeout") {
 				op.Outcome = e.Outcome
 			}
+		case *fact.ChasmTransition:
+			// A real CHASM operation, observed via the generic chasm.transition
+			// telemetry. Its component path is the operation's identity.
+			op.capture(e.ComponentPath, e.WorkflowID)
+			if event := nexusEventForStatus(e.Destination); event != "" {
+				if op.FSM.Fire(ctx, event) && op.FSM.IsTerminal() {
+					op.Outcome = e.Destination
+				}
+			}
 		}
 	}
 	return nil
+}
+
+// nexusEventForStatus maps a CHASM OperationStatus destination (its proto enum
+// name, e.g. "OPERATION_STATUS_SCHEDULED") to the FSM event that reaches the
+// corresponding model state. Unknown statuses yield "" (ignored).
+func nexusEventForStatus(destination string) string {
+	switch destination {
+	case "OPERATION_STATUS_SCHEDULED":
+		return "schedule"
+	case "OPERATION_STATUS_BACKING_OFF":
+		return "attempt_failed"
+	case "OPERATION_STATUS_STARTED":
+		return "start"
+	case "OPERATION_STATUS_SUCCEEDED":
+		return "succeed"
+	case "OPERATION_STATUS_FAILED":
+		return "fail"
+	case "OPERATION_STATUS_CANCELED":
+		return "cancel"
+	case "OPERATION_STATUS_TIMED_OUT":
+		return "timeout"
+	default:
+		return ""
+	}
 }
 
 func (op *NexusOperation) capture(scheduledEventID, workflowID string) {

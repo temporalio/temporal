@@ -66,6 +66,26 @@ func TestNexusOperation_BackoffThenRetryThenStart(t *testing.T) {
 	require.True(t, op.FSM.Reached("backing_off"))
 }
 
+// The same FSM is driven by the generic CHASM transition telemetry — a real CHASM
+// operation observed via chasm.transition events (destination = OperationStatus).
+func TestNexusOperation_DrivenByChasmTransitions(t *testing.T) {
+	op := NewNexusOperation()
+	chasm := func(dest string) *fact.ChasmTransition {
+		f := &fact.ChasmTransition{}
+		f.ComponentType, f.ComponentPath, f.WorkflowID, f.Destination = "*nexusoperation.Operation", "Operations/5", "wf1", dest
+		return f
+	}
+	fireNexus(t, op,
+		chasm("OPERATION_STATUS_SCHEDULED"),
+		chasm("OPERATION_STATUS_STARTED"),
+		chasm("OPERATION_STATUS_SUCCEEDED"),
+	)
+	require.Equal(t, "succeeded", op.FSM.Current())
+	require.True(t, op.FSM.IsTerminal())
+	require.Equal(t, "OPERATION_STATUS_SUCCEEDED", op.Outcome)
+	require.Equal(t, "Operations/5", op.ScheduledEventID) // component path captured as the op identity
+}
+
 // Sync completion skips STARTED: scheduled -> succeeded directly.
 func TestNexusOperation_SyncCompletionSkipsStarted(t *testing.T) {
 	op := NewNexusOperation()

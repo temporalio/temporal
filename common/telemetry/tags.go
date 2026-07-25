@@ -24,6 +24,14 @@ const (
 	AttrAbortReason   attribute.Key = "abort.reason"
 	AttrUpdateOutcome attribute.Key = "update.outcome"
 
+	// Generic CHASM transition telemetry (emitted by chasm.Transition.Apply under
+	// TEMPORAL_OTEL_DEBUG). Carries the component identity so the umpire can observe
+	// any CHASM component's lifecycle from one span-event type.
+	AttrChasmComponentType         attribute.Key = "chasm.component.type"
+	AttrChasmComponentPath         attribute.Key = "chasm.component.path"
+	AttrChasmTransitionSource      attribute.Key = "chasm.transition.source"
+	AttrChasmTransitionDestination attribute.Key = "chasm.transition.destination"
+
 	AttrNexusEndpoint         attribute.Key = "nexus.endpoint"
 	AttrNexusService          attribute.Key = "nexus.service"
 	AttrNexusOperation        attribute.Key = "nexus.operation"
@@ -48,6 +56,8 @@ const (
 	EventNexusOperationFailed        = "NexusOperationFailed"
 	EventNexusOperationCanceled      = "NexusOperationCanceled"
 	EventNexusOperationTimedOut      = "NexusOperationTimedOut"
+
+	EventChasmTransition = "chasm.transition"
 
 	// UpdateOutcomeSuccess / UpdateOutcomeFailure are values for AttrUpdateOutcome.
 	UpdateOutcomeSuccess = "success"
