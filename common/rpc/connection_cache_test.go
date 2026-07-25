@@ -11,6 +11,14 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
+// The cache is keyed by host address, and grpc.NewClient is lazy: no dial
+// happens until the first RPC, which these tests never make. So the addresses
+// below are only map keys and never have to be reachable.
+const (
+	hostA = "cache-test-host-a:1234"
+	hostB = "cache-test-host-b:1234"
+)
+
 func newCacheTestFactory() *RPCFactory {
 	return NewFactory(nil, "tester", log.NewNoopLogger(), metrics.NoopMetricsHandler, nil, "", "", 0, nil, nil, nil, nil, nil)
 }
@@ -25,22 +33,22 @@ func (d *RPCFactory) cachedConn(hostName string) (*grpc.ClientConn, bool) {
 func TestInternodeConnCache_SharesConnPerHost(t *testing.T) {
 	f := newCacheTestFactory()
 
-	c1 := f.CreateHistoryGRPCConnection("127.0.0.1:7234")
+	c1 := f.CreateHistoryGRPCConnection(hostA)
 	require.NotNil(t, c1)
-	require.Same(t, c1, f.CreateHistoryGRPCConnection("127.0.0.1:7234"))
+	require.Same(t, c1, f.CreateHistoryGRPCConnection(hostA))
 
 	// Different host address gets its own connection.
-	require.NotSame(t, c1, f.CreateHistoryGRPCConnection("127.0.0.1:7235"))
+	require.NotSame(t, c1, f.CreateHistoryGRPCConnection(hostB))
 }
 
 func TestInternodeConnCache_ReplacesShutdownConn(t *testing.T) {
 	f := newCacheTestFactory()
 
-	c1 := f.CreateHistoryGRPCConnection("127.0.0.1:7234")
+	c1 := f.CreateHistoryGRPCConnection(hostA)
 	require.NoError(t, c1.Close()) // simulate the downstream cache closing it on membership change
 	require.Equal(t, connectivity.Shutdown, c1.GetState())
 
-	c2 := f.CreateHistoryGRPCConnection("127.0.0.1:7234")
+	c2 := f.CreateHistoryGRPCConnection(hostA)
 	require.NotSame(t, c1, c2)
 	require.NotEqual(t, connectivity.Shutdown, c2.GetState())
 }
@@ -48,15 +56,15 @@ func TestInternodeConnCache_ReplacesShutdownConn(t *testing.T) {
 func TestInternodeConnCache_CleanupRemovesShutdownConns(t *testing.T) {
 	f := newCacheTestFactory()
 
-	live := f.CreateHistoryGRPCConnection("127.0.0.1:7234")
-	dead := f.CreateHistoryGRPCConnection("127.0.0.1:7235")
+	live := f.CreateHistoryGRPCConnection(hostA)
+	dead := f.CreateHistoryGRPCConnection(hostB)
 	require.NoError(t, dead.Close())
 
 	f.cleanupInternodeConns()
 
-	_, deadOK := f.cachedConn("127.0.0.1:7235")
+	_, deadOK := f.cachedConn(hostB)
 	require.False(t, deadOK, "shut-down connection should be swept")
-	liveConn, liveOK := f.cachedConn("127.0.0.1:7234")
+	liveConn, liveOK := f.cachedConn(hostA)
 	require.True(t, liveOK, "live connection should be retained")
 	require.Same(t, live, liveConn)
 }
@@ -70,7 +78,7 @@ func TestInternodeConnCache_ConcurrentCreate(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			f.CreateHistoryGRPCConnection("127.0.0.1:7234")
+			f.CreateHistoryGRPCConnection(hostA)
 		}()
 	}
 	wg.Wait()
