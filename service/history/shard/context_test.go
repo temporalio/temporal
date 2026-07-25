@@ -19,6 +19,8 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -983,6 +985,99 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 	s.NoError(err)
 	s.True(called)
 	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	now := s.timeSource.Now()
+
+	// Persist an ack level below the generated task ids so the queue looks backlogged.
+	frontier := tasks.NewImmediateKey(100)
+	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
+		int32(tasks.CategoryIDTransfer): {
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: timestamppb.New(tasks.DefaultFireTime),
+				TaskId:   frontier.TaskID,
+			},
+		},
+	}
+
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+			s.Equal(tasks.CategoryTransfer, req.TaskCategory)
+			s.Equal(frontier, req.InclusiveMinTaskKey)
+			// The read must happen after the shard lock is released, so it is takeable here.
+			s.True(s.mockShard.rwLock.TryLock(), "shard lock must be released before the read")
+			s.mockShard.rwLock.Unlock()
+			return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+				&tasks.ActivityTask{VisibilityTimestamp: now.Add(-time.Hour)},
+			}}, nil
+		}).Times(1)
+
+	capture := captureHandler.StartCapture()
+	s.mockShard.emitShardInfoMetricsLogs()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	recordings := snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(time.Hour, recordings[0].Value.(time.Duration))
+	s.Equal(metrics.ShardInfoScope, recordings[0].Tags["operation"])
+	s.Equal(tasks.CategoryTransfer.Name(), recordings[0].Tags["task_category"])
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_FutureVisibilityTime_ClampedToZero() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	now := s.timeSource.Now()
+
+	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
+		int32(tasks.CategoryIDTransfer): {
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: timestamppb.New(tasks.DefaultFireTime),
+				TaskId:   100,
+			},
+		},
+	}
+	// A task stamped by a host whose clock is ahead must not report a negative age.
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+			&tasks.ActivityTask{VisibilityTimestamp: now.Add(time.Minute)},
+		}}, nil).Times(1)
+
+	capture := captureHandler.StartCapture()
+	s.mockShard.emitShardInfoMetricsLogs()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	recordings := snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(time.Duration(0), recordings[0].Value.(time.Duration))
+}
+
+func (s *contextSuite) TestEmitShardInfoMetricsLogs_CaughtUp_NoRead() {
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+
+	// Ack level at the generated task id boundary: no lag, so nothing to read.
+	highWatermark := s.mockShard.taskKeyManager.getExclusiveReaderHighWatermark(tasks.CategoryTransfer)
+	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
+		int32(tasks.CategoryIDTransfer): {
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: timestamppb.New(tasks.DefaultFireTime),
+				TaskId:   highWatermark.TaskID,
+			},
+		},
+	}
+
+	capture := captureHandler.StartCapture()
+	// No GetHistoryTasks expectation is set, so an unexpected read fails the test.
+	s.mockShard.emitShardInfoMetricsLogs()
+	snap := capture.Snapshot()
+	captureHandler.StopCapture(capture)
+
+	s.Empty(snap[metrics.ShardInfoImmediateQueueBacklogAge.Name()])
 }
 
 func (s *contextSuite) TestOldestImmediateTaskVisibilityTime() {
