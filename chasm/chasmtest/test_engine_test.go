@@ -17,7 +17,8 @@ import (
 )
 
 // TestTasksArePhysicallyGenerated: a task a component adds must reach the backend as a physical task, in
-// the category its TaskAttributes imply.
+// the category its TaskAttributes imply, whether it was added while starting the execution or while
+// updating it.
 func TestTasksArePhysicallyGenerated(t *testing.T) {
 	const ttl = time.Hour
 
@@ -26,6 +27,16 @@ func TestTasksArePhysicallyGenerated(t *testing.T) {
 		require.Equal(t, 1, countTasks(t, e, ref, tasks.CategoryTimer))
 	})
 
+	t.Run("added while updating", func(t *testing.T) {
+		e, ref := startStore(t, 0)
+		require.Equal(t, 0, countTasks(t, e, ref, tasks.CategoryTimer))
+		_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+			func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+				return nil, addPayload(s, mc, "second", ttl)
+			}, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, countTasks(t, e, ref, tasks.CategoryTimer))
+	})
 }
 
 func startStore(t *testing.T, ttl time.Duration) (*chasmtest.Engine, chasm.ComponentRef) {
