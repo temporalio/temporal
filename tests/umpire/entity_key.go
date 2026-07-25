@@ -41,17 +41,6 @@ type WorkflowPath struct {
 	workflowID  string
 }
 
-// Update returns the registry key for a workflow update entity
-// (keyed under its parent workflow).
-func (p WorkflowPath) Update(updateID string) string {
-	ancestors := Namespace(p.namespaceID).ancestors()
-	ancestors = append(ancestors, umpirefw.NewEntityID(fact.WorkflowType, p.workflowID))
-	return umpirefw.EntityPathKey(&umpirefw.EntityPath{
-		EntityID:  umpirefw.NewEntityID(fact.WorkflowUpdateType, updateID),
-		Ancestors: ancestors,
-	})
-}
-
 // NexusOperation returns the registry key for a Nexus operation entity, keyed
 // under its caller workflow. The operation's own ID is "<workflowID>:<schedEventID>",
 // matching the HSM node identity.

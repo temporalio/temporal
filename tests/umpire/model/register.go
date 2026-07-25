@@ -37,16 +37,6 @@ func DefaultEntities() []DefaultEntity {
 			},
 		},
 		{
-			New: func() umpire.Entity { return NewWorkflowUpdate() },
-			Facts: []umpire.Fact{
-				&fact.WorkflowUpdateRequested{},
-				&fact.WorkflowUpdateAdmitted{},
-				&fact.WorkflowUpdateAccepted{},
-				&fact.WorkflowUpdateCompleted{},
-				&fact.WorkflowUpdateRejected{},
-			},
-		},
-		{
 			New: func() umpire.Entity { return NewNexusOperation() },
 			Facts: []umpire.Fact{
 				&fact.NexusOperationScheduled{},
@@ -63,7 +53,7 @@ func DefaultEntities() []DefaultEntity {
 
 // defaultFacts is the full set of fact probes the decoder must recognize. It is a
 // superset of the per-entity subscriptions in DefaultEntities: it also includes
-// broadcast / settle facts (e.g. WorkflowTerminated, WorkflowUpdateAborted) that no
+// broadcast / settle facts (e.g. WorkflowTerminated) that no
 // single entity subscribes to but entities still handle in OnFact.
 func defaultFacts() []umpire.Fact {
 	return []umpire.Fact{
@@ -75,12 +65,6 @@ func defaultFacts() []umpire.Fact {
 		&fact.WorkflowTaskDiscarded{},
 		&fact.WorkflowTerminated{},
 		&fact.SpeculativeWorkflowTaskScheduled{},
-		&fact.WorkflowUpdateRequested{},
-		&fact.WorkflowUpdateAdmitted{},
-		&fact.WorkflowUpdateAccepted{},
-		&fact.WorkflowUpdateCompleted{},
-		&fact.WorkflowUpdateRejected{},
-		&fact.WorkflowUpdateAborted{},
 		&fact.NexusOperationScheduled{},
 		&fact.NexusOperationAttemptFailed{},
 		&fact.NexusOperationStarted{},

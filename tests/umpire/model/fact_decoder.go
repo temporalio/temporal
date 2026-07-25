@@ -20,13 +20,8 @@ func NewFactDecoder() *FactDecoder {
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTaskStored{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTaskDiscarded{} })
-	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateAborted{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowTerminated{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.SpeculativeWorkflowTaskScheduled{} })
-	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateAdmitted{} })
-	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateAccepted{} })
-	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateCompleted{} })
-	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowUpdateRejected{} })
 	d.registerSpanFact(func() fact.SpanFact { return &fact.WorkflowExecutionCompleted{} })
 
 	d.registerSpanFact(func() fact.SpanFact { return &fact.NexusOperationScheduled{} })
@@ -40,8 +35,6 @@ func NewFactDecoder() *FactDecoder {
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskAdded{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowTaskPolled{} })
 	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowStarted{} })
-	d.registerRequestFact(func() fact.RequestFact { return &fact.WorkflowUpdateRequested{} })
-
 	return d
 }
 

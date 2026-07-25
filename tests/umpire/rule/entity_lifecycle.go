@@ -29,10 +29,8 @@ func (EntityTransitionLegality) CheckSafety(c *umpire.SafetyContext) {
 
 // EntityProgress is a generic liveness rule: an entity must not be left in a
 // state its Lifecycle marks as "must progress" (LifecycleSpec.MustProgress).
-// For WorkflowUpdate, whose must-progress states are {admitted, accepted}, it
-// replaces both WorkflowUpdateLossPrevention (stuck admitted) and
-// WorkflowUpdateCompletion (stuck accepted). Entities that declare no
-// must-progress states are unaffected, so it is safe across all entity types.
+// Entities that declare no must-progress states are unaffected, so it is safe
+// across all entity types.
 type EntityProgress struct{}
 
 func (EntityProgress) Name() string { return "EntityProgressRule" }

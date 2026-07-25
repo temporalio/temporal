@@ -6,7 +6,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatev1 "go.temporal.io/api/update/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
@@ -107,64 +106,6 @@ func makeSpecWorkflowTaskPolled(taskQueue, workflowID, runID string, taskReturne
 		},
 		EntityPath:   &umpire.EntityPath{EntityID: wtID, Ancestors: []umpire.EntityID{wfID}},
 		TaskReturned: taskReturned,
-	}
-}
-
-func makeWorkflowUpdateAdmitted(workflowID, updateID string) *fact.WorkflowUpdateAdmitted {
-	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
-	return &fact.WorkflowUpdateAdmitted{
-		UpdateID:   updateID,
-		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
-	}
-}
-
-func makeWorkflowUpdateAccepted(workflowID, updateID string) *fact.WorkflowUpdateAccepted {
-	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
-	return &fact.WorkflowUpdateAccepted{
-		UpdateID:   updateID,
-		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
-	}
-}
-
-func makeWorkflowUpdateCompleted(workflowID, updateID string) *fact.WorkflowUpdateCompleted {
-	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
-	return &fact.WorkflowUpdateCompleted{
-		UpdateID:   updateID,
-		WorkflowID: workflowID,
-		Success:    true,
-		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
-	}
-}
-
-func makeWorkflowUpdateRejected(workflowID, updateID string) *fact.WorkflowUpdateRejected {
-	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
-	return &fact.WorkflowUpdateRejected{
-		UpdateID:   updateID,
-		WorkflowID: workflowID,
-		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
-	}
-}
-
-func makeWorkflowUpdateRequested(workflowID, updateID string) *fact.WorkflowUpdateRequested {
-	wfID := umpire.NewEntityID(model.WorkflowType, workflowID)
-	updID := umpire.NewEntityID(model.WorkflowUpdateType, updateID)
-	return &fact.WorkflowUpdateRequested{
-		Request: &historyservice.UpdateWorkflowExecutionRequest{
-			Request: &workflowservice.UpdateWorkflowExecutionRequest{
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-				Request: &updatev1.Request{
-					Meta:  &updatev1.Meta{UpdateId: updateID},
-					Input: &updatev1.Input{Name: "handler"},
-				},
-			},
-		},
-		EntityPath: &umpire.EntityPath{EntityID: updID, Ancestors: []umpire.EntityID{wfID}},
 	}
 }
 

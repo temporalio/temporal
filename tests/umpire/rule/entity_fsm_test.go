@@ -8,44 +8,6 @@ import (
 	"go.temporal.io/server/tests/umpire/model"
 )
 
-func TestWorkflowUpdate_FSM_Transitions(t *testing.T) {
-	wu := model.NewWorkflowUpdate()
-	if wu.FSM.Current() != "unspecified" {
-		t.Fatalf("expected initial state 'unspecified', got %s", wu.FSM.Current())
-	}
-	if !wu.FSM.Can("admit") {
-		t.Fatal("expected 'admit' to be possible from 'unspecified'")
-	}
-
-	ident := &umpire.EntityPath{EntityID: umpire.NewEntityID(model.WorkflowUpdateType, "upd1")}
-	wu.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
-		yield(makeWorkflowUpdateAdmitted("wf1", "upd1"))
-	})
-	if wu.FSM.Current() != "admitted" {
-		t.Fatalf("expected 'admitted', got %s", wu.FSM.Current())
-	}
-	if wu.AdmittedAt().IsZero() {
-		t.Fatal("AdmittedAt should be set")
-	}
-
-	wu.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
-		yield(makeWorkflowUpdateAccepted("wf1", "upd1"))
-	})
-	if wu.FSM.Current() != "accepted" {
-		t.Fatalf("expected 'accepted', got %s", wu.FSM.Current())
-	}
-
-	wu.OnFact(context.Background(), ident, func(yield func(umpire.Fact) bool) {
-		yield(makeWorkflowUpdateCompleted("wf1", "upd1"))
-	})
-	if wu.FSM.Current() != "completed" {
-		t.Fatalf("expected 'completed', got %s", wu.FSM.Current())
-	}
-	if wu.CompletedAt().IsZero() {
-		t.Fatal("CompletedAt should be set")
-	}
-}
-
 func TestWorkflowTask_FSM_AddThenPoll(t *testing.T) {
 	wt := model.NewWorkflowTask()
 	if wt.FSM.Current() != "created" {

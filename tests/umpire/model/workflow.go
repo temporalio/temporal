@@ -29,10 +29,6 @@ func (w WorkflowID) Task(taskID string) WorkflowTaskID {
 	return WorkflowTaskID{parent: w, id: taskID}
 }
 
-func (w WorkflowID) Update(updateID string) WorkflowUpdateID {
-	return WorkflowUpdateID{parent: w, id: updateID}
-}
-
 type ExecutionID struct {
 	parent WorkflowID
 	id     string

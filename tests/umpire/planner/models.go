@@ -9,9 +9,8 @@ import (
 
 // Models is the authoring surface: a catalog of every entity model the planner can
 // plan over, keyed by entity type. A developer names targets fully-qualified by
-// entity ("WorkflowUpdate", "completed") instead of first fetching a Lifecycle by
-// hand — which also disambiguates states that several entities share (both
-// Workflow and WorkflowUpdate have a "completed" state).
+// entity ("Workflow", "completed") instead of first fetching a Lifecycle by
+// hand — which also disambiguates state names shared by multiple entities.
 //
 // Planning is structural (over the model graph, not any live instance), so one
 // representative Lifecycle per entity type is all the catalog needs.

@@ -15,9 +15,8 @@ import (
 // and total (Classify yields a defined outcome for every reachable state × event).
 func TestEntityLifecyclesAreValidAndTotal(t *testing.T) {
 	entities := map[string]umpire.Lifecycled{
-		"Workflow":       NewWorkflow(),
-		"WorkflowTask":   NewWorkflowTask(),
-		"WorkflowUpdate": NewWorkflowUpdate(),
+		"Workflow":     NewWorkflow(),
+		"WorkflowTask": NewWorkflowTask(),
 	}
 
 	for name, e := range entities {
@@ -41,9 +40,8 @@ func TestEntityLifecyclesAreValidAndTotal(t *testing.T) {
 // events (every declared event is a live transition from some reachable state).
 func TestEntityModelDecisionTables(t *testing.T) {
 	entities := map[string]umpire.Lifecycled{
-		"Workflow":       NewWorkflow(),
-		"WorkflowTask":   NewWorkflowTask(),
-		"WorkflowUpdate": NewWorkflowUpdate(),
+		"Workflow":     NewWorkflow(),
+		"WorkflowTask": NewWorkflowTask(),
 	}
 	names := make([]string, 0, len(entities))
 	for n := range entities {

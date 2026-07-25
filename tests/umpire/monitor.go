@@ -44,10 +44,6 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 
 	// Safety rules — checked on every observation.
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
-	// (state/timestamp consistency is now structural: WorkflowUpdate's *At accessors
-	// are derived from the lifecycle's entry times, so they cannot drift.)
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateHistoryOrdering{} })
-	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.WorkflowUpdateClosure{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
 	// rule.EntityTransitionLegality (generic, over any Lifecycled entity) is built
 	// and unit-tested but NOT registered: now that Classify treats forward jumps
@@ -60,15 +56,7 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeTaskRollback{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.SpeculativeConversion{} })
-	// EntityProgress subsumes the former WorkflowUpdateLossPrevention (stuck admitted)
-	// and WorkflowUpdateCompletion (stuck accepted) via the update's MustProgress states.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.EntityProgress{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateDeduplication{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContinueAsNew{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateWorkerSkipped{} })
-	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowUpdateContextClear{} })
 
 	if err := rb.InitRules(registry, logger, umpirefw.RuleConfig{}); err != nil {
 		return nil, fmt.Errorf("monitor: failed to initialize rules: %w", err)
