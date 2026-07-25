@@ -184,7 +184,7 @@ Done in the latest cleanup pass:
   observed close/terminate facts (`WorkflowExecutionCompleted` / `WorkflowTerminated` routed to
   entities), not teardown timing.
 - **Naming aligned to the docs** — framework `Registry`→`ModelState`, `Rulebook`→`RuleRegistry`;
-  active package `driver`→`planner` with the realizer interface `Actuator`→`Driver`; the
+  active package `driver`→`planner` with the realizer interface `Driver`; the
   speculative rule files renamed to match their types.
 
 Still open:
