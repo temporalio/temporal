@@ -80,6 +80,7 @@ var (
 	FlagScheduleID                 = "schedule-id"
 	FlagScheduleIDAlias            = []string{"sid"}
 	FlagTarget                     = "target"
+	FlagKey                        = "key"
 	FlagFromVisibility             = "from-visibility"
 	FlagExecute                    = "execute"
 	FlagWorkers                    = "workers"
