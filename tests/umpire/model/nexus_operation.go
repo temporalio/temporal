@@ -186,3 +186,99 @@ const (
 	NexusCancel        NexusEvent = "cancel"
 	NexusTimeout       NexusEvent = "timeout"
 )
+
+// This file gives NexusOperation an SAA-style *total transition function* on top of its
+// Lifecycle: NexusTransition(config, abstractState, event) -> NexusOutcome predicts, for
+// every input, the next abstract state, the rejection (if any), and the observable side
+// effects. It is the "complete edge contract" the SAA model has and a bare FSM lacks (see
+// UMPIRE_PRIOR_ART.md, the SAA section). The lifecycle-state part is delegated to the
+// generic Lifecycle's Classify so the two can never disagree; this layer adds the
+// archetype's reject/side-effect contract and the config-dependent retry branch.
+
+// NexusConfig is the start-time configuration a NexusOperation's behaviour branches on —
+// the analog of SAA's model.Config. It is what makes the transition function total over a
+// *family* of operations rather than one fixed graph.
+type NexusConfig struct {
+	// MaxAttempts caps retries; 0 means unlimited. When the budget is exhausted a
+	// retryable failure settles the operation instead of backing off.
+	MaxAttempts int
+}
+
+// NexusAbstract is the observable abstract state of a NexusOperation: its lifecycle state
+// plus the attempt count (the retry loop, which the bare FSM graph does not track). The
+// analog of SAA's AbstractState.
+type NexusAbstract struct {
+	State   string
+	Attempt int
+}
+
+// NexusReject is the API/validation error an event would produce when it is not a legal
+// advance — the analog of SAA's reject ErrorKind. Empty means no rejection.
+type NexusReject string
+
+const (
+	NexusRejectNone         NexusReject = ""
+	NexusRejectPrecondition NexusReject = "FailedPrecondition"
+)
+
+// NexusOutcome is the full predicted contract of applying one event to a NexusOperation in
+// a given abstract state under a config: the transition kind, the next abstract state, the
+// rejection (if any), and the observable side effects. A superset of the generic
+// Lifecycle's state-only Outcome.
+type NexusOutcome struct {
+	Kind         umpire.TransitionKind
+	From, Next   NexusAbstract
+	Reject       NexusReject
+	AttemptDelta int  // +1 when this edge schedules a new attempt
+	BackoffArmed bool // a retry backoff timer is armed after this edge
+	Terminal     bool // the operation is settled after this edge
+}
+
+// NexusTransition predicts the full outcome of applying event to a NexusOperation in
+// abstract state cur under cfg. Total: every (cfg, state, event) yields a defined outcome.
+func NexusTransition(cfg NexusConfig, cur NexusAbstract, event string) NexusOutcome {
+	lc := NewNexusOperation().Lifecycle()
+	lc.SetState(cur.State)
+	base := lc.Classify(event) // Advance / NoOp / Illegal + target state
+
+	out := NexusOutcome{From: cur, Next: cur, Kind: base.Kind}
+	switch base.Kind {
+	case umpire.Illegal:
+		// An impossible edge: the server would reject it on a precondition.
+		out.Reject = NexusRejectPrecondition
+		out.Terminal = nexusIsTerminal(cur.State)
+		return out
+	case umpire.NoOp:
+		// Benign re-observation (incl. any event once settled); no side effects.
+		out.Terminal = nexusIsTerminal(cur.State)
+		return out
+	}
+
+	// Advance: the lifecycle moves to base.To; enrich with the archetype contract.
+	out.Next.State = base.To
+	switch event {
+	case NexusSchedule:
+		// Initial schedule (attempt 1) or a retry out of backing_off (attempt+1).
+		out.Next.Attempt = cur.Attempt + 1
+		out.AttemptDelta = 1
+	case NexusAttemptFailed:
+		// Retryable failure → backoff, unless the retry budget is exhausted, in which
+		// case the operation fails terminally instead (the config-dependent branch).
+		if cfg.MaxAttempts > 0 && cur.Attempt >= cfg.MaxAttempts {
+			out.Next.State = NexusFailed
+		} else {
+			out.BackoffArmed = true
+		}
+	}
+	out.Terminal = nexusIsTerminal(out.Next.State)
+	return out
+}
+
+func nexusIsTerminal(state string) bool {
+	switch state {
+	case NexusSucceeded, NexusFailed, NexusCanceled, NexusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
