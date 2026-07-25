@@ -3439,6 +3439,63 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 	}, chasmTask.Info)
 }
 
+// A side effect task whose scheduled time has already passed belongs in the immediate queue.
+func (s *nodeSuite) TestCloseTransaction_SideEffectTaskCategory() {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name          string
+		scheduledTime time.Time
+		category      tasks.Category
+	}{
+		{"past", now.Add(-time.Minute), tasks.CategoryTransfer},
+		{"now", now, tasks.CategoryTransfer},
+		{"future", now.Add(time.Minute), tasks.CategoryTimer},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.nodeBackend = &MockNodeBackend{
+				HandleNextTransitionCount: func() int64 { return 2 },
+			}
+			s.timeSource.Update(now)
+
+			root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+				"": {
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+						Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+							ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+								TypeId: testComponentTypeID,
+							},
+						},
+					},
+				},
+			})
+			s.NoError(err)
+
+			mutableContext := NewMutableContext(context.Background(), root)
+			component, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+
+			s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+				Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+			mutableContext.AddTask(
+				component,
+				TaskAttributes{ScheduledTime: tc.scheduledTime},
+				&TestSideEffectTask{Data: []byte("task-payload")},
+			)
+
+			_, err = root.CloseTransaction()
+			s.NoError(err)
+
+			s.Len(s.nodeBackend.TasksByCategory[tc.category], 1)
+			s.Equal(1, s.nodeBackend.NumTasksAdded())
+		})
+	}
+}
+
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
