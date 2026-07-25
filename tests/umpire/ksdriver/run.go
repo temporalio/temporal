@@ -15,6 +15,11 @@ type RunOptions struct {
 	TaskQueue      string
 	WorkflowType   string // registered name of worker.KitchenSinkWorkflow on the worker
 	WorkflowIDBase string // per-route workflow IDs derive from this
+
+	// NexusEndpoint/NexusOperation are required for NexusOperation routes (the endpoint
+	// is created per-test), ignored otherwise.
+	NexusEndpoint  string
+	NexusOperation string
 }
 
 // RunPlan compiles each route in the plan for the given entity into a kitchensink
@@ -26,8 +31,12 @@ type RunOptions struct {
 // worker.KitchenSinkWorkflow registered under opts.WorkflowType. The pure mapping it
 // relies on (Compile) is unit-tested independently.
 func RunPlan(ctx context.Context, c client.Client, opts RunOptions, entity string, plan *planner.Plan) error {
+	var compileOpts []Option
+	if opts.NexusEndpoint != "" {
+		compileOpts = append(compileOpts, WithNexus(opts.NexusEndpoint, opts.NexusOperation))
+	}
 	for i, route := range plan.Routes {
-		ti, err := Compile(entity, route)
+		ti, err := Compile(entity, route, compileOpts...)
 		if err != nil {
 			return fmt.Errorf("ksdriver: compile route %d: %w", i, err)
 		}

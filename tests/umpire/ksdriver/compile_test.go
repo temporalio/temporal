@@ -41,3 +41,32 @@ func TestCompile_UnimplementedEntity(t *testing.T) {
 	_, err := Compile("WorkflowUpdate", []string{"admit", "complete"})
 	require.Error(t, err)
 }
+
+// A NexusOperation route compiles to a workflow that schedules an ExecuteNexusOperation
+// against the given endpoint. A terminal route (schedule→succeed) awaits completion.
+func TestCompile_Nexus_ScheduleSucceed(t *testing.T) {
+	ti, err := Compile("NexusOperation", []string{"schedule", "succeed"},
+		WithNexus("my-endpoint", "my-op"))
+	require.NoError(t, err)
+	acts := ti.GetWorkflowInput().GetInitialActions()[0].GetActions()
+	require.Len(t, acts, 1)
+	op := acts[0].GetNexusOperation()
+	require.NotNil(t, op, "must schedule a nexus operation")
+	require.Equal(t, "my-endpoint", op.GetEndpoint())
+	require.Equal(t, "my-op", op.GetOperation())
+	require.NotNil(t, op.GetAwaitableChoice().GetWaitFinish(), "terminal route awaits completion")
+}
+
+// A route stopping at "start" waits for STARTED only, not completion.
+func TestCompile_Nexus_ScheduleStart_WaitsStarted(t *testing.T) {
+	ti, err := Compile("NexusOperation", []string{"schedule", "start"}, WithNexus("ep", ""))
+	require.NoError(t, err)
+	op := ti.GetWorkflowInput().GetInitialActions()[0].GetActions()[0].GetNexusOperation()
+	require.NotNil(t, op.GetAwaitableChoice().GetWaitStarted(), "start-only route waits for STARTED")
+	require.Equal(t, "operation", op.GetOperation(), "empty operation defaults")
+}
+
+func TestCompile_Nexus_RequiresEndpoint(t *testing.T) {
+	_, err := Compile("NexusOperation", []string{"schedule", "succeed"})
+	require.Error(t, err)
+}

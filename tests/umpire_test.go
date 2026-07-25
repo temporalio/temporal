@@ -220,3 +220,68 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	violations := env.GetMonitor().CheckNamespace(ctx, nsID)
 	require.Empty(t, violations, "a cleanly settled CHASM Nexus operation must yield no violations")
 }
+
+// TestPlanAndDriveKitchenSinkNexusOperation drives a Nexus operation the same way, but the
+// caller is the copied Omes kitchensink interpreter rather than a bespoke workflow: the
+// NexusOperation route compiles (ksdriver.Compile + WithNexus) to a kitchensink workflow
+// whose ExecuteNexusOperation action schedules and awaits the op. Same plan -> drive ->
+// judge loop, arbitrary kitchensink-described workload.
+func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
+	t := s.T()
+
+	os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
+	t.Cleanup(func() { os.Unsetenv("TEMPORAL_OTEL_DEBUG") })
+
+	env := newNexusTestEnv(t, true,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
+	)
+	ctx := env.Context()
+	nsID := env.NamespaceID().String()
+
+	prevTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(env.GetMonitor())))
+	t.Cleanup(func() { otel.SetTracerProvider(prevTP) })
+
+	// A mock Nexus handler that completes synchronously.
+	endpointName := env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+		},
+	})
+
+	// The workload is the copied kitchensink interpreter; its ExecuteNexusOperation action
+	// schedules the op (against the kitchensink service on the endpoint above).
+	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
+
+	// PLAN: shortest route to a settled operation (sync path skips "started").
+	plan, err := planner.DefaultModels().PlanTo("NexusOperation", "succeeded", planner.Shortest, planner.Constraints{})
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"schedule", "succeed"}}, plan.Routes)
+
+	// DRIVE: the route compiles to a kitchensink workflow that schedules + awaits the op.
+	require.NoError(t, ksdriver.RunPlan(ctx, env.SdkClient(), ksdriver.RunOptions{
+		Namespace:      nsID,
+		TaskQueue:      env.WorkerTaskQueue(),
+		WorkflowType:   "KitchenSinkWorkflow",
+		WorkflowIDBase: "umpire-ks-nexus",
+		NexusEndpoint:  endpointName,
+		NexusOperation: "operation",
+	}, "NexusOperation", plan))
+
+	// JUDGE: the Monitor built a settled NexusOperation from chasm.transition telemetry.
+	nsRoot := umpirefw.NewEntityID(model.NamespaceType, nsID)
+	require.Eventually(t, func() bool {
+		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
+			if op, ok := e.Entity.(*model.NexusOperation); ok && op.FSM.IsTerminal() {
+				t.Logf("observed kitchensink-driven Nexus operation in state %q", op.FSM.Current())
+				return true
+			}
+		}
+		return false
+	}, 20*time.Second, 200*time.Millisecond, "the Monitor should observe the kitchensink-driven Nexus operation settle")
+
+	violations := env.GetMonitor().CheckNamespace(ctx, nsID)
+	require.Empty(t, violations, "a cleanly settled kitchensink Nexus operation must yield no violations")
+}
