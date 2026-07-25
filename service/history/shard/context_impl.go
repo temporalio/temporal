@@ -1304,17 +1304,17 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	}
 }
 
-// emitImmediateQueueLag records an immediate queue's lag and returns its backlog when the age still
+// emitImmediateQueueLagLocked records an immediate queue's lag and returns its backlog when the age still
 // has to be read from persistence.
-func (s *ContextImpl) emitImmediateQueueLag(
+func (s *ContextImpl) emitImmediateQueueLagLocked(
 	category tasks.Category,
 	queueState *persistencespb.QueueState,
 	metricsHandler metrics.Handler,
 	emitShardLagLog bool,
-) *immediateBacklog {
+) (immediateBacklog, bool) {
 	minTaskKey := getMinTaskKey(queueState)
 	if minTaskKey == nil {
-		return nil
+		return immediateBacklog{}, false
 	}
 	highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
 	lag := highWatermark.TaskID - minTaskKey.TaskID
@@ -1331,9 +1331,9 @@ func (s *ContextImpl) emitImmediateQueueLag(
 	// Replication ack levels track how far remote clusters have consumed rather than local task
 	// processing, and have their own lag metrics, so their age is not comparable here.
 	if lag <= 0 || category.ID() == tasks.CategoryIDReplication {
-		return nil
+		return immediateBacklog{}, false
 	}
-	return &immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}
+	return immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}, true
 }
 
 // emitQueueLagMetrics records the per-category queue lag and returns the immediate backlogs whose
@@ -1356,8 +1356,8 @@ Loop:
 
 		switch category.Type() {
 		case tasks.CategoryTypeImmediate:
-			if backlog := s.emitImmediateQueueLag(category, queueState, metricsHandler, emitShardLagLog); backlog != nil {
-				immediateBacklogs = append(immediateBacklogs, *backlog)
+			if backlog, ok := s.emitImmediateQueueLagLocked(category, queueState, metricsHandler, emitShardLagLog); ok {
+				immediateBacklogs = append(immediateBacklogs, backlog)
 			}
 
 		case tasks.CategoryTypeScheduled:
@@ -1404,8 +1404,10 @@ func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
 		BatchSize:           1,
 	})
 	if err != nil {
-		s.throttledLogger.Warn("Failed to read oldest task for backlog age metric",
-			tag.Error(err), tag.TaskCategoryID(category.ID()))
+		if !common.IsContextCanceledErr(err) {
+			s.throttledLogger.Warn("Failed to read oldest task for backlog age metric",
+				tag.Error(err), tag.TaskCategoryID(category.ID()))
+		}
 		return time.Time{}, false
 	}
 	if len(resp.Tasks) == 0 {

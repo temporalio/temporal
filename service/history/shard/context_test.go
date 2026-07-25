@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -52,6 +53,12 @@ type (
 func TestShardContextSuite(t *testing.T) {
 	s := &contextSuite{}
 	suite.Run(t, s)
+}
+
+// SetupSubTest rebinds the embedded assertions so a failure inside s.Run reports against the
+// subtest rather than calling FailNow on the parent from another goroutine.
+func (s *contextSuite) SetupSubTest() {
+	s.Assertions = require.New(s.T())
 }
 
 func (s *contextSuite) SetupTest() {
@@ -994,6 +1001,8 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
 
 	// Persist an ack level below the generated task ids so the queue looks backlogged.
 	frontier := tasks.NewImmediateKey(100)
+	// Replication is also an immediate category, but its ack level tracks remote clusters, so it must
+	// not be read. Its reader state is for an enabled remote cluster so trimShardInfo keeps it.
 	s.mockShard.shardInfo.QueueStates = map[int32]*persistencespb.QueueState{
 		int32(tasks.CategoryIDTransfer): {
 			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
@@ -1001,12 +1010,27 @@ func (s *contextSuite) TestEmitShardInfoMetricsLogs_ImmediateBacklogAge() {
 				TaskId:   frontier.TaskID,
 			},
 		},
+		int32(tasks.CategoryIDReplication): {
+			ReaderStates: map[int64]*persistencespb.QueueReaderState{
+				ReplicationReaderIDFromClusterShardID(cluster.TestAlternativeClusterInitialFailoverVersion, s.shardID): {
+					Scopes: []*persistencespb.QueueSliceScope{{
+						Range: &persistencespb.QueueSliceRange{
+							InclusiveMin: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 50},
+							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 60},
+						},
+					}},
+				},
+			},
+		},
 	}
 
+	// Exactly one read: transfer only, never replication.
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+		func(ctx context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 			s.Equal(tasks.CategoryTransfer, req.TaskCategory)
 			s.Equal(frontier, req.InclusiveMinTaskKey)
+			// A metric read must be shed before real task loading, not share its reserved priority.
+			s.Equal(headers.CallerTypePreemptable, headers.GetCallerInfo(ctx).CallerType)
 			// The read must happen after the shard lock is released, so it is takeable here.
 			s.True(s.mockShard.rwLock.TryLock(), "shard lock must be released before the read")
 			s.mockShard.rwLock.Unlock()
