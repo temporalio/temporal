@@ -29,24 +29,24 @@ type NexusOperation struct {
 func NewNexusOperation() *NexusOperation {
 	op := &NexusOperation{}
 	op.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
-		Initial: "unspecified",
+		Initial: NexusUnspecified,
 		Transitions: []umpire.Transition{
 			// schedule fires on init and again on each retry out of backing_off.
-			{Event: "schedule", From: []string{"unspecified", "backing_off"}, To: "scheduled"},
+			{Event: NexusSchedule, From: []string{NexusUnspecified, NexusBackingOff}, To: NexusScheduled},
 			// attempt_failed: a retryable attempt failure sends it into backoff.
-			{Event: "attempt_failed", From: []string{"scheduled"}, To: "backing_off"},
+			{Event: NexusAttemptFailed, From: []string{NexusScheduled}, To: NexusBackingOff},
 			// start: the async handler acknowledged (sync completion skips this).
-			{Event: "start", From: []string{"scheduled", "backing_off"}, To: "started"},
+			{Event: NexusStart, From: []string{NexusScheduled, NexusBackingOff}, To: NexusStarted},
 			// Terminal transitions may fire from scheduled/backing_off/started;
 			// "started precedes succeeded" is NOT an invariant (sync completes direct).
-			{Event: "succeed", From: []string{"scheduled", "backing_off", "started"}, To: "succeeded"},
-			{Event: "fail", From: []string{"scheduled", "backing_off", "started"}, To: "failed"},
-			{Event: "cancel", From: []string{"scheduled", "backing_off", "started"}, To: "canceled"},
-			{Event: "timeout", From: []string{"scheduled", "backing_off", "started"}, To: "timed_out"},
+			{Event: NexusSucceed, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusSucceeded},
+			{Event: NexusFail, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusFailed},
+			{Event: NexusCancel, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusCanceled},
+			{Event: NexusTimeout, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusTimedOut},
 		},
 		// A scheduled/backing_off/started operation must eventually settle;
 		// terminal states derive automatically.
-		MustProgress: []string{"scheduled", "backing_off", "started"},
+		MustProgress: []string{NexusScheduled, NexusBackingOff, NexusStarted},
 	})
 	return op
 }
@@ -58,12 +58,12 @@ func (op *NexusOperation) Lifecycle() *umpire.Lifecycle { return op.FSM }
 
 // The *At accessors are derived from the lifecycle's per-state entry times, so
 // "state reached ⇔ timestamp set" holds by construction.
-func (op *NexusOperation) ScheduledAt() time.Time { t, _ := op.FSM.EnteredAt("scheduled"); return t }
-func (op *NexusOperation) StartedAt() time.Time   { t, _ := op.FSM.EnteredAt("started"); return t }
+func (op *NexusOperation) ScheduledAt() time.Time { t, _ := op.FSM.EnteredAt(NexusScheduled); return t }
+func (op *NexusOperation) StartedAt() time.Time   { t, _ := op.FSM.EnteredAt(NexusStarted); return t }
 
 // SettledAt returns when the operation reached a terminal state, and whether it has.
 func (op *NexusOperation) SettledAt() (time.Time, bool) {
-	for _, s := range []string{"succeeded", "failed", "canceled", "timed_out"} {
+	for _, s := range []string{NexusSucceeded, NexusFailed, NexusCanceled, NexusTimedOut} {
 		if t, ok := op.FSM.EnteredAt(s); ok {
 			return t, true
 		}
@@ -82,29 +82,29 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 		switch e := ev.(type) {
 		case *fact.NexusOperationScheduled:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			op.FSM.Fire(ctx, "schedule")
+			op.FSM.Fire(ctx, NexusSchedule)
 		case *fact.NexusOperationAttemptFailed:
-			op.FSM.Fire(ctx, "attempt_failed")
+			op.FSM.Fire(ctx, NexusAttemptFailed)
 		case *fact.NexusOperationStarted:
-			op.FSM.Fire(ctx, "start")
+			op.FSM.Fire(ctx, NexusStart)
 		case *fact.NexusOperationSucceeded:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, "succeed") {
+			if op.FSM.Fire(ctx, NexusSucceed) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationFailed:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, "fail") {
+			if op.FSM.Fire(ctx, NexusFail) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationCanceled:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, "cancel") {
+			if op.FSM.Fire(ctx, NexusCancel) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.NexusOperationTimedOut:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
-			if op.FSM.Fire(ctx, "timeout") {
+			if op.FSM.Fire(ctx, NexusTimeout) {
 				op.Outcome = e.Outcome
 			}
 		case *fact.ChasmTransition:
@@ -127,19 +127,19 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 func nexusEventForStatus(destination string) string {
 	switch destination {
 	case "OPERATION_STATUS_SCHEDULED":
-		return "schedule"
+		return NexusSchedule
 	case "OPERATION_STATUS_BACKING_OFF":
-		return "attempt_failed"
+		return NexusAttemptFailed
 	case "OPERATION_STATUS_STARTED":
-		return "start"
+		return NexusStart
 	case "OPERATION_STATUS_SUCCEEDED":
-		return "succeed"
+		return NexusSucceed
 	case "OPERATION_STATUS_FAILED":
-		return "fail"
+		return NexusFail
 	case "OPERATION_STATUS_CANCELED":
-		return "cancel"
+		return NexusCancel
 	case "OPERATION_STATUS_TIMED_OUT":
-		return "timeout"
+		return NexusTimeout
 	default:
 		return ""
 	}
@@ -158,3 +158,28 @@ func (op *NexusOperation) String() string {
 	return fmt.Sprintf("NexusOperation{workflowID=%s, scheduledEventID=%s, state=%s}",
 		op.WorkflowID, op.ScheduledEventID, op.FSM.Current())
 }
+
+// Lifecycle states and events for NexusOperation (aliased to string; see Workflow).
+type (
+	NexusState = string
+	NexusEvent = string
+)
+
+const (
+	NexusUnspecified NexusState = "unspecified"
+	NexusScheduled   NexusState = "scheduled"
+	NexusBackingOff  NexusState = "backing_off"
+	NexusStarted     NexusState = "started"
+	NexusSucceeded   NexusState = "succeeded"
+	NexusFailed      NexusState = "failed"
+	NexusCanceled    NexusState = "canceled"
+	NexusTimedOut    NexusState = "timed_out"
+
+	NexusSchedule      NexusEvent = "schedule"
+	NexusAttemptFailed NexusEvent = "attempt_failed"
+	NexusStart         NexusEvent = "start"
+	NexusSucceed       NexusEvent = "succeed"
+	NexusFail          NexusEvent = "fail"
+	NexusCancel        NexusEvent = "cancel"
+	NexusTimeout       NexusEvent = "timeout"
+)

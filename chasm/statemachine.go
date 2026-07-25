@@ -1,10 +1,12 @@
 package chasm
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
@@ -76,7 +78,18 @@ func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) (retErr 
 			if retErr != nil {
 				attrs = append(attrs, attribute.String("chasm.transition.error", retErr.Error()))
 			}
+			// Prefer the ambient span (keeps the event correlated with the enclosing
+			// trace). CHASM transitions often run in background task processing with no
+			// recording ambient span, so fall back to a fresh span from the global
+			// tracer — a no-op unless a TracerProvider is configured (e.g. an observer
+			// wiring its own SpanProcessor).
 			span := trace.SpanFromContext(ctx.goContext())
+			if !span.IsRecording() {
+				var created trace.Span
+				_, created = otel.Tracer("go.temporal.io/server/chasm").Start(context.Background(), telemetry.EventChasmTransition)
+				span = created
+				defer created.End()
+			}
 			span.AddEvent(telemetry.EventChasmTransition, trace.WithAttributes(attrs...))
 		}()
 	}

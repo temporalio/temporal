@@ -54,15 +54,15 @@ type Workflow struct {
 func NewWorkflow() *Workflow {
 	wf := &Workflow{}
 	wf.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
-		Initial: "created",
+		Initial: WorkflowCreated,
 		Transitions: []umpire.Transition{
-			{Event: "start", From: []string{"created"}, To: "started"},
-			{Event: "complete", From: []string{"started"}, To: "completed"},
+			{Event: WorkflowStart, From: []string{WorkflowCreated}, To: WorkflowStarted},
+			{Event: WorkflowComplete, From: []string{WorkflowStarted}, To: WorkflowCompleted},
 		},
 		// A started workflow must eventually close: EntityProgress flags one left
-		// in "started" at teardown (workflow-completion liveness). Benign in-flight
+		// in WorkflowStarted at teardown (workflow-completion liveness). Benign in-flight
 		// closes are settled by the observed-close signal, not teardown timing.
-		MustProgress: []string{"started"},
+		MustProgress: []string{WorkflowStarted},
 	})
 	return wf
 }
@@ -84,7 +84,7 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 				wf.WorkflowID = e.Request.GetStartRequest().GetWorkflowId()
 				wf.NamespaceID = e.Request.GetNamespaceId()
 			}
-			if wf.FSM.Fire(ctx, "start") {
+			if wf.FSM.Fire(ctx, WorkflowStart) {
 				wf.StartedAt = time.Now()
 			}
 			wf.LastSeenAt = time.Now()
@@ -92,7 +92,7 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 			if wf.WorkflowID == "" {
 				wf.WorkflowID = e.WorkflowID
 			}
-			if wf.FSM.Fire(ctx, "complete") {
+			if wf.FSM.Fire(ctx, WorkflowComplete) {
 				wf.CompletedAt = time.Now()
 			}
 			wf.LastSeenAt = time.Now()
@@ -104,3 +104,19 @@ func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events ite
 func (wf *Workflow) String() string {
 	return fmt.Sprintf("Workflow{workflowID=%s, state=%s}", wf.WorkflowID, wf.FSM.Current())
 }
+
+// Lifecycle states and events for Workflow. Aliased to string so they drop into the
+// generic Lifecycle/planner APIs while giving named, typo-checked labels.
+type (
+	WorkflowState = string
+	WorkflowEvent = string
+)
+
+const (
+	WorkflowCreated   WorkflowState = "created"
+	WorkflowStarted   WorkflowState = "started"
+	WorkflowCompleted WorkflowState = "completed"
+
+	WorkflowStart    WorkflowEvent = "start"
+	WorkflowComplete WorkflowEvent = "complete"
+)

@@ -41,17 +41,17 @@ type WorkflowTask struct {
 func NewWorkflowTask() *WorkflowTask {
 	wt := &WorkflowTask{}
 	wt.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
-		Initial: "created",
+		Initial: TaskCreated,
 		Transitions: []umpire.Transition{
-			{Event: "add", From: []string{"created"}, To: "added"},
-			// poll: task delivered to worker — valid from either "added" (sync match)
-			// or "stored" (async match after DB persistence).
-			{Event: "poll", From: []string{"added", "stored"}, To: "polled"},
-			{Event: "store", From: []string{"added"}, To: "stored"},
+			{Event: TaskAdd, From: []string{TaskCreated}, To: TaskAdded},
+			// poll: task delivered to worker — valid from either TaskAdded (sync match)
+			// or TaskStored (async match after DB persistence).
+			{Event: TaskPoll, From: []string{TaskAdded, TaskStored}, To: TaskPolled},
+			{Event: TaskStore, From: []string{TaskAdded}, To: TaskStored},
 			// discard: task expired or invalidated in matching before being polled.
-			{Event: "discard", From: []string{"added", "stored"}, To: "discarded"},
+			{Event: TaskDiscard, From: []string{TaskAdded, TaskStored}, To: TaskDiscarded},
 			// terminate: parent workflow reached a terminal state; task is no longer needed.
-			{Event: "terminate", From: []string{"created", "added", "stored"}, To: "terminated"},
+			{Event: TaskTerminate, From: []string{TaskCreated, TaskAdded, TaskStored}, To: TaskTerminated},
 		},
 		// Task progress (added/stored → polled) is checked by WorkflowTaskStarvation,
 		// which excludes speculative tasks; not modelled as a generic must-progress here.
@@ -82,27 +82,27 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 				wt.WorkflowID = e.Request.GetExecution().GetWorkflowId()
 				wt.RunID = e.Request.GetExecution().GetRunId()
 			}
-			if wt.FSM.Fire(ctx, "add") {
+			if wt.FSM.Fire(ctx, TaskAdd) {
 				wt.AddedAt = time.Now()
 			}
 		case *fact.WorkflowTaskPolled:
-			if e.TaskReturned && wt.FSM.Fire(ctx, "poll") {
+			if e.TaskReturned && wt.FSM.Fire(ctx, TaskPoll) {
 				wt.PolledAt = time.Now()
 			}
 		case *fact.WorkflowTaskStored:
-			if wt.FSM.Fire(ctx, "store") {
+			if wt.FSM.Fire(ctx, TaskStore) {
 				wt.StoredAt = time.Now()
 			}
 		case *fact.WorkflowTaskDiscarded:
 			// Best-effort settle: use the guarded form so discarding an already
 			// terminal task is a no-op rather than a recorded illegal transition.
-			if wt.FSM.Can("discard") {
-				_ = wt.FSM.Event(ctx, "discard")
+			if wt.FSM.Can(TaskDiscard) {
+				_ = wt.FSM.Event(ctx, TaskDiscard)
 			}
 		case *fact.WorkflowTerminated:
 			// Best-effort settle (broadcast to every task); guarded on purpose.
-			if wt.WorkflowID == e.WorkflowID && wt.NamespaceID == e.NamespaceID && wt.FSM.Can("terminate") {
-				_ = wt.FSM.Event(ctx, "terminate")
+			if wt.WorkflowID == e.WorkflowID && wt.NamespaceID == e.NamespaceID && wt.FSM.Can(TaskTerminate) {
+				_ = wt.FSM.Event(ctx, TaskTerminate)
 			}
 		case *fact.SpeculativeWorkflowTaskScheduled:
 			if wt.TaskQueue == "" {
@@ -112,7 +112,7 @@ func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, eve
 			}
 			wt.IsSpeculative = true
 			wt.ScheduledAt = time.Now()
-			if wt.FSM.Fire(ctx, "add") {
+			if wt.FSM.Fire(ctx, TaskAdd) {
 				wt.AddedAt = wt.ScheduledAt
 			}
 		}
@@ -124,3 +124,24 @@ func (wt *WorkflowTask) String() string {
 	return fmt.Sprintf("WorkflowTask{taskQueue=%s, workflow=%s:%s, state=%s}",
 		wt.TaskQueue, wt.WorkflowID, wt.RunID, wt.FSM.Current())
 }
+
+// Lifecycle states and events for WorkflowTask (aliased to string; see Workflow).
+type (
+	TaskState = string
+	TaskEvent = string
+)
+
+const (
+	TaskCreated    TaskState = "created"
+	TaskAdded      TaskState = "added"
+	TaskPolled     TaskState = "polled"
+	TaskStored     TaskState = "stored"
+	TaskDiscarded  TaskState = "discarded"
+	TaskTerminated TaskState = "terminated"
+
+	TaskAdd       TaskEvent = "add"
+	TaskPoll      TaskEvent = "poll"
+	TaskStore     TaskEvent = "store"
+	TaskDiscard   TaskEvent = "discard"
+	TaskTerminate TaskEvent = "terminate"
+)

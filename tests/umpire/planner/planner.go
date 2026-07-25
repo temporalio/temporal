@@ -154,12 +154,21 @@ func Explore(lc *umpire.Lifecycle, c Constraints, opts ...Option) *Plan {
 	return &Plan{Routes: [][]string{route}}
 }
 
-// Driver realizes one abstract model event against the system under test, turning
-// intent into real traffic (RPCs, worker polls, fault injection). Real drivers are
-// Temporal-specific and per-entity; tests supply a fake. This is the seam between
-// the pure planner above and a live server.
+// Action is one step the Driver realizes: an abstract model event (the graph label
+// the planner emits) plus optional realization Params the Driver type-switches on.
+// Planned routes carry a nil Params — the label is all planning knows; a caller binds
+// per-step inputs via Plan.RunWith when a run needs them.
+type Action struct {
+	Event  string
+	Params any
+}
+
+// Driver realizes one Action against the system under test, turning intent into real
+// traffic (RPCs, worker polls, fault injection). Real drivers are Temporal-specific and
+// per-entity; tests supply a fake. This is the seam between the pure planner above and a
+// live server.
 type Driver interface {
-	Do(ctx context.Context, event string) error
+	Do(ctx context.Context, a Action) error
 }
 
 // Resetter is an optional Driver capability: when a Plan has several routes
@@ -168,10 +177,17 @@ type Resetter interface {
 	Reset(ctx context.Context) error
 }
 
-// Run drives every route in the plan through d, in order. For multi-route plans it
-// resets the driver between routes (if it is a Resetter). The monitor judges the
-// resulting traffic out of band; Run only drives.
+// Run drives every route in the plan through d, in order, with no per-step params (the
+// Driver supplies whatever inputs it needs from its own state). Equivalent to RunWith
+// with a nil binder.
 func (p *Plan) Run(ctx context.Context, d Driver) error {
+	return p.RunWith(ctx, d, nil)
+}
+
+// RunWith drives every route through d, binding each step's Action.Params via bind
+// (nil bind ⇒ nil Params). For multi-route plans it resets the driver between routes (if
+// it is a Resetter). The monitor judges the resulting traffic out of band; Run only drives.
+func (p *Plan) RunWith(ctx context.Context, d Driver, bind func(step int, event string) any) error {
 	for i, route := range p.Routes {
 		if i > 0 {
 			if r, ok := d.(Resetter); ok {
@@ -180,8 +196,12 @@ func (p *Plan) Run(ctx context.Context, d Driver) error {
 				}
 			}
 		}
-		for _, ev := range route {
-			if err := d.Do(ctx, ev); err != nil {
+		for step, ev := range route {
+			a := Action{Event: ev}
+			if bind != nil {
+				a.Params = bind(step, ev)
+			}
+			if err := d.Do(ctx, a); err != nil {
 				return fmt.Errorf("planner: route %d event %q: %w", i, ev, err)
 			}
 		}
