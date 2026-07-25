@@ -253,6 +253,92 @@ func TestHandleNexusCompletion_Canceled(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
+// TestHandleNexusCompletion_Terminated verifies that a terminated workflow
+// completion is recorded with TERMINATED status, not FAILED. The completion
+// carries no explicit status: executionStatusFromFailure reconstructs it from
+// the failure's FailureInfo shape, and a missing Failure_TerminatedFailureInfo
+// case there silently degrades to the FAILED default.
+func TestHandleNexusCompletion_Terminated(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "terminated completion",
+		setupInvoker: func(invoker *scheduler.Invoker) {
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
+				{
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+				},
+			}
+		},
+		completion: &persistencespb.ChasmNexusCompletion{
+			RequestId: "req-1",
+			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+				Failure: &failurepb.Failure{
+					Message: "workflow terminated",
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
+				},
+			},
+			CloseTime: timestamppb.New(time.Now()),
+		},
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+	}
+
+	executeNexusCompletion(t, tc)
+}
+
+// TestHandleNexusCompletion_TerminatedDoesNotPauseOnFailure pins the current
+// pause-on-failure policy: countsAsFailureForPause treats only FAILED and
+// TIMED_OUT as failures, so terminating a run of a PauseOnFailure schedule --
+// a routine operator action, not an application failure -- must leave the
+// schedule running and its notes untouched. Companion to
+// TestCanceledWorkflowDoesNotPauseByDefault in pause_on_cancel_test.go.
+func TestHandleNexusCompletion_TerminatedDoesNotPauseOnFailure(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "terminated completion with pause on failure",
+		setupInvoker: func(invoker *scheduler.Invoker) {
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
+				{
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+				},
+			}
+		},
+		setupScheduler: func(sched *scheduler.Scheduler) {
+			sched.Schedule.Policies.PauseOnFailure = true
+		},
+		completion: &persistencespb.ChasmNexusCompletion{
+			RequestId: "req-1",
+			Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+				Failure: &failurepb.Failure{
+					Message: "workflow terminated",
+					FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+						TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+					},
+				},
+			},
+			CloseTime: timestamppb.New(time.Now()),
+		},
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		validateScheduler: func(t *testing.T, sched *scheduler.Scheduler, _ chasm.Context) {
+			require.Empty(t, sched.Schedule.State.Notes,
+				"a terminated run must not write pause notes on a PauseOnFailure schedule")
+		},
+	}
+
+	executeNexusCompletion(t, tc)
+}
+
 // Deferred starts (Attempt==-1, set by ProcessBuffer when overlap policy
 // holds them back) must be re-enabled when a running workflow completes.
 // recordCompletedAction flips -1 to 0; the immediate ProcessBufferTask
