@@ -40,6 +40,10 @@ type (
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
 		allExecutions map[runKey]*execution
 		notifier      *executionNotifier
+		// decorateBackend, if set, is applied to each execution's MockNodeBackend at
+		// creation time, before the tree is built. It lets callers supply handlers the
+		// default backend leaves unset (e.g. HandleGetNamespaceEntry).
+		decorateBackend func(*chasm.MockNodeBackend)
 	}
 
 	execution struct {
@@ -70,6 +74,17 @@ type (
 func WithTimeSource(ts clock.TimeSource) EngineOption {
 	return func(e *Engine) {
 		e.timeSource = ts
+	}
+}
+
+// WithNodeBackendDecorator registers a function applied to every execution's
+// [chasm.MockNodeBackend] at creation time, before its tree is built. Use it to
+// supply backend handlers the default leaves unset — most commonly
+// HandleGetNamespaceEntry, which components that read namespace-scoped config
+// (e.g. the scheduler's Tweakables) require.
+func WithNodeBackendDecorator(fn func(*chasm.MockNodeBackend)) EngineOption {
+	return func(e *Engine) {
+		e.decorateBackend = fn
 	}
 }
 
@@ -558,6 +573,9 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			return changed, nil
 		},
 	}
+	if e.decorateBackend != nil {
+		e.decorateBackend(backend)
+	}
 	return &execution{
 		key:     key,
 		backend: backend,
@@ -570,6 +588,29 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			e.metrics,
 		),
 	}
+}
+
+// NodeForRef returns the CHASM tree node backing the execution identified by ref.
+// It is intended for test drivers that need to invoke node-level task dispatch
+// ([chasm.Node.EachPureTask], [chasm.Node.ExecuteSideEffectTask]) or close
+// transactions directly, which the [Engine] API does not expose.
+func (e *Engine) NodeForRef(ref chasm.ComponentRef) (*chasm.Node, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.node, nil
+}
+
+// BackendForRef returns the [chasm.MockNodeBackend] backing the execution
+// identified by ref. Test drivers use it to inspect the physical tasks
+// ([chasm.MockNodeBackend.TasksByCategory]) the engine has accumulated.
+func (e *Engine) BackendForRef(ref chasm.ComponentRef) (*chasm.MockNodeBackend, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	return exec.backend, nil
 }
 
 // executionForRef looks up an execution by the ref's RunID when present, or falls back
