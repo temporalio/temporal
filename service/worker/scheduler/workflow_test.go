@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -352,6 +353,61 @@ func (s *workflowSuite) TestStart() {
 		Action: action,
 	}, 2)
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// A VersioningOverride configured on the schedule's action must be forwarded to the
+// workflow the schedule starts, otherwise the started workflow silently falls back to
+// ordinary version routing.
+func (s *workflowSuite) TestStartVersioningOverride() {
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "sched-deployment",
+					BuildId:        "sched-build-id",
+				},
+			},
+		},
+	}
+	action := s.defaultAction("myid")
+	action.Action.(*schedulepb.ScheduleAction_StartWorkflow).StartWorkflow.VersioningOverride = override
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		protoassert.ProtoEqual(s.T(), override, req.Request.GetVersioningOverride())
+		return nil, nil
+	})
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(55 * time.Minute),
+			}},
+		},
+		Action: action,
+	}, 2)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// Control for TestStartVersioningOverride: a schedule without an override must not send
+// a non-nil (e.g. empty) override on the start request.
+func (s *workflowSuite) TestStartNoVersioningOverride() {
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Nil(req.Request.GetVersioningOverride())
+		return nil, nil
+	})
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(55 * time.Minute),
+			}},
+		},
+		Action: s.defaultAction("myid"),
+	}, 2)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }

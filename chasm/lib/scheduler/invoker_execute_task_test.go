@@ -7,8 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -17,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -781,6 +784,104 @@ func TestExecuteTask_BackoffUsesFrameworkClock(t *testing.T) {
 				"BackoffTime %v looks derived from wall clock, not framework clock", backoff)
 		},
 	})
+}
+
+// A VersioningOverride configured on the schedule's action must be forwarded to the
+// workflow the schedule starts, otherwise the started workflow silently falls back to
+// ordinary version routing.
+func TestExecuteTask_VersioningOverride(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+
+	override := &workflowpb.VersioningOverride{
+		Override: &workflowpb.VersioningOverride_Pinned{
+			Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+				Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: "sched-deployment",
+					BuildId:        "sched-build-id",
+				},
+			},
+		},
+	}
+	env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = override
+
+	capture := &startWorkflowExecutionRequestCapture{}
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), capture).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "req1",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, _ *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.NotNil(t, capture.Request)
+			protorequire.ProtoEqual(t, override, capture.Request.GetVersioningOverride())
+		},
+	})
+}
+
+// Control for TestExecuteTask_VersioningOverride: a schedule without an override must not
+// send a non-nil (e.g. empty) override on the start request.
+func TestExecuteTask_NoVersioningOverride(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+
+	capture := &startWorkflowExecutionRequestCapture{}
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), capture).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "req1",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, _ *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.NotNil(t, capture.Request)
+			require.Nil(t, capture.Request.GetVersioningOverride())
+		},
+	})
+}
+
+// startWorkflowExecutionRequestCapture is a gomock.Matcher that matches any
+// StartWorkflowExecutionRequest and records the last one it saw, so tests can assert on
+// individual fields after the call.
+type startWorkflowExecutionRequestCapture struct {
+	Request *workflowservice.StartWorkflowExecutionRequest
+}
+
+var _ gomock.Matcher = &startWorkflowExecutionRequestCapture{}
+
+func (c *startWorkflowExecutionRequestCapture) String() string {
+	return "any StartWorkflowExecutionRequest"
+}
+
+func (c *startWorkflowExecutionRequestCapture) Matches(x any) bool {
+	req, ok := x.(*workflowservice.StartWorkflowExecutionRequest)
+	if !ok {
+		return false
+	}
+	c.Request = req
+	return true
 }
 
 type startWorkflowExecutionRequestIDMatcher struct {
