@@ -6854,9 +6854,41 @@ func (wh *WorkflowHandler) validateSchedulePayloadSize(
 	)
 }
 
+// validateScheduleIntervalDurations rejects interval and phase durations that are not
+// valid google.protobuf.Duration messages (mismatched seconds/nanos signs, nanos outside
+// the +/-999999999 range, or seconds outside the +/-10000 year range).
+//
+// The spec compiler only looks at the *normalized* Go duration, so malformed wire values
+// such as {seconds: 2, nanos: -1} pass its semantic interval/phase checks and get
+// persisted verbatim. This check lives at frontend intake rather than in the compiler
+// because the compiler also runs inside the V1 scheduler workflow, where a new error
+// would change replay behavior for already-persisted schedules.
+//
+// Malformed durations are rejected outright rather than canonicalized or capped:
+// timestamp.ValidateAndCapProtoDuration mutates large values, which would be a silent
+// behavior change for schedule specs.
+func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
+	for _, interval := range spec.GetInterval() {
+		if d := interval.GetInterval(); d != nil {
+			if err := d.CheckValid(); err != nil {
+				return fmt.Errorf("interval is not a valid duration: %w", err)
+			}
+		}
+		if d := interval.GetPhase(); d != nil {
+			if err := d.CheckValid(); err != nil {
+				return fmt.Errorf("phase is not a valid duration: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {
 	if schedule.Spec == nil {
 		schedule.Spec = &schedulepb.ScheduleSpec{}
+	}
+	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
+		return serviceerror.NewInvalidArgumentf("Invalid schedule spec: %v", err)
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
