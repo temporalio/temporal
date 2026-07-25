@@ -673,6 +673,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
+		VersioningOverride:       requestSpec.VersioningOverride,
 		ContinuedFailure:         lastCompletionState.Failure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
