@@ -43,3 +43,13 @@ func TestChasmTransition_IgnoresNonNexusComponent(t *testing.T) {
 		chasmTransitionAttrs("*activity.Activity", "x", "ACTIVITY_EXECUTION_STATUS_STARTED")))
 	require.Nil(t, f.TargetEntity())
 }
+
+// The scheduling transition fires before the operation is attached to the CHASM
+// tree, so its component path is empty and it carries no per-operation identity.
+// It is discarded rather than minting a spurious, path-less second entity.
+func TestChasmTransition_IgnoresCreationTimeEmptyPath(t *testing.T) {
+	f := &ChasmTransition{}
+	require.False(t, f.ImportSpanEvent(
+		chasmTransitionAttrs("*nexusoperation.Operation", "", "OPERATION_STATUS_SCHEDULED")))
+	require.Nil(t, f.TargetEntity())
+}

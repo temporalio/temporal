@@ -170,22 +170,11 @@ func (s *UmpireTestSuite) TestNexusOperationModel() {
 // TestPlanAndDriveNexusOperationCHASM drives a REAL CHASM Nexus operation end-to-end
 // and confirms the Monitor observes it via the enriched, generic chasm.transition
 // telemetry (no per-operation instrumentation). This is the CHASM path — HSM has no
-// such telemetry. It also settles the open question of whether CHASM transitions
-// run inside a sampled span that reaches the Monitor.
+// such telemetry. The operation's transitions are delivered on the recording ambient
+// span of the enclosing request/task, which reaches the Monitor through the cluster's
+// TracerProvider.
 func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	t := s.T()
-
-	// SKIP (in-progress): the reusable half is done + unit-tested — chasm/statemachine.go
-	// emits identity-rich chasm.transition events (now with an ambient-or-global-tracer
-	// fallback so a wired provider receives them), and fact.ChasmTransition decodes,
-	// routes, and drives the NexusOperation FSM. Below we wire the global tracer to this
-	// cluster's Monitor. But the Monitor still observes NO events even though the caller
-	// workflow + operation complete — and since either emit path lands on the same
-	// Monitor instance, the events are not firing at all: the operation is not exercising
-	// chasm.Transition.Apply under DebugMode in this setup (flag/routing/history-goroutine
-	// question). Next step: a server-side log at the emit to confirm whether/when it fires
-	// for a workflow-scheduled CHASM Nexus operation.
-	t.Skip("CHASM Nexus operation does not appear to emit chasm.transition here; needs a server-side emission log to locate the gap (emission vs delivery)")
 
 	// Enable the generic CHASM transition telemetry (checked per-transition).
 	os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
@@ -199,9 +188,12 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	ctx := env.Context()
 	nsID := env.NamespaceID().String()
 
-	// CHASM transitions run without a recording ambient span, so the engine's emit
-	// falls back to the global tracer. Wire the global tracer to this cluster's
-	// Monitor so the chasm.transition events reach it.
+	// A chasm.transition is emitted either on the recording ambient span of the
+	// enclosing request/task (delivered to the Monitor via the cluster's own
+	// TracerProvider, into which the functional harness wires it as a span
+	// processor) or, when a transition runs with no recording ambient span, on a
+	// fresh span from the global tracer. Wire the global tracer to this cluster's
+	// Monitor too, so both delivery paths reach it.
 	prevTP := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(env.GetMonitor())))
 	t.Cleanup(func() { otel.SetTracerProvider(prevTP) })

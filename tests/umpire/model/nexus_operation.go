@@ -121,24 +121,27 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 	return nil
 }
 
-// nexusEventForStatus maps a CHASM OperationStatus destination (its proto enum
-// name, e.g. "OPERATION_STATUS_SCHEDULED") to the FSM event that reaches the
-// corresponding model state. Unknown statuses yield "" (ignored).
+// nexusEventForStatus maps a CHASM OperationStatus destination to the FSM event
+// that reaches the corresponding model state. The chasm.transition telemetry
+// stringifies the status with fmt %v, which for OperationStatus is its custom
+// stringer (e.g. "Scheduled"); the proto enum-name form ("OPERATION_STATUS_...")
+// is accepted too so the mapping survives a stringer change. Unknown statuses
+// yield "" (ignored).
 func nexusEventForStatus(destination string) string {
 	switch destination {
-	case "OPERATION_STATUS_SCHEDULED":
+	case "Scheduled", "OPERATION_STATUS_SCHEDULED":
 		return NexusSchedule
-	case "OPERATION_STATUS_BACKING_OFF":
+	case "BackingOff", "OPERATION_STATUS_BACKING_OFF":
 		return NexusAttemptFailed
-	case "OPERATION_STATUS_STARTED":
+	case "Started", "OPERATION_STATUS_STARTED":
 		return NexusStart
-	case "OPERATION_STATUS_SUCCEEDED":
+	case "Succeeded", "OPERATION_STATUS_SUCCEEDED":
 		return NexusSucceed
-	case "OPERATION_STATUS_FAILED":
+	case "Failed", "OPERATION_STATUS_FAILED":
 		return NexusFail
-	case "OPERATION_STATUS_CANCELED":
+	case "Canceled", "OPERATION_STATUS_CANCELED":
 		return NexusCancel
-	case "OPERATION_STATUS_TIMED_OUT":
+	case "TimedOut", "OPERATION_STATUS_TIMED_OUT":
 		return NexusTimeout
 	default:
 		return ""

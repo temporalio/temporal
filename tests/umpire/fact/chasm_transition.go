@@ -53,8 +53,16 @@ func (e *ChasmTransition) IsNexusOperation() bool {
 // route maps the CHASM component identity to a umpire entity path, or nil when the
 // component is not (yet) modelled. A Nexus operation is keyed "<workflowID>:<path>"
 // under its caller workflow.
+//
+// A transition with an empty ComponentPath is ignored: the component is created in
+// the current CHASM transition (e.g. the scheduling transition fires before the
+// operation is attached to the tree, so structuredRef cannot yet resolve its path),
+// leaving no per-operation identity to route on. Such creation-time transitions are
+// immediately superseded by path-bearing transitions on the same operation, which
+// the Monitor's legal forward-jumps carry to the true observed state — so ignoring
+// them avoids minting a spurious, un-progressing second entity.
 func (e *ChasmTransition) route() *umpire.EntityPath {
-	if !e.IsNexusOperation() || e.WorkflowID == "" {
+	if !e.IsNexusOperation() || e.WorkflowID == "" || e.ComponentPath == "" {
 		return nil
 	}
 	self := umpire.NewEntityID(NexusOperationType, e.WorkflowID+":"+e.ComponentPath)
