@@ -23,6 +23,8 @@ type ChasmTransition struct {
 	ComponentPath string
 	Source        string
 	Destination   string
+	Event         string // Go type of the triggering event (chasm.transition.event)
+	Attempt       int    // component-contributed attempt count, 0 if absent
 	NamespaceID   string
 	WorkflowID    string
 	RunID         string
@@ -38,6 +40,8 @@ func (e *ChasmTransition) ImportSpanEvent(attrs attribute.Set) bool {
 	e.ComponentPath = strAttr(attrs, telemetry.AttrChasmComponentPath)
 	e.Source = strAttr(attrs, telemetry.AttrChasmTransitionSource)
 	e.Destination = strAttr(attrs, telemetry.AttrChasmTransitionDestination)
+	e.Event = strAttr(attrs, telemetry.AttrChasmTransitionEvent)
+	e.Attempt = intAttr(attrs, telemetry.AttrChasmTransitionAttempt)
 	e.NamespaceID = strAttr(attrs, telemetry.AttrNamespaceID)
 	e.WorkflowID = strAttr(attrs, telemetry.AttrWorkflowID)
 	e.RunID = strAttr(attrs, telemetry.AttrRunID)
@@ -75,4 +79,11 @@ func strAttr(attrs attribute.Set, key attribute.Key) string {
 		return v.AsString()
 	}
 	return ""
+}
+
+func intAttr(attrs attribute.Set, key attribute.Key) int {
+	if v, ok := attrs.Value(key); ok {
+		return int(v.AsInt64())
+	}
+	return 0
 }

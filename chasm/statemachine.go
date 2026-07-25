@@ -65,6 +65,7 @@ func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) (retErr 
 			attrs := []attribute.KeyValue{
 				telemetry.AttrChasmTransitionSource.String(fmt.Sprintf("%v", prevState)),
 				telemetry.AttrChasmTransitionDestination.String(fmt.Sprintf("%v", t.Destination)),
+				telemetry.AttrChasmTransitionEvent.String(fmt.Sprintf("%T", event)),
 				telemetry.AttrChasmComponentType.String(fmt.Sprintf("%T", sm)),
 				telemetry.AttrNamespaceID.String(ek.NamespaceID),
 				telemetry.AttrWorkflowID.String(ek.BusinessID),
@@ -74,6 +75,13 @@ func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) (retErr 
 				if ref, err := ctx.structuredRef(comp); err == nil {
 					attrs = append(attrs, telemetry.AttrChasmComponentPath.String(strings.Join(ref.componentPath, "/")))
 				}
+			}
+			// A component may enrich its transition telemetry with its own attributes
+			// (e.g. an attempt count) — one generic event, optionally richer per component.
+			if enr, ok := any(sm).(interface {
+				TransitionTelemetryAttributes() []attribute.KeyValue
+			}); ok {
+				attrs = append(attrs, enr.TransitionTelemetryAttributes()...)
 			}
 			if retErr != nil {
 				attrs = append(attrs, attribute.String("chasm.transition.error", retErr.Error()))

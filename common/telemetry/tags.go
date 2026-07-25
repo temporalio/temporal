@@ -31,6 +31,13 @@ const (
 	AttrChasmComponentPath         attribute.Key = "chasm.component.path"
 	AttrChasmTransitionSource      attribute.Key = "chasm.transition.source"
 	AttrChasmTransitionDestination attribute.Key = "chasm.transition.destination"
+	// AttrChasmTransitionEvent is the Go type of the event that triggered the transition
+	// (e.g. "nexusoperation.EventStarted"), so an observer can identify the transition
+	// directly instead of inferring it from the source/destination state pair.
+	AttrChasmTransitionEvent attribute.Key = "chasm.transition.event"
+	// AttrChasmTransitionAttempt is an optional component-contributed attribute: the
+	// attempt count at the time of the transition, for components that retry.
+	AttrChasmTransitionAttempt attribute.Key = "chasm.transition.attempt"
 
 	AttrNexusEndpoint         attribute.Key = "nexus.endpoint"
 	AttrNexusService          attribute.Key = "nexus.service"

@@ -23,6 +23,7 @@ type NexusOperation struct {
 	ScheduledEventID string
 	WorkflowID       string
 	Outcome          string // set on a terminal transition, from the span's nexus.outcome
+	Attempt          int    // observed retry attempt, from chasm.transition telemetry
 	FSM              *umpire.Lifecycle
 }
 
@@ -111,6 +112,9 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			// A real CHASM operation, observed via the generic chasm.transition
 			// telemetry. Its component path is the operation's identity.
 			op.capture(e.ComponentPath, e.WorkflowID)
+			if e.Attempt > op.Attempt {
+				op.Attempt = e.Attempt // attempt count is monotonic
+			}
 			if event := nexusEventForStatus(e.Destination); event != "" {
 				if op.FSM.Fire(ctx, event) && op.FSM.IsTerminal() {
 					op.Outcome = e.Destination

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -22,6 +23,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/telemetry"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -166,6 +168,15 @@ func (o *Operation) StateMachineState() nexusoperationpb.OperationStatus {
 // SetStateMachineState sets the operation status.
 func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus) {
 	o.Status = status
+}
+
+// TransitionTelemetryAttributes enriches the generic chasm.transition telemetry with the
+// operation's attempt count, so an observer can follow the retry/backoff loop — which the
+// workflow history does not expose. Consumed by chasm.Transition.Apply.
+func (o *Operation) TransitionTelemetryAttributes() []attribute.KeyValue {
+	return []attribute.KeyValue{
+		telemetry.AttrChasmTransitionAttempt.Int64(int64(o.GetAttempt())),
+	}
 }
 
 // RequestCancel requests cancellation of the operation. It creates a Cancellation child component and, if the

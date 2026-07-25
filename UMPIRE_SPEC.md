@@ -14,7 +14,8 @@ pair that drives:
   plans routes over the Monitor's model; coverage-guided fuzzing is its most advanced mode. See
   [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md).
 - **Driver — the active mechanics (specced, unbuilt).** Realizes each planned route step as real
-  traffic against the server, and injects faults. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
+  traffic against the server through pluggable **realizers** (raw RPC/SDK, Omes-kitchensink in any
+  SDK language, direct CHASM), injects faults, and applies input mutations. See [`UMPIRE_DRIVER.md`](./UMPIRE_DRIVER.md).
 
 The parts close a cycle: **plan → drive → observe → model → judge → steer**. The Planner plans
 over the same model the Monitor builds; the Driver realizes those routes as traffic; the Monitor
@@ -60,7 +61,9 @@ than a bespoke DSL.
 - **event** — an abstract model transition (`admit`, `accept`); the atomic unit the Planner sequences and the Driver realizes.
 - **action** — the real traffic (an RPC, worker poll, or injected fault) the Driver produces to realize one event.
 - **`Do(ctx, event)`** — the Driver's single seam: realize one event as traffic against the SUT.
+- **realizer** — a concrete backend that turns an event into an action: a raw frontend **RPC / SDK** call, an **Omes-kitchensink** `TestInput` run by a worker in any SDK language, or a **direct CHASM** transition. One event alphabet, several realizers (see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)).
 - **FaultInjector** — the interceptor hook the Driver uses to drop/delay/corrupt requests.
+- **mutation** — a small, *labeled* perturbation of an otherwise-valid input (a malformed-but-plausible request field), used to exercise server-side validation and edge cases; distinct from a transport fault — it perturbs the *input*, not the wire.
 
 **Cross-cutting**
 - **Environment** — a named capability profile (`local-chasm`, `local-rpc`, `cicd`, `canary`) granting a subset of capabilities.
@@ -82,6 +85,12 @@ than a bespoke DSL.
   actions, like any RPC, not a bolt-on — the `FaultInjector` hook is built into the interceptor
   for exactly this. Steering the SUT into rare states is where the interesting invariants get
   exercised.
+- **Negative-space coverage via input mutation.** Beyond well-formed traffic, the Driver applies
+  **mutations** — small, labeled perturbations of a valid input (a malformed-but-plausible field,
+  randomized within bounds) — to exercise the server's *validation* surface and edge cases. This
+  is distinct from a transport fault: a fault perturbs the wire (drop/delay/corrupt), a mutation
+  is a structurally-different-but-plausible *input*. The expected rejection is the oracle — the
+  total model predicts it — so no hand-written per-case assertion is needed.
 - **Close the loop.** The Driver manufactures the preconditions the Monitor's rules need, turning
   "are our rules even exercised?" from hope into a driven, mechanical fact.
 
@@ -146,6 +155,13 @@ than a bespoke DSL.
   routes over the model graph (`Reachable`/`Cells`), failing fast if the target is unreachable
   under those constraints. A `Plan` is validated before any traffic — reviewable, diff-able,
   replayable.
+- **Route modes & constraints, for coverage.** When several routes reach a target, an explicit
+  mode picks which run — `shortest` (one canonical), `all` (every simple route, for route-dependent
+  bugs), or `random`+seed (reproducible variation) — and `explore` roams a constrained sub-graph
+  instead of naming a target. `Constraints` (allow/deny events or states, e.g. restrict a run to a
+  family like Nexus + Update, or forbid a branch) carve that sub-graph and are enforced **by
+  construction**, so a plan provably covers only what you asked for. Every mode is seeded, so any
+  run — even a random walk — replays as a fixed regression. See [`UMPIRE_PLANNER.md`](./UMPIRE_PLANNER.md).
 - **Planned and judged from one declaration.** The Planner's model catalog and the Monitor's
   fact-routing derive from the same entity declaration, so the drive side and the judge side can
   never disagree about which entities and states exist.
@@ -156,6 +172,13 @@ than a bespoke DSL.
   single seam, `Do(ctx, event)`, maps each to real traffic (RPC / worker poll / fault).
   Eventual-consistency waits are polled to a *predicate over the model*, never slept — driven
   concurrency stays deterministic.
+- **One event alphabet, several realizers.** The Driver is not a single backend. An event realizes
+  through a **raw-RPC / SDK realizer** (frontend calls — the widest reach, runs in `canary`), an
+  **Omes-kitchensink realizer** (compile the route to a `TestInput` executed by a worker in *any*
+  SDK language — free cross-language reach without a bespoke workflow), or a **direct-CHASM realizer**
+  (`directDrive`, no wire). Same planned event, a different realizer per environment or goal; the
+  Monitor observes whatever ran on the wire and judges it against the *same* model. This is the
+  model / realizer / observer split (see [`UMPIRE_PRIOR_ART.md` (Omes)](./UMPIRE_PRIOR_ART.md#what-umpire-can-learn-from-omes-kitchen-sink-approach)).
 - **Events and facts are symmetric.** The Monitor decodes wire → facts; the Driver encodes a
   planned event → wire. They meet at the same `EntityPath` addressing and the same deterministic
   identifiers, so an event and the fact it provokes name the same entity.
@@ -163,6 +186,12 @@ than a bespoke DSL.
   interceptor's `inj` slot are built and wired but no-op today; the Driver is the first real
   injector (drop → error, delay → sleep-then-proceed, corrupt → mutate). Faults are events with a
   grey-box reach.
+- **Input mutation is its own action class.** Separate from faults: a **mutation** replaces a valid
+  request with a malformed-but-plausible one (a field perturbed, randomized within bounds) to probe
+  the server's validation surface, carrying its *expected rejection* as the oracle — the total model
+  predicts the reject, so negative-space coverage needs no hand-written per-case assertion. Invalid
+  cases are a valid base plus exactly one *labeled* mutation, so the expected error is unambiguous
+  and any failure minimizes cleanly (the discipline `UMPIRE_PRIOR_ART.md` borrows from `rapid`).
 
 ### Shared
 

@@ -207,15 +207,21 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	// JUDGE: the Monitor built a settled NexusOperation purely from chasm.transition
 	// telemetry, and finds no violations.
 	nsRoot := umpirefw.NewEntityID(model.NamespaceType, nsID)
+	var observedAttempt int
 	require.Eventually(t, func() bool {
 		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
 			if op, ok := e.Entity.(*model.NexusOperation); ok && op.FSM.IsTerminal() {
-				t.Logf("observed CHASM Nexus operation in state %q", op.FSM.Current())
+				observedAttempt = op.Attempt
+				t.Logf("observed CHASM Nexus operation in state %q (attempt %d)", op.FSM.Current(), op.Attempt)
 				return true
 			}
 		}
 		return false
 	}, 20*time.Second, 200*time.Millisecond, "the Monitor should observe the CHASM Nexus operation via chasm.transition telemetry")
+
+	// The enriched chasm.transition telemetry carries the attempt count, which the Monitor
+	// records — signal the workflow history does not expose.
+	require.GreaterOrEqual(t, observedAttempt, 1, "attempt count must flow via the enriched chasm.transition telemetry")
 
 	violations := env.GetMonitor().CheckNamespace(ctx, nsID)
 	require.Empty(t, violations, "a cleanly settled CHASM Nexus operation must yield no violations")
