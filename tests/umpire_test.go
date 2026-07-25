@@ -18,7 +18,7 @@ import (
 )
 
 // UmpireTestSuite is an end-to-end test of both halves of the umpire together:
-// the Driver plans a route over an entity model, an Actuator realizes that route
+// the Planner plans a route over an entity model, a Driver realizes that route
 // as real traffic against a live cluster, and the Monitor (wired into every
 // functional cluster) judges the result. It is the first test that exercises
 // plan -> drive -> judge against a real server.
@@ -38,33 +38,33 @@ func signalThenComplete(ctx workflow.Context) error {
 	return nil
 }
 
-// workflowActuator realizes the Workflow model's abstract events as real SDK calls.
+// workflowDriver realizes the Workflow model's abstract events as real SDK calls.
 // It holds the run handle between steps, since a route drives its events in order.
-type workflowActuator struct {
+type workflowDriver struct {
 	env        *testcore.TestEnv
 	workflowID string
 	run        sdkclient.WorkflowRun
 }
 
-func (a *workflowActuator) Do(ctx context.Context, event string) error {
+func (d *workflowDriver) Do(ctx context.Context, event string) error {
 	switch event {
 	case "start":
-		run, err := a.env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-			ID:        a.workflowID,
-			TaskQueue: a.env.WorkerTaskQueue(),
+		run, err := d.env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        d.workflowID,
+			TaskQueue: d.env.WorkerTaskQueue(),
 		}, signalThenComplete)
 		if err != nil {
 			return err
 		}
-		a.run = run
+		d.run = run
 		return nil
 	case "complete":
-		if err := a.env.SdkClient().SignalWorkflow(ctx, a.workflowID, "", "finish", nil); err != nil {
+		if err := d.env.SdkClient().SignalWorkflow(ctx, d.workflowID, "", "finish", nil); err != nil {
 			return err
 		}
-		return a.run.Get(ctx, nil) // block until the workflow actually completes
+		return d.run.Get(ctx, nil) // block until the workflow actually completes
 	default:
-		return fmt.Errorf("workflowActuator: unhandled event %q", event)
+		return fmt.Errorf("workflowDriver: unhandled event %q", event)
 	}
 }
 
@@ -79,8 +79,8 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	require.Equal(t, [][]string{{"start", "complete"}}, plan.Routes)
 
 	// 2) DRIVE: realize the planned route as real RPCs against the live cluster.
-	act := &workflowActuator{env: env, workflowID: "umpire-e2e-wf"}
-	require.NoError(t, plan.Run(env.Context(), act))
+	driver := &workflowDriver{env: env, workflowID: "umpire-e2e-wf"}
+	require.NoError(t, plan.Run(env.Context(), driver))
 
 	// 3) JUDGE: wait until the Monitor's model reflects the completed workflow, then
 	// assert it finds no violations for this namespace. (The teardown check does this
