@@ -227,13 +227,12 @@ func TestSimplePartitionScalerMinBound(t *testing.T) {
 
 // TestSimplePartitionScalerHysteresisDeadband verifies that a rate landing between
 // the Down and Up target rates leaves the current target unchanged (no flapping).
-// Down TargetRate 50, Up TargetRate 150: at 150 tasks/s a current target of 2 is
-// neither pulled down (150/50=3 >= 2) nor pushed up (150/150=1 <= 2).
+// Let rate be slow, then fast again, and observe hysteresis in the deadband.
 func TestSimplePartitionScalerHysteresisDeadband(t *testing.T) {
 	t.Parallel()
 
 	ts := clock.NewEventTimeSource()
-	scaler := primedScaler(t, ts, dynamicconfig.SimplePartitionScalerSettings{
+	scaler := newTestScaler(ts, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Downs: []dynamicconfig.SimplePartitionScalerThreshold{
 			{Window: scalerWindow, TargetRate: 50},
@@ -243,9 +242,38 @@ func TestSimplePartitionScalerHysteresisDeadband(t *testing.T) {
 		},
 	})
 
-	dec := onTasksLoop(2, scaler, ts, 150, 2, 100*time.Millisecond) // TODO: target goes to 1 after third rep, why?
+	// Feed a sustained rate inside the deadband with a fresh (unprimed) scaler:
+	// 15 tasks per 100ms bucket => ~150 tasks/s over the 1s window.
+	// The first ~10 calls warm up the window and report NoChange (target untouched);
+	// every call after the window fills is a full read (sliding buffer) that is in between
+	// the Ups and Downs threshold, so the target holds at 2 across many repetitions --
+	// i.e. no flapping when rate drops below 150, but above 50.
+	dec := onTasksLoop(2, scaler, ts, 15, 10, 100*time.Millisecond)
+	require.True(t, dec.NoChange)
+	require.Equal(t, 0, dec.NewTarget, "we have not reached 1s yet, so no decision")
+
+	// 6 100ms windows of 0 tasks each brings the sliding average rate just above 50 -> still 2
+	dec = onTasksLoop(2, scaler, ts, 0, 6, 100*time.Millisecond)
 	require.False(t, dec.NoChange)
 	require.Equal(t, 2, dec.NewTarget, "a rate inside the deadband holds the current target")
+
+	// Another 100ms window of 0 tasks brings the sliding average rate to <50 -> scale to 1
+	dec = onTasksLoop(2, scaler, ts, 0, 1, 100*time.Millisecond)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 1, dec.NewTarget, "a rate below the deadband drops the current target")
+
+	// Scaling up is gated by the Up threshold (150):
+	// from target 1 we must exceed round(rate/150) >= 2, i.e. rate >= ~225/s.
+
+	// A rate back inside the deadband (~150/s) holds at 1.
+	dec = onTasksLoop(1, scaler, ts, 15, 12, 100*time.Millisecond)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 1, dec.NewTarget, "meeting the Up threshold does not scale back up")
+
+	// 25 tasks per 100ms bucket (~275/s) clears the Up threshold scales back to 2
+	dec = onTasksLoop(1, scaler, ts, 25, 12, 100*time.Millisecond)
+	require.False(t, dec.NoChange)
+	require.Equal(t, 2, dec.NewTarget, "exceeding the Up threshold scales back up")
 }
 
 // TestSimplePartitionScalerMultipleWindows verifies that distinct windows create
