@@ -298,10 +298,6 @@ func (p *queueBase) checkpoint() {
 		tasksCompleted += r.ShrinkSlices()
 	})
 
-	// Emitted here so it describes the just-shrunk state, before the persistence calls below give
-	// the frontier task time to be acked.
-	p.emitImmediateQueueBacklogAge()
-
 	var checkpointAction Action
 	maxReaderCount := p.options.MaxReaderCount()
 	if taskCountBase := p.options.MoveGroupTaskCountBase(); taskCountBase > 0 {
@@ -358,63 +354,6 @@ func (p *queueBase) checkpoint() {
 
 	err := p.updateQueueState(tasksCompleted, readerScopes)
 	p.resetCheckpointTimer(err)
-}
-
-// immediateBacklogFrontier returns the queue's ack frontier, the lowest key any of its slices may
-// still hold, along with the visibility time of the task at that key when it is loaded in memory.
-// A MaximumKey frontier means the queue holds no slices; a zero time means the frontier is an
-// iterator position rather than a loaded task.
-func (p *queueBase) immediateBacklogFrontier() (frontier tasks.Key, visibilityTime time.Time) {
-	// A slice can only hold tasks at or above its own lower bound, so the task at the frontier, if
-	// loaded at all, is loaded by a slice whose lower bound is that frontier.
-	frontier = tasks.MaximumKey
-	p.readerGroup.ForEach(func(_ int64, r Reader) {
-		r.WalkSlices(func(s Slice) {
-			sliceMin := s.Scope().Range.InclusiveMin
-			if cmp := sliceMin.CompareTo(frontier); cmp > 0 {
-				return
-			} else if cmp < 0 {
-				frontier, visibilityTime = sliceMin, time.Time{}
-			}
-			if t := s.TaskStats().FrontierTaskVisibilityTime; !t.IsZero() &&
-				(visibilityTime.IsZero() || t.Before(visibilityTime)) {
-				visibilityTime = t
-			}
-		})
-	})
-	return frontier, visibilityTime
-}
-
-// emitImmediateQueueBacklogAge emits the age of an immediate queue's oldest task, the time-based
-// counterpart to the shardinfo_immediate_queue_lag count. Immediate task keys carry no timestamp, so
-// the age comes from the task at the ack frontier and is only known while that task is loaded in
-// memory. It relies on immediate task ids being allocated in visibility time order, so that the
-// lowest-keyed pending task is also the oldest.
-func (p *queueBase) emitImmediateQueueBacklogAge() {
-	if p.category.Type() != tasks.CategoryTypeImmediate {
-		return
-	}
-
-	frontier, oldest := p.immediateBacklogFrontier()
-
-	var age time.Duration
-	switch {
-	case frontier.CompareTo(tasks.MaximumKey) == 0:
-		// No slices left, so the backlog is drained: report zero rather than going silent, matching
-		// the count metric.
-	case oldest.IsZero():
-		// The frontier task is not loaded, so its age is unknown.
-		return
-	default:
-		age = p.timeSource.Now().Sub(oldest)
-		if age < 0 {
-			age = 0
-		}
-	}
-
-	// Same scope and tags as ShardInfoImmediateQueueLagHistogram so the age and count line up.
-	handler := p.shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
-	metrics.ShardInfoImmediateQueueBacklogAge.With(handler).Record(age, metrics.TaskCategoryTag(p.category.Name()))
 }
 
 func (p *queueBase) updateShardRangeID() bool {

@@ -2,7 +2,6 @@ package queues
 
 import (
 	"fmt"
-	"time"
 
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
@@ -104,15 +103,6 @@ func (t *executableTracker) shrink() (tasks.Key, int) {
 	}
 
 	return minPendingTaskKey, tasksCompleted
-}
-
-// pendingTaskVisibilityTime returns the visibility time of the non-acked task loaded at key.
-func (t *executableTracker) pendingTaskVisibilityTime(key tasks.Key) (time.Time, bool) {
-	executable, ok := t.pendingExecutables[key]
-	if !ok || executable.State() == ctasks.TaskStateAcked {
-		return time.Time{}, false
-	}
-	return executable.GetVisibilityTime(), true
 }
 
 func (t *executableTracker) clear() {

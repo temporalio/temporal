@@ -984,3 +984,39 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 	s.True(called)
 	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 }
+
+func (s *contextSuite) TestOldestImmediateTaskVisibilityTime() {
+	now := s.timeSource.Now()
+	minKey, maxKey := tasks.NewImmediateKey(100), tasks.NewImmediateKey(1000)
+
+	s.Run("returns the oldest task's visibility time", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, req *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+				s.Equal(s.shardID, req.ShardID)
+				s.Equal(tasks.CategoryTransfer, req.TaskCategory)
+				s.Equal(minKey, req.InclusiveMinTaskKey)
+				s.Equal(maxKey, req.ExclusiveMaxTaskKey)
+				s.Equal(1, req.BatchSize)
+				return &persistence.GetHistoryTasksResponse{Tasks: []tasks.Task{
+					&tasks.ActivityTask{VisibilityTimestamp: now.Add(-time.Hour)},
+				}}, nil
+			}).Times(1)
+		got, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.True(ok)
+		s.Equal(now.Add(-time.Hour), got)
+	})
+
+	s.Run("reports nothing when the backlog drained before the read", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+			Return(&persistence.GetHistoryTasksResponse{}, nil).Times(1)
+		_, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.False(ok)
+	})
+
+	s.Run("reports nothing on read failure", func() {
+		s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("persistence unavailable")).Times(1)
+		_, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
+		s.False(ok)
+	})
+}

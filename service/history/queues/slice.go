@@ -2,7 +2,6 @@ package queues
 
 import (
 	"fmt"
-	"time"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
@@ -40,9 +39,6 @@ type (
 
 	TaskStats struct {
 		PendingPerKey map[any]int
-		// Visibility time of the task at the slice's lower bound, the oldest task the slice can
-		// hold. Zero when that task is not loaded; immediate tasks never carry a zero time.
-		FrontierTaskVisibilityTime time.Time
 	}
 
 	SliceImpl struct {
@@ -418,10 +414,8 @@ func (s *SliceImpl) MoreTasks() bool {
 func (s *SliceImpl) TaskStats() TaskStats {
 	s.stateSanityCheck()
 
-	frontierTaskVisibilityTime, _ := s.pendingTaskVisibilityTime(s.scope.Range.InclusiveMin)
 	return TaskStats{
-		PendingPerKey:              s.pendingPerKey,
-		FrontierTaskVisibilityTime: frontierTaskVisibilityTime,
+		PendingPerKey: s.pendingPerKey,
 	}
 }
 

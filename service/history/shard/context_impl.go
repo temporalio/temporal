@@ -1279,8 +1279,16 @@ func (s *ContextImpl) updateShardInfo(
 
 // Take the shard lock and update queue metrics
 func (s *ContextImpl) emitShardInfoMetricsLogs() {
+	// Immediate backlogs are collected under the lock; their oldest task is read from persistence
+	// afterwards so a slow read never blocks shard writers.
+	type immediateBacklog struct {
+		category tasks.Category
+		minKey   tasks.Key
+		maxKey   tasks.Key
+	}
+	var immediateBacklogs []immediateBacklog
+
 	s.rLock()
-	defer s.rUnlock()
 
 	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
@@ -1300,7 +1308,8 @@ Loop:
 			if minTaskKey == nil {
 				continue Loop
 			}
-			lag := s.taskKeyManager.getExclusiveReaderHighWatermark(category).TaskID - minTaskKey.TaskID
+			highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
+			lag := highWatermark.TaskID - minTaskKey.TaskID
 			if emitShardLagLog && lag > logWarnImmediateTaskLag {
 				s.contextTaggedLogger.Warn(
 					"Shard queue lag exceeds warn threshold.",
@@ -1310,6 +1319,13 @@ Loop:
 			metrics.ShardInfoImmediateQueueLagHistogram.
 				With(metricsHandler).
 				Record(lag, metrics.TaskCategoryTag(category.Name()))
+			if lag > 0 {
+				immediateBacklogs = append(immediateBacklogs, immediateBacklog{
+					category: category,
+					minKey:   *minTaskKey,
+					maxKey:   highWatermark,
+				})
+			}
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1329,6 +1345,53 @@ Loop:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.Stringer("task-category", category.Type()))
 		}
 	}
+
+	s.rUnlock()
+
+	// Immediate task keys carry no timestamp, so unlike the scheduled lag above the age cannot be
+	// derived from the queue state. Read the oldest task instead, off the lock.
+	for _, backlog := range immediateBacklogs {
+		oldest, ok := s.oldestImmediateTaskVisibilityTime(backlog.category, backlog.minKey, backlog.maxKey)
+		if !ok {
+			continue
+		}
+		age := s.timeSource.Now().Sub(oldest)
+		if age < 0 {
+			age = 0
+		}
+		metrics.ShardInfoImmediateQueueBacklogAge.
+			With(metricsHandler).
+			Record(age, metrics.TaskCategoryTag(backlog.category.Name()))
+	}
+}
+
+// oldestImmediateTaskVisibilityTime reads the oldest task at or after inclusiveMinKey and returns its
+// visibility time. Best effort: it reads persistence directly so a failed metric read cannot trigger
+// the shard's read-error handling.
+func (s *ContextImpl) oldestImmediateTaskVisibilityTime(
+	category tasks.Category,
+	inclusiveMinKey tasks.Key,
+	exclusiveMaxKey tasks.Key,
+) (time.Time, bool) {
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.config.ShardIOTimeout())
+	defer cancel()
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
+
+	resp, err := s.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.shardID,
+		TaskCategory:        category,
+		InclusiveMinTaskKey: inclusiveMinKey,
+		ExclusiveMaxTaskKey: exclusiveMaxKey,
+		BatchSize:           1,
+	})
+	if err != nil {
+		s.contextTaggedLogger.Warn("Failed to read oldest task for backlog age metric", tag.Error(err))
+		return time.Time{}, false
+	}
+	if len(resp.Tasks) == 0 {
+		return time.Time{}, false
+	}
+	return resp.Tasks[0].GetVisibilityTime(), true
 }
 
 func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {

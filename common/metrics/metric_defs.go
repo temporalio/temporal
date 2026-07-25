@@ -821,7 +821,7 @@ var (
 	)
 	ShardInfoImmediateQueueBacklogAge = NewTimerDef(
 		"shardinfo_immediate_queue_backlog_age",
-		WithDescription("Age of the oldest immediate-queue task loaded in memory, per task category, and the time-based counterpart to shardinfo_immediate_queue_lag. Zero when the backlog is empty, and not emitted at all while the oldest task is unloaded (e.g. after backpressure unloads a slice), so absence does not mean no backlog."),
+		WithDescription("Age of the oldest unacked task per immediate queue category, the time-based counterpart to shardinfo_immediate_queue_lag."),
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
