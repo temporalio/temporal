@@ -116,18 +116,18 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 }
 
 // CloseTransaction mocks base method.
-func (m *MockChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (m *MockChasmTree) CloseTransaction(transactionPolicy chasm.TransactionPolicy) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransaction")
+	ret := m.ctrl.Call(m, "CloseTransaction", transactionPolicy)
 	ret0, _ := ret[0].(chasm.NodesMutation)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CloseTransaction indicates an expected call of CloseTransaction.
-func (mr *MockChasmTreeMockRecorder) CloseTransaction() *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) CloseTransaction(transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), transactionPolicy)
 }
 
 // Component mocks base method.
