@@ -266,7 +266,7 @@ func (c *mutableCtx) AddTask(
 	attributes TaskAttributes,
 	payload any,
 ) {
-	c.root.AddTask(component, attributes, payload)
+	c.root.addTask(component, attributes, payload, c.now)
 }
 
 func (c *mutableCtx) SetRequestLinks(component Component, requestID string, links []*commonpb.Link) error {

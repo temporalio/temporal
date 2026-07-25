@@ -1673,6 +1673,17 @@ func (n *Node) AddTask(
 	taskAttributes TaskAttributes,
 	task any,
 ) {
+	n.addTask(component, taskAttributes, task, n.Now(component))
+}
+
+// addTask takes now as the time the calling context observes, which for a context created by
+// [NewMutableContext] is the time the component author reads from [Context.Now].
+func (n *Node) addTask(
+	component Component,
+	taskAttributes TaskAttributes,
+	task any,
+	now time.Time,
+) {
 	rt, ok := n.registry.taskFor(task)
 	if ok && rt.isPureTask && taskAttributes.IsImmediate() {
 		// Those tasks will be executed in the current transaction.
@@ -1681,6 +1692,11 @@ func (n *Node) AddTask(
 			attributes: taskAttributes,
 		})
 		return
+	}
+
+	if ok && !rt.isPureTask && !taskAttributes.ScheduledTime.After(now) {
+		// A side effect task with nothing left to wait for belongs in an immediate queue, not the timer queue.
+		taskAttributes.ScheduledTime = TaskScheduledTimeImmediate
 	}
 
 	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
