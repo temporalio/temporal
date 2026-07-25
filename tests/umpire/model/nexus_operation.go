@@ -29,8 +29,24 @@ type NexusOperation struct {
 
 func NewNexusOperation() *NexusOperation {
 	op := &NexusOperation{}
+	// active are the in-flight states an operation must eventually settle out of.
+	active := []string{NexusScheduled, NexusBackingOff, NexusStarted}
 	op.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: NexusUnspecified,
+		// Each state carries its traits: the in-flight states MustProgress; the
+		// terminals carry their modeled outcome (Success is a clean completion, the
+		// rest are acceptable failure terminals — a fault reaching one is degradation,
+		// not a bug). Terminal-ness itself derives from the transition graph.
+		States: umpire.States{
+			NexusUnspecified: {},
+			NexusScheduled:   {umpire.MustProgress},
+			NexusBackingOff:  {umpire.MustProgress},
+			NexusStarted:     {umpire.MustProgress},
+			NexusSucceeded:   {umpire.Success},
+			NexusFailed:      {umpire.Failure},
+			NexusCanceled:    {umpire.Failure},
+			NexusTimedOut:    {umpire.Failure},
+		},
 		Transitions: []umpire.Transition{
 			// schedule fires on init and again on each retry out of backing_off.
 			{Event: NexusSchedule, From: []string{NexusUnspecified, NexusBackingOff}, To: NexusScheduled},
@@ -38,24 +54,12 @@ func NewNexusOperation() *NexusOperation {
 			{Event: NexusAttemptFailed, From: []string{NexusScheduled}, To: NexusBackingOff},
 			// start: the async handler acknowledged (sync completion skips this).
 			{Event: NexusStart, From: []string{NexusScheduled, NexusBackingOff}, To: NexusStarted},
-			// Terminal transitions may fire from scheduled/backing_off/started;
+			// Terminal transitions may fire from any active state;
 			// "started precedes succeeded" is NOT an invariant (sync completes direct).
-			{Event: NexusSucceed, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusSucceeded},
-			{Event: NexusFail, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusFailed},
-			{Event: NexusCancel, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusCanceled},
-			{Event: NexusTimeout, From: []string{NexusScheduled, NexusBackingOff, NexusStarted}, To: NexusTimedOut},
-		},
-		// A scheduled/backing_off/started operation must eventually settle;
-		// terminal states derive automatically.
-		MustProgress: []string{NexusScheduled, NexusBackingOff, NexusStarted},
-		// Modeled outcomes: succeeded is a clean completion; the rest are
-		// acceptable failure terminals (a fault reaching one is degradation,
-		// not a bug — see umpire.Disposition).
-		Dispositions: map[string]umpire.Disposition{
-			NexusSucceeded: umpire.Success,
-			NexusFailed:    umpire.Failure,
-			NexusCanceled:  umpire.Failure,
-			NexusTimedOut:  umpire.Failure,
+			{Event: NexusSucceed, From: active, To: NexusSucceeded},
+			{Event: NexusFail, From: active, To: NexusFailed},
+			{Event: NexusCancel, From: active, To: NexusCanceled},
+			{Event: NexusTimeout, From: active, To: NexusTimedOut},
 		},
 	})
 	return op

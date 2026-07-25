@@ -97,6 +97,27 @@ func (d Disposition) String() string {
 	}
 }
 
+// Trait is an arbitrary annotation attached to a state. Disposition and MustProgress
+// are built-in traits; callers may attach a value of any type and read it back with
+// StateTrait. Co-locating a state's traits keeps everything the model knows about it
+// in one place, instead of scattered across parallel MustProgress/Dispositions lists.
+type Trait = any
+
+// Traits is the set of traits on a state.
+type Traits []Trait
+
+// States maps each state to its traits — the trait-based alternative to the
+// MustProgress and Dispositions fields. When set, it is the source of truth for
+// per-state metadata, and every state a transition references must be declared here.
+type States map[string]Traits
+
+// mustProgressTrait is the built-in marker trait exposed as MustProgress.
+type mustProgressTrait struct{}
+
+// MustProgress is the built-in marker trait: an entity must eventually leave a state
+// carrying it (the generic EntityProgress liveness rule enforces this).
+var MustProgress Trait = mustProgressTrait{}
+
 // LifecycleSpec declares an entity's state machine. Terminal states are derived
 // automatically (a state that is never the source of a transition), unless
 // overridden via Terminal.
@@ -108,10 +129,19 @@ type LifecycleSpec struct {
 	// The generic EntityProgress liveness rule flags an entity left in one of
 	// these at teardown. States not listed (e.g. an initial "not yet started"
 	// state) are treated as acceptable resting points.
+	//
+	// Deprecated in favour of the MustProgress trait in States; still honoured
+	// when States is nil.
 	MustProgress []string
 	// Dispositions tags terminal states as a modeled Success or Failure outcome
 	// (see Disposition). Optional; untagged terminals are Unset.
+	//
+	// Deprecated in favour of the Success/Failure traits in States; still
+	// honoured when States is nil.
 	Dispositions map[string]Disposition
+	// States is the trait-based per-state metadata (see States). When non-nil it
+	// is the source of truth and supersedes MustProgress and Dispositions.
+	States States
 }
 
 // IllegalTransition records a fact that attempted a transition that was not legal
@@ -141,6 +171,8 @@ type Lifecycle struct {
 	terminal     map[string]bool
 	mustProgress map[string]bool
 	dispositions map[string]Disposition
+	traits       map[string]Traits
+	declared     bool // true when States was used (enables the declared-state check)
 	entered      map[string]time.Time
 	illegal      []IllegalTransition
 }
@@ -184,14 +216,31 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		}
 	}
 
-	mustProgress := make(map[string]bool, len(spec.MustProgress))
-	for _, s := range spec.MustProgress {
-		mustProgress[s] = true
-	}
-
-	dispositions := make(map[string]Disposition, len(spec.Dispositions))
-	for s, d := range spec.Dispositions {
-		dispositions[s] = d
+	// Per-state metadata comes from the trait-based States when set, else from the
+	// deprecated MustProgress/Dispositions fields.
+	mustProgress := map[string]bool{}
+	dispositions := map[string]Disposition{}
+	traits := map[string]Traits{}
+	if spec.States != nil {
+		for st, trs := range spec.States {
+			stateSet[st] = true
+			traits[st] = trs
+			for _, tr := range trs {
+				switch v := tr.(type) {
+				case Disposition:
+					dispositions[st] = v
+				case mustProgressTrait:
+					mustProgress[st] = true
+				}
+			}
+		}
+	} else {
+		for _, s := range spec.MustProgress {
+			mustProgress[s] = true
+		}
+		for s, d := range spec.Dispositions {
+			dispositions[s] = d
+		}
 	}
 
 	eventDests := map[string][]string{}
@@ -210,6 +259,8 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		terminal:     terminal,
 		mustProgress: mustProgress,
 		dispositions: dispositions,
+		traits:       traits,
+		declared:     spec.States != nil,
 		entered:      map[string]time.Time{spec.Initial: time.Now()},
 	}
 }
@@ -378,6 +429,22 @@ func (l *Lifecycle) Disposition(state string) Disposition { return l.disposition
 // CurrentDisposition returns the disposition of the current state.
 func (l *Lifecycle) CurrentDisposition() Disposition { return l.dispositions[l.fsm.Current()] }
 
+// StateTraits returns the traits attached to state (nil if none / not trait-defined).
+func (l *Lifecycle) StateTraits(state string) Traits { return l.traits[state] }
+
+// StateTrait returns the first trait of type T attached to state, and whether one
+// exists — the typed way to read an arbitrary state annotation, e.g.
+// StateTrait[Disposition](lc, "succeeded") or StateTrait[MyTrait](lc, s).
+func StateTrait[T any](l *Lifecycle, state string) (T, bool) {
+	for _, tr := range l.traits[state] {
+		if v, ok := tr.(T); ok {
+			return v, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 // Illegal returns the illegal transitions observed so far.
 func (l *Lifecycle) Illegal() []IllegalTransition { return l.illegal }
 
@@ -464,6 +531,13 @@ func (l *Lifecycle) Validate() error {
 		stateSet[s] = true
 		if !reachable[s] {
 			return fmt.Errorf("lifecycle: state %q is unreachable from initial %q", s, l.initial)
+		}
+		// When States is used it must declare every state the transitions reference,
+		// so a typo in a transition is caught up front rather than modelled silently.
+		if l.declared {
+			if _, ok := l.traits[s]; !ok {
+				return fmt.Errorf("lifecycle: state %q is used in a transition but not declared in States", s)
+			}
 		}
 	}
 	for s := range l.terminal {
