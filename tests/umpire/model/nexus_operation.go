@@ -48,6 +48,15 @@ func NewNexusOperation() *NexusOperation {
 		// A scheduled/backing_off/started operation must eventually settle;
 		// terminal states derive automatically.
 		MustProgress: []string{NexusScheduled, NexusBackingOff, NexusStarted},
+		// Modeled outcomes: succeeded is a clean completion; the rest are
+		// acceptable failure terminals (a fault reaching one is degradation,
+		// not a bug — see umpire.Disposition).
+		Dispositions: map[string]umpire.Disposition{
+			NexusSucceeded: umpire.Success,
+			NexusFailed:    umpire.Failure,
+			NexusCanceled:  umpire.Failure,
+			NexusTimedOut:  umpire.Failure,
+		},
 	})
 	return op
 }

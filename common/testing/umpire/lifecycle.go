@@ -72,6 +72,31 @@ type Cell struct {
 	To    string
 }
 
+// Disposition tags a terminal state as a modeled outcome: a Success terminal is a
+// clean completion; a Failure terminal is a modeled, acceptable failure (a timeout,
+// cancellation, …). Non-terminal or untagged states are Unset. It lets a fault
+// campaign judge an outcome from the model — reaching a Success terminal is
+// recovery, a Failure terminal is (acceptable) degradation, and failing to settle
+// at all is the bug — instead of hand-writing that verdict per test.
+type Disposition int
+
+const (
+	Unset Disposition = iota
+	Success
+	Failure
+)
+
+func (d Disposition) String() string {
+	switch d {
+	case Success:
+		return "Success"
+	case Failure:
+		return "Failure"
+	default:
+		return "Unset"
+	}
+}
+
 // LifecycleSpec declares an entity's state machine. Terminal states are derived
 // automatically (a state that is never the source of a transition), unless
 // overridden via Terminal.
@@ -84,6 +109,9 @@ type LifecycleSpec struct {
 	// these at teardown. States not listed (e.g. an initial "not yet started"
 	// state) are treated as acceptable resting points.
 	MustProgress []string
+	// Dispositions tags terminal states as a modeled Success or Failure outcome
+	// (see Disposition). Optional; untagged terminals are Unset.
+	Dispositions map[string]Disposition
 }
 
 // IllegalTransition records a fact that attempted a transition that was not legal
@@ -112,6 +140,7 @@ type Lifecycle struct {
 	canReach     map[string]map[string]bool   // transitive closure over legal edges (≥1 hop)
 	terminal     map[string]bool
 	mustProgress map[string]bool
+	dispositions map[string]Disposition
 	entered      map[string]time.Time
 	illegal      []IllegalTransition
 }
@@ -160,6 +189,11 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		mustProgress[s] = true
 	}
 
+	dispositions := make(map[string]Disposition, len(spec.Dispositions))
+	for s, d := range spec.Dispositions {
+		dispositions[s] = d
+	}
+
 	eventDests := map[string][]string{}
 	for e, set := range eventDestSet {
 		eventDests[e] = sortedKeys(set)
@@ -175,6 +209,7 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		canReach:     reachClosure(edges),
 		terminal:     terminal,
 		mustProgress: mustProgress,
+		dispositions: dispositions,
 		entered:      map[string]time.Time{spec.Initial: time.Now()},
 	}
 }
@@ -337,6 +372,12 @@ func (l *Lifecycle) MustProgress() bool { return l.mustProgress[l.fsm.Current()]
 // Terminal reports whether the given state is terminal.
 func (l *Lifecycle) Terminal(state string) bool { return l.terminal[state] }
 
+// Disposition returns the modeled outcome tag of state (Unset if untagged).
+func (l *Lifecycle) Disposition(state string) Disposition { return l.dispositions[state] }
+
+// CurrentDisposition returns the disposition of the current state.
+func (l *Lifecycle) CurrentDisposition() Disposition { return l.dispositions[l.fsm.Current()] }
+
 // Illegal returns the illegal transitions observed so far.
 func (l *Lifecycle) Illegal() []IllegalTransition { return l.illegal }
 
@@ -438,6 +479,14 @@ func (l *Lifecycle) Validate() error {
 			return fmt.Errorf("lifecycle: must-progress state %q is terminal (can never be left)", s)
 		case !l.reachesTerminal(s):
 			return fmt.Errorf("lifecycle: no terminal state is reachable from must-progress state %q", s)
+		}
+	}
+	for s := range l.dispositions {
+		switch {
+		case !stateSet[s]:
+			return fmt.Errorf("lifecycle: disposition state %q is not a declared state", s)
+		case !l.terminal[s]:
+			return fmt.Errorf("lifecycle: disposition state %q is not terminal (only terminals carry an outcome)", s)
 		}
 	}
 	return nil
