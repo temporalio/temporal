@@ -610,8 +610,8 @@ func (s *sliceSuite) TestClear() {
 	s.Equal(slice.scope.Range, slice.iterators[0].Range())
 }
 
-func (s *sliceSuite) TestPendingTaskVisibilityTime() {
-	r := NewRandomRange()
+func (s *sliceSuite) TestTaskStats_FrontierTaskVisibilityTime() {
+	r := NewRange(tasks.NewImmediateKey(100), tasks.NewImmediateKey(1000))
 	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicates.Universal[tasks.Task]()), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 
 	base := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -625,19 +625,25 @@ func (s *sliceSuite) TestPendingTaskVisibilityTime() {
 		slice.add(e)
 	}
 
-	pendingKey := NewRandomKeyInRange(r)
-	_, ok := slice.PendingTaskVisibilityTime(pendingKey)
-	s.False(ok, "nothing loaded at that key")
+	s.True(slice.TaskStats().FrontierTaskVisibilityTime.IsZero(), "nothing loaded at the lower bound")
 
-	add(pendingKey, base.Add(3*time.Minute), ctasks.TaskStatePending)
-	visTime, ok := slice.PendingTaskVisibilityTime(pendingKey)
-	s.True(ok)
-	s.Equal(base.Add(3*time.Minute), visTime)
+	// A task above the lower bound is not the frontier task.
+	add(tasks.NewImmediateKey(500), base.Add(10*time.Minute), ctasks.TaskStatePending)
+	s.True(slice.TaskStats().FrontierTaskVisibilityTime.IsZero())
 
-	ackedKey := NewRandomKeyInRange(r)
-	add(ackedKey, base, ctasks.TaskStateAcked)
-	_, ok = slice.PendingTaskVisibilityTime(ackedKey)
-	s.False(ok, "acked task must not resolve")
+	add(r.InclusiveMin, base.Add(3*time.Minute), ctasks.TaskStatePending)
+	s.Equal(base.Add(3*time.Minute), slice.TaskStats().FrontierTaskVisibilityTime)
+
+	// An acked frontier task does not resolve, since it is about to be shrunk away.
+	ackedSlice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicates.Universal[tasks.Task]()), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
+	acked := NewMockExecutable(s.controller)
+	acked.EXPECT().GetKey().Return(r.InclusiveMin).AnyTimes()
+	acked.EXPECT().GetVisibilityTime().Return(base).AnyTimes()
+	acked.EXPECT().State().Return(ctasks.TaskStateAcked).AnyTimes()
+	acked.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+	acked.EXPECT().GetTask().Return(acked).AnyTimes()
+	ackedSlice.add(acked)
+	s.True(ackedSlice.TaskStats().FrontierTaskVisibilityTime.IsZero(), "acked frontier task must not resolve")
 }
 
 func (s *sliceSuite) newTestSlice(

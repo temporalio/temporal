@@ -34,13 +34,15 @@ type (
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
-		PendingTaskVisibilityTime(key tasks.Key) (time.Time, bool)
 		TaskStats() TaskStats
 		Clear()
 	}
 
 	TaskStats struct {
 		PendingPerKey map[any]int
+		// Visibility time of the task at the slice's lower bound, the oldest task the slice can
+		// hold. Zero when that task is not loaded; immediate tasks never carry a zero time.
+		FrontierTaskVisibilityTime time.Time
 	}
 
 	SliceImpl struct {
@@ -413,17 +415,13 @@ func (s *SliceImpl) MoreTasks() bool {
 	return len(s.iterators) != 0
 }
 
-// PendingTaskVisibilityTime returns the visibility time of the non-acked task loaded at key.
-func (s *SliceImpl) PendingTaskVisibilityTime(key tasks.Key) (time.Time, bool) {
-	s.stateSanityCheck()
-	return s.pendingTaskVisibilityTime(key)
-}
-
 func (s *SliceImpl) TaskStats() TaskStats {
 	s.stateSanityCheck()
 
+	frontierTaskVisibilityTime, _ := s.pendingTaskVisibilityTime(s.scope.Range.InclusiveMin)
 	return TaskStats{
-		PendingPerKey: s.pendingPerKey,
+		PendingPerKey:              s.pendingPerKey,
+		FrontierTaskVisibilityTime: frontierTaskVisibilityTime,
 	}
 }
 
