@@ -4623,12 +4623,12 @@ func (wh *WorkflowHandler) UpdateSchedule(
 ) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	if !wh.config.EnableSchedules(request.Namespace) {
-		return nil, errSchedulesNotAllowed
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableSchedules(request.Namespace) {
+		return nil, errSchedulesNotAllowed
 	}
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
