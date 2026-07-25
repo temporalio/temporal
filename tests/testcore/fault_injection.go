@@ -1,0 +1,115 @@
+package testcore
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+)
+
+// RPCFault determines whether a fault should be injected for a given RPC.
+// It receives the request, response, and error.
+// For pre-handler calls, resp and err are nil.
+// Return the error to inject, or nil to not inject a fault.
+type RPCFault func(req, resp any, err error) error
+
+// RPCFaultOption configures the behavior of [InjectRPCFault].
+type RPCFaultOption func(*rpcFaultOptions)
+
+type rpcFaultOptions struct {
+	namespaceID   string
+	namespaceName string
+}
+
+func (o rpcFaultOptions) matchesNamespace(req any) bool {
+	if o.namespaceID == "" && o.namespaceName == "" {
+		return true
+	}
+
+	if o.namespaceID != "" {
+		if r, ok := req.(interface{ GetNamespaceId() string }); ok && r.GetNamespaceId() == o.namespaceID {
+			return true
+		}
+	}
+	if o.namespaceName != "" {
+		if r, ok := req.(interface{ GetNamespace() string }); ok && r.GetNamespace() == o.namespaceName {
+			return true
+		}
+	}
+	return false
+}
+
+// WithNamespaceID matches requests that expose the given namespace ID.
+// When combined with [WithNamespaceName], matching either option is sufficient.
+func WithNamespaceID(id string) RPCFaultOption {
+	return func(o *rpcFaultOptions) {
+		o.namespaceID = id
+	}
+}
+
+// WithNamespaceName matches requests that expose the given namespace name.
+// When combined with [WithNamespaceID], matching either option is sufficient.
+func WithNamespaceName(name string) RPCFaultOption {
+	return func(o *rpcFaultOptions) {
+		o.namespaceName = name
+	}
+}
+
+// InjectRPCFault registers a fault injection that applies to all services
+// (frontend, history, matching). The fault function determines which requests
+// trigger a fault and what error to return.
+//
+// The fault function is called twice per RPC: before the handler (resp=nil, err=nil)
+// and after. Returning an error before handler short-circuits; returning after
+// modifies the response.
+//
+// Returns a cleanup function that disables the fault injection when called.
+// The test fails if the fault is never injected before the test completes.
+//
+// Example:
+//
+//	testcore.InjectRPCFault(s.T(), s.GetTestCluster(),
+//	    func(req, _ any, _ error) error {
+//	        r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
+//	        if ok {
+//	            return serviceerror.NewNotFound("injected fault")
+//	        }
+//	        return nil
+//	    })
+func InjectRPCFault(t testing.TB, tc *TestCluster, fault RPCFault, opts ...RPCFaultOption) func() {
+	t.Helper()
+
+	var options rpcFaultOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	generator := tc.Host().GetFaultInjector()
+	if generator == nil {
+		t.Fatal("fault injector is nil")
+		return func() {}
+	}
+
+	var fired atomic.Bool
+
+	unregister := generator.RegisterCallback(func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+		if !options.matchesNamespace(req) {
+			return false, nil, nil
+		}
+
+		if injectedErr := fault(req, resp, err); injectedErr != nil {
+			fired.Store(true)
+			t.Logf("Fault injection fired: %T", req)
+			return true, nil, injectedErr
+		}
+		return false, nil, nil
+	})
+
+	t.Cleanup(func() {
+		unregister()
+		if !fired.Load() {
+			t.Error("fault injection was registered but never fired - the fault was never injected")
+		}
+	})
+
+	return unregister
+}

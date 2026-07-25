@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -106,6 +107,7 @@ type (
 		chasmVisibilityMgr        chasm.VisibilityManager
 		replicationStreamRecorder *ReplicationStreamRecorder
 		historyTaskRecorder       *HistoryTaskRecorder
+		faultInjector             *rpcfaultinjection.RPCFaultGenerator
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		spanProcessors            []sdktrace.SpanProcessor
 		additionalInterceptors    []grpc.UnaryServerInterceptor
@@ -218,7 +220,9 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		additionalInterceptors:           params.additionalInterceptors,
 		tokenProvider:                    params.tokenProvider,
 		enableHistoryTaskRecorder:        params.enableHistoryTaskRecorder,
+		faultInjector:                    rpcfaultinjection.NewRPCFaultGenerator(),
 	}
+	testhooks.Set(impl.testHooks, testhooks.RPCFaultGenerator, impl.faultInjector.Generate, testhooks.GlobalScope)
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
 	clusterName := params.clusterMetadataConfig.CurrentClusterName
@@ -660,6 +664,10 @@ func (c *temporalImpl) createSystemNamespace() error {
 
 func (c *temporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
 	return c.historyTaskRecorder
+}
+
+func (c *temporalImpl) GetFaultInjector() *rpcfaultinjection.RPCFaultGenerator {
+	return c.faultInjector
 }
 
 func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {

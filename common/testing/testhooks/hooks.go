@@ -30,6 +30,7 @@ var (
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
 	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	RPCFaultGenerator                        = newKey[func(context.Context, string, any, any, error) (bool, any, error), global]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.
