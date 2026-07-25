@@ -819,6 +819,10 @@ var (
 		"shardinfo_scheduled_queue_lag",
 		WithDescription("A histogram across history shards for the difference between the earliest scheduled time of pending history tasks and current time."),
 	)
+	ShardInfoImmediateQueueBacklogAge = NewTimerDef(
+		"shardinfo_immediate_queue_backlog_age",
+		WithDescription("Age of the oldest immediate-queue task loaded in memory, per task category, and the time-based counterpart to shardinfo_immediate_queue_lag. Zero when the backlog is empty, and not emitted at all while the oldest task is unloaded (e.g. after backpressure unloads a slice), so absence does not mean no backlog."),
+	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
 	FinalizerRuns              = NewCounterDef(
@@ -936,7 +940,6 @@ var (
 	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
-	QueueImmediateBacklogAge     = NewTimerDef("queue_immediate_backlog_age")
 	QueueActionCounter           = NewCounterDef("queue_actions")
 	QueuePredicateResolutionLoss = NewCounterDef(
 		"queue_predicate_resolution_loss",

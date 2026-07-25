@@ -34,7 +34,7 @@ type (
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
-		OldestPendingTaskTime() time.Time
+		PendingTaskVisibilityTime(key tasks.Key) (time.Time, bool)
 		TaskStats() TaskStats
 		Clear()
 	}
@@ -413,11 +413,10 @@ func (s *SliceImpl) MoreTasks() bool {
 	return len(s.iterators) != 0
 }
 
-// OldestPendingTaskTime returns the min visibility time of this slice's non-acked in-memory
-// tasks, or the zero time if none are loaded.
-func (s *SliceImpl) OldestPendingTaskTime() time.Time {
+// PendingTaskVisibilityTime returns the visibility time of the non-acked task loaded at key.
+func (s *SliceImpl) PendingTaskVisibilityTime(key tasks.Key) (time.Time, bool) {
 	s.stateSanityCheck()
-	return s.oldestPendingTaskVisibilityTime()
+	return s.pendingTaskVisibilityTime(key)
 }
 
 func (s *SliceImpl) TaskStats() TaskStats {

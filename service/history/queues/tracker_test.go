@@ -10,7 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestExecutableTracker_OldestPendingTaskVisibilityTime(t *testing.T) {
+func TestExecutableTracker_PendingTaskVisibilityTime(t *testing.T) {
 	controller := gomock.NewController(t)
 	tracker := newExecutableTracker(GrouperNamespaceID{})
 
@@ -25,17 +25,20 @@ func TestExecutableTracker_OldestPendingTaskVisibilityTime(t *testing.T) {
 		tracker.add(e)
 	}
 
-	require.True(t, tracker.oldestPendingTaskVisibilityTime().IsZero(),
-		"empty tracker should report zero time")
+	_, ok := tracker.pendingTaskVisibilityTime(tasks.NewImmediateKey(20))
+	require.False(t, ok, "nothing loaded at that key")
 
-	// Oldest task (by visibility time) is pending.
-	add(1, base.Add(10*time.Minute), ctasks.TaskStatePending)
-	add(2, base.Add(5*time.Minute), ctasks.TaskStatePending)
-	add(3, base.Add(20*time.Minute), ctasks.TaskStatePending)
-	require.Equal(t, base.Add(5*time.Minute), tracker.oldestPendingTaskVisibilityTime())
+	add(20, base.Add(5*time.Minute), ctasks.TaskStatePending)
+	visTime, ok := tracker.pendingTaskVisibilityTime(tasks.NewImmediateKey(20))
+	require.True(t, ok)
+	require.Equal(t, base.Add(5*time.Minute), visTime)
 
-	// Acked tasks must be ignored even if they have older visibility times.
-	add(4, base, ctasks.TaskStateAcked)
-	require.Equal(t, base.Add(5*time.Minute), tracker.oldestPendingTaskVisibilityTime(),
-		"acked task with older visibility time must be ignored")
+	// A key held by another task must not resolve.
+	_, ok = tracker.pendingTaskVisibilityTime(tasks.NewImmediateKey(21))
+	require.False(t, ok)
+
+	// An acked-but-not-yet-shrunk task is not a pending task.
+	add(30, base, ctasks.TaskStateAcked)
+	_, ok = tracker.pendingTaskVisibilityTime(tasks.NewImmediateKey(30))
+	require.False(t, ok, "acked task must not resolve")
 }

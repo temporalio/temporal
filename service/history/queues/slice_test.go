@@ -610,16 +610,14 @@ func (s *sliceSuite) TestClear() {
 	s.Equal(slice.scope.Range, slice.iterators[0].Range())
 }
 
-func (s *sliceSuite) TestOldestPendingTaskTime() {
+func (s *sliceSuite) TestPendingTaskVisibilityTime() {
 	r := NewRandomRange()
 	slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicates.Universal[tasks.Task]()), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 
-	s.True(slice.OldestPendingTaskTime().IsZero(), "no pending tasks should report zero time")
-
 	base := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	add := func(visTime time.Time, state ctasks.State) {
+	add := func(key tasks.Key, visTime time.Time, state ctasks.State) {
 		e := NewMockExecutable(s.controller)
-		e.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
+		e.EXPECT().GetKey().Return(key).AnyTimes()
 		e.EXPECT().GetVisibilityTime().Return(visTime).AnyTimes()
 		e.EXPECT().State().Return(state).AnyTimes()
 		e.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
@@ -627,11 +625,19 @@ func (s *sliceSuite) TestOldestPendingTaskTime() {
 		slice.add(e)
 	}
 
-	add(base.Add(10*time.Minute), ctasks.TaskStatePending)
-	add(base.Add(3*time.Minute), ctasks.TaskStatePending)
-	add(base, ctasks.TaskStateAcked)
+	pendingKey := NewRandomKeyInRange(r)
+	_, ok := slice.PendingTaskVisibilityTime(pendingKey)
+	s.False(ok, "nothing loaded at that key")
 
-	s.Equal(base.Add(3*time.Minute), slice.OldestPendingTaskTime())
+	add(pendingKey, base.Add(3*time.Minute), ctasks.TaskStatePending)
+	visTime, ok := slice.PendingTaskVisibilityTime(pendingKey)
+	s.True(ok)
+	s.Equal(base.Add(3*time.Minute), visTime)
+
+	ackedKey := NewRandomKeyInRange(r)
+	add(ackedKey, base, ctasks.TaskStateAcked)
+	_, ok = slice.PendingTaskVisibilityTime(ackedKey)
+	s.False(ok, "acked task must not resolve")
 }
 
 func (s *sliceSuite) newTestSlice(

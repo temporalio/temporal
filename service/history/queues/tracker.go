@@ -106,20 +106,13 @@ func (t *executableTracker) shrink() (tasks.Key, int) {
 	return minPendingTaskKey, tasksCompleted
 }
 
-// oldestPendingTaskVisibilityTime returns the min visibility time of the non-acked pending tasks
-// in memory, or the zero time if none. Acked-but-not-yet-shrunk tasks are skipped.
-func (t *executableTracker) oldestPendingTaskVisibilityTime() time.Time {
-	var oldest time.Time
-	for _, executable := range t.pendingExecutables {
-		if executable.State() == ctasks.TaskStateAcked {
-			continue
-		}
-
-		if visibilityTime := executable.GetVisibilityTime(); oldest.IsZero() || visibilityTime.Before(oldest) {
-			oldest = visibilityTime
-		}
+// pendingTaskVisibilityTime returns the visibility time of the non-acked task loaded at key.
+func (t *executableTracker) pendingTaskVisibilityTime(key tasks.Key) (time.Time, bool) {
+	executable, ok := t.pendingExecutables[key]
+	if !ok || executable.State() == ctasks.TaskStateAcked {
+		return time.Time{}, false
 	}
-	return oldest
+	return executable.GetVisibilityTime(), true
 }
 
 func (t *executableTracker) clear() {

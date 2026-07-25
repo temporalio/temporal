@@ -293,13 +293,14 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
-	// Deferred so the metric is emitted on every checkpoint return path.
-	defer p.emitImmediateQueueBacklogAge()
-
 	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		tasksCompleted += r.ShrinkSlices()
 	})
+
+	// Emitted here so it describes the just-shrunk state, before the persistence calls below give
+	// the frontier task time to be acked.
+	p.emitImmediateQueueBacklogAge()
 
 	var checkpointAction Action
 	maxReaderCount := p.options.MaxReaderCount()
@@ -359,34 +360,55 @@ func (p *queueBase) checkpoint() {
 	p.resetCheckpointTimer(err)
 }
 
-// emitImmediateQueueBacklogAge emits the age of the oldest in-memory task in an immediate queue,
-// the time-based counterpart to the shardinfo_immediate_queue_lag count. It is a lower bound: the
-// oldest task may be unloaded (e.g. stranded on a starved reader), so pair it with the count.
+// emitImmediateQueueBacklogAge emits the age of an immediate queue's oldest task, the time-based
+// counterpart to the shardinfo_immediate_queue_lag count. Immediate task keys carry no timestamp, so
+// the age comes from the task at the ack frontier and is only known while that task is loaded in
+// memory. It relies on immediate task ids being allocated in visibility time order, so that the
+// lowest-keyed pending task is also the oldest.
 func (p *queueBase) emitImmediateQueueBacklogAge() {
 	if p.category.Type() != tasks.CategoryTypeImmediate {
 		return
 	}
 
+	// A slice can only hold tasks at or above its own lower bound, so the task at the queue's ack
+	// frontier, if loaded at all, is loaded by a slice whose lower bound is that frontier.
+	frontier := tasks.MaximumKey
 	var oldest time.Time
+	slices, found := 0, false
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		r.WalkSlices(func(s Slice) {
-			if t := s.OldestPendingTaskTime(); !t.IsZero() {
-				if oldest.IsZero() || t.Before(oldest) {
-					oldest = t
-				}
+			slices++
+			sliceMin := s.Scope().Range.InclusiveMin
+			if cmp := sliceMin.CompareTo(frontier); cmp > 0 {
+				return
+			} else if cmp < 0 {
+				frontier, oldest, found = sliceMin, time.Time{}, false
+			}
+			if visibilityTime, ok := s.PendingTaskVisibilityTime(sliceMin); ok &&
+				(!found || visibilityTime.Before(oldest)) {
+				oldest, found = visibilityTime, true
 			}
 		})
 	})
 
-	if oldest.IsZero() {
+	age := time.Duration(0)
+	switch {
+	case slices == 0:
+		// Nothing pending and nothing left to load: the backlog is empty, so report a zero age to
+		// match the count metric rather than going silent.
+	case found:
+		age = p.timeSource.Now().Sub(oldest)
+		if age < 0 {
+			age = 0
+		}
+	default:
+		// The frontier is an iterator position, so the oldest task's age is unknown.
 		return
 	}
 
-	age := p.timeSource.Now().Sub(oldest)
-	if age < 0 {
-		age = 0
-	}
-	metrics.QueueImmediateBacklogAge.With(p.metricsHandler).Record(age)
+	// Same scope and tags as ShardInfoImmediateQueueLagHistogram so the age and count line up.
+	handler := p.shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	metrics.ShardInfoImmediateQueueBacklogAge.With(handler).Record(age, metrics.TaskCategoryTag(p.category.Name()))
 }
 
 func (p *queueBase) updateShardRangeID() bool {
