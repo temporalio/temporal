@@ -1304,6 +1304,38 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	}
 }
 
+// emitImmediateQueueLag records an immediate queue's lag and returns its backlog when the age still
+// has to be read from persistence.
+func (s *ContextImpl) emitImmediateQueueLag(
+	category tasks.Category,
+	queueState *persistencespb.QueueState,
+	metricsHandler metrics.Handler,
+	emitShardLagLog bool,
+) *immediateBacklog {
+	minTaskKey := getMinTaskKey(queueState)
+	if minTaskKey == nil {
+		return nil
+	}
+	highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
+	lag := highWatermark.TaskID - minTaskKey.TaskID
+	if emitShardLagLog && lag > logWarnImmediateTaskLag {
+		s.contextTaggedLogger.Warn(
+			"Shard queue lag exceeds warn threshold.",
+			tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
+		)
+	}
+	metrics.ShardInfoImmediateQueueLagHistogram.
+		With(metricsHandler).
+		Record(lag, metrics.TaskCategoryTag(category.Name()))
+
+	// Replication ack levels track how far remote clusters have consumed rather than local task
+	// processing, and have their own lag metrics, so their age is not comparable here.
+	if lag <= 0 || category.ID() == tasks.CategoryIDReplication {
+		return nil
+	}
+	return &immediateBacklog{category: category, minKey: *minTaskKey, maxKey: highWatermark}
+}
+
 // emitQueueLagMetrics records the per-category queue lag and returns the immediate backlogs whose
 // age still has to be read from persistence, so that read happens off the shard lock.
 func (s *ContextImpl) emitQueueLagMetrics(metricsHandler metrics.Handler) []immediateBacklog {
@@ -1324,29 +1356,8 @@ Loop:
 
 		switch category.Type() {
 		case tasks.CategoryTypeImmediate:
-			minTaskKey := getMinTaskKey(queueState)
-			if minTaskKey == nil {
-				continue Loop
-			}
-			highWatermark := s.taskKeyManager.getExclusiveReaderHighWatermark(category)
-			lag := highWatermark.TaskID - minTaskKey.TaskID
-			if emitShardLagLog && lag > logWarnImmediateTaskLag {
-				s.contextTaggedLogger.Warn(
-					"Shard queue lag exceeds warn threshold.",
-					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
-				)
-			}
-			metrics.ShardInfoImmediateQueueLagHistogram.
-				With(metricsHandler).
-				Record(lag, metrics.TaskCategoryTag(category.Name()))
-			// Replication ack levels track how far remote clusters have consumed rather than local task
-			// processing, and have their own lag metrics, so their age is not comparable here.
-			if lag > 0 && category.ID() != tasks.CategoryIDReplication {
-				immediateBacklogs = append(immediateBacklogs, immediateBacklog{
-					category: category,
-					minKey:   *minTaskKey,
-					maxKey:   highWatermark,
-				})
+			if backlog := s.emitImmediateQueueLag(category, queueState, metricsHandler, emitShardLagLog); backlog != nil {
+				immediateBacklogs = append(immediateBacklogs, *backlog)
 			}
 
 		case tasks.CategoryTypeScheduled:
