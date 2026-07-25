@@ -108,6 +108,12 @@ const (
 
 	// Maximum number of backfillers allowed on a single scheduler.
 	maxBackfillers = 100
+
+	// How many recently applied mutation (Patch/Update) request IDs to retain
+	// for deduplicating retries. Retries land within moments of the original
+	// request, so a short window is enough; the list is persisted with the
+	// scheduler's state, so it must stay small.
+	maxRecentMutationRequestIDs = 10
 )
 
 var (
@@ -881,6 +887,13 @@ func (s *Scheduler) Update(
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
 	}
+	// A retry of an already applied update carries a conflict token that the
+	// first attempt has since consumed, so dedup must come first.
+	if s.isDuplicateMutation(req.FrontendRequest.GetRequestId()) {
+		return &schedulerpb.UpdateScheduleResponse{
+			FrontendResponse: &workflowservice.UpdateScheduleResponse{},
+		}, nil
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
@@ -912,6 +925,7 @@ func (s *Scheduler) Update(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+	s.recordMutationRequestID(req.FrontendRequest.GetRequestId())
 	s.getOrCreateEventLog(ctx).LogEvent(ctx, "updated via API")
 
 	// Since the spec may have been updated, kick off the generator.
@@ -938,6 +952,14 @@ func (s *Scheduler) Patch(
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
 	}
+	// Patch isn't naturally idempotent: every TriggerImmediately and
+	// BackfillRequest adds a Backfiller, which goes on to start workflows. A
+	// retry must be acknowledged without running those actions again.
+	if s.isDuplicateMutation(req.FrontendRequest.GetRequestId()) {
+		return &schedulerpb.PatchScheduleResponse{
+			FrontendResponse: &workflowservice.PatchScheduleResponse{},
+		}, nil
+	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
@@ -956,6 +978,7 @@ func (s *Scheduler) Patch(
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
+	s.recordMutationRequestID(req.FrontendRequest.GetRequestId())
 
 	// Since the paused state may have been updated, kick off the generator.
 	s.Generator.Get(ctx).Generate(ctx)
@@ -963,6 +986,28 @@ func (s *Scheduler) Patch(
 	return &schedulerpb.PatchScheduleResponse{
 		FrontendResponse: &workflowservice.PatchScheduleResponse{},
 	}, nil
+}
+
+// isDuplicateMutation reports whether a mutation carrying requestID has already
+// been applied recently. Patch and Update share one window, matching V1, where
+// both arrive as signals and are deduplicated by the workflow's signal request
+// IDs regardless of which mutation they carry. An empty request ID never
+// deduplicates: neither API requires one.
+func (s *Scheduler) isDuplicateMutation(requestID string) bool {
+	return requestID != "" && slices.Contains(s.RecentMutationRequestIds, requestID)
+}
+
+// recordMutationRequestID appends requestID to the dedup window, dropping the
+// oldest entries beyond maxRecentMutationRequestIDs.
+func (s *Scheduler) recordMutationRequestID(requestID string) {
+	if requestID == "" {
+		return
+	}
+
+	s.RecentMutationRequestIds = append(s.RecentMutationRequestIds, requestID)
+	if excess := len(s.RecentMutationRequestIds) - maxRecentMutationRequestIDs; excess > 0 {
+		s.RecentMutationRequestIds = slices.Clone(s.RecentMutationRequestIds[excess:])
+	}
 }
 
 func (s *Scheduler) generateConflictToken() []byte {

@@ -42,6 +42,13 @@ message SchedulerState {
   // Surfaced as the ScheduleIdleCloseTime search attribute for stuck-schedule
   // detection.
   google.protobuf.Timestamp idle_close_time = 12;
+
+  // Request IDs of recently applied mutations (PatchSchedule and
+  // UpdateSchedule), oldest first. A mutation whose request ID is already
+  // present is a retry, and is acknowledged without being applied again. The
+  // list is trimmed to the most recent entries, so it only covers retries that
+  // arrive within a handful of subsequent mutations.
+  repeated string recent_mutation_request_ids = 13;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.

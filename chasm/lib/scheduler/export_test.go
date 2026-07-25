@@ -47,6 +47,9 @@ func (i *Invoker) RunningWorkflowID(requestID string) string {
 // RecentActionCount exposes the completed-retention limit for tests.
 const RecentActionCount = recentActionCount
 
+// MaxRecentMutationRequestIDs exposes the mutation dedup window size for tests.
+const MaxRecentMutationRequestIDs = maxRecentMutationRequestIDs
+
 // ApplyCompletedRetention exposes applyCompletedRetention for tests.
 func (i *Invoker) ApplyCompletedRetention() {
 	i.applyCompletedRetention()

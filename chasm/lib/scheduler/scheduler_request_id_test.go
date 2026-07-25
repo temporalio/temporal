@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -122,6 +123,32 @@ func TestPatch_EmptyRequestIDIsNotDeduped(t *testing.T) {
 	_, err = sched.Patch(ctx, patchRequest(""))
 	require.NoError(t, err)
 	require.Len(t, addedBackfillerIDs(firstPatchIDs, backfillerIDs(sched)), 2)
+}
+
+// TestPatch_DedupWindowIsBounded pins that the retained request IDs are
+// trimmed, so a busy schedule can't grow its persisted state without bound.
+func TestPatch_DedupWindowIsBounded(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+
+	for i := range 50 {
+		_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.PatchScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				RequestId:  fmt.Sprintf("patch-request-%d", i),
+				Patch:      &schedulepb.SchedulePatch{Pause: "pausing"},
+			},
+		})
+		require.NoError(t, err)
+		_, err = node.CloseTransaction()
+		require.NoError(t, err)
+		ctx = chasm.NewMutableContext(context.Background(), node)
+	}
+
+	require.Len(t, sched.RecentMutationRequestIds, scheduler.MaxRecentMutationRequestIDs)
+	require.Equal(t, "patch-request-49", sched.RecentMutationRequestIds[len(sched.RecentMutationRequestIds)-1],
+		"the most recent request IDs are the ones retained")
 }
 
 // TestUpdate_DuplicateRequestIDIsIdempotent pins that a retried UpdateSchedule

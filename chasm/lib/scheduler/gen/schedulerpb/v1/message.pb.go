@@ -54,8 +54,14 @@ type SchedulerState struct {
 	// Surfaced as the ScheduleIdleCloseTime search attribute for stuck-schedule
 	// detection.
 	IdleCloseTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=idle_close_time,json=idleCloseTime,proto3" json:"idle_close_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Request IDs of recently applied mutations (PatchSchedule and
+	// UpdateSchedule), oldest first. A mutation whose request ID is already
+	// present is a retry, and is acknowledged without being applied again. The
+	// list is trimmed to the most recent entries, so it only covers retries that
+	// arrive within a handful of subsequent mutations.
+	RecentMutationRequestIds []string `protobuf:"bytes,13,rep,name=recent_mutation_request_ids,json=recentMutationRequestIds,proto3" json:"recent_mutation_request_ids,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SchedulerState) Reset() {
@@ -154,6 +160,13 @@ func (x *SchedulerState) GetWorkflowMigration() *WorkflowMigrationState {
 func (x *SchedulerState) GetIdleCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.IdleCloseTime
+	}
+	return nil
+}
+
+func (x *SchedulerState) GetRecentMutationRequestIds() []string {
+	if x != nil {
+		return x.RecentMutationRequestIds
 	}
 	return nil
 }
@@ -712,7 +725,7 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\"\x82\x04\n" +
+	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\"\xc1\x04\n" +
 	"\x0eSchedulerState\x12>\n" +
 	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12\x1c\n" +
@@ -725,7 +738,8 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\bsentinel\x18\n" +
 	" \x01(\bR\bsentinel\x12s\n" +
 	"\x12workflow_migration\x18\v \x01(\v2D.temporal.server.chasm.lib.scheduler.proto.v1.WorkflowMigrationStateR\x11workflowMigration\x12B\n" +
-	"\x0fidle_close_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\ridleCloseTime\"z\n" +
+	"\x0fidle_close_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\ridleCloseTime\x12=\n" +
+	"\x1brecent_mutation_request_ids\x18\r \x03(\tR\x18recentMutationRequestIds\"z\n" +
 	"\x16WorkflowMigrationState\x120\n" +
 	"\x14pre_migration_paused\x18\x01 \x01(\bR\x12preMigrationPaused\x12.\n" +
 	"\x13pre_migration_notes\x18\x02 \x01(\tR\x11preMigrationNotes\"\xa8\x01\n" +
