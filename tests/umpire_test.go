@@ -19,7 +19,8 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
-	"go.temporal.io/server/tests/umpire/fact"
+	ksworker "go.temporal.io/server/tests/umpire/kitchensink/worker"
+	"go.temporal.io/server/tests/umpire/ksdriver"
 	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
 )
@@ -106,65 +107,43 @@ func (s *UmpireTestSuite) TestPlanAndDriveWorkflowToCompletion() {
 	require.Empty(t, violations, "the Monitor should find no violations for a cleanly driven workflow")
 }
 
-// nexusEntityPath builds the namespace-rooted path for a Nexus operation, keyed
-// "<workflowID>:<scheduledEventID>" under its caller workflow — the identity the
-// HSM span instrumentation will target.
-func nexusEntityPath(nsID, workflowID, scheduledEventID string) *umpirefw.EntityPath {
-	return &umpirefw.EntityPath{
-		EntityID: umpirefw.NewEntityID(model.NexusOperationType, workflowID+":"+scheduledEventID),
-		Ancestors: []umpirefw.EntityID{
-			umpirefw.NewEntityID(model.NamespaceType, nsID),
-			umpirefw.NewEntityID(model.WorkflowType, workflowID),
-		},
-	}
-}
-
-// TestNexusOperationModel verifies the Nexus operation model end-to-end through the
-// umpire's own layers — the planner (active side) and the live cluster Monitor
-// (passive side). Driving a real Nexus operation would require HSM span
-// instrumentation that is not built yet (see UMPIRE_NEXUS.md), so the Monitor is
-// fed the lifecycle facts that instrumentation will emit; everything else — the
-// registered entity, its FSM, and the rules judging it — is the real production wiring.
-func (s *UmpireTestSuite) TestNexusOperationModel() {
+// TestPlanAndDriveKitchenSinkWorkflow is the same plan -> drive -> judge loop, but the
+// workload is the copied Omes kitchensink interpreter rather than a bespoke workflow:
+// the planned route compiles (ksdriver.Compile) to a kitchensink TestInput, and
+// ksdriver.RunPlan starts + drives it. This proves the umpire can drive arbitrary
+// kitchensink-described behaviour and still judge it with zero hand-written assertions.
+func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 	t := s.T()
 	env := testcore.NewEnv(t)
-	ctx := env.Context()
-	nsID := env.NamespaceID().String()
+	env.SdkWorker().RegisterWorkflow(ksworker.KitchenSinkWorkflow)
 
-	// PLAN: the Nexus model is in the shared catalog and the planner can route over
-	// it. Shortest route to "succeeded" is the sync path (start is skipped).
-	plan, err := planner.DefaultModels().PlanTo("NexusOperation", "succeeded", planner.Shortest, planner.Constraints{})
+	// 1) PLAN: describe the target state; the Planner computes the route.
+	plan, err := planner.DefaultModels().PlanTo("Workflow", "completed", planner.Shortest, planner.Constraints{})
 	require.NoError(t, err)
-	require.Equal(t, [][]string{{"schedule", "succeed"}}, plan.Routes)
+	require.Equal(t, [][]string{{"start", "complete"}}, plan.Routes)
 
-	// JUDGE: feed the live Monitor an async operation lifecycle and confirm the
-	// registered entity builds and the rules find no violation.
-	const wfID, schedID = "nexus-e2e-wf", "5"
-	path := nexusEntityPath(nsID, wfID, schedID)
+	// 2) DRIVE: the route compiles to a kitchensink TestInput (a WorkflowInput that
+	// returns a result); RunPlan starts the kitchensink workflow and drives it.
+	require.NoError(t, ksdriver.RunPlan(env.Context(), env.SdkClient(), ksdriver.RunOptions{
+		Namespace:      env.NamespaceID().String(),
+		TaskQueue:      env.WorkerTaskQueue(),
+		WorkflowType:   "KitchenSinkWorkflow",
+		WorkflowIDBase: "umpire-ks-wf",
+	}, "Workflow", plan))
 
-	scheduled := &fact.NexusOperationScheduled{}
-	scheduled.ScheduledEventID, scheduled.WorkflowID, scheduled.EntityPath = schedID, wfID, path
-	started := &fact.NexusOperationStarted{}
-	started.ScheduledEventID, started.WorkflowID, started.EntityPath = schedID, wfID, path
-	succeeded := &fact.NexusOperationSucceeded{}
-	succeeded.ScheduledEventID, succeeded.WorkflowID, succeeded.EntityPath, succeeded.Outcome = schedID, wfID, path, "success"
-
-	require.NoError(t, env.GetMonitor().ModelState().RouteFacts(ctx,
-		[]umpirefw.Fact{scheduled, started, succeeded}))
-
-	// The registered entity reached its terminal state in the live model.
-	nsRoot := umpirefw.NewEntityID(model.NamespaceType, nsID)
-	found := false
-	for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
-		if op, ok := e.Entity.(*model.NexusOperation); ok && op.FSM.Current() == "succeeded" {
-			found = true
-			require.Equal(t, "success", op.Outcome)
+	// 3) JUDGE: the Monitor observes the completion, then finds no violations.
+	nsRoot := umpirefw.NewEntityID(model.NamespaceType, env.NamespaceID().String())
+	require.Eventually(t, func() bool {
+		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowType, 0, &nsRoot) {
+			if wf, ok := e.Entity.(*model.Workflow); ok && wf.FSM.Current() == model.WorkflowCompleted {
+				return true
+			}
 		}
-	}
-	require.True(t, found, "the Monitor should have built a succeeded NexusOperation")
+		return false
+	}, 15*time.Second, 200*time.Millisecond, "the Monitor should observe the kitchensink workflow completing")
 
-	violations := env.GetMonitor().CheckNamespace(ctx, nsID)
-	require.Empty(t, violations, "a cleanly-settled Nexus operation must yield no violations")
+	violations := env.GetMonitor().CheckNamespace(env.Context(), env.NamespaceID().String())
+	require.Empty(t, violations, "a cleanly driven kitchensink workflow must yield no violations")
 }
 
 // TestPlanAndDriveNexusOperationCHASM drives a REAL CHASM Nexus operation end-to-end
