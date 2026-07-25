@@ -23,7 +23,7 @@ import (
 // during construction, so the pause state asserted before commit is the state
 // those tasks will observe when they run.
 func hasImmediateTask(nodeBackend *chasm.MockNodeBackend) bool {
-	want := reflect.TypeOf(&tasks.ChasmTask{})
+	want := reflect.TypeFor[*tasks.ChasmTask]()
 	for _, categoryTasks := range nodeBackend.TasksByCategory {
 		for _, t := range categoryTasks {
 			if reflect.TypeOf(t) == want &&
