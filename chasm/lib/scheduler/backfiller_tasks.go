@@ -165,7 +165,7 @@ func (b *BackfillerTaskHandler) processBackfill(
 	} else {
 		// On the first attempt, the start time is set slightly behind in order to make
 		// the backfill start time inclusive.
-		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
+		startTime = request.GetStartTime().AsTime().Add(-schedulescommon.InclusiveBackfillStartOffset)
 	}
 	endTime := request.GetEndTime().AsTime()
 	specResult, err := b.specProcessor.ProcessTimeRange(

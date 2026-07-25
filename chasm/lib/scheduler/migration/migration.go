@@ -468,7 +468,18 @@ func convertBackfillersCHASMToLegacy(
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
 			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
+				// The backfiller has already made progress, so its watermark is the
+				// last time processed. V1 resumes strictly after the stored cursor,
+				// which matches V2's own advance-by-next convention: no offset here.
 				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
+			} else if start := backfill.GetStartTime(); start != nil {
+				// The backfiller hasn't run yet, so the request still carries the
+				// user's inclusive start time. V2 applies the inclusive-boundary
+				// offset when the backfiller first runs, but V1 expects it to have
+				// been applied already at patch intake. Apply it now, or V1 would
+				// skip an action landing exactly on the backfill's start.
+				backfill.StartTime = timestamppb.New(
+					start.AsTime().Add(-schedulescommon.InclusiveBackfillStartOffset))
 			}
 			ongoing = append(ongoing, backfill)
 			continue
