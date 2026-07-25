@@ -148,6 +148,14 @@ func NewScheduler(
 	sched.setNullableFields()
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 
+	// Apply the initial patch's pause/unpause state before the Generator and any
+	// backfiller below arm their immediate tasks, so that generated and
+	// backfilled actions observe the requested state rather than the state the
+	// schedule was submitted with. The conflict token is deliberately left at its
+	// initial value: CreateSchedule hands the caller the initial token, so
+	// bumping it here would immediately invalidate it.
+	sched.applyPatchPauseState(ctx, patch, patchSourceInitial)
+
 	invoker := NewInvoker(ctx)
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 
@@ -217,6 +225,43 @@ func (s *Scheduler) setNullableFields() {
 	}
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedulepb.ScheduleState{}
+	}
+}
+
+// Sources of a patch, used to describe a pause/unpause transition in the event log.
+const (
+	patchSourceAPI     = "API"
+	patchSourceInitial = "initial patch"
+)
+
+// applyPatchPauseState applies the Pause and Unpause members of a patch to the
+// schedule's state. Shared by the PatchSchedule handler and schedule creation,
+// which must give InitialPatch the same semantics.
+//
+// A patch that sets both members is contradictory, but is applied rather than
+// rejected: the workflow-backed scheduler's processPatch applies Pause and then
+// Unpause, so Unpause wins, and CHASM ties it the same way.
+//
+// Callers are responsible for the surrounding bookkeeping (conflict token,
+// update time, kicking the generator), which differs between creation and
+// patching.
+func (s *Scheduler) applyPatchPauseState(
+	ctx chasm.MutableContext,
+	patch *schedulepb.SchedulePatch,
+	source string,
+) {
+	if patch == nil {
+		return
+	}
+	if patch.Pause != "" {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = patch.Pause
+		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via %s: %s", source, patch.Pause))
+	}
+	if patch.Unpause != "" {
+		s.Schedule.State.Paused = false
+		s.Schedule.State.Notes = patch.Unpause
+		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via %s: %s", source, patch.Unpause))
 	}
 }
 
@@ -939,16 +984,7 @@ func (s *Scheduler) Patch(
 		return nil, ErrMigrationPending
 	}
 	// Handle paused status.
-	if req.FrontendRequest.Patch.Pause != "" {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
-		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("paused via API: %s", req.FrontendRequest.Patch.Pause))
-	}
-	if req.FrontendRequest.Patch.Unpause != "" {
-		s.Schedule.State.Paused = false
-		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
-		s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("unpaused via API: %s", req.FrontendRequest.Patch.Unpause))
-	}
+	s.applyPatchPauseState(ctx, req.FrontendRequest.Patch, patchSourceAPI)
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err
