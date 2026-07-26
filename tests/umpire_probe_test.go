@@ -10,11 +10,15 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
@@ -97,12 +101,100 @@ func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler, build callerFor) 
 func (s *UmpireTestSuite) nexusExecForceTimeout() probe.EnvFunc {
 	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
 		env := s.newNexusProbeEnv(t)
-		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, true))
+		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, testhooks.NexusForceTimeoutFromScheduled))
 		unused := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
 		}}
 		return env.TestEnv, s.nexusProbeDrive(t, env, unused, syncCaller)
 	}
+}
+
+// nexusExecForceTimeoutBackingOff reaches timed_out from backing_off. A retryable handler
+// sends the first attempt into backoff (scheduled --> backing_off); the same
+// NexusOperationForceTimeout hook — with the backing_off value — makes the backoff retry
+// task time the operation out instead of rescheduling (backing_off --> timed_out).
+func (s *UmpireTestSuite) nexusExecForceTimeoutBackingOff() probe.EnvFunc {
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusProbeEnv(t)
+		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, testhooks.NexusForceTimeoutFromBackingOff))
+		retry := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
+		}}
+		return env.TestEnv, s.nexusProbeDrive(t, env, retry, syncCaller)
+	}
+}
+
+// nexusCapture holds the callback URL and token an async handler received on start, so
+// the test can later deliver a completion to that operation.
+type nexusCapture struct{ url, token string }
+
+// nexusExecComplete drives an async operation to STARTED and then delivers a completion
+// callback — success (opErr nil), failure, or cancellation — reaching started -->
+// {succeeded, failed, canceled}. The completion is sent only after DescribeWorkflowExecution
+// reports the pending operation STARTED, so the terminal transition fires from started (not
+// scheduled, which a completion racing the start ack would produce).
+func (s *UmpireTestSuite) nexusExecComplete(opErr *nexus.OperationError) probe.EnvFunc {
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusProbeEnv(t)
+		captured := make(chan nexusCapture, 1)
+		handler := nexustest.Handler{
+			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, opts nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				select {
+				case captured <- nexusCapture{opts.CallbackURL, opts.CallbackHeader.Get(commonnexus.CallbackTokenHeader)}:
+				default: // already captured (a retry); keep the first
+				}
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-probe-complete-token"}, nil
+			},
+			OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
+		}
+		inner := s.nexusProbeDrive(t, env, handler, syncCaller)
+		return env.TestEnv, func(dctx context.Context, iter int) error {
+			go s.completeWhenStarted(dctx, env, fmt.Sprintf("umpire-probe-nexus-%d", iter), captured, opErr)
+			return inner(dctx, iter)
+		}
+	}
+}
+
+// completeWhenStarted waits for the operation's callback details, then for the operation to
+// be durably STARTED, then delivers the completion (success or the given operation error).
+func (s *UmpireTestSuite) completeWhenStarted(ctx context.Context, env *NexusTestEnv, wfID string, captured <-chan nexusCapture, opErr *nexus.OperationError) {
+	var cap nexusCapture
+	select {
+	case cap = <-captured:
+	case <-ctx.Done():
+		return
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for !s.pendingOpInState(ctx, env, wfID, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{Serializer: commonnexus.PayloadSerializer})
+	opts := nexusrpc.CompleteOperationOptions{Header: nexus.Header{commonnexus.CallbackTokenHeader: cap.token}}
+	if opErr != nil {
+		opts.Error = opErr
+	} else {
+		opts.Result = payload.EncodeString("umpire-probe-result")
+	}
+	_ = c.CompleteOperation(ctx, cap.url, opts)
+}
+
+// pendingOpInState reports whether wfID has a pending Nexus operation in the given state.
+func (s *UmpireTestSuite) pendingOpInState(ctx context.Context, env *NexusTestEnv, wfID string, state enumspb.PendingNexusOperationState) bool {
+	resp, err := env.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
+	if err != nil {
+		return false
+	}
+	for _, op := range resp.GetPendingNexusOperations() {
+		if op.GetState() == state {
+			return true
+		}
+	}
+	return false
 }
 
 // TestProbeNexusResilience is the trace-derived resilience demo: plan a route to a
@@ -266,6 +358,14 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// A forced schedule-to-close timeout on the first attempt reaches timed_out from
 	// scheduled (scheduled --timeout--> timed_out), via the NexusOperationForceTimeout hook.
 	exploreEnv(s.nexusExecForceTimeout(), 10*time.Second)
+	// The same hook, valued for backing_off, times the op out during the backoff gap
+	// (backing_off --timeout--> timed_out).
+	exploreEnv(s.nexusExecForceTimeoutBackingOff(), 15*time.Second)
+	// An async start followed by a completion callback delivered once the op is durably
+	// STARTED reaches the started terminals: started --> {succeeded, failed, canceled}.
+	exploreEnv(s.nexusExecComplete(nil), 15*time.Second)
+	exploreEnv(s.nexusExecComplete(nexus.NewOperationFailedError("umpire probe: injected async failure")), 15*time.Second)
+	exploreEnv(s.nexusExecComplete(nexus.NewOperationCanceledError("umpire probe: injected async cancellation")), 15*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)
@@ -274,6 +374,16 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	for _, e := range rep.Missing() {
 		t.Logf("[exploration]   MISSING: %s --%s--> %s", e.From, e.Event, e.To)
 	}
-	require.GreaterOrEqual(t, rep.Covered, 6,
-		"the sync/retry/async/cancel/timeout drives should exercise the schedule, backoff, start, cancel and timeout edges")
+	// The drives above exercise 13 of the 16 modelled edges — every edge this workflow-driven
+	// probe can reach. The three {scheduled,backing_off,started} --terminate--> terminated
+	// edges are out of reach for it: terminated is reached via the operation's own CHASM
+	// Terminate hook, which the framework invokes only on an execution's *root* component.
+	// A workflow-initiated operation is a child of the caller workflow, so terminating the
+	// workflow does not cascade to it (verified). Reaching terminated needs a *standalone*
+	// Nexus operation driver (StartNexusOperationExecution + TerminateNexusOperationExecution,
+	// where the operation is its own root) — a separate driver from this one. (The
+	// unreachable-by-construction backing_off --> {start,succeed,fail,cancel} edges were
+	// pruned from the model, so coverage reflects the machine's real shape.)
+	require.GreaterOrEqual(t, rep.Covered, 13,
+		"every edge this workflow-driven probe can reach should be exercised; terminated needs a standalone-op driver")
 }

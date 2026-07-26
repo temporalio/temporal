@@ -49,6 +49,11 @@ type Constraints struct {
 	// EdgeRequires trait) is granted — so a route can never require power the
 	// environment lacks. nil disables capability filtering (any edge is allowed).
 	Grants []umpire.Capability
+	// Hosting is the execution context this run drives (Standalone or Embedded). An edge
+	// restricted to a different hosting (its HostedIn trait) is dropped — e.g. a workflow
+	// (Embedded) run can never reach terminated, which is Standalone-only. AnyHosting (the
+	// default) disables hosting filtering.
+	Hosting umpire.Hosting
 }
 
 // Plan is produced before anything runs: a concrete, inspectable set of routes
@@ -133,6 +138,9 @@ func PlanTo(lc *umpire.Lifecycle, target string, mode RouteMode, c Constraints, 
 		// missing environment capability is an explicit, named skip — never silent.
 		if miss := missingCapabilities(lc, c, target); len(miss) > 0 {
 			return nil, fmt.Errorf("planner: %q is unreachable: route needs drive-capability %v not granted by %v", target, miss, c.Grants)
+		}
+		if h := blockingHosting(lc, c, target); h != umpire.AnyHosting {
+			return nil, fmt.Errorf("planner: %q is unreachable: route needs %s hosting, this run drives %s", target, h, c.Hosting)
 		}
 		return nil, fmt.Errorf("planner: %q is unreachable under the given constraints", target)
 	}
@@ -250,12 +258,26 @@ func advanceEdges(lc *umpire.Lifecycle, c Constraints) map[string][]edge {
 		if !granted(lc, e.From, e.Event, grants) {
 			continue // needs a drive-capability this environment doesn't grant
 		}
+		if !hostingOK(lc, e.From, e.Event, c.Hosting) {
+			continue // restricted to a hosting this run does not drive
+		}
 		adj[e.From] = append(adj[e.From], edge{event: e.Event, to: e.To})
 	}
 	for s := range adj {
 		sort.Slice(adj[s], func(i, j int) bool { return adj[s][i].event < adj[s][j].event })
 	}
 	return adj
+}
+
+// hostingOK reports whether an edge's hosting restriction is compatible with the run's
+// declared hosting. An unrestricted edge (AnyHosting) is always allowed, and a run that
+// declares no hosting (AnyHosting) accepts every edge; only a concrete mismatch is dropped.
+func hostingOK(lc *umpire.Lifecycle, from, event string, runHosting umpire.Hosting) bool {
+	edgeHosting := lc.EdgeHosting(from, event)
+	if edgeHosting == umpire.AnyHosting || runHosting == umpire.AnyHosting {
+		return true
+	}
+	return edgeHosting == runHosting
 }
 
 // granted reports whether every drive-capability the from→event edge requires is in
@@ -287,6 +309,32 @@ func capSet(caps []umpire.Capability) map[umpire.Capability]bool {
 // missingCapabilities returns the drive-capabilities that a route to target needs but
 // the constraints do not grant — nil when the failure is not capability-related (no
 // grant set in play, or the target is unreachable even with every capability).
+// blockingHosting returns the hosting a route to target requires when the run's declared
+// Hosting is what blocks it (dropping the hosting filter makes the target reachable), or
+// AnyHosting when hosting is not the blocker. It mirrors missingCapabilities so a hosting
+// shortfall is a named, explicit skip rather than a silent dead-end.
+func blockingHosting(lc *umpire.Lifecycle, c Constraints, target string) umpire.Hosting {
+	if c.Hosting == umpire.AnyHosting {
+		return umpire.AnyHosting
+	}
+	full := c
+	full.Hosting = umpire.AnyHosting // re-plan ignoring hosting to isolate the shortfall
+	adj := advanceEdges(lc, full)
+	route, ok := shortestRoute(adj, lc.Initial(), target, c.MaxDepth)
+	if !ok {
+		return umpire.AnyHosting // unreachable even ignoring hosting: not a hosting problem
+	}
+	dest := edgeTargets(adj)
+	state := lc.Initial()
+	for _, ev := range route {
+		if h := lc.EdgeHosting(state, ev); h != umpire.AnyHosting {
+			return h
+		}
+		state = dest[state][ev]
+	}
+	return umpire.AnyHosting
+}
+
 func missingCapabilities(lc *umpire.Lifecycle, c Constraints, target string) []umpire.Capability {
 	if c.Grants == nil {
 		return nil

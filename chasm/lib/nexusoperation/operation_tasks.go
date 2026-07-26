@@ -36,6 +36,7 @@ type operationTaskHandlerOptions struct {
 
 	MetricsHandler metrics.Handler
 	Logger         log.Logger
+	TestHooks      testhooks.TestHooks
 }
 
 // operationInvocationTaskHandlerOptions is the fx parameter object for the invocation task executor.
@@ -109,8 +110,9 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	// Test hook: resolve this attempt as a schedule-to-close timeout instead of calling the
-	// handler, so tests can reach the timed_out terminal deterministically. No-op in prod builds.
-	if _, ok := testhooks.Get(h.testHooks, testhooks.NexusOperationForceTimeout, ns.ID()); ok {
+	// handler, so tests can reach timed_out from scheduled deterministically. No-op in prod
+	// builds; the backing_off value is handled by the backoff task handler, not here.
+	if from, ok := testhooks.Get(h.testHooks, testhooks.NexusOperationForceTimeout, ns.ID()); ok && from == testhooks.NexusForceTimeoutFromScheduled {
 		result, rerr := newInvocationResult(nil, &operationTimeoutBelowMinError{timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE})
 		if rerr != nil {
 			return fmt.Errorf("failed to construct forced-timeout result: %w", rerr)
@@ -358,6 +360,7 @@ type operationBackoffTaskHandler struct {
 
 	metricsHandler metrics.Handler
 	logger         log.Logger
+	testHooks      testhooks.TestHooks
 }
 
 func newOperationBackoffTaskHandler(opts operationTaskHandlerOptions) *operationBackoffTaskHandler {
@@ -365,6 +368,7 @@ func newOperationBackoffTaskHandler(opts operationTaskHandlerOptions) *operation
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
+		testHooks:      opts.TestHooks,
 	}
 }
 
@@ -383,6 +387,20 @@ func (h *operationBackoffTaskHandler) Execute(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) error {
+	// Test hook: time the operation out while it is still backing off, instead of
+	// rescheduling the retry — so tests can reach timed_out from backing_off (a state a
+	// handler response can never settle out of). Same key as the invocation-side hook,
+	// selected by the backing_off value. No-op in prod builds.
+	if from, ok := testhooks.Get(h.testHooks, testhooks.NexusOperationForceTimeout, namespace.ID(ctx.ExecutionKey().NamespaceID)); ok && from == testhooks.NexusForceTimeoutFromBackingOff {
+		return op.onTimedOut(ctx, &failurepb.Failure{
+			Message: "operation timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				},
+			},
+		}, false)
+	}
 	return transitionRescheduled.Apply(op, ctx, EventRescheduled{})
 }
 

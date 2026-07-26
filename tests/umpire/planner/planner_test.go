@@ -145,3 +145,31 @@ func TestPlanTo_CapabilityFiltering(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, [][]string{{"expire"}}, plan.Routes)
 }
+
+// TestPlanTo_HostingFiltering shows the Hosting dimension on the real NexusOperation model:
+// the terminated terminal is reachable only when the run drives Standalone operations —
+// an Embedded (workflow-child) run cannot reach it, with a named hosting shortfall.
+func TestPlanTo_HostingFiltering(t *testing.T) {
+	models := planner.DefaultModels()
+	powers := []umpire.Capability{umpire.RPCDrive, umpire.Faults}
+
+	// Embedded run: terminate is Standalone-only, so terminated is unreachable — and the
+	// shortfall is named, not silent.
+	_, err := models.PlanTo("NexusOperation", "terminated", planner.Shortest,
+		planner.Constraints{Grants: powers, Hosting: umpire.Embedded})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Standalone hosting")
+
+	// Standalone run: terminated is reachable.
+	plan, err := models.PlanTo("NexusOperation", "terminated", planner.Shortest,
+		planner.Constraints{Grants: powers, Hosting: umpire.Standalone})
+	require.NoError(t, err)
+	require.NotEmpty(t, plan.Routes)
+
+	// A non-hosting-restricted terminal (succeeded) is reachable under either hosting.
+	for _, h := range []umpire.Hosting{umpire.Embedded, umpire.Standalone} {
+		_, err := models.PlanTo("NexusOperation", "succeeded", planner.Shortest,
+			planner.Constraints{Grants: powers, Hosting: h})
+		require.NoErrorf(t, err, "succeeded should be reachable under %s", h)
+	}
+}

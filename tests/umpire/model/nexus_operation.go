@@ -30,15 +30,23 @@ type NexusOperation struct {
 func NewNexusOperation() *NexusOperation {
 	op := &NexusOperation{}
 	// active are the in-flight states an operation must eventually settle out of.
+	// timeout and terminate can fire from any of them (a timer, or an external RPC).
 	active := []string{NexusScheduled, NexusBackingOff, NexusStarted}
+	// settleable are the states from which a handler/attempt outcome settles the
+	// operation: an attempt result (from scheduled) or an async completion (from started).
+	// backing_off is excluded — the op leaves it via the backoff timer (backing_off
+	// --schedule--> scheduled), and that reschedule is what emits the retry attempt, so no
+	// attempt or completion ever runs while backing_off. Mirroring CHASM's From-sets here
+	// (which include BACKING_OFF defensively) would over-approximate the machine.
+	settleable := []string{NexusScheduled, NexusStarted}
 	op.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: NexusUnspecified,
 		// Each state carries its traits: the in-flight states MustProgress; the
 		// terminals carry their modeled outcome. succeeded is a clean completion;
 		// failed and timed_out are acceptable failure terminals (a fault reaching one
-		// is degradation, not a bug). canceled is left untagged: it is a user-driven
-		// decision, not a success or a failure of the operation. Terminal-ness itself
-		// derives from the transition graph.
+		// is degradation, not a bug). canceled and terminated are left untagged: both are
+		// user-driven decisions, not a success or a failure of the operation. Terminal-ness
+		// itself derives from the transition graph.
 		States: umpire.States{
 			NexusUnspecified: {},
 			NexusScheduled:   {umpire.MustProgress},
@@ -48,6 +56,7 @@ func NewNexusOperation() *NexusOperation {
 			NexusFailed:      {umpire.Failure},
 			NexusCanceled:    {}, // user-driven decision, not a failure
 			NexusTimedOut:    {umpire.Failure},
+			NexusTerminated:  {}, // user-driven forceful termination, not an operation failure
 		},
 		// Edge traits declare the drive-capability each edge needs: most are reachable
 		// with ordinary API traffic (RPCDrive — a handler response or client call);
@@ -68,38 +77,54 @@ func NewNexusOperation() *NexusOperation {
 				To:     NexusBackingOff,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
 			},
-			// start: the async handler acknowledged (sync completion skips this).
+			// start: the async handler acknowledged. Fires from scheduled only — the attempt
+			// that carries the ack runs from scheduled (sync completion skips this).
 			{
 				Event:  NexusStart,
-				From:   []string{NexusScheduled, NexusBackingOff},
+				From:   []string{NexusScheduled},
 				To:     NexusStarted,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
 			},
-			// Terminal transitions may fire from any active state;
-			// "started precedes succeeded" is NOT an invariant (sync completes direct).
+			// succeed/fail/cancel settle the operation from a running attempt (scheduled) or
+			// an async completion (started); "started precedes succeeded" is NOT an invariant
+			// (sync completes direct). They cannot fire from backing_off (see settleable).
 			{
 				Event:  NexusSucceed,
-				From:   active,
+				From:   settleable,
 				To:     NexusSucceeded,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
 			},
 			{
 				Event:  NexusFail,
-				From:   active,
+				From:   settleable,
 				To:     NexusFailed,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
 			},
 			{
 				Event:  NexusCancel,
-				From:   active,
+				From:   settleable,
 				To:     NexusCanceled,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
 			},
+			// timeout fires from any active state when the schedule-to-close timer elapses —
+			// including backing_off (the timer is independent of the retry cycle). It needs a
+			// timer trigger (a fault/hook), not ordinary API traffic.
 			{
 				Event:  NexusTimeout,
 				From:   active,
 				To:     NexusTimedOut,
 				Traits: umpire.Traits{umpire.Needs(umpire.Faults)},
+			},
+			// terminate is an external TerminateNexusOperationExecution RPC; it can force any
+			// active operation to the terminated terminal — but only for a Standalone operation
+			// (its own root execution). An Embedded (workflow-child) operation has no such RPC:
+			// terminating the caller workflow does not cascade to it (the framework's Terminate
+			// hook fires only on an execution's root component).
+			{
+				Event:  NexusTerminate,
+				From:   active,
+				To:     NexusTerminated,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive), umpire.RequiresHosting(umpire.Standalone)},
 			},
 		},
 	})
@@ -118,7 +143,7 @@ func (op *NexusOperation) StartedAt() time.Time   { t, _ := op.FSM.EnteredAt(Nex
 
 // SettledAt returns when the operation reached a terminal state, and whether it has.
 func (op *NexusOperation) SettledAt() (time.Time, bool) {
-	for _, s := range []string{NexusSucceeded, NexusFailed, NexusCanceled, NexusTimedOut} {
+	for _, s := range []string{NexusSucceeded, NexusFailed, NexusCanceled, NexusTimedOut, NexusTerminated} {
 		if t, ok := op.FSM.EnteredAt(s); ok {
 			return t, true
 		}
@@ -202,6 +227,8 @@ func nexusEventForStatus(destination string) string {
 		return NexusCancel
 	case "TimedOut", "OPERATION_STATUS_TIMED_OUT":
 		return NexusTimeout
+	case "Terminated", "OPERATION_STATUS_TERMINATED":
+		return NexusTerminate
 	default:
 		return ""
 	}
@@ -236,6 +263,7 @@ const (
 	NexusFailed      NexusState = "failed"
 	NexusCanceled    NexusState = "canceled"
 	NexusTimedOut    NexusState = "timed_out"
+	NexusTerminated  NexusState = "terminated"
 
 	NexusSchedule      NexusEvent = "schedule"
 	NexusAttemptFailed NexusEvent = "attempt_failed"
@@ -244,6 +272,7 @@ const (
 	NexusFail          NexusEvent = "fail"
 	NexusCancel        NexusEvent = "cancel"
 	NexusTimeout       NexusEvent = "timeout"
+	NexusTerminate     NexusEvent = "terminate"
 )
 
 // NexusTransition / the SAA-style total transition function was removed: the

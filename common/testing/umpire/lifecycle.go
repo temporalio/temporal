@@ -149,6 +149,37 @@ func (c Capability) String() string {
 	}
 }
 
+// Hosting is the execution context a lifecycle instance runs in. Unlike a Capability set,
+// it is single-valued: a drive environment realizes either Standalone entities (their own
+// root execution) or Embedded ones (a child component of another execution, e.g. a
+// workflow), not both at once. An edge restricted to one hosting carries a HostedIn trait.
+type Hosting int
+
+const (
+	AnyHosting Hosting = iota // unrestricted (default)
+	Standalone                // the entity is its own root execution
+	Embedded                  // the entity is a child component of another execution
+)
+
+func (h Hosting) String() string {
+	switch h {
+	case Standalone:
+		return "Standalone"
+	case Embedded:
+		return "Embedded"
+	default:
+		return "AnyHosting"
+	}
+}
+
+// HostedIn is the built-in transition trait restricting an edge to a single Hosting (e.g.
+// terminate is standalone-only). Construct it with RequiresHosting; read it back with
+// EdgeHosting or EdgeTrait[HostedIn].
+type HostedIn struct{ Hosting Hosting }
+
+// RequiresHosting restricts an edge to the given hosting.
+func RequiresHosting(h Hosting) HostedIn { return HostedIn{Hosting: h} }
+
 // Requires is the built-in transition trait: the drive-capabilities an edge needs.
 // Construct it with Needs; read it back with EdgeRequires or EdgeTrait[Requires].
 type Requires struct{ Capabilities []Capability }
@@ -490,6 +521,14 @@ func EdgeTrait[T any](l *Lifecycle, from, event string) (T, bool) {
 
 // EdgeRequires returns the drive-capabilities the from→event edge needs (nil if the
 // edge declares none), read from its Needs/Requires trait.
+// EdgeHosting returns the hosting an edge is restricted to, or AnyHosting if unrestricted.
+func (l *Lifecycle) EdgeHosting(from, event string) Hosting {
+	if h, ok := EdgeTrait[HostedIn](l, from, event); ok {
+		return h.Hosting
+	}
+	return AnyHosting
+}
+
 func (l *Lifecycle) EdgeRequires(from, event string) []Capability {
 	if r, ok := EdgeTrait[Requires](l, from, event); ok {
 		return r.Capabilities
