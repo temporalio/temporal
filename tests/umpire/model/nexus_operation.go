@@ -55,17 +55,52 @@ func NewNexusOperation() *NexusOperation {
 		// so that edge needs Faults and is unreachable in an observe-only environment.
 		Transitions: []umpire.Transition{
 			// schedule fires on init and again on each retry out of backing_off.
-			{Event: NexusSchedule, From: []string{NexusUnspecified, NexusBackingOff}, To: NexusScheduled, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
+			{
+				Event:  NexusSchedule,
+				From:   []string{NexusUnspecified, NexusBackingOff},
+				To:     NexusScheduled,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
 			// attempt_failed: a retryable attempt failure sends it into backoff.
-			{Event: NexusAttemptFailed, From: []string{NexusScheduled}, To: NexusBackingOff, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
+			{
+				Event:  NexusAttemptFailed,
+				From:   []string{NexusScheduled},
+				To:     NexusBackingOff,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
 			// start: the async handler acknowledged (sync completion skips this).
-			{Event: NexusStart, From: []string{NexusScheduled, NexusBackingOff}, To: NexusStarted, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
+			{
+				Event:  NexusStart,
+				From:   []string{NexusScheduled, NexusBackingOff},
+				To:     NexusStarted,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
 			// Terminal transitions may fire from any active state;
 			// "started precedes succeeded" is NOT an invariant (sync completes direct).
-			{Event: NexusSucceed, From: active, To: NexusSucceeded, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
-			{Event: NexusFail, From: active, To: NexusFailed, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
-			{Event: NexusCancel, From: active, To: NexusCanceled, Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
-			{Event: NexusTimeout, From: active, To: NexusTimedOut, Traits: umpire.Traits{umpire.Needs(umpire.Faults)}},
+			{
+				Event:  NexusSucceed,
+				From:   active,
+				To:     NexusSucceeded,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
+			{
+				Event:  NexusFail,
+				From:   active,
+				To:     NexusFailed,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
+			{
+				Event:  NexusCancel,
+				From:   active,
+				To:     NexusCanceled,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
+			{
+				Event:  NexusTimeout,
+				From:   active,
+				To:     NexusTimedOut,
+				Traits: umpire.Traits{umpire.Needs(umpire.Faults)},
+			},
 		},
 	})
 	return op
