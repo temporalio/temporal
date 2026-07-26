@@ -128,6 +128,7 @@ type (
 		ClientFactoryProvider      client.FactoryProvider
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		DynamicConfigClient        dynamicconfig.Client
+		DynamicConfigEvaluator     dynamicconfig.Evaluator
 		TLSConfigProvider          encryption.TLSConfigProvider
 		EsClient                   esclient.Client
 		MetricsHandler             metrics.Handler
@@ -240,6 +241,14 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// PROTOTYPE: optional constraint-expression configuration layered over the dynamic
+	// config client. Nil unless expressionFilepath is set, in which case dynamic config
+	// behaves exactly as before.
+	dcEvaluator, err := expressionEvaluatorProvider(so.config, logger, stopChan)
+	if err != nil {
+		return serverOptionsProvider{}, err
+	}
+
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
 		testHooks = *so.testHooks
@@ -338,6 +347,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClientFactoryProvider:      clientFactoryProvider,
 		PersistenceFactoryProvider: persistenceFactoryProvider,
 		DynamicConfigClient:        dcClient,
+		DynamicConfigEvaluator:     dcEvaluator,
 		TLSConfigProvider:          tlsConfigProvider,
 		EsClient:                   esClient,
 		MetricsHandler:             metricHandler,
@@ -387,6 +397,7 @@ type (
 		Logger                          log.Logger
 		NamespaceLogger                 resource.NamespaceLogger
 		DynamicConfigClient             dynamicconfig.Client
+		DynamicConfigEvaluator          dynamicconfig.Evaluator
 		MetricsHandler                  metrics.Handler
 		EventLoggerProvider             otellog.LoggerProvider
 		EsClient                        esclient.Client
@@ -477,6 +488,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() dynamicconfig.Client {
 				return params.DynamicConfigClient
+			},
+			func() dynamicconfig.Evaluator {
+				return params.DynamicConfigEvaluator
 			},
 			func() log.Logger {
 				return params.Logger

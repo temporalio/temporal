@@ -47,7 +47,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	defer cancel()
 
 	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		NewConfig(dynamicconfig.NewNoopCollection()),
 		"nsname",
 	)
@@ -126,7 +126,7 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		childPartition := tq.NormalPartition(1) // child partition /1
 
-		cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+		cfg := newTaskQueueConfig(tq.RootPartition(), NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
 		// Use a generous poll timeout so we can distinguish retry success from timeout.
 		cfg.LongPollExpirationInterval = func() time.Duration { return 10 * time.Second }
 
@@ -217,7 +217,7 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 			defer cancel()
 
 			cfg := newTaskQueueConfig(
-				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 				NewConfig(dynamicconfig.NewNoopCollection()),
 				"nsname",
 			)

@@ -77,7 +77,7 @@ func createUserDataManager(
 		nil,
 		nil,
 		testOpts.dbq.Partition(),
-		newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns),
+		newTaskQueueConfig(testOpts.dbq.Partition(), testOpts.config, ns),
 		logger,
 		mockNamespaceCache,
 	)

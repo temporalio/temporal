@@ -1,0 +1,73 @@
+# PROTOTYPE: constraint-expression dynamic config.
+#
+# Point at this file with:
+#
+#   dynamicConfigClient:
+#     filepath: "config/dynamicconfig/development-cass.yaml"
+#     pollInterval: "10s"
+#     expressionFilepath: "config/dynamicconfig/expressions-demo.yaml"
+#     expressionConstraints:
+#       env: "staging"
+#       zone: "us-west-2"
+#       deployRing: 2
+#
+# Every key here is resolved by evaluating its overrides in order and taking the first
+# match, falling back to defaultValue. A key that is absent falls through to the ordinary
+# dynamic config file, and a key absent from both uses its compiled-in default.
+#
+# Constraint keys available to every expression:
+#
+#   ambient (from expressionConstraints and the process):
+#     env, zone, cluster, service, host, serverVersion, plus any custom key
+#   from the setting's own precedence, when set:
+#     namespace, namespaceID, taskQueueName, taskQueueType, destination,
+#     historyTaskType, shardID, chasmTaskType
+#   ad-hoc, only where a component attaches them (see service/matching/config.go):
+#     taskQueuePartitionID, taskQueueKind, taskQueueIsRoot, taskQueueIsSticky
+#
+# Operators: = != > < and or, with parentheses. Keys are quoted; values are quoted
+# strings or bare numbers. A key that is not present in the constraints never matches.
+
+# --- 1. Boolean logic over deployment dimensions -----------------------------
+# Not expressible today: the file based client can only match a value against an exact
+# Constraints struct, and has no field for env or zone at all.
+matching.getTasksBatchSize:
+  defaultValue: 1000
+  overrides:
+    - matchString: '"env" = "staging" and ("zone" = "us-west-1" or "zone" = "us-west-2")'
+      matchResult: 250
+    - matchString: '"namespace" = "canary"'
+      matchResult: 100
+
+# --- 2. Roll out by deployment ring ------------------------------------------
+# Adding "deployRing" today would mean a new field on Constraints, a new precedence order
+# in cmd/tools/gendynamicconfig, and regenerating setting_gen.go. Here it is one YAML key.
+system.visibilityAllowList:
+  defaultValue: false
+  overrides:
+    - matchString: '"deployRing" > 1'
+      matchResult: true
+
+# --- 3. Target a single service ----------------------------------------------
+history.persistenceMaxQPS:
+  defaultValue: 9000
+  overrides:
+    - matchString: '"service" = "history" and "zone" = "us-west-2"'
+      matchResult: 18000
+
+# --- 4. Layer 2: dimensions of a task queue partition ------------------------
+# Forwarding only happens on non-root partitions, and sticky queues behave differently
+# from normal ones. Neither distinction has a field in Constraints.
+matching.maxWaitForPollerBeforeFwd:
+  defaultValue: 200ms
+  overrides:
+    - matchString: '"taskQueueIsRoot" = "true"'
+      matchResult: 1s
+
+matching.syncMatchWaitDuration:
+  defaultValue: 200ms
+  overrides:
+    - matchString: '"taskQueueIsSticky" = "true" and "namespace" = "canary"'
+      matchResult: 1s
+    - matchString: '"taskQueuePartitionID" > 3'
+      matchResult: 50ms

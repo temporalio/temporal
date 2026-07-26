@@ -30,7 +30,7 @@ func (s *RateLimitManagerSuite) SetupTest() {
 func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairnessKeyRateLimitDefaultIsNil() {
 	mockUserDataManager := &mockUserDataManager{}
 	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-namespace", "test-task-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		tqid.UnsafeTaskQueueFamily("test-namespace", "test-task-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
 		NewConfig(dynamicconfig.NewNoopCollection()),
 		"test-namespace",
 	)
@@ -141,7 +141,7 @@ func newConfigWithFraction(fraction float64) *Config {
 func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 	cfg := newConfigWithFraction(0.5)
 	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -160,7 +160,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
 	cfg := newConfigWithFraction(0.5)
 	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -181,7 +181,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 	const fairnessKeyRPS = float32(100)
 	cfg := newConfigWithFraction(fraction)
 	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		cfg, "test-ns",
 	)
 	udm := &mockUserDataManager{
@@ -218,7 +218,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 	cfg := newConfigWithFraction(0.0)
 	config := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tqid.UnsafeTaskQueueFamily("test-ns", "test-tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)

@@ -229,7 +229,7 @@ func newTestAckMgr(logger log.Logger) *ackManager {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
-	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+	tlCfg := newTaskQueueConfig(prtn, cfg, "test-namespace")
 	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger, metrics.NoopMetricsHandler, false)
 	return newAckManager(db, logger)
 }

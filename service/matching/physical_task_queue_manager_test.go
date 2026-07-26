@@ -79,7 +79,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 
 	s.physicalTaskQueueKey = defaultTqId()
 	prtn := s.physicalTaskQueueKey.Partition()
-	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+	tqConfig := newTaskQueueConfig(prtn, engine.config, nsName)
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
@@ -710,7 +710,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	physicalTaskQueueKey := defaultTqId()
 	prtn := physicalTaskQueueKey.Partition()
-	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+	tqConfig := newTaskQueueConfig(prtn, engine.config, nsName)
 	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 

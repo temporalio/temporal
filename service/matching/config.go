@@ -6,6 +6,7 @@ package matching
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -145,6 +146,10 @@ type (
 		PartitionScaleManagerSettings dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleManagerSettings]
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+		// dc is retained so that per-task-queue config can be resolved against a Collection
+		// view carrying that partition's constraint dimensions. See newTaskQueueConfig.
+		dc *dynamicconfig.Collection
 	}
 
 	forwarderConfig struct {
@@ -393,13 +398,46 @@ func NewConfig(
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 
+		dc: dc,
+
 		RateLimitFractionProvider: defaultTaskQueueRateLimitFractionProvider,
 	}
 }
 
-func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *taskQueueConfig {
+// partitionConstraints returns the constraint dimensions of a task queue partition that the
+// dynamicconfig.Constraints struct has no field for, and so cannot be used to target a
+// setting today: which partition this is, whether it is the root partition (the only one
+// that forwards), and whether it is sticky.
+//
+// PROTOTYPE: consumed only by the expression evaluator. With no expression config loaded
+// these are inert.
+func partitionConstraints(p tqid.Partition) map[string]any {
+	c := map[string]any{
+		"taskQueueKind":     p.Kind().String(),
+		"taskQueueIsRoot":   p.IsRoot(),
+		"taskQueueIsSticky": p.Kind() == enumspb.TASK_QUEUE_KIND_STICKY,
+	}
+	// Only normal partitions are numbered.
+	if np, ok := p.(*tqid.NormalPartition); ok {
+		c["taskQueuePartitionID"] = np.PartitionId()
+	}
+	return c
+}
+
+func newTaskQueueConfig(partition tqid.Partition, config *Config, ns namespace.Name) *taskQueueConfig {
+	tq := partition.TaskQueue()
 	taskQueueName := tq.Name()
 	taskType := tq.TaskType()
+
+	// PROTOTYPE (layer 2): a Collection view that additionally carries this partition's
+	// dimensions into the expression evaluator. Built once per task queue load, not per
+	// request, so it costs nothing on the hot path. It is nil-safe: with no evaluator
+	// configured, reads through pdc are identical to reads through config.dc.
+	//
+	// Only the settings below are resolved through it, as a demonstration; the rest of this
+	// function still uses the closures snapshotted in Config at service start. Extending
+	// this to every setting would mean re-resolving all of Config per task queue.
+	pdc := config.dc.WithConstraints(partitionConstraints(partition))
 	priorityLevels := priorityKey(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 	priorityLevels = max(priorityLevels, min(priorityLevels, maxPriorityLevels), 1)
 	defaultPriorityKey := (priorityLevels + 1) / 2
@@ -419,9 +457,11 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		AutoEnableV2Sub: func(cb func(bool)) (bool, func()) {
 			return config.AutoEnableV2Sub(ns.String(), taskQueueName, taskType, cb)
 		},
+		// PROTOTYPE: resolved through the partition-scoped view, see pdc above.
 		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
+			return dynamicconfig.MatchingGetTasksBatchSize.Get(pdc)(ns.String(), taskQueueName, taskType)
 		},
+
 		GetTasksReloadAt: func() int {
 			return config.GetTasksReloadAt(ns.String(), taskQueueName, taskType)
 		},
@@ -437,8 +477,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(ns.String(), taskQueueName, taskType)
 		},
+		// PROTOTYPE: resolved through the partition-scoped view, see pdc above.
 		SyncMatchWaitDuration: func() time.Duration {
-			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
+			return dynamicconfig.MatchingSyncMatchWaitDuration.Get(pdc)(ns.String(), taskQueueName, taskType)
 		},
 		EphemeralDataUpdateInterval: func() time.Duration {
 			return config.EphemeralDataUpdateInterval(ns.String(), taskQueueName, taskType)
@@ -452,8 +493,11 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		BacklogNegligibleAge: func() time.Duration {
 			return config.BacklogNegligibleAge(ns.String(), taskQueueName, taskType)
 		},
+		// PROTOTYPE: resolved through the partition-scoped view, see pdc above. Forwarding
+		// behaviour differs between the root partition and its children, which is exactly
+		// the kind of distinction dynamicconfig.Constraints cannot express.
 		MaxWaitForPollerBeforeFwd: func() time.Duration {
-			return config.MaxWaitForPollerBeforeFwd(ns.String(), taskQueueName, taskType)
+			return dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(pdc)(ns.String(), taskQueueName, taskType)
 		},
 		QueryPollerUnavailableWindow:       config.QueryPollerUnavailableWindow,
 		WorkerControllerNoPollerHookWindow: config.WorkerControllerNoPollerHookWindow,

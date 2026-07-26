@@ -32,6 +32,17 @@ type (
 	FileBasedClientConfig struct {
 		Filepath     string        `yaml:"filepath"`
 		PollInterval time.Duration `yaml:"pollInterval"`
+
+		// ExpressionFilepath optionally points at a second file holding expression based
+		// configuration, evaluated before Filepath's values. See evaluator.go and
+		// configurator/README.md. Empty (the default) disables it entirely.
+		//
+		// PROTOTYPE: this is an experiment in constraint-expression configuration, not a
+		// supported way to configure the server.
+		ExpressionFilepath string `yaml:"expressionFilepath"`
+		// ExpressionConstraints supplies deployment-scoped constraint dimensions
+		// (environment, zone, and any operator defined keys) that expressions can match on.
+		ExpressionConstraints map[string]any `yaml:"expressionConstraints"`
 	}
 
 	FileBasedClient struct {

@@ -355,7 +355,7 @@ func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabi
 				testReachabilityCacheOpenWFsTTL,
 				testReachabilityCacheClosedWFsTTL,
 			),
-			tqConfig: newTaskQueueConfig(tqf.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW), NewConfig(dynamicconfig.NewNoopCollection()), nsName),
+			tqConfig: newTaskQueueConfig(tqf.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), NewConfig(dynamicconfig.NewNoopCollection()), nsName),
 		},
 		capture: cacheMetricsHandler.StartCapture(),
 	}

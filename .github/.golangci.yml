@@ -171,6 +171,9 @@ linters:
       - ^api
       - ^proto
       - ^.git
+      # Vendored third-party source, kept byte-for-byte apart from import paths.
+      # See common/dynamicconfig/configurator/README.md.
+      - common/dynamicconfig/configurator/
     rules:
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"
