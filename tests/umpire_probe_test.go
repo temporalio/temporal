@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
@@ -19,27 +18,26 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// newNexusProbeEnv builds a CHASM-Nexus-enabled cluster env with the generic
-// chasm.transition telemetry routed to its Monitor (see TestPlanAndDriveNexusOperationCHASM).
-func (s *UmpireTestSuite) newNexusProbeEnv() *NexusTestEnv {
-	t := s.T()
-	os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-	t.Cleanup(func() { os.Unsetenv("TEMPORAL_OTEL_DEBUG") })
+// TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
+// consumes. Set once for the whole test binary — never per-test — so concurrent umpire
+// tests can't unset it out from under one another mid-flight.
+func init() { os.Setenv("TEMPORAL_OTEL_DEBUG", "true") }
 
-	env := newNexusTestEnv(t, true,
+// newNexusProbeEnv builds a fresh CHASM-Nexus-enabled cluster env — its own namespace.
+// The Monitor is already a span processor on the cluster's own TracerProvider, so
+// chasm.transition events reach it on the enclosing request/task's recording span; no
+// process-global tracer wiring is needed (and per-execution global wiring would race
+// across concurrent tests).
+func (s *UmpireTestSuite) newNexusProbeEnv() *NexusTestEnv {
+	return newNexusTestEnv(s.T(), true,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
 	)
-	prevTP := otel.GetTracerProvider()
-	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(env.GetMonitor())))
-	t.Cleanup(func() { otel.SetTracerProvider(prevTP) })
-	return env
 }
 
 // nexusProbeDrive registers a caller workflow that invokes a Nexus operation against
-// a mock endpoint using the given start handler, and returns a probe DriveFunc that
-// starts a fresh caller workflow per scenario.
+// a mock endpoint using the given start handler, and returns a probe DriveFunc.
 func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.Handler) probe.DriveFunc {
 	t := s.T()
 	endpointName := env.createRandomExternalNexusServer(env.Context(), t, onStart)
@@ -60,23 +58,29 @@ func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.H
 	}
 }
 
+// nexusExec is the probe EnvFunc: for each execution it builds a fresh, isolated env
+// (its own namespace) and the drive that runs the Nexus operation with onStart.
+func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler) probe.EnvFunc {
+	return func(_ *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusProbeEnv()
+		return env.TestEnv, s.nexusProbeDrive(env, onStart)
+	}
+}
+
 // TestProbeNexusResilience is the trace-derived resilience demo: plan a route to a
-// state, drive a REAL CHASM Nexus operation to it, learn the underlying gRPC calls
-// from the happy-path trace, break each one, and let the Monitor judge — no
-// hand-written faults and no hand-written outcome assertions (only the fault-free
-// baseline is asserted).
+// state, drive a REAL CHASM Nexus operation to it (each execution in its own
+// namespace), learn the underlying gRPC calls from the happy-path trace, break each
+// one, and let the Monitor judge — no hand-written faults and no hand-written outcome
+// assertions (only the fault-free baseline is asserted).
 func (s *UmpireTestSuite) TestProbeNexusResilience() {
 	t := s.T()
-	env := s.newNexusProbeEnv()
-	drive := s.nexusProbeDrive(env, nexustest.Handler{
-		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
-		},
-	})
-
-	report := probe.Umpire(t, env.TestEnv).
+	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Drive(drive).
+		Execution(s.nexusExec(nexustest.Handler{
+			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+			},
+		})).
 		Timeout(10 * time.Second).
 		MaxFaults(6).
 		FaultEachObservedCall().
@@ -93,16 +97,13 @@ func (s *UmpireTestSuite) TestProbeNexusResilience() {
 // Failure disposition, judged as acceptable degradation, not a bug.
 func (s *UmpireTestSuite) TestProbeNexusDegraded() {
 	t := s.T()
-	env := s.newNexusProbeEnv()
-	drive := s.nexusProbeDrive(env, nexustest.Handler{
-		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
-		},
-	})
-
-	report := probe.Umpire(t, env.TestEnv).
+	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Drive(drive).
+		Execution(s.nexusExec(nexustest.Handler{
+			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
+			},
+		})).
 		Timeout(15 * time.Second).
 		Judge() // baseline only; no faults needed — the handler produces the outcome
 
@@ -115,16 +116,13 @@ func (s *UmpireTestSuite) TestProbeNexusDegraded() {
 // EntityProgress liveness rule flags it — the real bug tier.
 func (s *UmpireTestSuite) TestProbeNexusFlagged() {
 	t := s.T()
-	env := s.newNexusProbeEnv()
-	drive := s.nexusProbeDrive(env, nexustest.Handler{
-		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
-		},
-	})
-
-	report := probe.Umpire(t, env.TestEnv).
+	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Drive(drive).
+		Execution(s.nexusExec(nexustest.Handler{
+			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
+			},
+		})).
 		Timeout(8 * time.Second). // the op never settles; bound the stranded drive
 		Judge()
 

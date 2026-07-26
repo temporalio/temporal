@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -155,10 +154,6 @@ func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkWorkflow() {
 func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 	t := s.T()
 
-	// Enable the generic CHASM transition telemetry (checked per-transition).
-	os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-	t.Cleanup(func() { os.Unsetenv("TEMPORAL_OTEL_DEBUG") })
-
 	env := newNexusTestEnv(t, true,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
@@ -234,9 +229,6 @@ func (s *UmpireTestSuite) TestPlanAndDriveNexusOperationCHASM() {
 // judge loop, arbitrary kitchensink-described workload.
 func (s *UmpireTestSuite) TestPlanAndDriveKitchenSinkNexusOperation() {
 	t := s.T()
-
-	os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
-	t.Cleanup(func() { os.Unsetenv("TEMPORAL_OTEL_DEBUG") })
 
 	env := newNexusTestEnv(t, true,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),

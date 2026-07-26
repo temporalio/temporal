@@ -5,9 +5,10 @@
 // built (Planner, Driver, Monitor, and the gRPC fault seam). See UMPIRE_SPEC.md
 // and UMPIRE_TRACING.md.
 //
-// Step 1 (this file): one *named* gRPC fault per scenario, to prove the loop and
-// the API. Step 2 replaces the named method with the calls *observed* from a
-// happy-path trace (a `FaultEachObservedCall`), so faults stop being hand-picked.
+// Every execution (the baseline and each fault scenario) runs in its own fresh
+// test environment — its own namespace — so scenarios are fully isolated. The
+// faults themselves are learned from a happy-path trace (FaultEachObservedCall),
+// not hand-picked.
 package probe
 
 import (
@@ -36,19 +37,23 @@ const defaultMaxFaults = 12
 // The exclusion is reported, never silent.
 var skipObserved = []string{"Poll", "GetSystemInfo", "GetClusterInfo", "DescribeNamespace"}
 
-// DriveFunc realizes "reach the target state" as real traffic. iter is a
-// per-scenario counter so the caller can mint a unique workflow ID each run.
+// DriveFunc realizes "reach the target state" as real traffic within one execution's
+// environment. iter is the per-scenario counter.
 type DriveFunc func(ctx context.Context, iter int) error
 
+// EnvFunc creates a fresh, isolated test environment (its own namespace) and the
+// DriveFunc that realizes the target within it, for scenario iter. The probe calls
+// it once per execution so every scenario is fully isolated.
+type EnvFunc func(t *testing.T, iter int) (*testcore.TestEnv, DriveFunc)
+
 // Probe is the fluent entry point. Build it with Umpire, describe a target with
-// Reach, say how to realize it with Drive, arm faults, then Judge.
+// Reach, say how to create+drive each execution with Execution, arm faults, then Judge.
 type Probe struct {
 	t         *testing.T
-	env       *testcore.TestEnv
+	mk        EnvFunc
 	entity    string
 	state     string
 	routes    [][]string
-	drive     DriveFunc
 	faults    []string
 	observe   bool
 	maxFaults int
@@ -56,10 +61,10 @@ type Probe struct {
 	timeout   time.Duration
 }
 
-// Umpire starts a probe against a live cluster (via env) whose Monitor already
-// observes and judges every namespace.
-func Umpire(t *testing.T, env *testcore.TestEnv) *Probe {
-	return &Probe{t: t, env: env, timeout: 30 * time.Second, maxFaults: defaultMaxFaults, dropN: 1}
+// Umpire starts a probe. The cluster's Monitor observes and judges every namespace;
+// each execution gets its own namespace via Execution.
+func Umpire(t *testing.T) *Probe {
+	return &Probe{t: t, timeout: 30 * time.Second, maxFaults: defaultMaxFaults, dropN: 1}
 }
 
 // Timeout bounds how long one drive may take before it is deemed not to have
@@ -93,20 +98,20 @@ func (s *Probe) Reach(entity, state string) *Probe {
 	return s
 }
 
-// Drive registers how to realize the target as traffic against the SUT.
-func (s *Probe) Drive(fn DriveFunc) *Probe { s.drive = fn; return s }
+// Execution registers how to create a fresh environment and drive it, called once
+// per scenario so every execution runs in its own namespace.
+func (s *Probe) Execution(mk EnvFunc) *Probe { s.mk = mk; return s }
 
 // InjectDropOn adds one scenario that drops every gRPC call whose full method
 // equals name or ends in "/"+name (so "AddWorkflowTask" matches the matching
-// service's method). Step 1 names these by hand; Step 2 derives them from a trace.
+// service's method). Faults derived from a trace are added by FaultEachObservedCall.
 func (s *Probe) InjectDropOn(name string) *Probe { s.faults = append(s.faults, name); return s }
 
-// Judge runs a baseline (no fault) then one scenario per armed fault, judging each
-// with the Monitor's rulebook, and returns a Report. It leaves the namespace clean
-// so the harness teardown check does not trip on an intentionally provoked violation.
+// Judge runs a baseline (no fault) then one scenario per armed fault — each in its
+// own environment — judging each with the Monitor's rulebook, and returns a Report.
 func (s *Probe) Judge() Report {
-	if s.drive == nil {
-		s.t.Fatal("probe: Drive(...) is required before Judge()")
+	if s.mk == nil {
+		s.t.Fatal("probe: Execution(...) is required before Judge()")
 	}
 	rep := Report{Entity: s.entity, State: s.state, Routes: s.routes}
 
@@ -122,30 +127,29 @@ func (s *Probe) Judge() Report {
 	for i, m := range s.faults {
 		rep.Scenarios = append(rep.Scenarios, s.run(i+1, m, "drop "+shortName(m)))
 	}
-	s.env.GetMonitor().PurgeNamespace(s.env.NamespaceID().String())
 	rep.log(s.t)
 	return rep
 }
 
-// recordAndRun drives the happy path once with a recording callback, returning the
-// sorted set of distinct gRPC methods it made (scoped to this namespace) and the
-// baseline scenario.
+// recordAndRun drives the happy path once in a fresh namespace with a recording
+// callback, returning the sorted set of distinct gRPC methods it made and the baseline.
 func (s *Probe) recordAndRun() ([]string, Scenario) {
-	nsID := s.env.NamespaceID().String()
-	s.env.GetMonitor().PurgeNamespace(nsID)
+	env, drive := s.mk(s.t, 0)
+	nsID := env.NamespaceID().String()
 
 	seen := map[string]struct{}{}
 	var mu sync.Mutex
-	cleanup := s.record(nsID, seen, &mu)
+	cleanup := s.record(env, nsID, seen, &mu)
 
-	// Use a standalone context, not env.Context(): the latter carries the whole
-	// test's deadline, and a stranding drive would otherwise burn it down.
+	// Standalone context, not env.Context(): the latter carries the whole test's
+	// deadline, and a stranding drive would otherwise burn it down.
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 	sc := Scenario{Label: "baseline + observe"}
-	sc.DriveErr = s.drive(ctx, 0)
+	sc.DriveErr = drive(ctx, 0)
 	cleanup()
-	s.judge(nsID, &sc)
+	s.judge(env, nsID, &sc)
+	env.GetMonitor().PurgeNamespace(nsID)
 
 	mu.Lock()
 	methods := make([]string, 0, len(seen))
@@ -178,51 +182,36 @@ func (s *Probe) selectFaults(observed []string) []string {
 	return kept
 }
 
-// record registers a no-op callback that records the full method of every gRPC
-// call in this namespace, reusing the cluster's fault generator as the recorder.
-func (s *Probe) record(nsID string, seen map[string]struct{}, mu *sync.Mutex) func() {
-	gen := s.env.GetTestCluster().Host().GetFaultInjector()
-	if gen == nil {
-		s.t.Fatal("probe: fault injector is nil (build with -tags test_dep)")
-	}
-	nsName := s.env.Namespace().String()
-	return gen.RegisterCallback(func(_ context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
-		if namespaceMatches(req, nsID, nsName) {
-			mu.Lock()
-			seen[fullMethod] = struct{}{}
-			mu.Unlock()
-		}
-		return false, nil, nil // observe only, never fault
-	})
-}
-
 func (s *Probe) run(iter int, method, label string) Scenario {
-	nsID := s.env.NamespaceID().String()
-	s.env.GetMonitor().PurgeNamespace(nsID) // fresh model per scenario
+	env, drive := s.mk(s.t, iter)
+	nsID := env.NamespaceID().String()
 
 	sc := Scenario{Label: label, Method: method}
 	if method != "" {
-		cleanup := s.armDrop(nsID, method, &sc.Fired)
+		cleanup := s.armDrop(env, nsID, method, &sc.Fired)
 		defer cleanup()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
-	sc.DriveErr = s.drive(ctx, iter)
-	s.judge(nsID, &sc)
+	sc.DriveErr = drive(ctx, iter)
+	s.judge(env, nsID, &sc)
+	// Leave this execution's namespace clean so its env teardown check doesn't trip
+	// on an intentionally provoked violation.
+	env.GetMonitor().PurgeNamespace(nsID)
 	return sc
 }
 
 // judge fills a scenario's verdict from the Monitor: any rulebook violation is a
 // bug (Flagged); otherwise the target entity's terminal disposition decides —
 // a Success terminal is Recovered, a Failure terminal is (acceptable) Degraded,
-// and never settling is target-not-reached. All of this is read from the model;
-// nothing about the outcome is hand-written.
-func (s *Probe) judge(nsID string, sc *Scenario) {
-	for _, v := range s.env.GetMonitor().CheckNamespace(context.Background(), nsID) {
+// and never settling is target-not-reached. All read from the model; nothing about
+// the outcome is hand-written.
+func (s *Probe) judge(env *testcore.TestEnv, nsID string, sc *Scenario) {
+	for _, v := range env.GetMonitor().CheckNamespace(context.Background(), nsID) {
 		sc.Violations = append(sc.Violations, v.Rule)
 	}
-	sc.Terminal, sc.Disposition = s.inspectTarget(nsID)
+	sc.Terminal, sc.Disposition = s.inspectTarget(env, nsID)
 	switch {
 	case len(sc.Violations) > 0:
 		sc.Verdict = Flagged
@@ -237,9 +226,9 @@ func (s *Probe) judge(nsID string, sc *Scenario) {
 
 // inspectTarget returns the target entity's terminal state and modeled disposition,
 // or ("", Unset) if no entity of the target type settled in the namespace.
-func (s *Probe) inspectTarget(nsID string) (string, umpire.Disposition) {
+func (s *Probe) inspectTarget(env *testcore.TestEnv, nsID string) (string, umpire.Disposition) {
 	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
-	for _, e := range s.env.GetMonitor().ModelState().QueryEntities(umpire.EntityType(s.entity), 0, &nsRoot) {
+	for _, e := range env.GetMonitor().ModelState().QueryEntities(umpire.EntityType(s.entity), 0, &nsRoot) {
 		lc, ok := e.Entity.(umpire.Lifecycled)
 		if !ok {
 			continue
@@ -254,12 +243,12 @@ func (s *Probe) inspectTarget(nsID string) (string, umpire.Disposition) {
 // armDrop registers a namespace-scoped fault that transiently fails the matching
 // gRPC call (the first dropN occurrences), reusing the cluster's imported
 // RPCFaultGenerator. Returns an unregister func.
-func (s *Probe) armDrop(nsID, name string, fired *bool) func() {
-	gen := s.env.GetTestCluster().Host().GetFaultInjector()
+func (s *Probe) armDrop(env *testcore.TestEnv, nsID, name string, fired *bool) func() {
+	gen := env.GetTestCluster().Host().GetFaultInjector()
 	if gen == nil {
 		s.t.Fatal("probe: fault injector is nil (build with -tags test_dep)")
 	}
-	nsName := s.env.Namespace().String()
+	nsName := env.Namespace().String()
 	var seen atomic.Int32
 	return gen.RegisterCallback(func(_ context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
 		if !methodMatches(fullMethod, name) || !namespaceMatches(req, nsID, nsName) {
@@ -273,6 +262,24 @@ func (s *Probe) armDrop(nsID, name string, fired *bool) func() {
 		}
 		*fired = true
 		return true, nil, serviceerror.NewUnavailable("umpire probe: injected transient drop of " + shortName(name))
+	})
+}
+
+// record registers a no-op callback that records the full method of every gRPC
+// call in this namespace, reusing the cluster's fault generator as the recorder.
+func (s *Probe) record(env *testcore.TestEnv, nsID string, seen map[string]struct{}, mu *sync.Mutex) func() {
+	gen := env.GetTestCluster().Host().GetFaultInjector()
+	if gen == nil {
+		s.t.Fatal("probe: fault injector is nil (build with -tags test_dep)")
+	}
+	nsName := env.Namespace().String()
+	return gen.RegisterCallback(func(_ context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
+		if namespaceMatches(req, nsID, nsName) {
+			mu.Lock()
+			seen[fullMethod] = struct{}{}
+			mu.Unlock()
+		}
+		return false, nil, nil // observe only, never fault
 	})
 }
 
