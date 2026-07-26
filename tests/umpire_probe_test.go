@@ -29,8 +29,8 @@ func init() { os.Setenv("TEMPORAL_OTEL_DEBUG", "true") }
 // chasm.transition events reach it on the enclosing request/task's recording span; no
 // process-global tracer wiring is needed (and per-execution global wiring would race
 // across concurrent tests).
-func (s *UmpireTestSuite) newNexusProbeEnv() *NexusTestEnv {
-	return newNexusTestEnv(s.T(), true,
+func (s *UmpireTestSuite) newNexusProbeEnv(t *testing.T) *NexusTestEnv {
+	return newNexusTestEnv(t, true,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
@@ -63,8 +63,7 @@ func timeoutCaller(endpoint string) any {
 
 // nexusProbeDrive registers the given caller workflow (built from a fresh mock endpoint
 // using onStart) and returns a probe DriveFunc that runs it.
-func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.Handler, build callerFor) probe.DriveFunc {
-	t := s.T()
+func (s *UmpireTestSuite) nexusProbeDrive(t *testing.T, env *NexusTestEnv, onStart nexustest.Handler, build callerFor) probe.DriveFunc {
 	endpointName := env.createRandomExternalNexusServer(env.Context(), t, onStart)
 	callerWorkflow := build(endpointName)
 	env.SdkWorker().RegisterWorkflow(callerWorkflow)
@@ -83,9 +82,9 @@ func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.H
 // nexusExec is the probe EnvFunc: for each execution it builds a fresh, isolated env
 // (its own namespace) and the drive that runs the caller workflow with onStart.
 func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler, build callerFor) probe.EnvFunc {
-	return func(_ *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
-		env := s.newNexusProbeEnv()
-		return env.TestEnv, s.nexusProbeDrive(env, onStart, build)
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusProbeEnv(t)
+		return env.TestEnv, s.nexusProbeDrive(t, env, onStart, build)
 	}
 }
 

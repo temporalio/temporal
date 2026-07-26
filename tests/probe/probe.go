@@ -13,6 +13,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -146,23 +147,27 @@ func (s *Probe) WithCoverage(c *Coverage) *Probe { s.cov = c; return s }
 // recordAndRun drives the happy path once in a fresh namespace with a recording
 // callback, returning the sorted set of distinct gRPC methods it made and the baseline.
 func (s *Probe) recordAndRun() ([]string, Scenario) {
-	env, drive := s.mk(s.t, 0)
-	nsID := env.NamespaceID().String()
-
+	var sc Scenario
 	seen := map[string]struct{}{}
 	var mu sync.Mutex
-	cleanup := s.record(env, nsID, seen, &mu)
 
-	// Standalone context, not env.Context(): the latter carries the whole test's
-	// deadline, and a stranding drive would otherwise burn it down.
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	defer cancel()
-	sc := Scenario{Label: "baseline + observe"}
-	sc.DriveErr = drive(ctx, 0)
-	cleanup()
-	s.judge(env, nsID, &sc)
-	s.stopExecutions(env, nsID)
-	env.GetMonitor().PurgeNamespace(nsID)
+	// Own subtest / own *testing.T, so the env teardown is scoped to this execution (see run).
+	s.t.Run(uniqueSubtestName("baseline-observe"), func(t *testing.T) {
+		env, drive := s.mk(t, 0)
+		nsID := env.NamespaceID().String()
+		cleanup := s.record(env, nsID, seen, &mu)
+
+		// Standalone context, not env.Context(): the latter carries the whole test's
+		// deadline, and a stranding drive would otherwise burn it down.
+		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+		defer cancel()
+		sc = Scenario{Label: "baseline + observe"}
+		sc.DriveErr = drive(ctx, 0)
+		cleanup()
+		s.judge(env, nsID, &sc)
+		s.stopExecutions(env, nsID)
+		env.GetMonitor().PurgeNamespace(nsID)
+	})
 
 	mu.Lock()
 	methods := make([]string, 0, len(seen))
@@ -196,26 +201,31 @@ func (s *Probe) selectFaults(observed []string) []string {
 }
 
 func (s *Probe) run(iter int, method, label string) Scenario {
-	env, drive := s.mk(s.t, iter)
-	nsID := env.NamespaceID().String()
+	var sc Scenario
+	// Each execution runs in its own subtest with its own *testing.T. The env it creates
+	// registers its teardown (CheckAndPurgeMonitor) on that subtest's t, so the check runs
+	// promptly when this execution ends — not stacked behind every other execution at the
+	// end of the whole test (where a still-cycling op would have re-dirtied the namespace).
+	s.t.Run(uniqueSubtestName(label), func(t *testing.T) {
+		env, drive := s.mk(t, iter)
+		nsID := env.NamespaceID().String()
 
-	sc := Scenario{Label: label, Method: method}
-	if method != "" {
-		cleanup := s.armDrop(env, nsID, method, &sc.Fired)
-		defer cleanup()
-	}
+		sc = Scenario{Label: label, Method: method}
+		if method != "" {
+			cleanup := s.armDrop(env, nsID, method, &sc.Fired)
+			defer cleanup()
+		}
 
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	defer cancel()
-	sc.DriveErr = drive(ctx, iter)
-	s.judge(env, nsID, &sc)
-	// Leave this execution's namespace clean so its env teardown check doesn't trip
-	// on an intentionally provoked violation. Stop the drivers first: an operation
-	// deliberately provoked never to settle keeps cycling server-side and would
-	// re-populate the namespace after the purge (all envs share one *testing.T, so
-	// their teardown checks run together at the end, long after this purge).
-	s.stopExecutions(env, nsID)
-	env.GetMonitor().PurgeNamespace(nsID)
+		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+		defer cancel()
+		sc.DriveErr = drive(ctx, iter)
+		s.judge(env, nsID, &sc)
+		// Stop the drivers, then purge, so this subtest's own teardown check stays clean:
+		// an intentionally provoked never-settling op keeps cycling server-side and would
+		// otherwise re-populate the namespace between the purge and the teardown re-check.
+		s.stopExecutions(env, nsID)
+		env.GetMonitor().PurgeNamespace(nsID)
+	})
 	return sc
 }
 
@@ -223,10 +233,10 @@ func (s *Probe) run(iter int, method, label string) Scenario {
 // namespace, so an operation deliberately provoked never to settle (e.g. a
 // retryable-forever Nexus handler) stops cycling server-side. Left running, the live
 // operation keeps emitting chasm.transition telemetry that re-populates the namespace
-// after PurgeNamespace, and the env's deferred teardown liveness check then re-finds it
-// stuck. The workflow ID is read from the entity key (a Workflow entity created only as
-// a parent placeholder for its operations never has its WorkflowID field populated by a
-// fact). Errors are ignored: a workflow that already closed needs no termination.
+// between PurgeNamespace and the subtest's teardown liveness check, which would then
+// re-flag it. The workflow ID is read from the entity key (a Workflow entity created
+// only as a parent placeholder for its operations never has its WorkflowID field
+// populated by a fact). Errors are ignored: a workflow that already closed needs none.
 func (s *Probe) stopExecutions(env *testcore.TestEnv, nsID string) {
 	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -245,6 +255,34 @@ func (s *Probe) stopExecutions(env *testcore.TestEnv, nsID string) {
 func workflowIDFromKey(key string) string {
 	leaf := key[strings.LastIndex(key, "@")+1:]
 	return strings.TrimPrefix(leaf, string(model.WorkflowType)+":")
+}
+
+// execSeq makes subtest names unique across sibling probes under the same parent test,
+// so the testing package never appends a "#NN" collision suffix (whose '#' is invalid in
+// t.Name()-derived identifiers such as Nexus endpoint names).
+var execSeq atomic.Int64
+
+// uniqueSubtestName is a sanitized, globally-unique subtest name for one execution.
+func uniqueSubtestName(label string) string {
+	return fmt.Sprintf("%s-%d", subtestName(label), execSeq.Add(1))
+}
+
+// subtestName reduces a human label to a subtest name safe for t.Name()-derived
+// identifiers (e.g. Nexus endpoint names must be alphanumeric-plus-hyphen): every run of
+// non-alphanumeric characters collapses to a single hyphen.
+func subtestName(label string) string {
+	var b strings.Builder
+	prevHyphen := false
+	for _, r := range label {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevHyphen = false
+		} else if !prevHyphen {
+			b.WriteByte('-')
+			prevHyphen = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // judge fills a scenario's verdict from the Monitor: any rulebook violation is a
