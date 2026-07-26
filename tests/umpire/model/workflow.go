@@ -64,8 +64,16 @@ func NewWorkflow() *Workflow {
 			WorkflowCompleted: {},
 		},
 		Transitions: []umpire.Transition{
-			{Event: WorkflowStart, From: []string{WorkflowCreated}, To: WorkflowStarted},
-			{Event: WorkflowComplete, From: []string{WorkflowStarted}, To: WorkflowCompleted},
+			{
+				Event: WorkflowStart,
+				From:  []string{WorkflowCreated},
+				To:    WorkflowStarted,
+			},
+			{
+				Event: WorkflowComplete,
+				From:  []string{WorkflowStarted},
+				To:    WorkflowCompleted,
+			},
 		},
 	})
 	return wf

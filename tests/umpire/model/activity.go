@@ -57,14 +57,42 @@ func NewActivityLifecycle() *umpire.Lifecycle {
 		},
 		Transitions: []umpire.Transition{
 			// schedule fires initially and again on each retry out of backing_off.
-			{Event: ActivitySchedule, From: []string{ActivityUnspecified, ActivityBackingOff}, To: ActivityScheduled},
-			{Event: ActivityStart, From: []string{ActivityScheduled}, To: ActivityStarted},
-			{Event: ActivityComplete, From: []string{ActivityStarted}, To: ActivityCompleted},
+			{
+				Event: ActivitySchedule,
+				From:  []string{ActivityUnspecified, ActivityBackingOff},
+				To:    ActivityScheduled,
+			},
+			{
+				Event: ActivityStart,
+				From:  []string{ActivityScheduled},
+				To:    ActivityStarted,
+			},
+			{
+				Event: ActivityComplete,
+				From:  []string{ActivityStarted},
+				To:    ActivityCompleted,
+			},
 			// attempt_failed: a retryable failure sends a started attempt into backoff.
-			{Event: ActivityAttemptFailed, From: []string{ActivityStarted}, To: ActivityBackingOff},
-			{Event: ActivityFail, From: []string{ActivityScheduled, ActivityStarted}, To: ActivityFailed},
-			{Event: ActivityTimeout, From: []string{ActivityScheduled, ActivityStarted, ActivityBackingOff}, To: ActivityTimedOut},
-			{Event: ActivityCancel, From: []string{ActivityScheduled, ActivityStarted, ActivityBackingOff}, To: ActivityCanceled},
+			{
+				Event: ActivityAttemptFailed,
+				From:  []string{ActivityStarted},
+				To:    ActivityBackingOff,
+			},
+			{
+				Event: ActivityFail,
+				From:  []string{ActivityScheduled, ActivityStarted},
+				To:    ActivityFailed,
+			},
+			{
+				Event: ActivityTimeout,
+				From:  []string{ActivityScheduled, ActivityStarted, ActivityBackingOff},
+				To:    ActivityTimedOut,
+			},
+			{
+				Event: ActivityCancel,
+				From:  []string{ActivityScheduled, ActivityStarted, ActivityBackingOff},
+				To:    ActivityCanceled,
+			},
 		},
 	})
 }

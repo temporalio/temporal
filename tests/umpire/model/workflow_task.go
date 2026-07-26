@@ -43,15 +43,35 @@ func NewWorkflowTask() *WorkflowTask {
 	wt.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: TaskCreated,
 		Transitions: []umpire.Transition{
-			{Event: TaskAdd, From: []string{TaskCreated}, To: TaskAdded},
+			{
+				Event: TaskAdd,
+				From:  []string{TaskCreated},
+				To:    TaskAdded,
+			},
 			// poll: task delivered to worker — valid from either TaskAdded (sync match)
 			// or TaskStored (async match after DB persistence).
-			{Event: TaskPoll, From: []string{TaskAdded, TaskStored}, To: TaskPolled},
-			{Event: TaskStore, From: []string{TaskAdded}, To: TaskStored},
+			{
+				Event: TaskPoll,
+				From:  []string{TaskAdded, TaskStored},
+				To:    TaskPolled,
+			},
+			{
+				Event: TaskStore,
+				From:  []string{TaskAdded},
+				To:    TaskStored,
+			},
 			// discard: task expired or invalidated in matching before being polled.
-			{Event: TaskDiscard, From: []string{TaskAdded, TaskStored}, To: TaskDiscarded},
+			{
+				Event: TaskDiscard,
+				From:  []string{TaskAdded, TaskStored},
+				To:    TaskDiscarded,
+			},
 			// terminate: parent workflow reached a terminal state; task is no longer needed.
-			{Event: TaskTerminate, From: []string{TaskCreated, TaskAdded, TaskStored}, To: TaskTerminated},
+			{
+				Event: TaskTerminate,
+				From:  []string{TaskCreated, TaskAdded, TaskStored},
+				To:    TaskTerminated,
+			},
 		},
 		// Task progress (added/stored → polled) is checked by WorkflowTaskStarvation,
 		// which excludes speculative tasks; not modelled as a generic must-progress here.
