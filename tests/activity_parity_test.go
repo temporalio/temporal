@@ -66,12 +66,12 @@ func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
 			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t).Status,
+				newWFADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
 				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t).Status,
+				newSAADriver(t, env, cfg).driveTrace(t, trace).terminalStatus(t),
 				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType)
 		})
 	}

@@ -4,7 +4,6 @@ package tests
 // sequence of events (a 'trace'), and observes it via DescribeWorkflowExecution.
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -38,13 +37,6 @@ type activityInfoProjection struct {
 	NextAttemptScheduleSet bool
 }
 
-// activityTerminalProjection is the terminal status plus the failure discriminant a user sees: the
-// application failure Type for FAILED, the TimeoutType string for TIMED_OUT, empty otherwise.
-type activityTerminalProjection struct {
-	Status      enumspb.ActivityExecutionStatus
-	FailureType string
-}
-
 func projectWFA(p *workflowpb.PendingActivityInfo) activityInfoProjection {
 	return activityInfoProjection{
 		State:                  p.GetState(),
@@ -60,8 +52,6 @@ type wfaDriver struct {
 	env *testcore.TestEnv
 	ctx context.Context
 	cfg activityConfig
-
-	positivePollTimeout time.Duration // bounds a "must dispatch" poll; 0 => activityDriverPositivePollTimeout
 }
 
 // newWFADriver builds a driver with the test-scoped context. cfg.StartDelay is ignored: a
@@ -151,14 +141,12 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 
 // driveEvent advances the activity by one event.
 func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
-	d := a.d
 	switch {
 	case e.Type == model.PollType:
 		// A poll captures the dispatched task token. Every Poll a trace drives is a positive poll — the
 		// activity is meant to be dispatchable — so finding no task is a failure, not a step to skip.
-		timeout := cmp.Or(d.positivePollTimeout, activityDriverPositivePollTimeout)
-		resp := a.pollForTask(t, timeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, timeout)
+		resp := a.pollForTask(t, activityDriverPositivePollTimeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverPositivePollTimeout)
 		a.token = resp.GetTaskToken()
 	case isWallClockEvent(e.Type):
 		// A wall-clock event is realized by waiting out its configured window.
@@ -270,28 +258,24 @@ func (d *wfaDriver) start(t *testing.T) *wfaHandle {
 	return &wfaHandle{d: d, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, activityTQ: actTQ}
 }
 
-// terminal waits for the activity to reach a terminal state and reports it. A workflow activity's
-// terminal outcome is not in PendingActivities, so it is read from the workflow-result error's cause.
-func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
+// terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's
+// terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
+func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
 	err := a.run.Get(a.d.ctx, nil)
 	if err == nil {
-		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
+		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
 	}
 	// A canceled activity surfaces as a bare CanceledError, not wrapped in an ActivityError.
 	var canceledErr *temporal.CanceledError
 	if errors.As(err, &canceledErr) {
-		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
+		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
 	}
 	var actErr *temporal.ActivityError
 	require.ErrorAs(t, err, &actErr)
-	switch cause := actErr.Unwrap().(type) {
-	case *temporal.ApplicationError:
-		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, FailureType: cause.Type()}
-	case *temporal.TimeoutError:
-		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: cause.TimeoutType().String()}
-	default:
-		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED}
+	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
+		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
 	}
+	return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
 }
 
 func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
