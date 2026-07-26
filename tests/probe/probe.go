@@ -56,12 +56,22 @@ type Probe struct {
 	state     string
 	routes    [][]string
 	faults    []string
+	holds     []holdFault
 	observe   bool
 	maxFaults int
 	dropN     int
 	timeout   time.Duration
 	cov       *Coverage
 }
+
+// holdFault delays a matching call by d before letting it through.
+type holdFault struct {
+	method string
+	d      time.Duration
+}
+
+// fault arms a namespace-scoped fault for one execution and returns an unregister func.
+type fault func(env *testcore.TestEnv, nsID string, fired *bool) func()
 
 // Umpire starts a probe. The cluster's Monitor observes and judges every namespace;
 // each execution gets its own namespace via Execution.
@@ -109,6 +119,16 @@ func (s *Probe) Execution(mk EnvFunc) *Probe { s.mk = mk; return s }
 // service's method). Faults derived from a trace are added by FaultEachObservedCall.
 func (s *Probe) InjectDropOn(name string) *Probe { s.faults = append(s.faults, name); return s }
 
+// InjectHoldOn adds one scenario that delays (holds) the first matching call by d before
+// letting it through — exercising latency- and ordering-sensitive paths (e.g. a slow
+// dependency, or making one call land after another). Method matching is the same as
+// InjectDropOn; the fault seam is shared, so it also matches the Nexus HTTP invocation
+// (method "HTTP <METHOD> <path>"), not just gRPC.
+func (s *Probe) InjectHoldOn(name string, d time.Duration) *Probe {
+	s.holds = append(s.holds, holdFault{method: name, d: d})
+	return s
+}
+
 // Judge runs a baseline (no fault) then one scenario per armed fault — each in its
 // own environment — judging each with the Monitor's rulebook, and returns a Report.
 func (s *Probe) Judge() Report {
@@ -123,11 +143,25 @@ func (s *Probe) Judge() Report {
 		rep.Observed, rep.Baseline = s.recordAndRun()
 		s.faults = append(s.selectFaults(rep.Observed), s.faults...)
 	} else {
-		rep.Baseline = s.run(0, "", "baseline (no fault)")
+		rep.Baseline = s.run(0, "", "baseline (no fault)", nil)
 	}
 
-	for i, m := range s.faults {
-		rep.Scenarios = append(rep.Scenarios, s.run(i+1, m, "drop "+shortName(m)))
+	iter := 1
+	for _, m := range s.faults {
+		method := m
+		rep.Scenarios = append(rep.Scenarios, s.run(iter, method, "drop "+shortName(method),
+			func(env *testcore.TestEnv, nsID string, fired *bool) func() {
+				return s.armDrop(env, nsID, method, fired)
+			}))
+		iter++
+	}
+	for _, h := range s.holds {
+		hold := h
+		rep.Scenarios = append(rep.Scenarios, s.run(iter, hold.method, "hold "+shortName(hold.method),
+			func(env *testcore.TestEnv, nsID string, fired *bool) func() {
+				return s.armHold(env, nsID, hold.method, hold.d, fired)
+			}))
+		iter++
 	}
 	if lc, ok := planner.DefaultModels().Lifecycle(s.entity); ok {
 		rep.Coverage = s.cov.Report(s.entity, lc.Edges())
@@ -200,7 +234,7 @@ func (s *Probe) selectFaults(observed []string) []string {
 	return kept
 }
 
-func (s *Probe) run(iter int, method, label string) Scenario {
+func (s *Probe) run(iter int, method, label string, arm fault) Scenario {
 	var sc Scenario
 	// Each execution runs in its own subtest with its own *testing.T. The env it creates
 	// registers its teardown (CheckAndPurgeMonitor) on that subtest's t, so the check runs
@@ -211,8 +245,8 @@ func (s *Probe) run(iter int, method, label string) Scenario {
 		nsID := env.NamespaceID().String()
 
 		sc = Scenario{Label: label, Method: method}
-		if method != "" {
-			cleanup := s.armDrop(env, nsID, method, &sc.Fired)
+		if arm != nil {
+			cleanup := arm(env, nsID, &sc.Fired)
 			defer cleanup()
 		}
 
@@ -350,6 +384,31 @@ func (s *Probe) armDrop(env *testcore.TestEnv, nsID, name string, fired *bool) f
 		}
 		*fired = true
 		return true, nil, serviceerror.NewUnavailable("umpire probe: injected transient drop of " + shortName(name))
+	})
+}
+
+// armHold registers a namespace-scoped fault that holds (blocks) the first dropN matching
+// calls for d before letting them through, exercising latency- and ordering-sensitive
+// paths. It reuses the same RPCFaultGenerator seam as armDrop, so it matches Nexus HTTP
+// invocations as well as gRPC. The hold happens on the intercepted call's own goroutine
+// (declining the match after sleeping), so the call proceeds normally once released.
+func (s *Probe) armHold(env *testcore.TestEnv, nsID, name string, d time.Duration, fired *bool) func() {
+	gen := env.GetTestCluster().Host().GetFaultInjector()
+	if gen == nil {
+		s.t.Fatal("probe: fault injector is nil (build with -tags test_dep)")
+	}
+	nsName := env.Namespace().String()
+	var seen atomic.Int32
+	return gen.RegisterCallback(func(_ context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
+		if !methodMatches(fullMethod, name) || !namespaceMatches(req, nsID, nsName) {
+			return false, nil, nil
+		}
+		if int(seen.Add(1)) > s.dropN {
+			return false, nil, nil
+		}
+		*fired = true
+		time.Sleep(d)          //nolint:forbidigo // holding the call for d is the point of this fault
+		return false, nil, nil // released: let the call proceed
 	})
 }
 

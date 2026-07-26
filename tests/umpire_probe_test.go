@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,6 +166,47 @@ func (s *UmpireTestSuite) TestProbeNexusFlagged() {
 
 	require.Equal(t, probe.Flagged, report.Baseline.Verdict, "an operation that never settles must be flagged")
 	require.NotEmpty(t, report.Baseline.Violations, "EntityProgress should flag the stuck operation")
+}
+
+// TestProbeNexusHTTPFaultSeam proves the Nexus operation's outbound HTTP call to its
+// handler now flows through the same fault seam as gRPC: it appears in the observed
+// footprint (method "HTTP <METHOD> <path>"), so drop/hold faults can target it. It also
+// exercises the hold fault against that HTTP call and confirms the hold fired.
+func (s *UmpireTestSuite) TestProbeNexusHTTPFaultSeam() {
+	t := s.T()
+	syncOK := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+	}}
+
+	// MaxFaults(1) keeps it fast (one fault scenario) while still capturing the full
+	// observed footprint, which now includes the outbound Nexus HTTP invocation.
+	report := probe.Umpire(t).
+		Reach("NexusOperation", "succeeded").
+		Execution(s.nexusExec(syncOK, syncCaller)).
+		Timeout(10 * time.Second).
+		MaxFaults(1).
+		FaultEachObservedCall().
+		Judge()
+
+	var httpCalls []string
+	for _, m := range report.Observed {
+		if strings.HasPrefix(m, "HTTP ") {
+			httpCalls = append(httpCalls, m)
+		}
+	}
+	require.NotEmpty(t, httpCalls, "the Nexus HTTP invocation should be observed via the shared fault seam; observed=%v", report.Observed)
+
+	// Hold that exact HTTP call for 500ms and confirm the hold fired — the same seam and
+	// matching drives both gRPC and HTTP faults.
+	held := probe.Umpire(t).
+		Reach("NexusOperation", "succeeded").
+		Execution(s.nexusExec(syncOK, syncCaller)).
+		Timeout(10*time.Second).
+		InjectHoldOn(httpCalls[0], 500*time.Millisecond).
+		Judge()
+
+	require.Len(t, held.Scenarios, 1)
+	require.True(t, held.Scenarios[0].Fired, "the hold fault should have matched and held the Nexus HTTP call")
 }
 
 // TestProbeNexusExploration drives the NexusOperation through several distinct
