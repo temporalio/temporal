@@ -159,20 +159,16 @@ func (s *UmpireTestSuite) TestProbeNexusFaultAction() {
 	require.Equal(t, "succeeded", report.Baseline.Terminal)
 }
 
-// TestProbeNexusResilience is the trace-derived resilience demo: plan a route to a
-// state, drive a REAL CHASM Nexus operation to it (each execution in its own
-// namespace), learn the underlying gRPC calls from the happy-path trace, break each
-// one, and let the Monitor judge — no hand-written faults and no hand-written outcome
-// assertions (only the fault-free baseline is asserted).
+// TestProbeNexusResilience is the trace-derived resilience demo, now over a generated plan
+// (actions model): drive the sync-success completion via the runtime, learn the underlying
+// gRPC/HTTP calls from the happy-path trace, break each one, and let the Monitor judge — no
+// hand-written faults and no hand-written outcome assertions (only the fault-free baseline is
+// asserted). This is the learned-footprint fault exploration on an actions plan (PLAN.md Phase 5).
 func (s *UmpireTestSuite) TestProbeNexusResilience() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusExec(nexustest.Handler{
-			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
-			},
-		}, syncCaller)).
+		Execution(s.nexusGenExecPlan(action.EmbeddedSyncSuccess())).
 		Timeout(10 * time.Second).
 		MaxFaults(6).
 		FaultEachObservedCall().
