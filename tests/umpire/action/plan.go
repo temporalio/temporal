@@ -96,19 +96,24 @@ func PlanEdge(from, event string, hosting umpire.Hosting) ([]umpire.Action, erro
 	return seq, nil
 }
 
-// AutoCoverPlans computes the set of plans that together traverse every model edge the planner
-// can reach — the coverage goal becomes a computed list, not a hand-written one. It drives one
-// plan per *settling* edge (an edge landing on a terminal state); the path edges to reach it
-// are covered along the way. An edge is driven under the hosting its HostedIn trait requires
-// (Standalone for terminate), else Embedded. Two server-timer edges have no atomic action and
-// are skipped (PlanEdge returns an error): the backing_off→scheduled retry reschedule and
-// started→timed_out — they still need bespoke drives.
-func AutoCoverPlans() [][]umpire.Action {
+// settlingEdge is a model edge that lands on a terminal state, tagged with the hosting it must be
+// driven under (Standalone for terminate, else Embedded). It is the unit AutoCoverPlans expands
+// into plans and RandomPlan samples from.
+type settlingEdge struct {
+	from, event string
+	hosting     umpire.Hosting
+}
+
+// settlingEdges lists every *drivable* settling edge of the NexusOperation model — an edge landing
+// on a terminal state that PlanEdge can realize. Two server-timer edges have no atomic action and
+// are dropped here (PlanEdge returns an error): the backing_off→scheduled retry reschedule (not
+// terminal, so already excluded) and started→timed_out — they still need bespoke drives.
+func settlingEdges() []settlingEdge {
 	lc, ok := planner.DefaultModels().Lifecycle(string(model.NexusOperationType))
 	if !ok {
 		return nil
 	}
-	var plans [][]umpire.Action
+	var edges []settlingEdge
 	for _, e := range lc.Edges() {
 		if !lc.Terminal(e.To) {
 			continue // drive only settling edges; their prefixes cover the rest
@@ -117,7 +122,25 @@ func AutoCoverPlans() [][]umpire.Action {
 		if lc.EdgeHosting(e.From, e.Event) == umpire.Standalone {
 			hosting = umpire.Standalone
 		}
-		if seq, err := PlanEdge(e.From, e.Event, hosting); err == nil {
+		if _, err := PlanEdge(e.From, e.Event, hosting); err != nil {
+			continue // no atomic action (e.g. started→timed_out); needs a bespoke drive
+		}
+		edges = append(edges, settlingEdge{from: e.From, event: e.Event, hosting: hosting})
+	}
+	return edges
+}
+
+// AutoCoverPlans computes the set of plans that together traverse every model edge the planner
+// can reach — the coverage goal becomes a computed list, not a hand-written one. It drives one
+// plan per *settling* edge (an edge landing on a terminal state); the path edges to reach it
+// are covered along the way. An edge is driven under the hosting its HostedIn trait requires
+// (Standalone for terminate), else Embedded. Two server-timer edges have no atomic action and
+// are skipped (PlanEdge returns an error): the backing_off→scheduled retry reschedule and
+// started→timed_out — they still need bespoke drives.
+func AutoCoverPlans() [][]umpire.Action {
+	var plans [][]umpire.Action
+	for _, e := range settlingEdges() {
+		if seq, err := PlanEdge(e.from, e.event, e.hosting); err == nil {
 			plans = append(plans, seq)
 		}
 	}
