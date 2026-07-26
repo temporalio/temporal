@@ -36,10 +36,5 @@ func isNil(value any) bool {
 	}
 
 	reflectedValue := reflect.ValueOf(value)
-	switch reflectedValue.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflectedValue.IsNil()
-	default:
-		return false
-	}
+	return reflectedValue.Kind() == reflect.Pointer && reflectedValue.IsNil()
 }

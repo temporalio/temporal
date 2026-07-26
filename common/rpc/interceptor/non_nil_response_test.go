@@ -22,38 +22,25 @@ func TestNewNonNilResponseInterceptor(t *testing.T) {
 	handlerErr := errors.New("handler failed")
 	tests := []struct {
 		name          string
-		handler       grpc.UnaryHandler
+		response      any
+		err           error
 		expectFailure bool
-		expectedResp  any
-		expectedErr   error
 	}{
 		{
-			name: "non-nil response",
-			handler: func(context.Context, any) (any, error) {
-				return handlerResp, nil
-			},
-			expectedResp: handlerResp,
+			name:     "non-nil response",
+			response: handlerResp,
 		},
 		{
 			name: "nil response with error",
-			handler: func(context.Context, any) (any, error) {
-				return nil, handlerErr
-			},
-			expectedErr: handlerErr,
+			err:  handlerErr,
 		},
 		{
-			name: "nil response",
-			handler: func(context.Context, any) (any, error) {
-				return nil, nil
-			},
+			name:          "nil response",
 			expectFailure: true,
 		},
 		{
-			name: "typed nil response",
-			handler: func(context.Context, any) (any, error) {
-				var resp *emptypb.Empty
-				return resp, nil
-			},
+			name:          "typed nil response",
+			response:      (*emptypb.Empty)(nil),
 			expectFailure: true,
 		},
 	}
@@ -70,24 +57,17 @@ func TestNewNonNilResponseInterceptor(t *testing.T) {
 			}
 
 			interceptor := NewNonNilResponseInterceptor(logger)
-			require.NotNil(t, interceptor)
 
 			resp, err := interceptor(
 				t.Context(),
 				nil,
 				&grpc.UnaryServerInfo{FullMethod: fullMethod},
-				test.handler,
+				func(context.Context, any) (any, error) {
+					return test.response, test.err
+				},
 			)
-			if test.expectFailure || test.expectedResp == nil {
-				require.Nil(t, resp)
-			} else {
-				require.Same(t, test.expectedResp, resp)
-			}
-			if test.expectedErr == nil {
-				require.NoError(t, err)
-			} else {
-				require.Equal(t, test.expectedErr, err)
-			}
+			require.Equal(t, test.response, resp)
+			require.Equal(t, test.err, err)
 		})
 	}
 }
