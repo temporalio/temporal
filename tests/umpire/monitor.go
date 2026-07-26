@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -27,6 +28,13 @@ type Monitor struct {
 	decoder  *model.FactDecoder
 	rulebook *umpirefw.RuleRegistry
 	factLog  *umpirefw.FactLog
+
+	// nsIDByName resolves a namespace name (all a frontend request carries) to the id the model
+	// scopes entities by. A synchronous rejection produces no telemetry, so its fact must be
+	// namespace-id-rooted from the request alone; the driver seeds this map (it knows both) before
+	// driving. See SetNamespaceID and UMPIRE_ERR.md.
+	nsMu       sync.RWMutex
+	nsIDByName map[string]string
 }
 
 // NewMonitor creates a new Monitor with all default rules registered.
@@ -68,14 +76,32 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	)
 
 	u := &Monitor{
-		logger:   logger,
-		registry: registry,
-		decoder:  decoder,
-		rulebook: rb,
-		factLog:  el,
+		logger:     logger,
+		registry:   registry,
+		decoder:    decoder,
+		rulebook:   rb,
+		factLog:    el,
+		nsIDByName: map[string]string{},
 	}
 
 	return u, nil
+}
+
+// SetNamespaceID records a namespace name→id mapping so a synchronous rejection (which carries only
+// the name) can be routed into the id-scoped model. The driver seeds it before driving; idempotent.
+func (u *Monitor) SetNamespaceID(name, id string) {
+	if name == "" || id == "" {
+		return
+	}
+	u.nsMu.Lock()
+	defer u.nsMu.Unlock()
+	u.nsIDByName[name] = id
+}
+
+func (u *Monitor) resolveNamespaceID(name string) string {
+	u.nsMu.RLock()
+	defer u.nsMu.RUnlock()
+	return u.nsIDByName[name]
 }
 
 var _ sdktrace.SpanProcessor = (*Monitor)(nil)
@@ -121,6 +147,28 @@ func (u *Monitor) RecordResponse(ctx context.Context, req, resp any) {
 	u.factLog.Add(ev)
 	if err := u.registry.RouteFacts(ctx, []umpirefw.Fact{ev}); err != nil {
 		u.logger.Warn("monitor: failed to route response event", tag.Error(err))
+	}
+}
+
+// RecordRejection converts a rejected gRPC request (request + error) to a fact and routes it. The
+// request carries only the namespace name, so the id the model scopes by is resolved from the map
+// the driver seeded (SetNamespaceID); an unknown namespace or an unmodeled rejection is dropped.
+func (u *Monitor) RecordRejection(ctx context.Context, req any, err error) {
+	named, ok := req.(interface{ GetNamespace() string })
+	if !ok {
+		return
+	}
+	nsID := u.resolveNamespaceID(named.GetNamespace())
+	if nsID == "" {
+		return
+	}
+	ev := u.decoder.ImportRejection(req, err, nsID)
+	if ev == nil {
+		return
+	}
+	u.factLog.Add(ev)
+	if routeErr := u.registry.RouteFacts(ctx, []umpirefw.Fact{ev}); routeErr != nil {
+		u.logger.Warn("monitor: failed to route rejection event", tag.Error(routeErr))
 	}
 }
 

@@ -7,15 +7,11 @@ package action
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/workflow"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -25,7 +21,6 @@ import (
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -62,8 +57,11 @@ func (c *Ctx) Cleanup() {
 	c.cleanups = nil
 }
 
-// NewCtx builds a RealizeContext for one drive.
+// NewCtx builds a RealizeContext for one drive. It seeds the Monitor's namespace name→id map: a
+// synchronous rejection carries only the name, but the driver knows both, so this lets the observer
+// route the rejection fact into the id-scoped model (see UMPIRE_ERR.md, Monitor.SetNamespaceID).
 func NewCtx(env *testcore.TestEnv, endpoint string, h *ResponsePolicy, iter int) *Ctx {
+	env.GetMonitor().SetNamespaceID(env.Namespace().String(), env.NamespaceID().String())
 	return &Ctx{Env: env, Endpoint: endpoint, Handler: h, Iter: iter, bind: map[string]string{}, rejects: map[string]error{}}
 }
 
@@ -218,57 +216,6 @@ func (rpcStartStandalone) Fire(ctx context.Context, rc umpire.RealizeContext, a 
 	return nil
 }
 
-// rpcStartInvalid realizes an invalid StartNexusOperationExecution: a well-formed request naming a
-// non-existent endpoint. The frontend rejects it (NotFound) during endpoint resolution, before any
-// operation is created, so it returns the RPC error and binds nothing; Drive captures the error as
-// the expected rejection (see Action.Reject).
-type rpcStartInvalid struct{}
-
-func (rpcStartInvalid) Install(umpire.RealizeContext, umpire.Action) error { return nil }
-
-func (rpcStartInvalid) Fire(ctx context.Context, rc umpire.RealizeContext, _ umpire.Action) error {
-	c := rc.(*Ctx)
-	opID := fmt.Sprintf("umpire-action-invalid-op-%d", c.Iter)
-	_, err := c.Env.FrontendClient().StartNexusOperationExecution(ctx, &workflowservice.StartNexusOperationExecutionRequest{
-		Namespace:              c.Env.Namespace().String(),
-		OperationId:            opID,
-		Endpoint:               "umpire-nonexistent-endpoint",
-		Service:                "service",
-		Operation:              "operation",
-		RequestId:              opID,
-		ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
-	})
-	return err
-}
-
-// cmdSchedule realizes cmd:ScheduleNexusOperation via a caller workflow that issues
-// ExecuteOperation — embedded scheduling (the operation is a child of the workflow). Non-
-// blocking: it starts the workflow (which then blocks on the operation) and binds the operation
-// under its caller workflow id — the id its chasm.transition telemetry carries — so later
-// actions (handler, callback) drive its outcome. This is the worker-behavior layer: the SDK
-// worker turns "produce a ScheduleNexusOperation command" into a real WFT command.
-type cmdSchedule struct{}
-
-func (cmdSchedule) Install(umpire.RealizeContext, umpire.Action) error { return nil }
-func (cmdSchedule) Fire(ctx context.Context, rc umpire.RealizeContext, a umpire.Action) error {
-	c := rc.(*Ctx)
-	wfID := fmt.Sprintf("umpire-action-caller-%d", c.Iter)
-	endpoint := c.Endpoint
-	caller := func(wctx workflow.Context) error {
-		return workflow.NewNexusClient(endpoint, "service").
-			ExecuteOperation(wctx, "operation", "input", workflow.NexusOperationOptions{}).Get(wctx, nil)
-	}
-	c.Env.SdkWorker().RegisterWorkflow(caller)
-	if _, err := c.Env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        wfID,
-		TaskQueue: c.Env.WorkerTaskQueue(),
-	}, caller); err != nil {
-		return err
-	}
-	bindFresh(rc, a, wfID)
-	return nil
-}
-
 // handlerBlock holds the start attempt so the operation stays scheduled (no effect of its
 // own; a companion action, e.g. terminate, acts while it is held). Reactive.
 type handlerBlock struct{}
@@ -395,15 +342,6 @@ var (
 		Faultable: []string{"StartNexusOperationExecution"},
 		Realize:   rpcStartStandalone{},
 	}
-	// StartUnknownEndpoint is an invalid StartNexusOperationExecution: a well-formed request naming
-	// a non-existent endpoint. The frontend rejects it (a client error, grounded as NotFound) and
-	// no operation is created — the E1 rejection round-trip (UMPIRE_ERR.md). Its empty Reject
-	// asserts only the generic contract, so nothing is authored per field.
-	StartUnknownEndpoint = umpire.Action{
-		Name: "StartNexusOperationExecution(unknown-endpoint)", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
-		Reject:  &umpire.Reject{},
-		Realize: rpcStartInvalid{},
-	}
 	HandlerAsyncAck = umpire.Action{
 		Name: "handler:AsyncAck", Kind: umpire.HandlerResponse,
 		Requires: []umpire.Pre{{Ref: nexusOp("op", false), State: model.NexusScheduled}},
@@ -412,11 +350,12 @@ var (
 	}
 	CallbackSucceed = CompleteWith(nil, model.NexusSucceed)
 
-	// ScheduleEmbedded creates the operation inside a caller workflow (embedded hosting).
+	// ScheduleEmbedded creates the operation inside a caller workflow (embedded hosting),
+	// realized by the real kitchensink interpreter (see kitchensink.go).
 	ScheduleEmbedded = umpire.Action{
 		Name: "cmd:ScheduleNexusOperation", Kind: umpire.WorkerCommand, Hosting: umpire.Embedded,
 		Effects: []umpire.Effect{{Ref: nexusOp("op", true), Event: model.NexusSchedule}},
-		Realize: cmdSchedule{},
+		Realize: kitchensink{},
 	}
 )
 
@@ -539,68 +478,4 @@ func StandaloneTerminate(state string) []umpire.Action {
 		return []umpire.Action{StartStandalone, HandlerBlock, TerminateFrom(state)}
 	}
 	return mustPlan(state, model.NexusTerminate, umpire.Standalone)
-}
-
-// ---- Error / divergence model (UMPIRE_ERR.md) ----
-
-// clientErrorCodes are the gRPC status classes a well-formed rejection may carry: the request was
-// refused for its content or the target's state, not because the server failed. A rejection
-// outside this set (Internal/Unknown/Unavailable/DataLoss) — or no rejection at all — violates the
-// generic rejection contract (UMPIRE_ERR.md §0 pillar 2).
-var clientErrorCodes = map[codes.Code]bool{
-	codes.InvalidArgument:    true,
-	codes.NotFound:           true,
-	codes.AlreadyExists:      true,
-	codes.FailedPrecondition: true,
-	codes.PermissionDenied:   true,
-	codes.Unauthenticated:    true,
-	codes.OutOfRange:         true,
-}
-
-// RejectionDrift is the domain-side half of the E1 reject seam: the transport-aware judgment the
-// generic Drive defers to us. For every action that declared a Reject, it checks the captured
-// outcome against the generic contract — the request must have been rejected (non-nil error) with
-// a client-error gRPC class — and, when the Reject pins a Code/Message, against those. It returns
-// one human-readable drift string per violation; empty means the contract held.
-func RejectionDrift(c *Ctx, plan []umpire.Action) []string {
-	c.mu.Lock()
-	rejects := make(map[string]error, len(c.rejects))
-	for k, v := range c.rejects {
-		rejects[k] = v
-	}
-	c.mu.Unlock()
-
-	var drift []string
-	for _, a := range plan {
-		if a.Reject == nil {
-			continue
-		}
-		err, fired := rejects[a.Name]
-		switch {
-		case !fired:
-			drift = append(drift, fmt.Sprintf("%s: declared a rejection but was never fired", a.Name))
-		case err == nil:
-			drift = append(drift, fmt.Sprintf("%s: declared a rejection but the request was accepted", a.Name))
-		default:
-			// serviceerror.ToStatus is Temporal's canonical error→gRPC-status conversion; it works
-			// on the in-process client's raw serviceerror, which grpc's status.FromError does not.
-			code := serviceerror.ToStatus(err).Code()
-			switch {
-			case !clientErrorCodes[code]:
-				drift = append(drift, fmt.Sprintf("%s: rejected with non-client-error class %s: %v", a.Name, code, err))
-			case a.Reject.Code != "" && code.String() != a.Reject.Code:
-				drift = append(drift, fmt.Sprintf("%s: rejected with %s, pinned %s", a.Name, code, a.Reject.Code))
-			case a.Reject.Message != "" && !strings.Contains(err.Error(), a.Reject.Message):
-				drift = append(drift, fmt.Sprintf("%s: rejection message %q lacks %q", a.Name, err.Error(), a.Reject.Message))
-			}
-		}
-	}
-	return drift
-}
-
-// CountEntities reports how many entities of type t the Monitor currently models in the env's
-// namespace — used to assert an invalid request created nothing.
-func CountEntities(env *testcore.TestEnv, t umpire.EntityType) int {
-	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	return len(env.GetMonitor().ModelState().QueryEntities(t, 0, &nsRoot))
 }

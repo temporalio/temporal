@@ -142,11 +142,11 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 	require.Equal(t, "succeeded", report.Baseline.Terminal)
 }
 
-// TestProbeNexusRejectedStart is the E1 rejection round-trip (UMPIRE_ERR.md): an invalid action —
-// a well-formed StartNexusOperationExecution naming a non-existent endpoint — is driven, its
-// synchronous rejection is captured as the expected outcome (not a drive failure), it satisfies
-// the generic client-error contract, and no operation entity is created. A rejection has no entity
-// to reach a terminal, so this drives the runtime directly rather than through Reach/Judge.
+// TestProbeNexusRejectedStart is the E3 rejection round-trip (UMPIRE_ERR.md §3): an invalid action
+// — a well-formed StartNexusOperationExecution naming a non-existent endpoint — is driven, and its
+// synchronous rejection is modeled as an entity reaching the `rejected` Failure terminal. The
+// Monitor decodes the RPC error into a fact, so the same umpire.Reconcile that judges any other
+// transition confirms the action's reject Effect, and exactly one (rejected) operation exists.
 func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
 	t := s.T()
 	env := s.newNexusStandaloneEnv(t)
@@ -154,13 +154,50 @@ func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
 	plan := []umpire.Action{action.StartUnknownEndpoint}
 	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
 	defer cancel()
+	oracle := action.Oracle{Env: env.TestEnv}
 	rc := action.NewCtx(env.TestEnv, "", action.NewResponsePolicy(), 0)
 	defer rc.Cleanup()
 
-	err := umpire.Drive(dctx, rc, action.Oracle{Env: env.TestEnv}, action.Resolver{}, 50*time.Millisecond, plan)
+	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
 	require.NoError(t, err, "a declared rejection is an expected outcome, not a drive failure")
-	require.Empty(t, action.RejectionDrift(rc, plan), "the rejection must satisfy the generic client-error contract")
-	require.Zero(t, action.CountEntities(env.TestEnv, model.NexusOperationType), "an invalid start must create no operation")
+	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the modeled rejection (reject edge) must be observed")
+	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
+}
+
+// TestProbeNexusReflectedVariant is the E2 round-trip (UMPIRE_ERR.md §1): the invalid actions are
+// enumerated by reflecting the StartNexusOperationExecution descriptor — a variant per string field
+// — rather than hand-authored. Driving one reflected variant (operation_id mutated to empty on an
+// otherwise-valid base) reaches the E3 model: the rejection is observed as the op reaching the
+// `rejected` terminal, confirmed by Reconcile.
+func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
+	t := s.T()
+
+	variants := action.StartFieldVariants()
+	require.NotEmpty(t, variants, "reflection should derive per-field variants from the request descriptor")
+	var mutated umpire.Action
+	for _, a := range variants {
+		if strings.Contains(a.Name, "operation_id=empty") {
+			mutated = a
+			break
+		}
+	}
+	require.NotEmpty(t, mutated.Name, "the descriptor should yield an operation_id string field")
+
+	env := s.newNexusStandaloneEnv(t)
+	policy := action.NewResponsePolicy()
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+
+	plan := []umpire.Action{mutated}
+	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
+	defer cancel()
+	oracle := action.Oracle{Env: env.TestEnv}
+	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
+	defer rc.Cleanup()
+
+	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	require.NoError(t, err, "a reflected invalid variant is an expected rejection, not a drive failure")
+	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the reflected variant's rejection must be observed as the reject edge")
+	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
 // TestProbeNexusFaultAction shows a fault as a first-class plan action (Phase 5): a Hold on the

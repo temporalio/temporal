@@ -74,6 +74,45 @@ type Reject struct {
 	Message string // optional substring the rejection message must contain
 }
 
+// ValidityClass tags why a mutated value diverges from a field's valid domain (UMPIRE_ERR.md §1).
+// It is the negative-space analog of a lifecycle state: the class, not the specific value, is what
+// the model reasons about.
+type ValidityClass int
+
+const (
+	WellFormed ValidityClass = iota // the valid base
+	Malformed                       // syntactically invalid (empty, over-long, bad charset, …)
+	Unknown                         // well-formed but names something that does not exist
+	Stale                           // well-formed, was valid, since superseded (e.g. an old RunID)
+	OutOfRange                      // a numeric / enum value outside the allowed set
+)
+
+// Variant is one labeled perturbation of a field's valid value and the outcome it should produce
+// (UMPIRE_ERR.md §2). Mutate maps the request's current (valid) value to the perturbed one; Expect
+// is the outcome the server should produce — for now the rejection contract (an empty Reject means
+// "any client-error class", grounded).
+type Variant struct {
+	Label  string
+	Class  ValidityClass
+	Mutate func(valid any) any
+	Expect *Reject
+}
+
+// Domain describes a request field's valid values and its standard invalid neighbors. Concrete
+// domains are reflected from the proto descriptor on the domain side (see UMPIRE_ERR.md §0 pillar
+// 1); this package holds only the abstract shape so the schema and planner can reason about params
+// uniformly, without any proto/RPC dependency.
+type Domain interface {
+	Variants() []Variant
+}
+
+// Param binds a request field path to its Domain (UMPIRE_ERR.md §1). The full set of an action's
+// params is usually enumerated by reflecting the request descriptor, not hand-authored.
+type Param struct {
+	Path   string
+	Domain Domain
+}
+
 // RealizeContext is the opaque handle a Realizer operates on. The generic runtime passes it
 // through unexamined; a concrete Realizer type-asserts it to reach the live environment. It
 // also carries the running Var→entity-identity bindings a plan accumulates.

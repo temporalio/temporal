@@ -46,6 +46,7 @@ func DefaultEntities() []DefaultEntity {
 				&fact.NexusOperationFailed{},
 				&fact.NexusOperationCanceled{},
 				&fact.NexusOperationTimedOut{},
+				&fact.NexusOperationRejected{},
 			},
 		},
 	}
@@ -72,6 +73,7 @@ func defaultFacts() []umpire.Fact {
 		&fact.NexusOperationFailed{},
 		&fact.NexusOperationCanceled{},
 		&fact.NexusOperationTimedOut{},
+		&fact.NexusOperationRejected{},
 	}
 }
 

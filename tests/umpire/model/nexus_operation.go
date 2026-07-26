@@ -57,6 +57,9 @@ func NewNexusOperation() *NexusOperation {
 			NexusCanceled:    {}, // user-driven decision, not a failure
 			NexusTimedOut:    {umpire.Failure},
 			NexusTerminated:  {}, // user-driven forceful termination, not an operation failure
+			// rejected: the start request was refused synchronously (invalid input, unknown
+			// endpoint, …) — a modeled Failure terminal reached before the operation ever exists.
+			NexusRejected: {umpire.Failure},
 		},
 		// Edge traits declare the drive-capability each edge needs: most are reachable
 		// with ordinary API traffic (RPCDrive — a handler response or client call);
@@ -126,6 +129,14 @@ func NewNexusOperation() *NexusOperation {
 				To:     NexusTerminated,
 				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive), umpire.RequiresHosting(umpire.Standalone)},
 			},
+			// reject: the start request was refused synchronously, before the operation was
+			// created — it only ever fires from unspecified, and reaches the rejected terminal.
+			{
+				Event:  NexusReject,
+				From:   []string{NexusUnspecified},
+				To:     NexusRejected,
+				Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)},
+			},
 		},
 	})
 	return op
@@ -186,6 +197,13 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			op.capture(e.ScheduledEventID, e.WorkflowID)
 			if op.FSM.Fire(ctx, NexusTimeout) {
 				op.Outcome = e.Outcome
+			}
+		case *fact.NexusOperationRejected:
+			// A synchronous rejection: no telemetry, so the operation's identity is its request id
+			// (the field the Oracle keys on), and the outcome is the gRPC status class.
+			op.capture("", e.RequestID)
+			if op.FSM.Fire(ctx, NexusReject) {
+				op.Outcome = e.Code
 			}
 		case *fact.ChasmTransition:
 			// A real CHASM operation, observed via the generic chasm.transition
@@ -264,6 +282,7 @@ const (
 	NexusCanceled    NexusState = "canceled"
 	NexusTimedOut    NexusState = "timed_out"
 	NexusTerminated  NexusState = "terminated"
+	NexusRejected    NexusState = "rejected"
 
 	NexusSchedule      NexusEvent = "schedule"
 	NexusAttemptFailed NexusEvent = "attempt_failed"
@@ -273,6 +292,7 @@ const (
 	NexusCancel        NexusEvent = "cancel"
 	NexusTimeout       NexusEvent = "timeout"
 	NexusTerminate     NexusEvent = "terminate"
+	NexusReject        NexusEvent = "reject"
 )
 
 // NexusTransition / the SAA-style total transition function was removed: the

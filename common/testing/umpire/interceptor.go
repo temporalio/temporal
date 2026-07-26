@@ -23,6 +23,14 @@ type ResponseRecorder interface {
 	RecordResponse(ctx context.Context, req, resp any)
 }
 
+// RejectionRecorder is an optional extension of FactRecorder that receives a
+// handler's error outcome — the request was rejected rather than served. It lets
+// the observer model a synchronous rejection (an invalid request that produced no
+// entity and no telemetry) as a fact. See UMPIRE_ERR.md.
+type RejectionRecorder interface {
+	RecordRejection(ctx context.Context, req any, err error)
+}
+
 // NewUnaryServerInterceptor returns a gRPC interceptor that records events via rec
 // and optionally injects faults via inj. Either may be nil.
 func NewUnaryServerInterceptor(rec FactRecorder, inj FaultInjector) grpc.UnaryServerInterceptor {
@@ -45,6 +53,8 @@ func NewUnaryServerInterceptor(rec FactRecorder, inj FaultInjector) grpc.UnarySe
 			if rr, ok := rec.(ResponseRecorder); ok {
 				rr.RecordResponse(ctx, req, resp)
 			}
+		} else if rr, ok := rec.(RejectionRecorder); ok {
+			rr.RecordRejection(ctx, req, err)
 		}
 		return resp, err
 	}
