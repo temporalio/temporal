@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire/action"
+	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
 )
 
@@ -139,6 +140,27 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 
 	require.Equal(t, probe.Recovered, report.Baseline.Verdict, "generated standalone completion should reach succeeded")
 	require.Equal(t, "succeeded", report.Baseline.Terminal)
+}
+
+// TestProbeNexusRejectedStart is the E1 rejection round-trip (UMPIRE_ERR.md): an invalid action —
+// a well-formed StartNexusOperationExecution naming a non-existent endpoint — is driven, its
+// synchronous rejection is captured as the expected outcome (not a drive failure), it satisfies
+// the generic client-error contract, and no operation entity is created. A rejection has no entity
+// to reach a terminal, so this drives the runtime directly rather than through Reach/Judge.
+func (s *UmpireTestSuite) TestProbeNexusRejectedStart() {
+	t := s.T()
+	env := s.newNexusStandaloneEnv(t)
+
+	plan := []umpire.Action{action.StartUnknownEndpoint}
+	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
+	defer cancel()
+	rc := action.NewCtx(env.TestEnv, "", action.NewResponsePolicy(), 0)
+	defer rc.Cleanup()
+
+	err := umpire.Drive(dctx, rc, action.Oracle{Env: env.TestEnv}, action.Resolver{}, 50*time.Millisecond, plan)
+	require.NoError(t, err, "a declared rejection is an expected outcome, not a drive failure")
+	require.Empty(t, action.RejectionDrift(rc, plan), "the rejection must satisfy the generic client-error contract")
+	require.Zero(t, action.CountEntities(env.TestEnv, model.NexusOperationType), "an invalid start must create no operation")
 }
 
 // TestProbeNexusFaultAction shows a fault as a first-class plan action (Phase 5): a Hold on the

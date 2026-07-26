@@ -57,6 +57,21 @@ type Action struct {
 	Effects   []Effect
 	Realize   Realizer
 	Faultable []string // footprint points (RPC method / HTTP path) a Fault may attach to
+	// Reject, when non-nil, declares this action is expected to be rejected synchronously rather
+	// than produce its Effects — an invalid input (malformed / unknown / stale; see UMPIRE_ERR.md).
+	// Drive treats a Fire error on such an action as the expected outcome (recorded via RejectSink,
+	// not a drive failure); the domain side judges the captured error against the rejection
+	// contract, since that judgment needs transport knowledge this package deliberately lacks.
+	Reject *Reject
+}
+
+// Reject declares an action's expected synchronous rejection (UMPIRE_ERR.md §0/§2). It is
+// deliberately transport-agnostic: an empty Code means "any client-error class" — the generic
+// rejection contract, with the specific grounded on first observation — while a set Code/Message
+// pin a grounded or by-design specific.
+type Reject struct {
+	Code    string // grounded status-code name (e.g. "NotFound"); "" = any client-error class
+	Message string // optional substring the rejection message must contain
 }
 
 // RealizeContext is the opaque handle a Realizer operates on. The generic runtime passes it
@@ -73,6 +88,14 @@ type RealizeContext interface {
 type Realizer interface {
 	Install(rc RealizeContext, a Action) error
 	Fire(ctx context.Context, rc RealizeContext, a Action) error
+}
+
+// RejectSink is optionally implemented by a RealizeContext to capture an action's synchronous
+// rejection (see Action.Reject). When an action declares a Reject, Drive records the Fire outcome
+// here — the error on rejection, or nil if the request was (unexpectedly) accepted — and continues
+// instead of aborting the drive, leaving the domain side to judge it against the contract.
+type RejectSink interface {
+	ObserveReject(action string, err error)
 }
 
 // StateOracle reports the current observed state of a bound entity — implemented Temporal-side
@@ -110,7 +133,17 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 				}
 			}
 		}
-		if err := a.Realize.Fire(ctx, rc, a); err != nil {
+		err := a.Realize.Fire(ctx, rc, a)
+		if a.Reject != nil {
+			// A declared rejection is the expected outcome, not a drive failure: record the Fire
+			// result (the error, or nil if the request was accepted) for the domain side to judge,
+			// and move on. Such an action produces no effects, so there is nothing to confirm.
+			if sink, ok := rc.(RejectSink); ok {
+				sink.ObserveReject(a.Name, err)
+			}
+			continue
+		}
+		if err != nil {
 			return fmt.Errorf("fire %s: %w", a.Name, err)
 		}
 	}
