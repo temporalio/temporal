@@ -27,17 +27,44 @@ inverts the model: config is a default plus an ordered list of DSL overrides, an
 supplies an open `map[string]any` of constraints evaluated at read time.
 
 It is vendored at `common/dynamicconfig/configurator/` (see the README there for why it
-cannot be a `go.mod` dependency yet), and integrated in two layers.
+cannot be a `go.mod` dependency yet), and integrated at two different seams, which turn out
+to be complementary rather than competing.
 
-### Layer 1: an `Evaluator` inside `Collection`
+### Seam A: a `Client` (`configurator_client.go`)
 
-The natural-looking seam, implementing `dynamicconfig.Client`, is the wrong one:
-`GetValue(key) []ConstrainedValue` requires the backend to pre-enumerate every matching
-combination so that `Collection` can do the equality match itself, and an open constraint
-space cannot be enumerated.
+The obvious integration: implement the existing one-method `dynamicconfig.Client`. This
+works, and it needs **no changes to the core at all**.
 
-Instead the hook is `matchAndConvert` (`common/dynamicconfig/collection.go`), the choke point
-every read already passes through with its constraints in hand:
+The reason it works is the library's default value. The adapter evaluates each key **once at
+load time** against what the process knows about itself, and publishes the result as a single
+`ConstrainedValue` with *empty* constraints. Every precedence order ends in the empty
+`Constraints` (`cmd/tools/gendynamicconfig/main.go`), so that one value is matched by every
+setting at every precedence — global, namespace, task queue, shard, and the rest. No
+enumeration of the constraint space is required, because nothing is being matched on.
+
+Because evaluation happens at load and `GetValue` returns a stable slice, reads cost exactly
+what they cost today (see the benchmark table below: 47 ns, zero allocations).
+
+**What it cannot do.** `GetValue` is handed a `Key` and nothing else. It is not told the
+namespace, task queue, or shard of the call, so an expression referencing those dimensions
+has nothing to evaluate against and silently falls through to its default.
+`TestConfiguratorClient_CannotSeePerRequestDimensions` pins this down. That rules out
+expressions over the dimensions Temporal uses most: 191 namespace-precedence and 48
+task-queue-precedence settings.
+
+There is a partial way around this — compile expressions that are equalities over known
+`Constraints` fields into real `ConstrainedValue`s at load time, so `"namespace" = "canary"`
+becomes `{Constraints: {Namespace: "canary"}}`. It is not implemented here, and it has sharp
+edges: `!=`, `>` and `<` over those fields cannot be enumerated; the emitted constraint tuple
+must exactly match an entry in that setting's precedence list or it never fires; and
+first-match-in-file-order silently becomes precedence-order, so a config whose broad override
+precedes its narrow one changes meaning.
+
+### Seam B: an `Evaluator` inside `Collection` (`evaluator.go`)
+
+To evaluate expressions over per-request dimensions, the hook has to be somewhere that knows
+them. `matchAndConvert` (`common/dynamicconfig/collection.go`) is the choke point every read
+already passes through with its constraints in hand:
 
 ```go
 type Evaluator interface {
@@ -56,7 +83,10 @@ type Evaluator interface {
   precedence (`namespace`, `taskQueueName`, `shardID`, …), and ad-hoc (layer 2).
 - All ~677 settings are covered, and no consumer of a property fn changed.
 
-### Layer 2: ad-hoc dimensions via `Collection.WithConstraints`
+The price is that evaluation now happens per read rather than per load: ~230 ns and three
+allocations on keys that are expression-configured, against 47 ns and zero for seam A.
+
+### Seam B+: ad-hoc dimensions via `Collection.WithConstraints`
 
 Property fns take no `ctx`, so request-scoped constraints cannot be threaded through them.
 Instead `WithConstraints` returns a cheap read-only `Collection` view carrying extra
@@ -130,32 +160,40 @@ easy to get wrong.
 Ordered-first-match is also a genuine improvement over the implicit precedence table: what
 wins is visible in the file rather than in `gendynamicconfig/main.go`.
 
-### (d) Performance — free when unused, ~4.5x when used
+### (d) Performance — seam A is free, seam B costs ~4.5x on configured keys
 
-`go test ./common/dynamicconfig/ -bench BenchmarkEvaluator -benchmem` on an M5 Max:
+`go test ./common/dynamicconfig/ -bench 'BenchmarkEvaluator|BenchmarkConfiguratorClient' -benchmem`
+on an M5 Max:
 
 | Case | ns/op | B/op | allocs/op |
 | --- | --- | --- | --- |
-| no evaluator (today's path) | 51.5 | 0 | 0 |
-| evaluator present, key absent | 52.6 | 0 | 0 |
-| expression, 0 overrides | 228.8 | 48 | 3 |
-| expression, 1 override | 238.8 | 48 | 3 |
-| expression, 5 overrides | 266.4 | 48 | 3 |
-| expression, 20 overrides | 265.1 | 48 | 3 |
-| expression, 5 overrides, `WithConstraints` view | 312.7 | 48 | 3 |
+| today's path, no expression config | 50.7 | 0 | 0 |
+| **seam A**: Client, expression-backed key | **47.5** | **0** | **0** |
+| seam B: Evaluator present, key absent | 51.8 | 0 | 0 |
+| seam B: expression, 0 overrides | 231.6 | 48 | 3 |
+| seam B: expression, 1 override | 240.9 | 48 | 3 |
+| seam B: expression, 5 overrides | 270.5 | 48 | 3 |
+| seam B: expression, 20 overrides | 277.8 | 48 | 3 |
+| seam B: 5 overrides, `WithConstraints` view | 314.6 | 48 | 3 |
 
-The row that matters most is the second: the `Has` guard is one lookup on an interned key, so
-the ~677 settings nobody configures by expression pay ~1 ns and zero allocations. That was the
-main risk and it did not materialise.
+**Seam A is free.** It is not merely close to today's path, it *is* today's path: expressions
+are evaluated once at load, and what `Collection` sees afterwards is an ordinary one-element
+`[]ConstrainedValue`. (It benches marginally faster than the baseline only because that
+one-element slice is smaller than the baseline's two-element one.)
 
-For keys that *are* expression-configured, reads cost roughly 4.5x the current path. The cost
-is dominated by building the constraint map, not by evaluating expressions: scanning 20
-overrides instead of 0 adds only ~36 ns. Pooling the map (`constraintMapPool`) cut this from
+For seam B, the row that matters most is the third: the `Has` guard is one lookup on an
+interned key, so the ~677 settings nobody configures by expression pay ~1 ns and zero
+allocations. That was the main risk and it did not materialise.
+
+Keys that *are* expression-configured through seam B cost roughly 4.5x the current path. The
+cost is dominated by building the constraint map, not by evaluating expressions: scanning 20
+overrides instead of 0 adds only ~46 ns. Pooling the map (`constraintMapPool`) cut this from
 304 ns / 712 B / 7 allocs to the numbers above; the remaining 48 B is boxing string and int
 constraint values into `any`.
 
 At ~230 ns a read this is fine for anything read per request, but it is not free, and today's
-path is genuinely fast. A production version would want to memoize per (key, constraint-set).
+path is genuinely fast. A production version would want to memoize per (key, constraint-set)
+— or simply use seam A wherever per-request dimensions are not needed.
 
 ## Problems found in the library
 
@@ -177,7 +215,7 @@ path is genuinely fast. A production version would want to memoize per (key, con
 
 - **Subscriptions on derived views.** `WithConstraints` returns a read-only view; `Subscribe`
   on it will never fire. Root collections are unaffected.
-- **Layer 2 covers three matching settings**, not all of them. Extending it to every setting
+- **Seam B's ad-hoc dimensions cover three matching settings**, not all of them. Extending it to every setting
   would mean re-resolving the whole of `Config` per task queue.
 - **Expression config wins over constrained defaults.** Deliberate, but it means a
   `NewTaskQueueIntSettingWithConstrainedDefault` value is overridden by an expression default,
@@ -187,12 +225,24 @@ path is genuinely fast. A production version would want to memoize per (key, con
 
 ## Recommendation
 
-The constraint model is the right one, and the integration point (`matchAndConvert` plus an
-optional `Evaluator`) is small, reversible, and cheap enough to leave permanently in place.
-The open constraint map solves a real problem: the closed `Constraints` struct is the reason
-Temporal cannot roll anything out by zone, host, or partition without a release.
+The constraint model is the right one. The closed `Constraints` struct is the reason Temporal
+cannot roll anything out by zone, host, or partition without a release, and an open constraint
+map fixes that.
 
-Two things must be resolved before this could be more than a prototype:
+**Start with seam A.** It is about 120 lines, changes nothing in the core, costs nothing at
+read time, and already delivers arbitrary *deployment-scoped* dimensions — env, zone, cluster,
+service, host, and anything an operator invents — for all ~677 settings. If the goal is
+"decouple rollout from deployment", that is most of the value, and it is available at
+essentially zero risk, because a server with no expression file configured is byte-for-byte
+the server we have today.
+
+**Add seam B only if per-request dimensions are actually wanted.** They are not free: ~230 ns
+and three allocations per read on configured keys, plus a hook in `Collection`. What they buy
+is expressions over namespace, task queue, shard, and ad-hoc component dimensions — which is
+where most of Temporal's existing constrained config lives, so this is likely to be wanted
+eventually rather than never. The two seams coexist without interacting.
+
+Whichever seam, two things must be resolved before this is more than a prototype:
 
 1. **Percentage and time-phased rollout must exist in the DSL**, or the DSL must compose with
    `GradualChange`. Without it this cannot replace what matching already relies on.
@@ -200,7 +250,7 @@ Two things must be resolved before this could be more than a prototype:
    can be a dependency rather than a vendored copy.
 
 Beyond that, `>=`/`<=`, `in`, and prefix matching are the operators that were actually missed
-in practice, and per-lookup memoization would close most of the performance gap.
+in practice.
 
 ## Trying it
 
