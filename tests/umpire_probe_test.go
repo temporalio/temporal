@@ -161,6 +161,10 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
 	}}, 8*time.Second)
+	// An async start reaches STARTED (and then stays there), exercising the start edge.
+	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return &nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-probe-async-token"}, nil
+	}}, 8*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)

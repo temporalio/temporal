@@ -171,10 +171,13 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 }
 
 // TransitionTelemetryAttributes enriches the generic chasm.transition telemetry with the
-// operation's attempt count, so an observer can follow the retry/backoff loop — which the
-// workflow history does not expose. Consumed by chasm.Transition.Apply.
+// operation's stable request ID (a per-operation identity present on every transition,
+// including the scheduling one before the component has a resolvable tree path) and its
+// attempt count (so an observer can follow the retry/backoff loop, which the workflow
+// history does not expose). Consumed by chasm.Transition.Apply.
 func (o *Operation) TransitionTelemetryAttributes() []attribute.KeyValue {
 	return []attribute.KeyValue{
+		telemetry.AttrNexusRequestID.String(o.GetRequestId()),
 		telemetry.AttrChasmTransitionAttempt.Int64(int64(o.GetAttempt())),
 	}
 }

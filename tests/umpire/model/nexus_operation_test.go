@@ -72,7 +72,7 @@ func TestNexusOperation_DrivenByChasmTransitions(t *testing.T) {
 	op := NewNexusOperation()
 	chasm := func(dest string) *fact.ChasmTransition {
 		f := &fact.ChasmTransition{}
-		f.ComponentType, f.ComponentPath, f.WorkflowID, f.Destination = "*nexusoperation.Operation", "Operations/5", "wf1", dest
+		f.ComponentType, f.RequestID, f.WorkflowID, f.Destination = "*nexusoperation.Operation", "req-5", "wf1", dest
 		return f
 	}
 	fireNexus(t, op,
@@ -83,7 +83,7 @@ func TestNexusOperation_DrivenByChasmTransitions(t *testing.T) {
 	require.Equal(t, "succeeded", op.FSM.Current())
 	require.True(t, op.FSM.IsTerminal())
 	require.Equal(t, "OPERATION_STATUS_SUCCEEDED", op.Outcome)
-	require.Equal(t, "Operations/5", op.ScheduledEventID) // component path captured as the op identity
+	require.Equal(t, "req-5", op.ScheduledEventID) // request ID captured as the op identity
 }
 
 // Sync completion skips STARTED: scheduled -> succeeded directly.

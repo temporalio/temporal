@@ -164,8 +164,9 @@ func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, 
 			}
 		case *fact.ChasmTransition:
 			// A real CHASM operation, observed via the generic chasm.transition
-			// telemetry. Its component path is the operation's identity.
-			op.capture(e.ComponentPath, e.WorkflowID)
+			// telemetry. Its stable request ID is the operation's identity (present
+			// on every transition, so the scheduling one is observed too).
+			op.capture(e.RequestID, e.WorkflowID)
 			if e.Attempt > op.Attempt {
 				op.Attempt = e.Attempt // attempt count is monotonic
 			}

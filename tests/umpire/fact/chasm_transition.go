@@ -25,6 +25,7 @@ type ChasmTransition struct {
 	Destination   string
 	Event         string // Go type of the triggering event (chasm.transition.event)
 	Attempt       int    // component-contributed attempt count, 0 if absent
+	RequestID     string // stable per-operation identity (component-contributed)
 	NamespaceID   string
 	WorkflowID    string
 	RunID         string
@@ -42,6 +43,7 @@ func (e *ChasmTransition) ImportSpanEvent(attrs attribute.Set) bool {
 	e.Destination = strAttr(attrs, telemetry.AttrChasmTransitionDestination)
 	e.Event = strAttr(attrs, telemetry.AttrChasmTransitionEvent)
 	e.Attempt = intAttr(attrs, telemetry.AttrChasmTransitionAttempt)
+	e.RequestID = strAttr(attrs, telemetry.AttrNexusRequestID)
 	e.NamespaceID = strAttr(attrs, telemetry.AttrNamespaceID)
 	e.WorkflowID = strAttr(attrs, telemetry.AttrWorkflowID)
 	e.RunID = strAttr(attrs, telemetry.AttrRunID)
@@ -55,21 +57,20 @@ func (e *ChasmTransition) IsNexusOperation() bool {
 }
 
 // route maps the CHASM component identity to a umpire entity path, or nil when the
-// component is not (yet) modelled. A Nexus operation is keyed "<workflowID>:<path>"
+// component is not (yet) modelled. A Nexus operation is keyed "<workflowID>:<requestID>"
 // under its caller workflow.
 //
-// A transition with an empty ComponentPath is ignored: the component is created in
-// the current CHASM transition (e.g. the scheduling transition fires before the
-// operation is attached to the tree, so structuredRef cannot yet resolve its path),
-// leaving no per-operation identity to route on. Such creation-time transitions are
-// immediately superseded by path-bearing transitions on the same operation, which
-// the Monitor's legal forward-jumps carry to the true observed state — so ignoring
-// them avoids minting a spurious, un-progressing second entity.
+// It keys on the operation's stable RequestID (present on every transition, including
+// the scheduling one), not its component path: the scheduling transition fires before
+// the operation is attached to the tree, so its path is empty. Keying on RequestID
+// routes the scheduling transition and all later ones to the same entity, so the entity
+// is created at "scheduled" and its subsequent transitions are observed as direct edges
+// rather than a forward jump from an already-late creation.
 func (e *ChasmTransition) route() *umpire.EntityPath {
-	if !e.IsNexusOperation() || e.WorkflowID == "" || e.ComponentPath == "" {
+	if !e.IsNexusOperation() || e.WorkflowID == "" || e.RequestID == "" {
 		return nil
 	}
-	self := umpire.NewEntityID(NexusOperationType, e.WorkflowID+":"+e.ComponentPath)
+	self := umpire.NewEntityID(NexusOperationType, e.WorkflowID+":"+e.RequestID)
 	parents := []umpire.EntityID{umpire.NewEntityID(WorkflowType, e.WorkflowID)}
 	return nsPath(e.NamespaceID, self, parents...)
 }

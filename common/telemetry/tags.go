@@ -44,6 +44,10 @@ const (
 	AttrNexusOperation        attribute.Key = "nexus.operation"
 	AttrNexusScheduledEventID attribute.Key = "nexus.scheduled_event_id"
 	AttrNexusOutcome          attribute.Key = "nexus.outcome"
+	// AttrNexusRequestID is the operation's stable per-operation identity, present on
+	// every transition (including the scheduling one, before the component is attached
+	// to the tree and has a resolvable path).
+	AttrNexusRequestID attribute.Key = "nexus.request_id"
 
 	EventSpeculativeWorkflowTaskScheduled = "SpeculativeWorkflowTaskScheduled"
 	EventWorkflowTaskStored               = "WorkflowTaskStored"
