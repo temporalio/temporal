@@ -4,6 +4,7 @@ package faultinjection
 
 import (
 	"context"
+	"net/http"
 
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
@@ -42,4 +43,45 @@ func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerI
 
 		return resp, err
 	}
+}
+
+// HTTPRoundTripper wraps base so outbound HTTP calls (e.g. Nexus operation invocations to a
+// handler) pass through the same RPCFaultGenerator seam as gRPC: a registered callback can
+// hold (block, then decline), fail, or pass each call. The synthetic method handed to the
+// generator is "HTTP <METHOD> <path>". namespaceID scopes the call to its owning namespace.
+func HTTPRoundTripper(base http.RoundTripper, namespaceID string, testHooks testhooks.TestHooks) http.RoundTripper {
+	return &faultRoundTripper{base: base, namespaceID: namespaceID, testHooks: testHooks}
+}
+
+type faultRoundTripper struct {
+	base        http.RoundTripper
+	namespaceID string
+	testHooks   testhooks.TestHooks
+}
+
+func (f *faultRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	generate, ok := testhooks.Get(f.testHooks, testhooks.RPCFaultGenerator, testhooks.GlobalScope)
+	if !ok {
+		return f.base.RoundTrip(r)
+	}
+	method := "HTTP " + r.Method + " " + r.URL.Path
+	req := &HTTPFaultRequest{NamespaceID: f.namespaceID, Request: r}
+
+	// Before the call: a matching callback can fail it (return an error) or hold it (block,
+	// then decline the match so the call proceeds). A match without an error is ignored here
+	// (RoundTrip must not return a nil response and nil error).
+	if matched, _, err := generate(r.Context(), method, req, nil, nil); matched && err != nil {
+		return nil, err
+	}
+
+	resp, callErr := f.base.RoundTrip(r)
+
+	// After the call: a matching callback may replace the outcome with an error.
+	if matched, _, err := generate(r.Context(), method, req, resp, callErr); matched && err != nil {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		return nil, err
+	}
+	return resp, callErr
 }
