@@ -63,14 +63,14 @@ func (s *activityParityTestSuite) TestParityNonRetryableTimeout() {
 		cfg.NonRetryableErrorTypes = []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType.String()}
 
 		t.Run("WorkflowActivity", func(t *testing.T) {
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 				newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t).Status,
-				"a non-retryable timeout must fail the activity terminally, not retry it")
+				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			require.Equalf(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 				newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t).Status,
-				"a non-retryable timeout must fail the activity terminally, not retry it")
+				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType)
 		})
 	}
 
@@ -181,7 +181,9 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	})
 
 	// Paused after the retry was dispatched: the dispatched code path already nils both fields, and the
-	// pause preserves that.
+	// pause preserves that. No field of ActivityExecutionInfo or PendingActivityInfo distinguishes this
+	// from PausedBeforeDispatch on either surface, so the two subtests differ in the state they reach,
+	// not in what they assert.
 	s.T().Run("PausedAfterDispatch", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: dispatchInterval}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Pause},
 			activityInfoProjection{
