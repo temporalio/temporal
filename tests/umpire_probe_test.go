@@ -11,6 +11,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
@@ -20,9 +21,12 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testhooks"
+	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
@@ -197,6 +201,80 @@ func (s *UmpireTestSuite) pendingOpInState(ctx context.Context, env *NexusTestEn
 	return false
 }
 
+// newNexusStandaloneEnv is a probe env with standalone Nexus operations enabled (in
+// addition to workflow-based ones), for the Standalone-hosting driver.
+func (s *UmpireTestSuite) newNexusStandaloneEnv(t *testing.T) *NexusTestEnv {
+	return newNexusTestEnv(t, true,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, true),
+		testcore.WithDynamicConfig(chasmnexus.Enabled, true),
+	)
+}
+
+// nexusStandaloneExec is the Standalone-hosting driver: it creates a Nexus operation as its
+// own execution via the frontend Nexus API (no caller workflow), drives it into `state` via
+// the handler, then terminates it with its own TerminateNexusOperationExecution RPC —
+// reaching state --terminate--> terminated, an edge unreachable in the Embedded (workflow)
+// driver. It waits for the terminated transition to be observed so coverage records the edge.
+func (s *UmpireTestSuite) nexusStandaloneExec(handler nexustest.Handler, state string) probe.EnvFunc {
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusStandaloneEnv(t)
+		endpointName := env.createRandomExternalNexusServer(env.Context(), t, handler)
+		return env.TestEnv, func(dctx context.Context, iter int) error {
+			opID := fmt.Sprintf("umpire-probe-standalone-%d", iter)
+			start, err := env.FrontendClient().StartNexusOperationExecution(dctx, &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace:              env.Namespace().String(),
+				OperationId:            opID,
+				Endpoint:               endpointName,
+				Service:                "service",
+				Operation:              "operation",
+				RequestId:              opID,
+				ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
+			})
+			if err != nil {
+				return err
+			}
+			if !s.awaitNexusOpState(dctx, env, state) {
+				return fmt.Errorf("standalone op did not reach %s", state)
+			}
+			if _, err := env.FrontendClient().TerminateNexusOperationExecution(dctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: opID,
+				RunId:       start.RunId,
+				Reason:      "umpire probe: reach terminated",
+			}); err != nil {
+				return err
+			}
+			if !s.awaitNexusOpState(dctx, env, model.NexusTerminated) {
+				return fmt.Errorf("standalone op did not reach terminated")
+			}
+			return nil
+		}
+	}
+}
+
+// awaitNexusOpState polls the Monitor's model until a NexusOperation in env's namespace is
+// currently in state — the fine-grained state (scheduled/backing_off/started) that the
+// frontend Describe API does not expose.
+func (s *UmpireTestSuite) awaitNexusOpState(dctx context.Context, env *NexusTestEnv, state string) bool {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
+	for {
+		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
+			if lc, ok := e.Entity.(umpire.Lifecycled); ok && lc.Lifecycle().Current() == state {
+				return true
+			}
+		}
+		select {
+		case <-dctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
+}
+
 // TestProbeNexusResilience is the trace-derived resilience demo: plan a route to a
 // state, drive a REAL CHASM Nexus operation to it (each execution in its own
 // namespace), learn the underlying gRPC calls from the happy-path trace, break each
@@ -367,6 +445,21 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	exploreEnv(s.nexusExecComplete(nexus.NewOperationFailedError("umpire probe: injected async failure")), 15*time.Second)
 	exploreEnv(s.nexusExecComplete(nexus.NewOperationCanceledError("umpire probe: injected async cancellation")), 15*time.Second)
 
+	// Standalone-hosting drives: create the operation as its own execution, drive it into a
+	// state, then terminate it via its own RPC — reaching {scheduled,backing_off,started}
+	// --terminate--> terminated. These edges are Standalone-only (a workflow-child op has no
+	// terminate RPC and workflow termination does not cascade to it).
+	blockingStart := nexustest.Handler{OnStartOperation: func(hctx context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		<-hctx.Done() // hold the attempt so the op stays scheduled until it is terminated
+		return nil, hctx.Err()
+	}}
+	retryStart := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
+	}}
+	exploreEnv(s.nexusStandaloneExec(blockingStart, model.NexusScheduled), 15*time.Second)
+	exploreEnv(s.nexusStandaloneExec(retryStart, model.NexusBackingOff), 15*time.Second)
+	exploreEnv(s.nexusStandaloneExec(asyncStart, model.NexusStarted), 15*time.Second)
+
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)
 	rep := cov.Report("NexusOperation", lc.Edges())
@@ -374,16 +467,13 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	for _, e := range rep.Missing() {
 		t.Logf("[exploration]   MISSING: %s --%s--> %s", e.From, e.Event, e.To)
 	}
-	// The drives above exercise 13 of the 16 modelled edges — every edge this workflow-driven
-	// probe can reach. The three {scheduled,backing_off,started} --terminate--> terminated
-	// edges are out of reach for it: terminated is reached via the operation's own CHASM
-	// Terminate hook, which the framework invokes only on an execution's *root* component.
-	// A workflow-initiated operation is a child of the caller workflow, so terminating the
-	// workflow does not cascade to it (verified). Reaching terminated needs a *standalone*
-	// Nexus operation driver (StartNexusOperationExecution + TerminateNexusOperationExecution,
-	// where the operation is its own root) — a separate driver from this one. (The
-	// unreachable-by-construction backing_off --> {start,succeed,fail,cancel} edges were
-	// pruned from the model, so coverage reflects the machine's real shape.)
-	require.GreaterOrEqual(t, rep.Covered, 13,
-		"every edge this workflow-driven probe can reach should be exercised; terminated needs a standalone-op driver")
+	// All 16 modelled edges are now exercised, across both hostings: the workflow (Embedded)
+	// driver covers the shared lifecycle, and the standalone driver covers the three
+	// {scheduled,backing_off,started} --terminate--> terminated edges that are Standalone-only
+	// (terminated is reached via the operation's own Terminate RPC — a workflow-child op has
+	// none, and workflow termination does not cascade to it). The unreachable-by-construction
+	// backing_off --> {start,succeed,fail,cancel} edges were pruned from the model, so the
+	// count reflects the machine's real shape.
+	require.Equal(t, rep.Total, rep.Covered,
+		"every modelled NexusOperation edge should be exercised across the workflow and standalone drivers")
 }
