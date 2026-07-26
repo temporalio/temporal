@@ -56,6 +56,15 @@ type RPCFactory struct {
 	monitor                  membership.Monitor
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient func() (*common.FrontendHTTPClient, error)
+	// A OnceValue wrapper for createLocalFrontendGRPCConnection.
+	localFrontendGRPCConn func() *grpc.ClientConn
+
+	// remoteFrontendGRPCConns caches connections created by
+	// CreateRemoteFrontendGRPCConnection, keyed by rpcAddress, so that repeated
+	// calls for the same remote cluster reuse a connection instead of leaking
+	// one per call.
+	remoteFrontendGRPCConnsLock sync.Mutex
+	remoteFrontendGRPCConns     map[string]*grpc.ClientConn
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -101,9 +110,11 @@ func NewFactory(
 		authHeaderName:           authHeaderName,
 		requireRemoteClusterAuth: requireRemoteClusterAuth,
 		monitor:                  monitor,
+		remoteFrontendGRPCConns:  make(map[string]*grpc.ClientConn),
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
+	f.localFrontendGRPCConn = sync.OnceValue(f.createLocalFrontendGRPCConnection)
 	return f
 }
 
@@ -215,8 +226,22 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateRemoteFrontendGRPCConnection creates a gRPC connection for cross-cluster calls.
+// CreateRemoteFrontendGRPCConnection returns a cached gRPC connection for cross-cluster
+// calls to rpcAddress, dialing and caching one on first use. Connections are reused for
+// the lifetime of the process rather than being re-dialed on every call.
 func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+	d.remoteFrontendGRPCConnsLock.Lock()
+	defer d.remoteFrontendGRPCConnsLock.Unlock()
+
+	if conn, ok := d.remoteFrontendGRPCConns[rpcAddress]; ok {
+		return conn
+	}
+	conn := d.dialRemoteFrontendGRPCConnection(rpcAddress)
+	d.remoteFrontendGRPCConns[rpcAddress] = conn
+	return conn
+}
+
+func (d *RPCFactory) dialRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -259,8 +284,14 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 	return d.dial(rpcAddress, tlsClientConfig, append(additionalDialOptions, keepAliveOption)...)
 }
 
-// CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
+// CreateLocalFrontendGRPCConnection returns a cached connection for internal frontend
+// calls, dialing it on first use. d.frontendURL never changes for the lifetime of the
+// factory, so the connection is reused rather than re-dialed on every call.
 func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return d.localFrontendGRPCConn()
+}
+
+func (d *RPCFactory) createLocalFrontendGRPCConnection() *grpc.ClientConn {
 	additionalDialOptions := append([]grpc.DialOption{}, d.perServiceDialOptions[primitives.InternalFrontendService]...)
 
 	return d.dial(d.frontendURL, d.frontendTLSConfig, additionalDialOptions...)
