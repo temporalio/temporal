@@ -50,23 +50,6 @@ func syncCaller(endpoint string) any {
 	}
 }
 
-// cancelCaller starts the operation, waits for it to reach STARTED, then cancels it,
-// driving the operation to the canceled terminal — a user-driven decision.
-func cancelCaller(endpoint string) any {
-	return func(wctx workflow.Context) error {
-		c := workflow.NewNexusClient(endpoint, "service")
-		ctx, cancel := workflow.WithCancel(wctx)
-		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
-		var exec workflow.NexusOperationExecution
-		if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
-			return err
-		}
-		cancel()
-		_ = fut.Get(wctx, nil) // resolves with a canceled error; the terminal is what we want
-		return nil
-	}
-}
-
 // timeoutCaller starts an async operation the handler never completes, bounded by a
 // short schedule-to-close timeout, driving the operation to the timed_out terminal.
 func timeoutCaller(endpoint string) any {
@@ -210,8 +193,13 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	}}, syncCaller, 8*time.Second)
 	// An async start reaches STARTED (and then stays there), exercising the start edge.
 	explore(asyncStart, syncCaller, 8*time.Second)
-	// Canceling a STARTED async operation reaches the canceled terminal (started --cancel--> canceled).
-	explore(asyncStart, cancelCaller, 10*time.Second)
+	// A handler reporting the operation canceled reaches the canceled terminal
+	// (scheduled --cancel--> canceled) — a user-driven decision modeled as an untagged
+	// terminal. (A workflow-side cancel request only advances the cancellation
+	// sub-machine, which the umpire model does not track, leaving the op STARTED.)
+	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+		return nil, nexus.NewOperationCanceledError("umpire probe: injected cancellation")
+	}}, syncCaller, 10*time.Second)
 	// A short schedule-to-close timeout on a never-completing async operation reaches
 	// the timed_out terminal (started --timeout--> timed_out).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
@@ -223,5 +211,6 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	for _, e := range rep.Missing() {
 		t.Logf("[exploration]   MISSING: %s --%s--> %s", e.From, e.Event, e.To)
 	}
-	require.GreaterOrEqual(t, rep.Covered, 2, "the retryable path should exercise the backing_off<->scheduled edges")
+	require.GreaterOrEqual(t, rep.Covered, 6,
+		"the sync/retry/async/cancel/timeout drives should exercise the schedule, backoff, start, cancel and timeout edges")
 }
