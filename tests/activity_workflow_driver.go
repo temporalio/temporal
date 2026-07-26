@@ -27,24 +27,21 @@ import (
 
 // --- the activity info both surfaces expose --------------------------------------------------
 
-// activityInfoProjection is the retry-scheduling contract both surfaces expose, projected out of the
-// two different messages that carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
-// Fields keep those messages' names, except that SAA calls the run state run_state and WFA calls it
-// state.
+// activityInfo is user-visible activity state projected out of the two different messages that
+// carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
 //
-// Two fields are not the raw value. CurrentRetryInterval is rounded to the second, because WFA derives
-// it by subtracting two stored timestamps while SAA stores it exactly. NextAttemptScheduleTime is
-// reduced to whether it is set, because its absolute value differs run to run and so cannot be written
-// into an expected value; a test that needs the value itself reads it from Describe.
-type activityInfoProjection struct {
+// CurrentRetryInterval is rounded to the second, because WFA derives it by subtracting two stored
+// timestamps while SAA stores it exactly. NextAttemptScheduleTime is reduced to whether it is set
+// to facilitate test assertions.
+type activityInfo struct {
 	RunState                   enumspb.PendingActivityState
 	Attempt                    int32
 	CurrentRetryInterval       time.Duration
 	NextAttemptScheduleTimeSet bool
 }
 
-func projectWFA(p *workflowpb.PendingActivityInfo) activityInfoProjection {
-	return activityInfoProjection{
+func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
+	return activityInfo{
 		RunState:                   p.GetState(),
 		Attempt:                    p.GetAttempt(),
 		CurrentRetryInterval:       p.GetCurrentRetryInterval().AsDuration().Round(time.Second),
@@ -193,7 +190,7 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 		return // the dispatch time has already passed, or the activity is no longer pending
 	}
 	deadline := next.AsTime().Add(activityDriverWallClockSettle)
-	var p activityInfoProjection
+	var p activityInfo
 	dispatched := func() bool {
 		var pending bool
 		p, pending = a.pendingSnapshot(t)
@@ -220,12 +217,12 @@ func (a *wfaHandle) pendingActivity(t require.TestingT) *workflowpb.PendingActiv
 }
 
 // pendingSnapshot is the activity's info, and whether it is currently pending.
-func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfoProjection, bool) {
+func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfo, bool) {
 	pa := a.pendingActivity(t)
 	if pa == nil {
-		return activityInfoProjection{}, false
+		return activityInfo{}, false
 	}
-	return projectWFA(pa), true
+	return wfaActivityInfo(pa), true
 }
 
 func (d *wfaDriver) start(t *testing.T) *wfaHandle {
@@ -318,7 +315,7 @@ func (a *wfaHandle) rpc(e model.Event) error {
 }
 
 // activityInfo is the activity's PendingActivityInfo, projected.
-func (a *wfaHandle) activityInfo(t require.TestingT) activityInfoProjection {
+func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
 	p, pending := a.pendingSnapshot(t)
 	require.Truef(t, pending, "activity %q not pending; workflow may have closed", a.activityID)
 	return p

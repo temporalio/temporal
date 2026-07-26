@@ -213,7 +213,7 @@ func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 		return // the dispatch time has already passed
 	}
 	deadline := next.AsTime().Add(activityDriverWallClockSettle)
-	p := projectSAA(info)
+	p := saaActivityInfo(info)
 	if activityDriverPollUntil(deadline, func() bool { p = a.activityInfo(t); return !p.NextAttemptScheduleTimeSet }) {
 		return
 	}
@@ -294,8 +294,8 @@ func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivi
 }
 
 // activityInfo is the activity's ActivityExecutionInfo, projected.
-func (a *saaHandle) activityInfo(t require.TestingT) activityInfoProjection {
-	return projectSAA(a.describe(t).GetInfo())
+func (a *saaHandle) activityInfo(t require.TestingT) activityInfo {
+	return saaActivityInfo(a.describe(t).GetInfo())
 }
 
 // terminalStatus waits for the activity to reach a terminal status and reports it.
@@ -327,8 +327,8 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
-func projectSAA(i *apiactivitypb.ActivityExecutionInfo) activityInfoProjection {
-	return activityInfoProjection{
+func saaActivityInfo(i *apiactivitypb.ActivityExecutionInfo) activityInfo {
+	return activityInfo{
 		RunState:                   i.GetRunState(),
 		Attempt:                    i.GetAttempt(),
 		CurrentRetryInterval:       i.GetCurrentRetryInterval().AsDuration().Round(time.Second),
