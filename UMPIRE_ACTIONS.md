@@ -295,8 +295,6 @@ fires on the attempt, not once started).
 - **Beyond `NexusOperation`** — the schema is generic, but only `NexusOperation` has declared
   actions so far.
 - **Footprint reconciliation** — `Reconcile` grounds effects, not yet the `Faultable` footprint.
-- **Planner-core lift** — moving `advanceEdges`/`shortestRoute`/`hostingOK` into `common` so
-  `PlanEdge` need not live beside the Temporal planner (mechanical).
 
 ## Relationship to the other umpire pieces
 

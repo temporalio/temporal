@@ -24,7 +24,7 @@ type paramDriver struct {
 	result string
 }
 
-func (d *paramDriver) Do(_ context.Context, a planner.Action) error {
+func (d *paramDriver) Do(_ context.Context, a planner.Step) error {
 	switch p := a.Params.(type) {
 	case initializeArgs:
 		d.config = p.Config
@@ -59,7 +59,7 @@ func TestRunWith_BindsTypedParamsPerEvent(t *testing.T) {
 // nilParamDriver flags any non-nil Params it receives.
 type nilParamDriver struct{ sawNonNil bool }
 
-func (d *nilParamDriver) Do(_ context.Context, a planner.Action) error {
+func (d *nilParamDriver) Do(_ context.Context, a planner.Step) error {
 	if a.Params != nil {
 		d.sawNonNil = true
 	}

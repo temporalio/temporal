@@ -11,7 +11,7 @@ import (
 
 type recordingDriver struct{ events []string }
 
-func (d *recordingDriver) Do(_ context.Context, a planner.Action) error {
+func (d *recordingDriver) Do(_ context.Context, a planner.Step) error {
 	d.events = append(d.events, a.Event)
 	return nil
 }

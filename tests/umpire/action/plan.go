@@ -73,7 +73,7 @@ func PlanEdge(from, event string, hosting umpire.Hosting) ([]umpire.Action, erro
 	}
 	var route []string
 	if from != lc.Initial() {
-		plan, err := planner.PlanTo(lc, from, planner.Shortest, planner.Constraints{Hosting: hosting})
+		plan, err := umpire.PlanTo(lc, from, umpire.Shortest, umpire.Constraints{Hosting: hosting})
 		if err != nil {
 			return nil, fmt.Errorf("route to %s: %w", from, err)
 		}

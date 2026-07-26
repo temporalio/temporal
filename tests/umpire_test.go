@@ -53,7 +53,7 @@ type workflowDriver struct {
 	run        sdkclient.WorkflowRun
 }
 
-func (d *workflowDriver) Do(ctx context.Context, a planner.Action) error {
+func (d *workflowDriver) Do(ctx context.Context, a planner.Step) error {
 	switch a.Event {
 	case "start":
 		run, err := d.env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
