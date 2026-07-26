@@ -53,7 +53,7 @@ func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event) {
 		trace := []model.Event{model.Poll, timeout}
 		cfg := activityConfig{
-			MaxAttempts:            3,
+			MaxAttempts:            2,
 			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(timeout).String()},
 		}
 
