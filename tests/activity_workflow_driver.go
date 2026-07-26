@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	apiactivitypb "go.temporal.io/api/activity/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -25,12 +26,16 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type wfaDriver struct {
 	env *testcore.TestEnv
 	ctx context.Context
 	cfg activityConfig
+
+	positivePollTimeout time.Duration // bounds a "must dispatch" poll; 0 => activityDriverTimeout
 }
 
 // newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
@@ -39,10 +44,14 @@ func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaD
 	return &wfaDriver{env: env, ctx: testcontext.For(t), cfg: cfg}
 }
 
+// activityDriverCancelRequestedTimeout bounds the wait for a signalled cancel to reach the activity.
+const activityDriverCancelRequestedTimeout = 10 * time.Second
+
 // wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
+	cursor     *activityModelCursor // the model state reached, so driveEvent can check each event
+	cfg        activityConfig       // d.cfg with the windows this trace needs; see activityConfig.forTrace
 	d          *wfaDriver
-	cfg        activityConfig // d.cfg with the windows this trace needs; see activityConfig.forTrace
 	run        sdkclient.WorkflowRun
 	workflowID string
 	runID      string
@@ -54,8 +63,8 @@ type wfaHandle struct {
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
 // through a sequence of events (a 'trace'). Returns a handle to the activity at the reached state.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
-	validateTrace(t, trace)
-	a := d.start(t, d.cfg.forTrace(trace))
+	cfg := d.cfg.forTrace(trace)
+	a := d.start(t, cfg)
 	for _, e := range trace {
 		a.driveEvent(t, e)
 	}
@@ -64,10 +73,13 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 
 // driveEvent advances the activity by one event.
 func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
+	a.cursor.check(t, e)
+	d := a.d
 	switch {
 	case e.Type == model.PollType:
-		resp := a.pollForTask(t, activityDriverTimeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
+		timeout := cmp.Or(d.positivePollTimeout, activityDriverTimeout)
+		resp := a.pollForTask(t, timeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, timeout)
 		a.token = resp.GetTaskToken()
 	case isDispatchDelayEvent(e.Type):
 		a.awaitDispatchDelay(t, e)
@@ -87,30 +99,32 @@ func (a *wfaHandle) awaitTimeout(t require.TestingT, e model.Event, deadline tim
 	var got activityTimeoutMark
 	fired := func() bool {
 		got = a.timeoutMark(t)
-		return got.timeout == want && (got.closed || got != before)
+		return got.reports(want) && (got.closed || got != before)
 	}
 	if activityDriverPollUntil(deadline, fired) {
 		return
 	}
-	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %s. "+
+	t.Errorf("%s: the activity did not report a %s timeout within %s of driving the event; it reports %+v. "+
 		"Check that the config makes this the timeout that fires.",
-		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got.timeout)
+		e, want, a.cfg.timerDuration(e)+activityDriverTimerMargin, got)
 }
 
 // timeoutMark is the most recent timeout the activity reports. A closed activity has left the pending
 // set, so its timeout comes from the workflow result instead.
 func (a *wfaHandle) timeoutMark(t require.TestingT) activityTimeoutMark {
 	if pa := a.pendingActivity(t); pa != nil {
-		return activityTimeoutMark{
-			timeout: pa.GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType(),
-			attempt: pa.GetAttempt(),
+		return activityTimeoutMark{attemptFailure: timeoutTypeOf(pa.GetLastFailure()), attempt: pa.GetAttempt()}
+	}
+	m := activityTimeoutMark{closed: true}
+	var outcome *temporal.TimeoutError
+	if errors.As(a.run.Get(a.d.ctx, nil), &outcome) {
+		m.outcome = outcome.TimeoutType()
+		var cause *temporal.TimeoutError
+		if errors.As(outcome.Unwrap(), &cause) {
+			m.cause = cause.TimeoutType()
 		}
 	}
-	var timeoutErr *temporal.TimeoutError
-	if errors.As(a.run.Get(a.d.ctx, nil), &timeoutErr) {
-		return activityTimeoutMark{timeout: timeoutErr.TimeoutType(), closed: true}
-	}
-	return activityTimeoutMark{closed: true}
+	return m
 }
 
 // awaitDispatchDelay polls the activity until the delayed dispatch is no longer pending, and
@@ -156,8 +170,9 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.ctx,
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
 		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID})
+
 	require.NoError(t, err)
-	a := &wfaHandle{d: d, cfg: cfg, run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, taskQueue: actTQ}
+	a := &wfaHandle{d: d, cfg: cfg, cursor: newActivityModelCursor(cfg), run: run, workflowID: wfID, runID: run.GetRunID(), activityID: actID, taskQueue: actTQ}
 	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
 	require.Truef(t, activityDriverPollUntil(time.Now().Add(activityDriverTimeout),
 		func() bool { return a.pendingActivity(t) != nil }),
@@ -229,23 +244,83 @@ func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
 	return p
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's
-// terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
-func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+// terminal waits for the activity to reach a terminal state and reports it. A workflow activity's
+// terminal outcome is not in PendingActivities, so it is read from the workflow-result error's cause.
+func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
 	err := a.run.Get(a.d.ctx, nil)
 	if err == nil {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
 	}
 	// A canceled activity surfaces as a bare CanceledError, not wrapped in an ActivityError.
-	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+	var canceledErr *temporal.CanceledError
+	if errors.As(err, &canceledErr) {
+		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 	}
 	var actErr *temporal.ActivityError
 	require.ErrorAs(t, err, &actErr)
-	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	switch cause := actErr.Unwrap().(type) {
+	case *temporal.ApplicationError:
+		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, FailureType: cause.Type()}
+	case *temporal.TimeoutError:
+		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: cause.TimeoutType().String()}
+	default:
+		return activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED}
 	}
-	return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+}
+
+// terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's
+// terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
+func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+	return a.terminal(t).Status
+}
+
+// terminalCause is the failure the terminal outcome chains as its Cause, empty if there is none. The
+// SDK surfaces it via TimeoutError.Unwrap().
+func (a *wfaHandle) terminalCause(_ require.TestingT) failureCause {
+	var toErr *temporal.TimeoutError
+	if errors.As(a.run.Get(a.d.ctx, nil), &toErr) {
+		var appErr *temporal.ApplicationError
+		if errors.As(toErr.Unwrap(), &appErr) {
+			return failureCause{Type: appErr.Type(), Message: appErr.Message()}
+		}
+	}
+	return failureCause{}
+}
+
+// waitForCancelRequested blocks until the activity reports CANCEL_REQUESTED.
+func (a *wfaHandle) waitForCancelRequested() error {
+	var describeErr error
+	cancelRequested := func() bool {
+		resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
+		if err != nil {
+			describeErr = err
+			return true
+		}
+		for _, pa := range resp.GetPendingActivities() {
+			if pa.GetActivityId() == a.activityID && pa.GetState() == enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED {
+				return true
+			}
+		}
+		return false
+	}
+	if activityDriverPollUntil(time.Now().Add(activityDriverCancelRequestedTimeout), cancelRequested) {
+		return describeErr
+	}
+	return fmt.Errorf("wfaDriver: activity %q did not reach CANCEL_REQUESTED after signal", a.activityID)
+}
+
+// heartbeatDetails is the last heartbeat checkpoint, as the first payload's raw bytes. Readable only
+// while the activity is still pending.
+func (a *wfaHandle) heartbeatDetails(t require.TestingT) []byte {
+	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
+	require.NoError(t, err)
+	for _, pa := range resp.GetPendingActivities() {
+		if pa.GetActivityId() == a.activityID {
+			return firstPayloadData(pa.GetHeartbeatDetails())
+		}
+	}
+	require.FailNowf(t, "no pending activity", "activity %q not pending", a.activityID)
+	return nil
 }
 
 // pendingActivityInfo is the activityInfo if activity is currently a pending activity, and whether
@@ -272,19 +347,74 @@ func (a *wfaHandle) rpc(e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
 	switch e.Type {
+	case model.HeartbeatType:
+		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: ns, TaskToken: a.token, Details: activityHeartbeatDetails,
+		})
+		return err
+	case model.RespondCompletedType:
+		_, err := fc.RespondActivityTaskCompleted(a.d.ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+		})
+		return err
 	case model.RespondFailedType:
 		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
 		})
 		return err
+	case model.RespondCanceledType:
+		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+		})
+		return err
+	case model.RequestCancelType:
+		// WFA cancel comes from the workflow, so signal it, then wait for CANCEL_REQUESTED, which SAA's
+		// RequestCancelActivityExecution reaches synchronously.
+		if err := a.d.env.SdkClient().SignalWorkflow(a.d.ctx, a.workflowID, a.runID, wfaCancelSignal, nil); err != nil {
+			return err
+		}
+		return a.waitForCancelRequested()
 	case model.PauseType:
 		_, err := fc.PauseActivityExecution(a.d.ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.UnpauseType:
+		_, err := fc.UnpauseActivityExecution(a.d.ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			ResetAttempts: e.ResetAttempts, ResetHeartbeat: e.ResetHeartbeat,
+		})
+		return err
+	case model.ResetType:
+		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			KeepPaused: e.KeepPaused, RestoreOriginalOptions: e.RestoreOriginal,
+		})
+		return err
+	case model.UpdateOptionsType:
+		return a.updateOptions(e)
 	default:
 		return fmt.Errorf("wfaDriver: unhandled event type %v", e.Type)
 	}
+}
+
+func (a *wfaHandle) updateOptions(e model.Event) error {
+	req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+		Namespace: a.d.env.Namespace().String(), WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+	}
+	switch {
+	case e.RestoreOriginal:
+		req.RestoreOriginal = true
+	case e.SetsStartDelay:
+		req.ActivityOptions = &apiactivitypb.ActivityOptions{StartDelay: durationpb.New(time.Hour)}
+		req.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{"start_delay"}}
+	default:
+		// A minimal, always-valid update: re-set the heartbeat timeout.
+		req.ActivityOptions = &apiactivitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)}
+		req.UpdateMask = &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}}
+	}
+	_, err := a.d.env.FrontendClient().UpdateActivityExecutionOptions(a.d.ctx, req)
+	return err
 }
 
 func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {

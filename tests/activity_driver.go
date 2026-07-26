@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -30,16 +31,16 @@ import (
 // absent when unset.
 type activityConfig struct {
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
-	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortRetryInterval
+	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortDispatchDelay
 	BackoffCoefficient     float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
 	NonRetryableErrorTypes []string      // RetryPolicy NonRetryableErrorTypes
 
 	StartToClose     time.Duration // 0 => activityLongDuration, so it does not fire
-	ScheduleToClose  time.Duration // 0 = unset
-	ScheduleToStart  time.Duration // 0 = unset
-	HeartbeatTimeout time.Duration // 0 = unset
+	ScheduleToClose  time.Duration
+	ScheduleToStart  time.Duration
+	HeartbeatTimeout time.Duration
 	StartDelay       time.Duration // SAA only: WFA has no per-activity start delay
 }
 
@@ -66,6 +67,7 @@ var activityShortDispatchDelay = timerProcessorMaxShift
 func (c activityConfig) retryInterval() time.Duration {
 	return cmp.Or(c.RetryInterval, activityShortDispatchDelay)
 }
+
 func (c activityConfig) startToClose() time.Duration {
 	return cmp.Or(c.StartToClose, activityLongDuration)
 }
@@ -94,7 +96,7 @@ func (c activityConfig) timerDuration(e model.Event) time.Duration {
 		return c.StartDelay
 	case model.BackoffElapsesType:
 		// The first backoff only: a later one is longer under a non-constant policy. Waiting for a
-		// dispatch uses the server's schedule time instead; see awaitDispatchTimePassed.
+		// dispatch uses the server's schedule time instead; see awaitDispatchDelay.
 		return cmp.Or(c.NextRetryDelay, c.retryInterval())
 	case model.StartToCloseElapsesType:
 		return c.startToClose()
@@ -109,17 +111,16 @@ func (c activityConfig) timerDuration(e model.Event) time.Duration {
 	}
 }
 
-// activityInfo is user-visible activity state projected out of SAA's ActivityExecutionInfo and
-// WFA's PendingActivityInfo.
-//
-// CurrentRetryInterval is rounded to the second, because WFA derives it by subtracting two stored
-// timestamps while SAA stores it exactly. NextAttemptScheduleTime is reduced to whether it is set
-// to facilitate test assertions.
-type activityInfo struct {
-	RunState                   enumspb.PendingActivityState
-	Attempt                    int32
-	CurrentRetryInterval       time.Duration
-	NextAttemptScheduleTimeSet bool
+// modelConfig is the model's view of the activity: which options are configured at all. Deriving it
+// means the two cannot disagree.
+func (c activityConfig) modelConfig() model.Config {
+	return model.Config{
+		MaxAttempts:        c.MaxAttempts,
+		HasStartDelay:      c.StartDelay > 0,
+		HasScheduleToClose: c.ScheduleToClose > 0,
+		HasScheduleToStart: c.ScheduleToStart > 0,
+		HasHeartbeat:       c.HeartbeatTimeout > 0,
+	}
 }
 
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
@@ -151,33 +152,27 @@ func timeoutType(e model.Event) enumspb.TimeoutType {
 	}
 }
 
-// validateTrace rejects a trace the drivers cannot realize. An attempt's timeouts run concurrently,
-// from deadlines the server anchors at schedule or attempt-start time, while the driver waits each one
-// out from the moment its event is driven — so an attempt can be ended by at most one. Once the first
-// fires, the others are no longer running and the driver would wait for something that never happens.
-//
-// A Poll starts a new attempt, which arms a fresh set, so the same timeout may appear again after one.
-// Dispatch delays are exempt entirely: each backoff is its own window, and awaitDispatchTimePassed
-// takes its deadline from the server rather than from the trace.
-//
-// A rule of thumb, not a decision procedure. The model decides this per event and per state, and
-// replaces this once it lands here.
-func validateTrace(t require.TestingT, trace []model.Event) {
-	var timeouts []model.Event
-	for _, e := range trace {
-		switch {
-		case e.Type == model.PollType:
-			timeouts = nil // a new attempt arms its timeouts afresh
-		case isTimerEvent(e.Type) && !isDispatchDelayEvent(e.Type):
-			timeouts = append(timeouts, e)
-		}
-		if len(timeouts) > 1 {
-			require.Failf(t, "a trace cannot name two timeouts on one attempt",
-				"they run concurrently, so once the first fires the rest cannot occur. This attempt names %v. "+
-					"Poll again first if the second belongs to a later attempt.", timeouts)
-			return
-		}
+// activityModelCursor is the model state a driver has reached, so that driveEvent can check each
+// event against the state it is driven from.
+type activityModelCursor struct {
+	cfg   model.Config
+	state model.AbstractState
+}
+
+func newActivityModelCursor(cfg activityConfig) *activityModelCursor {
+	mc := cfg.modelConfig()
+	return &activityModelCursor{cfg: mc, state: model.Initial(mc)}
+}
+
+// check fails if e cannot occur in the state reached so far, then advances past it.
+func (c *activityModelCursor) check(t require.TestingT, e model.Event) {
+	if !model.Possible(c.cfg, c.state, e.Type) {
+		require.Failf(t, "the trace drives an event that cannot occur",
+			"%s cannot occur in %v/%v: its clock is not running there. Remove it, or drive the events "+
+				"that start its clock first.", e, c.state.Status, c.state.Dispatchability)
+		return
 	}
+	c.state = model.Transition(c.cfg, c.state, e).Next
 }
 
 // isTimerEvent reports whether an event represents a timer elapsing, as opposed to an RPC.
@@ -212,9 +207,21 @@ func activityFailure(retryable bool, nextRetryDelay time.Duration) *failurepb.Fa
 // activityTimeoutMark is what a driver compares to decide that the timeout an event names is this
 // event's, rather than one left over from an earlier attempt.
 type activityTimeoutMark struct {
-	timeout enumspb.TimeoutType
-	attempt int32
-	closed  bool
+	attemptFailure enumspb.TimeoutType // ended the last attempt
+	outcome        enumspb.TimeoutType // closed the activity
+	cause          enumspb.TimeoutType // chained by outcome as what led to it
+	attempt        int32
+	closed         bool
+}
+
+// reports says whether the activity reports tt as having occurred.
+func (m activityTimeoutMark) reports(tt enumspb.TimeoutType) bool {
+	return tt != enumspb.TIMEOUT_TYPE_UNSPECIFIED &&
+		(m.attemptFailure == tt || m.outcome == tt || m.cause == tt)
+}
+
+func timeoutTypeOf(f *failurepb.Failure) enumspb.TimeoutType {
+	return f.GetTimeoutFailureInfo().GetTimeoutType()
 }
 
 // activityDriverPollUntil reports whether cond held before the deadline, reading every activityDriverPollInterval.
@@ -233,4 +240,43 @@ func activityDriverPollUntil(deadline time.Time, cond func() bool) bool {
 		}
 		time.Sleep(activityDriverPollInterval)
 	}
+}
+
+// activityHeartbeatDetails is the checkpoint payload both drivers send with a Heartbeat event.
+var activityHeartbeatDetails = &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+	Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+	Data:     []byte(`"hb"`),
+}}}
+
+func firstPayloadData(p *commonpb.Payloads) []byte {
+	if ps := p.GetPayloads(); len(ps) > 0 {
+		return ps[0].GetData()
+	}
+	return nil
+}
+
+// activityInfo is user-visible activity state projected out of SAA's ActivityExecutionInfo and
+// WFA's PendingActivityInfo.
+//
+// CurrentRetryInterval is rounded to the second, because WFA derives it by subtracting two stored
+// timestamps while SAA stores it exactly. NextAttemptScheduleTime is reduced to whether it is set
+// to facilitate test assertions.
+type activityInfo struct {
+	RunState                   enumspb.PendingActivityState
+	Attempt                    int32
+	CurrentRetryInterval       time.Duration
+	NextAttemptScheduleTimeSet bool
+}
+
+// activityTerminalProjection is the terminal status plus the failure discriminant a user sees: the
+// application failure Type for FAILED, the TimeoutType string for TIMED_OUT, empty otherwise.
+type activityTerminalProjection struct {
+	Status      enumspb.ActivityExecutionStatus
+	FailureType string
+}
+
+// failureCause is the Type and Message of the failure a terminal outcome chains as its Cause.
+type failureCause struct {
+	Type    string
+	Message string
 }

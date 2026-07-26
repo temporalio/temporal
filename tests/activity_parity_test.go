@@ -24,6 +24,7 @@ func TestActivityParityTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &activityParityTestSuite{})
 }
 
+// newActivityParityEnv is a test env with standalone activity enabled.
 func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 	env := testcore.NewEnv(t)
 	nsValues := func(value any) []dynamicconfig.ConstrainedValue {
@@ -43,17 +44,15 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 // activityLongDuration so the reported interval cannot be confused with the policy's.
 const nextRetryDelayOverride = 10 * time.Second
 
-// The retry policy's NonRetryableErrorTypes Must be respected. In particular, a StartToClose or
-// Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes using the
-// special TemporalTimeout: syntax must fail the activity terminally (TimedOut) when it fires,
-// rather than retrying.
+// A StartToClose or Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes
+// must fail the activity terminally (TimedOut) when it fires, rather than retrying.
 func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
 	testTimeoutWhileAttemptInProgress := func(t *testing.T, timeout model.Event) {
 		trace := []model.Event{model.Poll, timeout}
 		cfg := activityConfig{
-			MaxAttempts:            2,
+			MaxAttempts:            3,
 			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(timeout).String()},
 		}
 
@@ -185,5 +184,249 @@ func (s *activityParityTestSuite) TestParityCurrentRetryIntervalAndNextAttemptSc
 				RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED,
 				Attempt:  2,
 			})
+	})
+}
+
+// TestParityStartToCloseTimeout ports a slice of Test_ActivityTimeouts: a started attempt exceeds its
+// StartToClose timeout and, with no retries left, the activity ends TIMED_OUT with the StartToClose
+// TimeoutType.
+//
+// The failure message differs by construction — SAA carries a proto message, WFA's SDK TimeoutError
+// formats its own — so TimeoutType is the cross-surface discriminant.
+func (s *activityParityTestSuite) TestParityStartToCloseTimeout() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.StartToCloseElapses}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}
+
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityScheduleToCloseTimeout ports the schedule-to-close slice of Test_ActivityTimeouts: the
+// activity is started, then its ScheduleToClose deadline elapses while it runs, so it ends TIMED_OUT
+// with the ScheduleToClose TimeoutType. The trace polls first because a never-started activity that
+// hits the deadline times out as ScheduleToStart instead, on both surfaces.
+func (s *activityParityTestSuite) TestParityScheduleToCloseTimeout() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, {Type: model.ScheduleToCloseElapsesType}}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}
+
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityTimeoutPreservesUnderlyingFailureCause ports TestTimeoutPreservesUnderlyingFailureCause:
+// when a timeout closes an activity whose retries were driven by an application failure, the terminal
+// TimedOut failure must chain that application failure as its Cause, so an SDK can surface the real
+// failure. See mutable_state_impl.go AddActivityTaskTimedOutEvent and temporalio/temporal#3667.
+func (s *activityParityTestSuite) TestParityTimeoutPreservesUnderlyingFailureCause() {
+	env := newActivityParityEnv(s.T())
+
+	// The application failure driven on attempt 1; see activityFailure. The terminal timeout must chain it
+	// verbatim, both Type and Message.
+	wantCause := failureCause{Type: "drive", Message: "drive"}
+
+	// assertCausePreserved drives the trace on both surfaces and asserts each ends TIMED_OUT with the given
+	// timeout type, chaining wantCause.
+	assertCausePreserved := func(t *testing.T, cfg activityConfig, trace []model.Event, timeoutType enumspb.TimeoutType) {
+		expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: timeoutType.String()}
+		const chained = "the terminal timeout must chain the underlying application failure as its Cause"
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, expected, a.terminal(t))
+			require.Equal(t, wantCause, a.terminalCause(t), chained)
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+			require.Equal(t, expected, a.terminal(t))
+			require.Equal(t, wantCause, a.terminalCause(t), chained)
+		})
+	}
+
+	// Retries exhausted by a StartToClose timeout on the final attempt (attempt 1 failed retryably).
+	s.T().Run("StartToClose", func(t *testing.T) {
+		assertCausePreserved(t, activityConfig{MaxAttempts: 2},
+			[]model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.StartToCloseElapses}, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	})
+	// Retries exhausted by a Heartbeat timeout on the final attempt: the attempt starts but never
+	// heartbeats. A distinct code path that must chain the same cause.
+	s.T().Run("Heartbeat", func(t *testing.T) {
+		assertCausePreserved(t, activityConfig{MaxAttempts: 2},
+			[]model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.HeartbeatElapses}, enumspb.TIMEOUT_TYPE_HEARTBEAT)
+	})
+	// Schedule-to-close deadline closes the activity while it backs off to retry. A third code path.
+	s.T().Run("ScheduleToClose", func(t *testing.T) {
+		assertCausePreserved(t, activityConfig{},
+			[]model.Event{model.Poll, model.FailRetryably, model.ScheduleToCloseElapses}, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	})
+}
+
+// TestParityTimeoutTypeOnInsufficientTimeForRetry ports the HeartbeatWithScheduleToClose slice of
+// Test_ActivityTimeouts: a heartbeat timeout fires on a started attempt, but the retry interval cannot
+// fit before the schedule-to-close deadline, so retries are given up and the terminal timeout is
+// reported as ScheduleToClose rather than Heartbeat.
+func (s *activityParityTestSuite) TestParityTimeoutTypeOnInsufficientTimeForRetry() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, {Type: model.HeartbeatElapsesType}}
+	// Heartbeat fires at ~2s; the 30s retry cannot fit before the 10s schedule-to-close deadline.
+	const retryInterval, scheduleToClose = 30 * time.Second, 10 * time.Second
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}
+
+	cfg := activityConfig{
+		MaxAttempts: 2, RetryInterval: retryInterval, ScheduleToClose: scheduleToClose,
+	}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		// A workflow activity stops reporting the timeout that ended its attempt the moment it closes:
+		// the terminal error carries ScheduleToClose and no cause. The standalone surface keeps the
+		// attempt's failure, so only it can drive HeartbeatElapses here.
+		t.Skip("a closed workflow activity does not report the timeout that ended its attempt")
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityBackoffCoefficient: with a coefficient above 1 each retry waits longer than the last. The
+// interval for attempt N is InitialInterval * coefficient^(N-2), so the first backoff is the initial
+// interval and the second is that times the coefficient. Observed during the second backoff, before it
+// dispatches.
+func (s *activityParityTestSuite) TestParityBackoffCoefficient() {
+	env := newActivityParityEnv(s.T())
+	const initialInterval, maxInterval = 5 * time.Second, 30 * time.Second
+	trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.FailRetryably}
+	expected := activityInfo{
+		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+		Attempt:                    3,
+		CurrentRetryInterval:       2 * initialInterval,
+		NextAttemptScheduleTimeSet: true,
+	}
+
+	cfg := activityConfig{
+		MaxAttempts: 4, RetryInterval: initialInterval, BackoffCoefficient: 2.0, MaxRetryInterval: maxInterval,
+	}
+
+	// Elapsing the longer second backoff also exercises the driver's wait, which must take its deadline
+	// from the server rather than from the configured interval.
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		a := newWFADriver(t, env, cfg).driveTrace(t, trace)
+		require.Equal(t, expected, a.activityInfo(t))
+		a.driveEvent(t, model.BackoffElapses)
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		a := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		require.Equal(t, expected, a.activityInfo(t))
+		a.driveEvent(t, model.BackoffElapses)
+	})
+}
+
+var heartbeatWant = []byte(`"hb"`) // == activityHeartbeatDetails
+
+// TestParityHeartbeat ports the core of TestActivityHeartBeatWorkflow_Success: a worker polls the
+// activity and heartbeats a checkpoint payload, the checkpoint is readable while it runs, then the
+// worker completes it.
+func (s *activityParityTestSuite) TestParityHeartbeat() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, {Type: model.HeartbeatType}}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		d := newWFADriver(t, env, activityConfig{MaxAttempts: 3, RetryInterval: 2 * time.Second})
+		a := d.driveTrace(t, trace)
+		require.Equal(t, heartbeatWant, a.heartbeatDetails(t))
+		a.driveEvent(t, model.Complete)
+		require.Equal(t, expected, a.terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		d := newSAADriver(t, env, activityConfig{MaxAttempts: 3, RetryInterval: 2 * time.Second})
+		a := d.driveTrace(t, trace)
+		require.Equal(t, heartbeatWant, a.heartbeatDetails(t))
+		a.driveEvent(t, model.Complete)
+		require.Equal(t, expected, a.terminal(t))
+	})
+}
+
+// TestParityHeartbeatTimeout ports the core of TestActivityHeartBeatWorkflow_Timeout: a started attempt
+// heartbeats nothing within its HeartbeatTimeout and, with no retries left, ends TIMED_OUT with the
+// Heartbeat TimeoutType.
+func (s *activityParityTestSuite) TestParityHeartbeatTimeout() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, {Type: model.HeartbeatElapsesType}}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, FailureType: enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}
+
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityRetry: an attempt fails retryably, the backoff elapses, the next attempt fails
+// non-retryably, and the activity ends FAILED with the application failure type.
+func (s *activityParityTestSuite) TestParityRetry() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.FailNonRetryably}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, FailureType: "drive"}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		d := newWFADriver(t, env, activityConfig{MaxAttempts: 3, RetryInterval: 2 * time.Second})
+		require.Equal(t, expected, d.driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		d := newSAADriver(t, env, activityConfig{MaxAttempts: 3, RetryInterval: 2 * time.Second})
+		require.Equal(t, expected, d.driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityCompleteAfterRetry: attempt 1 fails retryably, the backoff elapses, and attempt 2
+// completes. The counterpart of TestWFASAARetry, which ends in a non-retryable failure.
+func (s *activityParityTestSuite) TestParityCompleteAfterRetry() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll, model.Complete}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
+
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityDelayWindow}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+}
+
+// TestParityCancel ports the core of TestTryActivityCancellationFromWorkflow: a running activity is
+// cancel-requested, the worker acknowledges with RespondActivityTaskCanceled, and the activity ends
+// CANCELED. The RequestCancel event realizes differently per surface — SAA's direct
+// RequestCancelActivityExecution RPC vs WFA's signal-then-RequestCancelActivity — which the drivers
+// hide.
+func (s *activityParityTestSuite) TestParityCancel() {
+	env := newActivityParityEnv(s.T())
+	trace := []model.Event{model.Poll, model.RequestCancel, {Type: model.RespondCanceledType}}
+	expected := activityTerminalProjection{Status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
+
+	cfg := activityConfig{MaxAttempts: 1}
+
+	s.T().Run("WorkflowActivity", func(t *testing.T) {
+		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
+	})
+	s.T().Run("StandaloneActivity", func(t *testing.T) {
+		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminal(t))
 	})
 }
