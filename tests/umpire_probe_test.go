@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire/action"
-	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
 )
 
@@ -114,6 +113,7 @@ func (s *UmpireTestSuite) nexusGenExecPlan(plan []umpire.Action) probe.EnvFunc {
 		endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
 		return env.TestEnv, func(dctx context.Context, iter int) error {
 			rc := action.NewCtx(env.TestEnv, endpoint, policy, iter)
+			defer rc.Cleanup() // unregister any fault actions the plan armed
 			oracle := action.Oracle{Env: env.TestEnv}
 			if err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan); err != nil {
 				return err
@@ -138,6 +138,24 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 		Judge()
 
 	require.Equal(t, probe.Recovered, report.Baseline.Verdict, "generated standalone completion should reach succeeded")
+	require.Equal(t, "succeeded", report.Baseline.Terminal)
+}
+
+// TestProbeNexusFaultAction shows a fault as a first-class plan action (Phase 5): a Hold on the
+// outbound Nexus invocation is injected declaratively into a completion plan; the operation is
+// delayed but still settles at succeeded — resilience, driven by the actions model.
+func (s *UmpireTestSuite) TestProbeNexusFaultAction() {
+	t := s.T()
+	// Hold the outbound Nexus HTTP invocation (matched by its "…/service/operation" path) for
+	// 500ms, then run the standalone completion path.
+	plan := append([]umpire.Action{action.Hold("service/operation", 500*time.Millisecond)}, action.StandaloneCompletion()...)
+	report := probe.Umpire(t).
+		Reach("NexusOperation", "succeeded").
+		Execution(s.nexusGenExecPlan(plan)).
+		Timeout(20 * time.Second).
+		Judge()
+
+	require.Equal(t, probe.Recovered, report.Baseline.Verdict, "the operation should tolerate a held invocation")
 	require.Equal(t, "succeeded", report.Baseline.Terminal)
 }
 
@@ -271,43 +289,22 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
 	}
 
-	// Sync success, op-failure, and handler-reported cancel each settle directly from the
-	// start attempt (scheduled --> {succeeded, failed, canceled}), generated from the actions
-	// model. (The scheduled-cancel is a user-driven decision modeled as an untagged terminal;
-	// a workflow-side cancel request only advances the cancellation sub-machine the umpire
-	// model does not track.)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedSyncSuccess()), 10*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedOpFailure()), 10*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedScheduledCancel()), 10*time.Second)
-	// The retryable path cycles scheduled <-> backing_off, exercising those direct edges.
+	// Auto-cover (PLAN.md Phase 4): the LIST of drives is computed from the model — one plan
+	// per settling edge, assembled by PlanEdge and driven in its own env. This covers every
+	// edge across both hostings (embedded handler/completion outcomes, standalone terminates)
+	// except the two server-timer edges below, which have no atomic action.
+	for _, plan := range action.AutoCoverPlans() {
+		exploreEnv(s.nexusGenExecPlan(plan), 15*time.Second)
+	}
+	// The two server-driven edges auto-cover skips, driven bespoke:
+	//   backing_off --schedule--> scheduled: the retry reschedule — a cycling retryable handler
+	//   observes it (and scheduled --attempt_failed--> backing_off) but never settles.
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
 	}}, syncCaller, 8*time.Second)
-	// An async start reaches STARTED (and then stays there), exercising the start edge.
-	explore(asyncStart, syncCaller, 8*time.Second)
-	// A short schedule-to-close timeout on a never-completing async operation reaches
-	// the timed_out terminal (started --timeout--> timed_out).
+	//   started --timeout--> timed_out: a real schedule-to-close timer on a never-completing
+	//   async operation (the force-timeout hook fires on the attempt, not once started).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
-	// Forced schedule-to-close timeout, generated from the actions model: from the first
-	// attempt (scheduled --timeout--> timed_out) and from the backoff gap after a retryable
-	// failure (backing_off --timeout--> timed_out).
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedTimeoutScheduled()), 10*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedTimeoutBackingOff()), 15*time.Second)
-	// Embedded async completion, now generated from the actions model (see PLAN.md Phase 3):
-	// schedule the op inside a caller workflow, async-ack the start, then deliver a completion
-	// callback once it is STARTED — reaching started --> {succeeded, failed, canceled}.
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedSucceed()), 15*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedFail()), 15*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.EmbeddedCancel()), 15*time.Second)
-
-	// Standalone-hosting drives, now generated from the actions model (see PLAN.md Phase 3):
-	// each plan starts the operation as its own execution, drives it into a state, then
-	// terminates it — reaching {scheduled,backing_off,started} --terminate--> terminated. These
-	// edges are Standalone-only (a workflow-child op has no terminate RPC and workflow
-	// termination does not cascade to it).
-	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusScheduled)), 15*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusBackingOff)), 15*time.Second)
-	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusStarted)), 15*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)

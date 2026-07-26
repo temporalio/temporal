@@ -36,8 +36,26 @@ type Ctx struct {
 	Iter     int
 	RunID    string // the started operation's run id, captured by the start action for terminate
 
-	mu   sync.Mutex
-	bind map[string]string
+	mu       sync.Mutex
+	bind     map[string]string
+	cleanups []func() // e.g. fault unregistration, run on Cleanup
+}
+
+// addCleanup registers a function to run when the drive finishes (see Cleanup).
+func (c *Ctx) addCleanup(f func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cleanups = append(c.cleanups, f)
+}
+
+// Cleanup runs the registered cleanups (unregistering faults, etc.). Call it after Drive.
+func (c *Ctx) Cleanup() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, f := range c.cleanups {
+		f()
+	}
+	c.cleanups = nil
 }
 
 // NewCtx builds a RealizeContext for one drive.

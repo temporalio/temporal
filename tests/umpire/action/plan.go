@@ -42,10 +42,15 @@ func actionFor(from, event string, hosting umpire.Hosting) (umpire.Action, bool)
 		}
 		return HandlerOpCanceled, true
 	case model.NexusTimeout:
-		if from == model.NexusBackingOff {
+		switch from {
+		case model.NexusScheduled:
+			return TimerForceTimeout(testhooks.NexusForceTimeoutFromScheduled), true
+		case model.NexusBackingOff:
 			return TimerForceTimeout(testhooks.NexusForceTimeoutFromBackingOff), true
+		default: // started: the force-timeout hook fires on the attempt, not once started —
+			// this edge needs a real schedule-to-close timer, so there is no atomic action.
+			return umpire.Action{}, false
 		}
-		return TimerForceTimeout(testhooks.NexusForceTimeoutFromScheduled), true
 	case model.NexusTerminate:
 		return TerminateFrom(from), true
 	}
@@ -89,6 +94,34 @@ func PlanEdge(from, event string, hosting umpire.Hosting) ([]umpire.Action, erro
 		}
 	}
 	return seq, nil
+}
+
+// AutoCoverPlans computes the set of plans that together traverse every model edge the planner
+// can reach — the coverage goal becomes a computed list, not a hand-written one. It drives one
+// plan per *settling* edge (an edge landing on a terminal state); the path edges to reach it
+// are covered along the way. An edge is driven under the hosting its HostedIn trait requires
+// (Standalone for terminate), else Embedded. Two server-timer edges have no atomic action and
+// are skipped (PlanEdge returns an error): the backing_off→scheduled retry reschedule and
+// started→timed_out — they still need bespoke drives.
+func AutoCoverPlans() [][]umpire.Action {
+	lc, ok := planner.DefaultModels().Lifecycle(string(model.NexusOperationType))
+	if !ok {
+		return nil
+	}
+	var plans [][]umpire.Action
+	for _, e := range lc.Edges() {
+		if !lc.Terminal(e.To) {
+			continue // drive only settling edges; their prefixes cover the rest
+		}
+		hosting := umpire.Embedded
+		if lc.EdgeHosting(e.From, e.Event) == umpire.Standalone {
+			hosting = umpire.Standalone
+		}
+		if seq, err := PlanEdge(e.From, e.Event, hosting); err == nil {
+			plans = append(plans, seq)
+		}
+	}
+	return plans
 }
 
 // mustPlan is PlanEdge for the known-good edges the named plan constructors expose; it panics
