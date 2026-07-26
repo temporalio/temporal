@@ -3704,23 +3704,23 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// fast_forward set while enabled=false is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForward: durationpb.New(time.Second * 10), FastForwardId: "ff-id"}, s.testNamespace), &invalidArgumentErr)
+		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
 	// negative fast_forward duration is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * -10), FastForwardId: "ff-id"}, s.testNamespace), &invalidArgumentErr)
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
 	// fast_forward set without a fast_forward_id is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
 
 	// a blank (whitespace-only) fast_forward_id is rejected
 	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * 10), FastForwardId: "  "}, s.testNamespace), &invalidArgumentErr)
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
 
 	// fast_forward with a valid fast_forward_id is accepted
 	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * 10), FastForwardId: "ff-id"}, s.testNamespace))
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
 
 	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
 	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
@@ -3738,17 +3738,17 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	// namespace with a per-namespace override uses that value
 	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(7), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
 
 	// namespace without a per-namespace setting falls back to the per-cell value
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
-	s.Require().Equal(int32(42), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
 
 	// a value already on the request is preserved, not overwritten by dynamic config
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSkipPerSession: 999}
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(999), tsc.GetMaxSkipPerSession())
+	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
 }
 
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
@@ -3798,7 +3798,7 @@ func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
 
 		want := &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
-			Result: workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED,
+			FastForwardPollingResult: enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED,
 			FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{
 				FastForwardId: "ff-id",
 				HasCompleted:  true,

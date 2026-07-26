@@ -711,22 +711,22 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
 		return errWorkflowTimeSkippingNotEnabled
 	}
-	if tsc.GetMaxSkipPerSession() <= 0 {
+	if tsc.GetMaxSessionSkipCount() <= 0 {
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
-		tsc.MaxSkipPerSession = max(1, int32(defaultMaxSkipPerSession))
+		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
 	}
 
-	if ff := tsc.GetFastForward(); ff != nil {
-		if ff.AsDuration() < 0 {
+	if ff := tsc.GetFastForwardConfig(); ff != nil {
+		if ff.GetDuration().AsDuration() < 0 {
 			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
 		}
-		if strings.TrimSpace(tsc.GetFastForwardId()) == "" {
+		if strings.TrimSpace(ff.GetId()) == "" {
 			return errTimeSkippingFastForwardIDNotSet
 		}
 	}
 
 	if !tsc.GetEnabled() {
-		if tsc.GetFastForward() != nil {
+		if tsc.GetFastForwardConfig() != nil {
 			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 		}
 		return nil

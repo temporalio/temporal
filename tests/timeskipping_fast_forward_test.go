@@ -88,9 +88,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id"}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -223,9 +222,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id"}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -359,9 +357,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	const fastForward = 30 * time.Minute
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id"}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -404,7 +401,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	select {
 	case r := <-resultCh:
 		s.Failf("poll returned before the fast-forward completed",
-			"result=%v err=%v", r.resp.GetResult(), r.err)
+			"result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
 	case <-time.After(2 * time.Second):
 	}
 
@@ -423,8 +420,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	case r := <-resultCh:
 		s.NoError(r.err)
 		s.Equal(
-			workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED,
-			r.resp.GetResult())
+			enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			r.resp.GetFastForwardPollingResult())
 		s.NotNil(r.resp.GetFastForwardInfo())
 		s.True(r.resp.GetFastForwardInfo().GetHasCompleted())
 		s.Equal("ff-id", r.resp.GetFastForwardInfo().GetFastForwardId())
@@ -442,8 +439,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnComp
 	})
 	s.NoError(err)
 	s.Equal(
-		workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED,
-		resp2.GetResult())
+		enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+		resp2.GetFastForwardPollingResult())
 	s.NotNil(resp2.GetFastForwardInfo())
 	s.True(resp2.GetFastForwardInfo().GetHasCompleted())
 	s.Equal("ff-id", resp2.GetFastForwardInfo().GetFastForwardId())
@@ -471,9 +468,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	const fastForward = 30 * time.Minute
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id"}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -513,7 +509,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	// here would mean it short-circuited.
 	select {
 	case r := <-resultCh:
-		s.Failf("poll returned before the workflow ended", "result=%v err=%v", r.resp.GetResult(), r.err)
+		s.Failf("poll returned before the workflow ended", "result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
 	case <-time.After(2 * time.Second):
 	}
 
@@ -532,8 +528,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	case r := <-resultCh:
 		s.NoError(r.err)
 		s.Equal(
-			workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION,
-			r.resp.GetResult())
+			enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION,
+			r.resp.GetFastForwardPollingResult())
 		s.NotNil(r.resp.GetFastForwardInfo())
 		s.False(r.resp.GetFastForwardInfo().GetHasCompleted())
 		s.Equal("ff-id", r.resp.GetFastForwardInfo().GetFastForwardId())
@@ -550,8 +546,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWork
 	})
 	s.NoError(err)
 	s.Equal(
-		workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION,
-		resp2.GetResult())
+		enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION,
+		resp2.GetFastForwardPollingResult())
 }
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
@@ -567,9 +563,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id"}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -624,9 +619,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:       true,
-		FastForward:   durationpb.New(fastForward),
-		FastForwardId: "ff-id",
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 	}
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -674,7 +668,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTim
 		timer1Dur   = 45 * time.Second
 	)
 
-	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward), FastForwardId: "ff-id"}
+	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),

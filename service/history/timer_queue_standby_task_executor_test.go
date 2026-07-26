@@ -2499,8 +2499,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 		pms, workflowKey := makeTimeSkippingMS()
 		pms.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
-				Enabled:     true,
-				FastForward: durationpb.New(time.Hour),
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 			},
 			FastForwardInfo: &persistencespb.FastForwardInfo{
 				TargetTime:                    timestamppb.New(s.now.Add(time.Hour)),

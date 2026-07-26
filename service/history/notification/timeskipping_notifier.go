@@ -1,17 +1,24 @@
 package notification
 
 import (
-	commonpb "go.temporal.io/api/common/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 )
 
-type FastForwardNotification struct {
-	FastForwardInfo            *commonpb.TimeSkippingFastForwardInfo
+type TimeSkippingNotification struct {
+	TimeSkippingInfo           *persistencespb.TimeSkippingInfo
 	WorkflowExecutionCompleted bool
 }
 
-type TimeSkippingFastForwardNotifier = PubSubNotifier[*FastForwardNotification]
+func (n *TimeSkippingNotification) GetTimeSkippingInfo() *persistencespb.TimeSkippingInfo {
+	if n == nil {
+		return nil
+	}
+	return n.TimeSkippingInfo
+}
+
+type TimeSkippingFastForwardNotifier = PubSubNotifier[*TimeSkippingNotification]
 
 // NewTimeSkippingNotificationKey builds the subscription key for time-skipping notifications from
 // namespace + workflowID with RunID left empty, so waiters and publishers key on the whole chain
@@ -23,7 +30,7 @@ func NewTimeSkippingNotificationKey(namespaceID string, workflowID string) defin
 const maxFastForwardWaitersPerExecution = 5
 
 func NewTimeSkippingFastForwardNotifier(hashKey func(namespace.ID, string) int32) TimeSkippingFastForwardNotifier {
-	return NewPubSubNotifier[*FastForwardNotification](hashKey, maxFastForwardWaitersPerExecution)
+	return NewPubSubNotifier[*TimeSkippingNotification](hashKey, maxFastForwardWaitersPerExecution)
 }
 
-var NoopTimeSkippingFastForwardNotifier = NewNoopNotifier[*FastForwardNotification]()
+var NoopTimeSkippingFastForwardNotifier = NewNoopNotifier[*TimeSkippingNotification]()

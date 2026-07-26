@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,19 +45,24 @@ func Invoke(
 	defer func() { _ = ffNotifier.Unwatch(watchKey, subscriberID) }()
 
 	// step-2: an initial read to see we can short-circuit the polling
-	ffinfo, wfClosed, err := readFastForwardInfo(ctx, req, workflowConsistencyChecker)
+	ffinfo, tsDisabled, wfClosed, err := readFastForwardInfo(ctx, req, workflowConsistencyChecker)
 	if err != nil {
 		return nil, err
 	}
 	if ffinfo == nil || ffinfo.GetFastForwardId() != requestedFFID {
-		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND), nil
+		return newResponse(ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_ID_MISMATCH), nil
 	}
 	if ffinfo.GetHasCompleted() {
-		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED), nil
+		return newResponse(ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED), nil
 	}
 	// The run ended before the fast-forward completed: it never will.
 	if wfClosed {
-		return newResponse(ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION), nil
+		return newResponse(ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION), nil
+	}
+	// Time skipping was disabled (e.g. the session skip budget was reached) before the
+	// fast-forward completed: it never will.
+	if tsDisabled {
+		return newResponse(ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_TIME_SKIPPING_DISABLED_BEFORE_FAST_FORWARD_COMPLETION), nil
 	}
 
 	// step-3: Fast-forward is pending and matches the request: long-poll for a change.
@@ -76,7 +82,7 @@ func readFastForwardInfo(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionTimeSkippingRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (_ *commonpb.TimeSkippingFastForwardInfo, closed bool, retError error) {
+) (_ *commonpb.TimeSkippingFastForwardInfo, tsDisabled bool, closed bool, retError error) {
 	execution := req.GetRequest().GetWorkflowExecution()
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
@@ -85,16 +91,18 @@ func readFastForwardInfo(
 		locks.PriorityLow, // testing api
 	)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	ms := workflowLease.GetMutableState()
-	ffinfo := workflow.NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).ToFastForwardInfo()
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	ffinfo := workflow.NewTimeSkippingInfoUtil(tsi).ToFastForwardInfo()
+	tsDisabled = !tsi.GetConfig().GetEnabled()
 	// A closed run with no continuation (retry / cron / CaN set NewExecutionRunId)
 	// can never complete a pending fast-forward.
 	closed = !ms.IsWorkflowExecutionRunning() && ms.GetExecutionInfo().GetNewExecutionRunId() == ""
-	return ffinfo, closed, nil
+	return ffinfo, tsDisabled, closed, nil
 }
 
 // waitFastForwardNotification blocks until a fast-forward update for the polled
@@ -102,11 +110,11 @@ func readFastForwardInfo(
 func waitFastForwardNotification(
 	ctx context.Context,
 	shardLifecycleCtx context.Context,
-	channel <-chan *notification.FastForwardNotification,
+	channel <-chan *notification.TimeSkippingNotification,
 	softTimeout time.Duration,
 	requestedFFID string,
 	pending *commonpb.TimeSkippingFastForwardInfo,
-) (*commonpb.TimeSkippingFastForwardInfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_Result, error) {
+) (*commonpb.TimeSkippingFastForwardInfo, enumspb.FastForwardCompletionPollingResult, error) {
 	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()
 
@@ -118,19 +126,23 @@ func waitFastForwardNotification(
 				// The pub-sub notifier never closes a live subscription's channel; a closed
 				// channel means we were handed a dead one (e.g. a misconfigured noop notifier),
 				// which should never happen for a real poll.
-				return nil, 0, serviceerror.NewInternal("fast-forward notification channel closed unexpectedly")
+				return nil, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_UNSPECIFIED, serviceerror.NewInternal("fast-forward notification channel closed unexpectedly")
 			}
-			ffinfo := notif.FastForwardInfo
+			ffinfo := workflow.NewTimeSkippingInfoUtil(notif.GetTimeSkippingInfo()).ToFastForwardInfo()
+			tsDisabled := !notif.GetTimeSkippingInfo().GetConfig().GetEnabled()
 			switch {
+			case ffinfo.GetHasCompleted():
+				return ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_COMPLETED, nil
+			case notif.WorkflowExecutionCompleted:
+				return ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_EXECUTION_ENDED_BEFORE_FAST_FORWARD_COMPLETION, nil
+			case tsDisabled:
+				// Time skipping was disabled before the fast-forward completed: it never will.
+				return ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_TIME_SKIPPING_DISABLED_BEFORE_FAST_FORWARD_COMPLETION, nil
 			case ffinfo == nil || ffinfo.GetFastForwardId() != requestedFFID:
 				// there is a edge case users udpate fast forward with the same ID again with a different target time
 				// we detect this by comparing versioned transition in the ffinfo, but right now we don't do this
 				// with the assumption that if the fast-forward id is the same, the user may still want to wait on it
-				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_NOT_FOUND, nil
-			case ffinfo.GetHasCompleted():
-				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_FAST_FORWARD_COMPLETED, nil
-			case notif.WorkflowExecutionCompleted:
-				return ffinfo, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_WORKFLOW_END_BEFORE_FAST_FORWARD_COMPLETION, nil
+				return ffinfo, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_FAST_FORWARD_ID_MISMATCH, nil
 			default:
 				// False alert (benign config write / skip transition / continuation run-stop):
 				// the pending fast-forward is unchanged, so keep waiting.
@@ -143,25 +155,25 @@ func waitFastForwardNotification(
 		// deadline / client disconnect / shutdown), propagate that error rather than faking a timeout.
 		case <-stCtx.Done():
 			if ctx.Err() != nil {
-				return nil, 0, ctx.Err()
+				return nil, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_UNSPECIFIED, ctx.Err()
 			}
-			return pending, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_POLL_TIMEOUT, nil
+			return pending, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_POLL_TIMEOUT, nil
 		// (3) The shard moved or closed. Release promptly instead of holding the subscriber slot
 		// until the soft timeout; the client's retry routes to the new shard owner.
 		case <-shardLifecycleCtx.Done():
-			return pending, workflowservice.PollWorkflowExecutionTimeSkippingResponse_RESULT_POLL_TIMEOUT, nil
+			return pending, enumspb.FAST_FORWARD_COMPLETION_POLLING_RESULT_POLL_TIMEOUT, nil
 		}
 	}
 }
 
 func newResponse(
 	ffinfo *commonpb.TimeSkippingFastForwardInfo,
-	result workflowservice.PollWorkflowExecutionTimeSkippingResponse_Result,
+	result enumspb.FastForwardCompletionPollingResult,
 ) *historyservice.PollWorkflowExecutionTimeSkippingResponse {
 	return &historyservice.PollWorkflowExecutionTimeSkippingResponse{
 		Response: &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
-			FastForwardInfo: ffinfo,
-			Result:          result,
+			FastForwardInfo:          ffinfo,
+			FastForwardPollingResult: result,
 		},
 	}
 }

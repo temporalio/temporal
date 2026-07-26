@@ -63,7 +63,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
 	tsi := ms.executionInfo.TimeSkippingInfo
 
-	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
+	if !tsc.GetEnabled() || tsc.GetFastForwardConfig().GetDuration().AsDuration() <= 0 {
 		if tsi.FastForwardInfo != nil {
 			tsi.FastForwardInfo = nil
 		}
@@ -76,7 +76,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 	} else {
 		// if there is no propagated target time,
 		// fast-forward refers to a new duration from now.
-		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
+		targetTime = ms.Now().Add(tsc.GetFastForwardConfig().GetDuration().AsDuration())
 	}
 
 	currentVersionedTransition := &persistencespb.VersionedTransition{
@@ -192,8 +192,8 @@ func propagateTimeSkippingToChild(
 
 	// propagate both config and state
 	return &commonpb.TimeSkippingConfig{
-		Enabled:           true,
-		MaxSkipPerSession: tsc.GetMaxSkipPerSession(),
+		Enabled:             true,
+		MaxSessionSkipCount: tsc.GetMaxSessionSkipCount(),
 	}, stateProp
 }
 
@@ -322,8 +322,8 @@ func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonp
 		return nil
 	}
 	return &commonpb.TimeSkippingInfo{
-		CurrentTime: timestamppb.New(currentTime),
-		IsRunning:   util.IsEnabled(),
+		CurrentTime:     timestamppb.New(currentTime),
+		EffectiveConfig: common.CloneProto(util.tsi.GetConfig()),
 	}
 }
 
@@ -339,8 +339,8 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 	return &commonpb.TimeSkippingFastForwardInfo{
 		TargetTime:          common.CloneProto(ff.GetTargetTime()),
 		HasCompleted:        ff.GetHasReached(),
-		FastForwardId:       config.GetFastForwardId(),
-		FastForwardDuration: config.GetFastForward(),
+		FastForwardId:       config.GetFastForwardConfig().GetId(),
+		FastForwardDuration: config.GetFastForwardConfig().GetDuration(),
 	}
 }
 
@@ -553,7 +553,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	}
 	// update skip
 	tsi.SessionSkipCount += 1
-	if tsi.SessionSkipCount >= tsi.Config.GetMaxSkipPerSession() && tsi.Config.Enabled {
+	if tsi.SessionSkipCount >= tsi.Config.GetMaxSessionSkipCount() && tsi.Config.Enabled {
 		tsi.Config.Enabled = false
 	}
 

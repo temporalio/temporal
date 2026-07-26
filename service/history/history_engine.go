@@ -892,7 +892,7 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 
 func (e *historyEngineImpl) NotifyFastForwardUpdate(
 	key definition.WorkflowKey,
-	fastforwardNotification *notification.FastForwardNotification,
+	fastforwardNotification *notification.TimeSkippingNotification,
 ) {
 	if e.fastForwardNotifier == nil {
 		// Always injected in production via fx; a nil here means a misconfigured engine.
