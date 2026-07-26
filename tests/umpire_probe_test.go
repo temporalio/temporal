@@ -358,6 +358,9 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// Gate: every WorkerCommand action must have a kitchensink mapping before any drive runs,
 	// so the exploration can't silently skip a worker-driven edge (see action.kitchensink).
 	require.NoError(t, action.ValidateKitchensinkMappings(), "kitchensink mappings must be exhaustive")
+	// Gate: every request field under invalid-input testing must be enumerated or consciously
+	// deferred, so the negative-space drive can't silently skip a field (see action.mutation_gate).
+	require.NoError(t, action.ValidateMutationCoverage(), "mutation coverage must be exhaustive")
 	cov := probe.NewCoverage()
 
 	exploreEnv := func(exec probe.EnvFunc, timeout time.Duration) {
