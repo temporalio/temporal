@@ -14,6 +14,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire/planner"
@@ -85,6 +86,21 @@ func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler, build callerFor) 
 	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
 		env := s.newNexusProbeEnv(t)
 		return env.TestEnv, s.nexusProbeDrive(t, env, onStart, build)
+	}
+}
+
+// nexusExecForceTimeout builds an env whose Nexus invocation attempts resolve as a
+// schedule-to-close timeout (via the NexusOperationForceTimeout server test hook), so the
+// operation reaches the timed_out terminal deterministically — from scheduled, on the first
+// attempt, with no real timer wait. The handler is never called (the hook short-circuits it).
+func (s *UmpireTestSuite) nexusExecForceTimeout() probe.EnvFunc {
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusProbeEnv(t)
+		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, true))
+		unused := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
+		}}
+		return env.TestEnv, s.nexusProbeDrive(t, env, unused, syncCaller)
 	}
 }
 
@@ -160,13 +176,16 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	t := s.T()
 	cov := probe.NewCoverage()
 
-	explore := func(handler nexustest.Handler, build callerFor, timeout time.Duration) {
+	exploreEnv := func(exec probe.EnvFunc, timeout time.Duration) {
 		probe.Umpire(t).
 			WithCoverage(cov).
 			Reach("NexusOperation", "succeeded"). // plan validation only; the handler+caller drive the actual outcome
-			Execution(s.nexusExec(handler, build)).
+			Execution(exec).
 			Timeout(timeout).
 			Judge()
+	}
+	explore := func(handler nexustest.Handler, build callerFor, timeout time.Duration) {
+		exploreEnv(s.nexusExec(handler, build), timeout)
 	}
 
 	// asyncStart is an async acknowledgement the handler never resolves — the operation
@@ -202,6 +221,9 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// A short schedule-to-close timeout on a never-completing async operation reaches
 	// the timed_out terminal (started --timeout--> timed_out).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
+	// A forced schedule-to-close timeout on the first attempt reaches timed_out from
+	// scheduled (scheduled --timeout--> timed_out), via the NexusOperationForceTimeout hook.
+	exploreEnv(s.nexusExecForceTimeout(), 10*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)

@@ -23,6 +23,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
@@ -51,6 +52,7 @@ type operationInvocationTaskHandlerOptions struct {
 	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 	HistoryClient          resource.HistoryClient
 	ChasmRegistry          *chasm.Registry
+	TestHooks              testhooks.TestHooks
 }
 
 type operationInvocationTaskHandler struct {
@@ -66,6 +68,7 @@ type operationInvocationTaskHandler struct {
 	httpTraceProvider      commonnexus.HTTPClientTraceProvider
 	historyClient          resource.HistoryClient
 	chasmRegistry          *chasm.Registry
+	testHooks              testhooks.TestHooks
 }
 
 func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOptions) *operationInvocationTaskHandler {
@@ -80,6 +83,7 @@ func newOperationInvocationTaskHandler(opts operationInvocationTaskHandlerOption
 		httpTraceProvider:      opts.HTTPTraceProvider,
 		historyClient:          opts.HistoryClient,
 		chasmRegistry:          opts.ChasmRegistry,
+		testHooks:              opts.TestHooks,
 	}
 }
 
@@ -102,6 +106,20 @@ func (h *operationInvocationTaskHandler) Execute(
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(opRef.NamespaceID))
 	if err != nil {
 		return serviceerror.NewNotFoundf("failed to get namespace by ID: %v", err)
+	}
+
+	// Test hook: resolve this attempt as a schedule-to-close timeout instead of calling the
+	// handler, so tests can reach the timed_out terminal deterministically. No-op in prod builds.
+	if _, ok := testhooks.Get(h.testHooks, testhooks.NexusOperationForceTimeout, ns.ID()); ok {
+		result, rerr := newInvocationResult(nil, &operationTimeoutBelowMinError{timeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE})
+		if rerr != nil {
+			return fmt.Errorf("failed to construct forced-timeout result: %w", rerr)
+		}
+		_, _, err = chasm.UpdateComponent(ctx, opRef, (*Operation).saveInvocationResult, saveInvocationResultInput{
+			result:      result,
+			retryPolicy: h.config.RetryPolicy(),
+		})
+		return err
 	}
 
 	args, err := chasm.ReadComponent(ctx, opRef, (*Operation).loadStartArgs, nil)
