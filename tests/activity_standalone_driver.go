@@ -171,6 +171,7 @@ type saaHandle struct {
 // driveTrace runs a trace on a fresh activity and returns a handle at the reached state. Model-free:
 // each RPC must succeed.
 func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHandle {
+	validateTrace(t, trace)
 	d.cfg = d.cfg.forTrace(trace)
 	a := d.start(t)
 	for _, e := range trace {
@@ -436,6 +437,28 @@ func timeoutType(e model.Event) enumspb.TimeoutType {
 	default:
 		return enumspb.TIMEOUT_TYPE_UNSPECIFIED
 	}
+}
+
+// validateTrace rejects a trace the drivers cannot realize. Timeouts run concurrently, from deadlines
+// the server anchors at schedule or attempt-start time, while the driver waits each one out from the
+// moment its event is driven — so a trace can name at most one. Once the first fires, the others are no
+// longer running and the driver would wait for something that never happens.
+//
+// Dispatch delays are exempt: each backoff is a fresh window, and awaitDispatchTimePassed takes its
+// deadline from the server rather than from the trace.
+//
+// A rule of thumb, not a decision procedure. The model decides this per event and per state, and
+// replaces this once it lands here.
+func validateTrace(t require.TestingT, trace []model.Event) {
+	var timeouts []model.Event
+	for _, e := range trace {
+		if isWallClockEvent(e.Type) && !isDispatchDelayEvent(e.Type) {
+			timeouts = append(timeouts, e)
+		}
+	}
+	require.LessOrEqualf(t, len(timeouts), 1,
+		"a trace can fire at most one timeout, because they run concurrently and the first to fire stops "+
+			"the rest; this one fires %v", timeouts)
 }
 
 // isWallClockEvent reports whether an event fires on wall-clock time rather than synchronously.
