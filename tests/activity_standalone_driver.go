@@ -161,10 +161,12 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 	d := a.d
 	switch {
 	case e.Type == model.PollType:
-		// A poll captures the dispatched task token.
-		if resp := a.pollForTask(t, cmp.Or(d.positivePollTimeout, activityDriverPositivePollTimeout)); resp != nil {
-			a.token = resp.GetTaskToken()
-		}
+		// A poll captures the dispatched task token. Every Poll a trace drives is a positive poll — the
+		// activity is meant to be dispatchable — so finding no task is a failure, not a step to skip.
+		timeout := cmp.Or(d.positivePollTimeout, activityDriverPositivePollTimeout)
+		resp := a.pollForTask(t, timeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, timeout)
+		a.token = resp.GetTaskToken()
 	case isWallClockEvent(e.Type):
 		// A wall-clock event is realized by waiting out its configured window.
 		a.awaitWallClock(t, e)
