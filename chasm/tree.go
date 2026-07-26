@@ -1673,17 +1673,6 @@ func (n *Node) AddTask(
 	taskAttributes TaskAttributes,
 	task any,
 ) {
-	n.addTask(component, taskAttributes, task, n.Now(component))
-}
-
-// addTask takes now as the time the calling context observes, which for a context created by
-// [NewMutableContext] is the time the component author reads from [Context.Now].
-func (n *Node) addTask(
-	component Component,
-	taskAttributes TaskAttributes,
-	task any,
-	now time.Time,
-) {
 	rt, ok := n.registry.taskFor(task)
 	if ok && rt.isPureTask && taskAttributes.IsImmediate() {
 		// Those tasks will be executed in the current transaction.
@@ -1692,11 +1681,6 @@ func (n *Node) addTask(
 			attributes: taskAttributes,
 		})
 		return
-	}
-
-	if ok && !rt.isPureTask && !taskAttributes.ScheduledTime.After(now) {
-		// A side effect task with nothing left to wait for belongs in an immediate queue, not the timer queue.
-		taskAttributes.ScheduledTime = TaskScheduledTimeImmediate
 	}
 
 	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
@@ -2093,6 +2077,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 				sideEffectTask,
 				nodePath,
 				archetypeID,
+				taskValidationContext.Now(nil),
 			)
 		}
 
@@ -2337,12 +2322,13 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 	sideEffectTask *persistencespb.ChasmComponentAttributes_Task,
 	nodePath []string,
 	archetypeID ArchetypeID,
+	now time.Time,
 ) {
 	n.backend.AddTasks(&tasks.ChasmTask{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
 		VisibilityTimestamp: sideEffectTask.ScheduledTime.AsTime(),
 		Destination:         sideEffectTask.Destination,
-		Category:            taskCategory(sideEffectTask),
+		Category:            taskCategory(sideEffectTask, now),
 		Info: &persistencespb.ChasmTaskInfo{
 			ComponentInitialVersionedTransition:    n.serializedNode.Metadata.InitialVersionedTransition,
 			ComponentLastUpdateVersionedTransition: n.serializedNode.Metadata.LastUpdateVersionedTransition,
@@ -3342,8 +3328,11 @@ func (n *Node) carryOverTaskStatus(
 	}
 }
 
+// taskCategory places a side effect task in an immediate queue unless it is still waiting for its
+// scheduled time to arrive, where now is the time observed by the transaction generating the task.
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
+	now time.Time,
 ) tasks.Category {
 	if task.TypeId == visibilityTaskTypeID {
 		return tasks.CategoryVisibility
@@ -3354,7 +3343,7 @@ func taskCategory(
 	}
 
 	if task.ScheduledTime == nil ||
-		task.ScheduledTime.AsTime().Equal(TaskScheduledTimeImmediate) {
+		!task.ScheduledTime.AsTime().After(now) {
 		return tasks.CategoryTransfer
 	}
 	return tasks.CategoryTimer
