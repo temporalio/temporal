@@ -288,13 +288,20 @@ fires on the attempt, not once started).
 
 - **Coverage-guided fault exploration** — the scheduler that ties `AutoCoverPlans` ×
   `FaultVariants`/learned-footprint × per-execution testEnvs into a novelty-prioritized loop
-  under a budget. The pieces exist; the loop does not.
-- **`Faultable` from the learned footprint** — the declared `Faultable` fields are not the
-  resilience targets (dropping a client-entry RPC just fails the drive); today fault exploration
-  uses the *observed* footprint. Wiring the learned footprint back onto actions would unify them.
+  under a budget. The pieces exist (now including `LearnFootprint`); the loop does not. This is
+  the direct upgrade of `TestProbeNexusRandomized` (uniform → coverage-biased sampling) and the
+  "coverage-guided sampling" open question in [`UMPIRE_MATRIX.md`](./UMPIRE_MATRIX.md).
+- ~~**`Faultable` from the learned footprint**~~ **(done)** — the static field was renamed
+  `Action.Entry` (the client-entry RPCs a Drop just fails on) and fault targeting now derives from
+  the *observed* footprint: `LearnFootprint` drives a plan under observation, `FaultTargets` reduces
+  the result (observed − entry − ambient) to the internal calls, and `FaultVariants(plan, learned)`
+  builds one Drop-variant per target. See `tests/umpire/action/fault.go` and
+  `TestProbeNexusLearnedFootprint`.
 - **Beyond `NexusOperation`** — the schema is generic, but only `NexusOperation` has declared
   actions so far.
-- **Footprint reconciliation** — `Reconcile` grounds effects, not yet the `Faultable` footprint.
+- **Footprint reconciliation** — `Reconcile` grounds effects, not yet the footprint. Now
+  unblocked: with `LearnFootprint` in place, an action could declare an *expected* footprint and
+  `Reconcile` assert the observed calls match it (wire-level drift, not just effect drift).
 
 ## Relationship to the other umpire pieces
 

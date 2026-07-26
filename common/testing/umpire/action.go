@@ -50,12 +50,12 @@ type Effect struct {
 // Action is a declarative driver operator. It is domain-agnostic; concrete actions (with
 // Temporal realizers) are declared in tests/umpire/action.
 type Action struct {
-	Name      string
-	Kind      Kind
-	Hosting   Hosting
-	Requires  []Pre
-	Effects   []Effect
-	Realize   Realizer
+	Name     string
+	Kind     Kind
+	Hosting  Hosting
+	Requires []Pre
+	Effects  []Effect
+	Realize  Realizer
 	// Entry names the RPC(s) / HTTP path(s) this action issues directly. A Drop of an entry call
 	// fails the drive rather than testing resilience, so entry calls are *excluded* from a plan's
 	// learned fault targets — the internal/retryable calls a fault can meaningfully perturb are
