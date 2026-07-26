@@ -24,6 +24,7 @@ import (
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tests/umpire/action"
 	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -273,6 +274,47 @@ func (s *UmpireTestSuite) awaitNexusOpState(dctx context.Context, env *NexusTest
 		case <-ticker.C:
 		}
 	}
+}
+
+// nexusGenExec is the first actions-model driver (Phase 1, see PLAN.md): the standalone
+// completion path driven entirely by the generic umpire.Drive runtime from declared actions —
+// no bespoke drive logic. It exercises reactive install (the async handler rule + callback
+// capture), proactive fire (the start RPC and the completion delivery), and a precondition
+// wait (op@started), reaching unspecified→scheduled→started→succeeded.
+func (s *UmpireTestSuite) nexusGenExec() probe.EnvFunc {
+	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
+		env := s.newNexusStandaloneEnv(t)
+		policy := action.NewResponsePolicy()
+		endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+		return env.TestEnv, func(dctx context.Context, iter int) error {
+			rc := action.NewCtx(env.TestEnv, endpoint, policy, iter)
+			oracle := action.Oracle{Env: env.TestEnv}
+			// Drive confirms the plan's endpoint (op@succeeded) before returning.
+			if err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, action.StandaloneCompletion); err != nil {
+				return err
+			}
+			// Reconcile grounds the declared actions against what was observed.
+			if drift := umpire.Reconcile(oracle, rc, action.StandaloneCompletion); len(drift) > 0 {
+				return fmt.Errorf("actions model drift: %v", drift)
+			}
+			return nil
+		}
+	}
+}
+
+// TestProbeNexusGeneratedCompletion is the Phase-1 round-trip proof: a declared action
+// sequence, driven by the generic runtime, reproduces a path we already trust — the standalone
+// operation settles at succeeded.
+func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
+	t := s.T()
+	report := probe.Umpire(t).
+		Reach("NexusOperation", "succeeded").
+		Execution(s.nexusGenExec()).
+		Timeout(15 * time.Second).
+		Judge()
+
+	require.Equal(t, probe.Recovered, report.Baseline.Verdict, "generated standalone completion should reach succeeded")
+	require.Equal(t, "succeeded", report.Baseline.Terminal)
 }
 
 // TestProbeNexusResilience is the trace-derived resilience demo: plan a route to a

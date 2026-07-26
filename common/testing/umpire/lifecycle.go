@@ -591,6 +591,17 @@ type Edge struct {
 // Edges returns every direct transition edge (from -> event -> to) declared by the
 // spec, in stable order. These are the actual transitions — distinct from
 // Classify's forward-jump interpretation — and are what a planner routes over.
+// Destination returns the state an event leads to. Each event has a single destination in
+// these models (its To is fixed regardless of From), so the lookup is unambiguous.
+func (l *Lifecycle) Destination(event string) (string, bool) {
+	for _, dst := range l.edges {
+		if to, ok := dst[event]; ok {
+			return to, true
+		}
+	}
+	return "", false
+}
+
 func (l *Lifecycle) Edges() []Edge {
 	froms := make([]string, 0, len(l.edges))
 	for f := range l.edges {
