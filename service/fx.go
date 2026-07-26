@@ -176,5 +176,6 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
 	}
 
+	interceptors = interceptor.AddNonNilResponseInterceptor(interceptors, params.Logger)
 	return append(interceptors, params.RetryableInterceptor.Intercept)
 }
