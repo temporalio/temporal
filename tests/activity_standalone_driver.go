@@ -33,9 +33,12 @@ import (
 // test describes a single activity rather than two that might differ.
 //
 // Every field is the value it names. A zero duration leaves that option unset, which for a timeout
-// means it never fires; the exceptions are noted. A trace that fires a timeout must therefore
-// configure it: writing model.HeartbeatElapses into a trace requires a Heartbeat here, and the
-// duration set is the window the driver waits out.
+// means it never fires; the exceptions are noted.
+//
+// Timeouts are usually left unset: forTrace gives a short window to each one the trace fires, so
+// writing model.HeartbeatElapses is itself the statement that this activity has a heartbeat timeout.
+// Set one explicitly only to say something the trace cannot — that it exists without firing, or that
+// its exact duration is what the test is about.
 type activityConfig struct {
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
 	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityDefaultRetryInterval
@@ -76,6 +79,25 @@ func (c activityConfig) retryInterval() time.Duration {
 }
 func (c activityConfig) startToClose() time.Duration {
 	return cmp.Or(c.StartToClose, activityLongTimeout)
+}
+
+// forTrace is the config with a short window for each timeout the trace fires, so that it can. A
+// timeout the author set is left alone: only they can say how long a timeout that the trace does not
+// fire should be, or that a fired one has a duration the test depends on.
+func (c activityConfig) forTrace(trace []model.Event) activityConfig {
+	for _, e := range trace {
+		switch e.Type {
+		case model.ScheduleToStartElapsesType:
+			c.ScheduleToStart = cmp.Or(c.ScheduleToStart, activityShortTimeout)
+		case model.ScheduleToCloseElapsesType:
+			c.ScheduleToClose = cmp.Or(c.ScheduleToClose, activityShortTimeout)
+		case model.StartToCloseElapsesType:
+			c.StartToClose = cmp.Or(c.StartToClose, activityShortTimeout)
+		case model.HeartbeatElapsesType:
+			c.Heartbeat = cmp.Or(c.Heartbeat, activityShortTimeout)
+		}
+	}
+	return c
 }
 
 // window is how long the clock behind a wall-clock event takes to elapse, from the option that event
@@ -149,6 +171,7 @@ type saaHandle struct {
 // driveTrace runs a trace on a fresh activity and returns a handle at the reached state. Model-free:
 // each RPC must succeed.
 func (d *saaDriver) driveTrace(t require.TestingT, trace []model.Event) *saaHandle {
+	d.cfg = d.cfg.forTrace(trace)
 	a := d.start(t)
 	for _, e := range trace {
 		a.driveEvent(t, e)

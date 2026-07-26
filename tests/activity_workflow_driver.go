@@ -135,6 +135,7 @@ func wfaOneActivityWorkflow(ctx workflow.Context, p wfaActivityParams) error {
 // driveTrace runs a trace on a fresh workflow-scheduled activity and returns a handle at the reached
 // state. Model-free.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
+	d.cfg = d.cfg.forTrace(trace)
 	a := d.start(t)
 	for _, e := range trace {
 		a.driveEvent(t, e)
