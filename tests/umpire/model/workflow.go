@@ -55,14 +55,18 @@ func NewWorkflow() *Workflow {
 	wf := &Workflow{}
 	wf.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: WorkflowCreated,
+		// A started workflow must eventually close: EntityProgress flags one left
+		// in WorkflowStarted at teardown (workflow-completion liveness). Benign in-flight
+		// closes are settled by the observed-close signal, not teardown timing.
+		States: umpire.States{
+			WorkflowCreated:   {},
+			WorkflowStarted:   {umpire.MustProgress},
+			WorkflowCompleted: {},
+		},
 		Transitions: []umpire.Transition{
 			{Event: WorkflowStart, From: []string{WorkflowCreated}, To: WorkflowStarted},
 			{Event: WorkflowComplete, From: []string{WorkflowStarted}, To: WorkflowCompleted},
 		},
-		// A started workflow must eventually close: EntityProgress flags one left
-		// in WorkflowStarted at teardown (workflow-completion liveness). Benign in-flight
-		// closes are settled by the observed-close signal, not teardown timing.
-		MustProgress: []string{WorkflowStarted},
 	})
 	return wf
 }

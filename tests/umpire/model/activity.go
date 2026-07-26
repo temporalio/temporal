@@ -44,6 +44,17 @@ const (
 func NewActivityLifecycle() *umpire.Lifecycle {
 	return umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: ActivityUnspecified,
+		// The in-flight states must eventually settle; terminals derive from the graph.
+		States: umpire.States{
+			ActivityUnspecified: {},
+			ActivityScheduled:   {umpire.MustProgress},
+			ActivityStarted:     {umpire.MustProgress},
+			ActivityBackingOff:  {umpire.MustProgress},
+			ActivityCompleted:   {},
+			ActivityFailed:      {},
+			ActivityTimedOut:    {},
+			ActivityCanceled:    {},
+		},
 		Transitions: []umpire.Transition{
 			// schedule fires initially and again on each retry out of backing_off.
 			{Event: ActivitySchedule, From: []string{ActivityUnspecified, ActivityBackingOff}, To: ActivityScheduled},
@@ -55,7 +66,6 @@ func NewActivityLifecycle() *umpire.Lifecycle {
 			{Event: ActivityTimeout, From: []string{ActivityScheduled, ActivityStarted, ActivityBackingOff}, To: ActivityTimedOut},
 			{Event: ActivityCancel, From: []string{ActivityScheduled, ActivityStarted, ActivityBackingOff}, To: ActivityCanceled},
 		},
-		MustProgress: []string{ActivityScheduled, ActivityStarted, ActivityBackingOff},
 	})
 }
 

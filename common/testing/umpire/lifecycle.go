@@ -11,11 +11,13 @@ import (
 )
 
 // Transition is one edge of a Lifecycle's state machine: firing Event moves the
-// entity from any of the From states to To.
+// entity from any of the From states to To. Traits annotate the edge (see Trait);
+// the built-in one is Needs, declaring the drive-capability the edge requires.
 type Transition struct {
-	Event string
-	From  []string
-	To    string
+	Event  string
+	From   []string
+	To     string
+	Traits Traits
 }
 
 // TransitionKind is the three-valued verdict of applying an event in a given
@@ -118,6 +120,42 @@ type mustProgressTrait struct{}
 // carrying it (the generic EntityProgress liveness rule enforces this).
 var MustProgress Trait = mustProgressTrait{}
 
+// Capability is a class of drive power an edge may require to be realized. It is
+// environment-independent knowledge about the edge (e.g. a timeout edge inherently
+// needs timing/fault control); the concrete realization stays in the Driver, and a
+// run enables only the capabilities its environment grants (see UMPIRE_SPEC.md).
+type Capability int
+
+const (
+	// RPCDrive: realizable through the public frontend API / SDK. Runnable anywhere.
+	RPCDrive Capability = iota + 1
+	// Faults: needs fault/timing injection at internal seams. local-* only.
+	Faults
+	// DirectDrive: calls a CHASM transition directly, no wire. local-chasm only.
+	DirectDrive
+)
+
+func (c Capability) String() string {
+	switch c {
+	case RPCDrive:
+		return "RPCDrive"
+	case Faults:
+		return "Faults"
+	case DirectDrive:
+		return "DirectDrive"
+	default:
+		return "Capability(?)"
+	}
+}
+
+// Requires is the built-in transition trait: the drive-capabilities an edge needs.
+// Construct it with Needs; read it back with EdgeRequires or EdgeTrait[Requires].
+type Requires struct{ Capabilities []Capability }
+
+// Needs builds a Requires transition trait: Needs(Faults) marks an edge that can
+// only be crossed where fault injection is available.
+func Needs(caps ...Capability) Requires { return Requires{Capabilities: caps} }
+
 // LifecycleSpec declares an entity's state machine. Terminal states are derived
 // automatically (a state that is never the source of a transition), unless
 // overridden via Terminal.
@@ -125,22 +163,10 @@ type LifecycleSpec struct {
 	Initial     string
 	Transitions []Transition
 	Terminal    map[string]bool // optional override; nil = derive
-	// MustProgress lists non-terminal states the entity must eventually leave.
-	// The generic EntityProgress liveness rule flags an entity left in one of
-	// these at teardown. States not listed (e.g. an initial "not yet started"
-	// state) are treated as acceptable resting points.
-	//
-	// Deprecated in favour of the MustProgress trait in States; still honoured
-	// when States is nil.
-	MustProgress []string
-	// Dispositions tags terminal states as a modeled Success or Failure outcome
-	// (see Disposition). Optional; untagged terminals are Unset.
-	//
-	// Deprecated in favour of the Success/Failure traits in States; still
-	// honoured when States is nil.
-	Dispositions map[string]Disposition
-	// States is the trait-based per-state metadata (see States). When non-nil it
-	// is the source of truth and supersedes MustProgress and Dispositions.
+	// States is the per-state metadata: each state's traits (see States, Trait).
+	// The built-in MustProgress marker and the Success/Failure Dispositions are
+	// traits; a state may also carry arbitrary domain traits read back with
+	// StateTrait. When set, every state a transition references must be declared.
 	States States
 }
 
@@ -166,6 +192,7 @@ type Lifecycle struct {
 	states       []string                     // all declared states, stable sorted
 	eventNames   []string                     // all declared event names, stable sorted
 	edges        map[string]map[string]string // from -> event -> to (legal edges)
+	edgeTraits   map[string]map[string]Traits // from -> event -> edge traits
 	eventDests   map[string][]string          // event -> declared destination states
 	canReach     map[string]map[string]bool   // transitive closure over legal edges (≥1 hop)
 	terminal     map[string]bool
@@ -183,6 +210,7 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 	srcSeen := map[string]bool{}
 	dstSeen := map[string]bool{}
 	edges := map[string]map[string]string{}
+	edgeTraits := map[string]map[string]Traits{}
 	eventDestSet := map[string]map[string]bool{}
 	stateSet := map[string]bool{spec.Initial: true}
 	eventSet := map[string]bool{}
@@ -202,6 +230,12 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 				edges[s] = map[string]string{}
 			}
 			edges[s][t.Event] = t.To
+			if len(t.Traits) > 0 {
+				if edgeTraits[s] == nil {
+					edgeTraits[s] = map[string]Traits{}
+				}
+				edgeTraits[s][t.Event] = t.Traits
+			}
 		}
 	}
 
@@ -216,30 +250,20 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		}
 	}
 
-	// Per-state metadata comes from the trait-based States when set, else from the
-	// deprecated MustProgress/Dispositions fields.
+	// Per-state metadata is derived from the state traits.
 	mustProgress := map[string]bool{}
 	dispositions := map[string]Disposition{}
 	traits := map[string]Traits{}
-	if spec.States != nil {
-		for st, trs := range spec.States {
-			stateSet[st] = true
-			traits[st] = trs
-			for _, tr := range trs {
-				switch v := tr.(type) {
-				case Disposition:
-					dispositions[st] = v
-				case mustProgressTrait:
-					mustProgress[st] = true
-				}
+	for st, trs := range spec.States {
+		stateSet[st] = true
+		traits[st] = trs
+		for _, tr := range trs {
+			switch v := tr.(type) {
+			case Disposition:
+				dispositions[st] = v
+			case mustProgressTrait:
+				mustProgress[st] = true
 			}
-		}
-	} else {
-		for _, s := range spec.MustProgress {
-			mustProgress[s] = true
-		}
-		for s, d := range spec.Dispositions {
-			dispositions[s] = d
 		}
 	}
 
@@ -254,6 +278,7 @@ func NewLifecycle(spec LifecycleSpec) *Lifecycle {
 		states:       sortedKeys(stateSet),
 		eventNames:   sortedKeys(eventSet),
 		edges:        edges,
+		edgeTraits:   edgeTraits,
 		eventDests:   eventDests,
 		canReach:     reachClosure(edges),
 		terminal:     terminal,
@@ -443,6 +468,30 @@ func StateTrait[T any](l *Lifecycle, state string) (T, bool) {
 	}
 	var zero T
 	return zero, false
+}
+
+// EdgeTraits returns the traits on the from→event edge (nil if none).
+func (l *Lifecycle) EdgeTraits(from, event string) Traits { return l.edgeTraits[from][event] }
+
+// EdgeTrait returns the first trait of type T on the from→event edge — the typed way
+// to read an edge annotation, e.g. EdgeTrait[Requires](lc, from, event).
+func EdgeTrait[T any](l *Lifecycle, from, event string) (T, bool) {
+	for _, tr := range l.edgeTraits[from][event] {
+		if v, ok := tr.(T); ok {
+			return v, true
+		}
+	}
+	var zero T
+	return zero, false
+}
+
+// EdgeRequires returns the drive-capabilities the from→event edge needs (nil if the
+// edge declares none), read from its Needs/Requires trait.
+func (l *Lifecycle) EdgeRequires(from, event string) []Capability {
+	if r, ok := EdgeTrait[Requires](l, from, event); ok {
+		return r.Capabilities
+	}
+	return nil
 }
 
 // Illegal returns the illegal transitions observed so far.

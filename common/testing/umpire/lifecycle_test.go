@@ -222,25 +222,25 @@ func TestLifecycle_Validate(t *testing.T) {
 		Terminal:    map[string]bool{"a": true},
 	}).Validate())
 
-	// A well-formed spec with a coherent MustProgress annotation is valid.
+	// A well-formed spec with a coherent MustProgress trait is valid.
 	require.NoError(t, NewLifecycle(LifecycleSpec{
-		Initial:      "a",
-		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
-		MustProgress: []string{"a"},
+		Initial:     "a",
+		Transitions: []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		States:      States{"a": {MustProgress}, "b": {}},
 	}).Validate())
 
-	// MustProgress naming a state that does not exist is rejected.
+	// A transition referencing a state not declared in States is rejected.
 	require.Error(t, NewLifecycle(LifecycleSpec{
-		Initial:      "a",
-		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
-		MustProgress: []string{"nope"},
+		Initial:     "a",
+		Transitions: []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		States:      States{"a": {MustProgress}}, // "b" is undeclared
 	}).Validate())
 
 	// MustProgress on a terminal state (can never be left) is rejected.
 	require.Error(t, NewLifecycle(LifecycleSpec{
-		Initial:      "a",
-		Transitions:  []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
-		MustProgress: []string{"b"},
+		Initial:     "a",
+		Transitions: []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		States:      States{"a": {}, "b": {MustProgress}},
 	}).Validate())
 
 	// MustProgress on a state with no path to any terminal (a pure cycle) is rejected.
@@ -250,6 +250,40 @@ func TestLifecycle_Validate(t *testing.T) {
 			{Event: "x", From: []string{"a"}, To: "b"},
 			{Event: "y", From: []string{"b"}, To: "a"},
 		},
-		MustProgress: []string{"a"},
+		States: States{"a": {MustProgress}, "b": {}},
 	}).Validate())
+
+	// A Disposition trait on a non-terminal state is rejected.
+	require.Error(t, NewLifecycle(LifecycleSpec{
+		Initial:     "a",
+		Transitions: []Transition{{Event: "x", From: []string{"a"}, To: "b"}},
+		States:      States{"a": {Success}, "b": {}},
+	}).Validate())
+}
+
+func TestLifecycle_EdgeTraits(t *testing.T) {
+	type risk struct{ level int } // an arbitrary domain edge trait
+	lc := NewLifecycle(LifecycleSpec{
+		Initial: "a",
+		States:  States{"a": {}, "b": {}, "c": {}},
+		Transitions: []Transition{
+			{Event: "go", From: []string{"a"}, To: "b", Traits: Traits{Needs(RPCDrive)}},
+			{Event: "boom", From: []string{"a", "b"}, To: "c", Traits: Traits{Needs(Faults), risk{level: 3}}},
+			{Event: "plain", From: []string{"b"}, To: "c"}, // no traits
+		},
+	})
+	require.NoError(t, lc.Validate())
+
+	// Built-in capability trait, read via the convenience accessor.
+	require.Equal(t, []Capability{RPCDrive}, lc.EdgeRequires("a", "go"))
+	require.Equal(t, []Capability{Faults}, lc.EdgeRequires("a", "boom"))
+	require.Equal(t, []Capability{Faults}, lc.EdgeRequires("b", "boom")) // applies to every From
+	require.Nil(t, lc.EdgeRequires("b", "plain"))
+
+	// Arbitrary edge trait, read generically by type.
+	r, ok := EdgeTrait[risk](lc, "a", "boom")
+	require.True(t, ok)
+	require.Equal(t, 3, r.level)
+	_, ok = EdgeTrait[risk](lc, "a", "go")
+	require.False(t, ok)
 }
