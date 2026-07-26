@@ -13,10 +13,10 @@ import (
 // alone (log the seed, re-run RandomPlan(seed)).
 //
 // It intentionally carries no fault. Meaningful resilience faults attach to a plan's *learned*
-// footprint (the calls the drive actually makes, captured at runtime), not to statically declared
-// points — the two declared Faultable entries are client-entry RPCs whose drop just fails the
-// drive. The randomized loop therefore samples the settling edge here and lets the probe fault
-// each observed call of the resulting footprint. Route selection is Shortest for now; the free
+// footprint (the calls the drive actually makes, captured at runtime; see LearnFootprint), not to
+// statically declared points — the two declared Entry calls are client-entry RPCs whose drop just
+// fails the drive. The randomized loop therefore samples the settling edge here and lets the probe
+// fault each observed call of the resulting footprint. Route selection is Shortest for now; the free
 // variable is which settling edge, sampled across seeds. (Route randomization — PlanTo's Random
 // mode — is a natural next axis once the model grows deeper paths.)
 func RandomPlan(seed int64) ([]umpire.Action, string) {

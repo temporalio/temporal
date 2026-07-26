@@ -422,6 +422,36 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 		"every modelled NexusOperation edge should be exercised across the workflow and standalone drivers")
 }
 
+// TestProbeNexusLearnedFootprint proves fault targeting comes from the *learned* footprint, not the
+// statically declared Entry points: it drives the standalone completion path once under observation
+// and reduces the observed calls to fault targets. The result is non-empty (the drive makes internal
+// calls) and excludes the plan's own client-entry RPC (StartNexusOperationExecution) — a drop of
+// which would just fail the drive rather than test resilience.
+func (s *UmpireTestSuite) TestProbeNexusLearnedFootprint() {
+	t := s.T()
+	env := s.newNexusStandaloneEnv(t)
+	policy := action.NewResponsePolicy()
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+
+	plan := action.StandaloneCompletion()
+	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
+	defer cancel()
+	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
+	defer rc.Cleanup()
+	oracle := action.Oracle{Env: env.TestEnv}
+
+	learned, err := action.LearnFootprint(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	require.NoError(t, err, "the observed drive should reach its terminal")
+	require.NotEmpty(t, learned, "the drive should make observable calls")
+
+	targets := action.FaultTargets(plan, learned)
+	require.NotEmpty(t, targets, "the learned footprint should yield internal fault targets")
+	for _, m := range targets {
+		require.NotContains(t, m, "StartNexusOperationExecution", "the client-entry RPC must not be a fault target")
+	}
+	t.Logf("[footprint] learned %d call(s); %d fault target(s): %v", len(learned), len(targets), targets)
+}
+
 // TestProbeNexusRandomized is the seeded fuzz loop over the actions model: each iteration draws a
 // random settling edge from a base seed, drives it in its own env, and — on that path's *learned*
 // footprint — faults each observed call in turn. It extends resilience checking from the single

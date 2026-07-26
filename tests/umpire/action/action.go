@@ -338,9 +338,9 @@ func nexusOp(v string, fresh bool) umpire.Ref {
 var (
 	StartStandalone = umpire.Action{
 		Name: "StartNexusOperationExecution", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
-		Effects:   []umpire.Effect{{Ref: nexusOp("op", true), Event: model.NexusSchedule}},
-		Faultable: []string{"StartNexusOperationExecution"},
-		Realize:   rpcStartStandalone{},
+		Effects: []umpire.Effect{{Ref: nexusOp("op", true), Event: model.NexusSchedule}},
+		Entry:   []string{"StartNexusOperationExecution"},
+		Realize: rpcStartStandalone{},
 	}
 	HandlerAsyncAck = umpire.Action{
 		Name: "handler:AsyncAck", Kind: umpire.HandlerResponse,
@@ -462,10 +462,10 @@ var HandlerRetryable = umpire.Action{
 func TerminateFrom(state string) umpire.Action {
 	return umpire.Action{
 		Name: "TerminateNexusOperationExecution", Kind: umpire.ClientRPC, Hosting: umpire.Standalone,
-		Requires:  []umpire.Pre{{Ref: nexusOp("op", false), State: state}},
-		Effects:   []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusTerminate}},
-		Faultable: []string{"TerminateNexusOperationExecution"},
-		Realize:   rpcTerminate{},
+		Requires: []umpire.Pre{{Ref: nexusOp("op", false), State: state}},
+		Effects:  []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusTerminate}},
+		Entry:    []string{"TerminateNexusOperationExecution"},
+		Realize:  rpcTerminate{},
 	}
 }
 

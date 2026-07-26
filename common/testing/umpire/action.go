@@ -56,7 +56,12 @@ type Action struct {
 	Requires  []Pre
 	Effects   []Effect
 	Realize   Realizer
-	Faultable []string // footprint points (RPC method / HTTP path) a Fault may attach to
+	// Entry names the RPC(s) / HTTP path(s) this action issues directly. A Drop of an entry call
+	// fails the drive rather than testing resilience, so entry calls are *excluded* from a plan's
+	// learned fault targets — the internal/retryable calls a fault can meaningfully perturb are
+	// discovered by observing a drive, not declared here (see tests/umpire/action fault.go:
+	// LearnFootprint / FaultTargets).
+	Entry []string
 	// Reject, when non-nil, declares this action is expected to be rejected synchronously rather
 	// than produce its Effects — an invalid input (malformed / unknown / stale; see UMPIRE_ERR.md).
 	// Drive treats a Fire error on such an action as the expected outcome (recorded via RejectSink,

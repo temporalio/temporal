@@ -3,7 +3,9 @@ package action
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -70,19 +72,98 @@ func armFault(rc umpire.RealizeContext, method string, hold time.Duration) error
 	return nil
 }
 
-// FaultVariants returns, for each faultable point across the plan's actions, a copy of the plan
-// with a transient Drop of that point prepended (installed before the drive). Driving a variant
-// exercises the operation's resilience to that fault. Note: dropping a client-entry RPC (the
-// action's own call) fails the drive rather than testing resilience; the meaningful points are
-// the internal/retryable calls in an action's footprint.
-func FaultVariants(plan []umpire.Action) [][]umpire.Action {
-	var variants [][]umpire.Action
-	for _, a := range plan {
-		for _, m := range a.Faultable {
-			variants = append(variants, append([]umpire.Action{Drop(m)}, plan...))
+// ambientCalls are observed calls that are never resilience targets: long-polls and cluster
+// metadata that happen during any drive but are not part of a transition's footprint. Mirrors the
+// probe's skipObserved so the action model and the probe agree on what "the footprint" is.
+var ambientCalls = []string{"Poll", "GetSystemInfo", "GetClusterInfo", "DescribeNamespace"}
+
+// LearnFootprint drives plan once with an observe-only callback on the cluster's fault injector and
+// returns the distinct RPC/HTTP calls it made in the drive's namespace, sorted. This is the
+// *learned* footprint: the calls a plan actually makes, discovered rather than declared. The two
+// statically declared points (Action.Entry) are only the client-entry RPCs; the internal calls a
+// fault can meaningfully perturb are knowable only by observation — so fault targeting is sourced
+// from here (via FaultTargets), not from static declarations. (UMPIRE_ACTIONS.md "What remains".)
+func LearnFootprint(dctx context.Context, rc umpire.RealizeContext, oracle umpire.StateOracle,
+	resolver umpire.EffectResolver, poll time.Duration, plan []umpire.Action) ([]string, error) {
+	c := rc.(*Ctx)
+	gen := c.Env.GetTestCluster().Host().GetFaultInjector()
+	if gen == nil {
+		return nil, fmt.Errorf("fault injector is nil (build with -tags test_dep)")
+	}
+	nsID, nsName := c.Env.NamespaceID().String(), c.Env.Namespace().String()
+	var mu sync.Mutex
+	seen := map[string]struct{}{}
+	cleanup := gen.RegisterCallback(func(_ context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
+		if namespaceMatches(req, nsID, nsName) {
+			mu.Lock()
+			seen[fullMethod] = struct{}{}
+			mu.Unlock()
 		}
+		return false, nil, nil // observe only, never fault
+	})
+	defer cleanup()
+	if err := umpire.Drive(dctx, rc, oracle, resolver, poll, plan); err != nil {
+		return nil, err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	methods := make([]string, 0, len(seen))
+	for m := range seen {
+		methods = append(methods, m)
+	}
+	sort.Strings(methods)
+	return methods, nil
+}
+
+// FaultTargets reduces a learned footprint to the calls worth faulting: the observed calls minus
+// the plan's own Entry calls (a Drop of an entry RPC just fails the drive) and ambient traffic. It
+// is pure, so the reduction is unit-testable independent of a live drive.
+func FaultTargets(plan []umpire.Action, learned []string) []string {
+	var entry []string
+	for _, a := range plan {
+		entry = append(entry, a.Entry...)
+	}
+	var out []string
+	for _, m := range learned {
+		if matchesAny(m, ambientCalls) || matchesAnyMethod(m, entry) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// FaultVariants returns, for each learned resilience target of the plan, a copy of the plan with a
+// transient Drop of that call prepended (installed before the drive). Driving a variant exercises
+// the operation's resilience to that fault. The targets come from the *observed* footprint
+// (LearnFootprint) reduced by FaultTargets — the internal/retryable calls, not the client-entry
+// Entry RPCs whose drop just fails the drive.
+func FaultVariants(plan []umpire.Action, learned []string) [][]umpire.Action {
+	var variants [][]umpire.Action
+	for _, m := range FaultTargets(plan, learned) {
+		variants = append(variants, append([]umpire.Action{Drop(m)}, plan...))
 	}
 	return variants
+}
+
+// matchesAny reports whether fullMethod contains any of subs (substring match, for ambient traffic).
+func matchesAny(fullMethod string, subs []string) bool {
+	for _, sub := range subs {
+		if strings.Contains(fullMethod, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesAnyMethod reports whether fullMethod is any of names by exact gRPC-method suffix match.
+func matchesAnyMethod(fullMethod string, names []string) bool {
+	for _, n := range names {
+		if methodMatches(fullMethod, n) {
+			return true
+		}
+	}
+	return false
 }
 
 func methodMatches(fullMethod, name string) bool {
