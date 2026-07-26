@@ -230,6 +230,11 @@ type RuleRegistry struct {
 	ruleModelState *ModelState
 	logger       log.Logger
 	config       RuleConfig
+
+	// conformance dedup: per entity key, how many recorded illegal transitions have
+	// already been surfaced as violations (see checkConformance).
+	conformanceMu   sync.Mutex
+	reportedIllegal map[string]int
 }
 
 // NewRuleRegistry creates a new rulebook.
@@ -374,7 +379,42 @@ func (r *RuleRegistry) Check(ctx context.Context, final bool, scope *EntityID) [
 		st.mu.Unlock()
 	}
 
+	// Built-in conformance: surface transitions the model itself judged illegal at
+	// fire-time. This is not a pluggable rule — it runs for every Lifecycled entity,
+	// always, as the model judging its own transitions.
+	allViolations = append(allViolations, r.checkConformance(scope)...)
+
 	return allViolations
+}
+
+// checkConformance surfaces the illegal transitions the model recorded at fire-time
+// (Classify == Illegal, via Lifecycle.Fire, driven from OnFact) as conformance
+// violations. Each illegal transition is reported once per entity — deduped by how
+// many were already surfaced — so repeated Checks don't re-report the same one.
+func (r *RuleRegistry) checkConformance(scope *EntityID) []Violation {
+	r.conformanceMu.Lock()
+	defer r.conformanceMu.Unlock()
+	if r.reportedIllegal == nil {
+		r.reportedIllegal = map[string]int{}
+	}
+	var out []Violation
+	for _, e := range r.ruleModelState.QueryAll(0, scope) {
+		lc, ok := e.Entity.(Lifecycled)
+		if !ok {
+			continue
+		}
+		illegal := lc.Lifecycle().Illegal()
+		for i := r.reportedIllegal[e.Key]; i < len(illegal); i++ {
+			it := illegal[i]
+			out = append(out, Violation{
+				Rule:    "Conformance",
+				Message: fmt.Sprintf("illegal transition: event %q is not legal from state %q", it.Event, it.From),
+				Tags:    map[string]string{"entity": e.Key, "from": it.From, "event": it.Event},
+			})
+		}
+		r.reportedIllegal[e.Key] = len(illegal)
+	}
+	return out
 }
 
 // keyInScope reports whether a registry key falls under the given scope root.
@@ -408,6 +448,13 @@ func (r *RuleRegistry) PurgeScope(root EntityID) {
 		st.passedKeys = slices.DeleteFunc(st.passedKeys, func(k string) bool { return keyInScope(k, scope) })
 		st.mu.Unlock()
 	}
+	r.conformanceMu.Lock()
+	for k := range r.reportedIllegal {
+		if keyInScope(k, scope) {
+			delete(r.reportedIllegal, k)
+		}
+	}
+	r.conformanceMu.Unlock()
 }
 
 // RuleCount returns the count of initialized rules by kind.

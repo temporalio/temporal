@@ -6,26 +6,10 @@ import (
 	"go.temporal.io/server/common/testing/umpire"
 )
 
-// EntityTransitionLegality is a generic safety rule: no entity backed by a
-// Lifecycle may observe an illegal (impossible / out-of-order) state transition.
-// It subsumes the per-entity monotonicity rules — a stage regression is simply
-// not a legal edge — and works for every Lifecycled entity type at once.
-type EntityTransitionLegality struct{}
-
-func (EntityTransitionLegality) Name() string { return "EntityTransitionLegalityRule" }
-
-func (EntityTransitionLegality) CheckSafety(c *umpire.SafetyContext) {
-	for r := range c.ChangedLifecycles() {
-		lc := r.Entity.Lifecycle()
-		illegal := lc.Illegal()
-		c.Eval(r.Key, len(illegal) == 0, umpire.Violation{
-			Message: fmt.Sprintf("illegal state transition observed: %+v", illegal),
-			Tags: map[string]string{
-				"state": lc.Current(),
-			},
-		})
-	}
-}
+// Illegal-transition conformance (no entity may observe an impossible / out-of-order
+// state change) is no longer a rule here: it is surfaced generically by the framework's
+// built-in conformance check over every Lifecycled entity (RuleRegistry.Check →
+// checkConformance), reading the illegal transitions Lifecycle.Fire records at fire-time.
 
 // EntityProgress is a generic liveness rule: an entity must not be left in a
 // state its Lifecycle marks as "must progress" (LifecycleSpec.MustProgress).

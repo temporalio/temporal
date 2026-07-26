@@ -45,14 +45,13 @@ func NewMonitor(logger log.Logger) (*Monitor, error) {
 	// Safety rules — checked on every observation.
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.SpeculativeTaskCreation{} })
 	rb.RegisterSafety(func() umpirefw.SafetyRule { return &rule.NexusOperationClosure{} })
-	// rule.EntityTransitionLegality (generic, over any Lifecycled entity) is built
-	// and unit-tested but NOT registered: now that Classify treats forward jumps
-	// over unobserved states as legal (observe-only cannot distinguish a missed
-	// observation from an illegal skip), the current entity lifecycles — all
-	// converging DAGs — have ZERO possible illegal transitions, so the rule would
-	// be vacuous (a never-firing rule is false confidence). It regains teeth only
-	// with event-time ordering, or for a future lifecycle with isolated branches.
-	// See UMPIRE_PLAN.md.
+	// Illegal-transition conformance is not registered as a rule: it is a built-in
+	// framework check (RuleRegistry.Check → checkConformance) that surfaces, for every
+	// Lifecycled entity, the illegal transitions Lifecycle.Fire records at fire-time —
+	// the model judging its own transitions. It is silent for the current converging-DAG
+	// lifecycles (Classify treats forward jumps over unobserved states as legal, so they
+	// have no possible illegal transitions) and gains teeth with event-time ordering or a
+	// branching lifecycle. See UMPIRE_PLAN.md.
 
 	// Liveness rules — checked at test teardown.
 	rb.RegisterLiveness(func() umpirefw.LivenessRule { return &rule.WorkflowTaskStarvation{} })
@@ -86,12 +85,12 @@ func (u *Monitor) OnStart(_ context.Context, _ sdktrace.ReadWriteSpan) {}
 
 // OnEnd receives completed spans synchronously and routes them to entities.
 func (u *Monitor) OnEnd(span sdktrace.ReadOnlySpan) {
-	events := u.decoder.ImportSpan(span)
-	if len(events) == 0 {
+	facts := u.decoder.ImportSpan(span)
+	if len(facts) == 0 {
 		return
 	}
-	if err := u.registry.RouteFacts(context.Background(), events); err != nil {
-		u.logger.Warn("monitor: failed to route OTEL events", tag.Error(err))
+	if err := u.registry.RouteFacts(context.Background(), facts); err != nil {
+		u.logger.Warn("monitor: failed to route OTEL facts", tag.Error(err))
 	}
 }
 

@@ -38,20 +38,20 @@ func TestFactLog_AddAndAll(t *testing.T) {
 	sb.Add(m2)
 	all := sb.All()
 	if len(all) != 2 {
-		t.Fatalf("expected 2 events, got %d", len(all))
+		t.Fatalf("expected 2 facts, got %d", len(all))
 	}
 }
 
 func TestFactLog_AddAll(t *testing.T) {
 	sb := NewFactLog()
-	events := []Fact{
+	facts := []Fact{
 		newTestFact("typeA", "Workflow", "wf1"),
 		newTestFact("typeA", "Workflow", "wf2"),
 		newTestFact("typeB", "Task", "t1"),
 	}
-	sb.AddAll(events)
+	sb.AddAll(facts)
 	if len(sb.All()) != 3 {
-		t.Fatalf("expected 3 events, got %d", len(sb.All()))
+		t.Fatalf("expected 3 facts, got %d", len(sb.All()))
 	}
 }
 

@@ -97,7 +97,7 @@ func fromResponse(req, resp any) umpire.Fact {
 // ImportSpan extracts umpire facts from a ReadOnlySpan's span events.
 // This is called synchronously from the SpanProcessor's OnEnd callback.
 func (d *FactDecoder) ImportSpan(span sdktrace.ReadOnlySpan) []umpire.Fact {
-	var events []umpire.Fact
+	var facts []umpire.Fact
 	for _, ev := range span.Events() {
 		factory, ok := d.spanFacts[ev.Name]
 		if !ok {
@@ -106,8 +106,8 @@ func (d *FactDecoder) ImportSpan(span sdktrace.ReadOnlySpan) []umpire.Fact {
 		attrs := attribute.NewSet(ev.Attributes...)
 		f := factory()
 		if f.ImportSpanEvent(attrs) {
-			events = append(events, f)
+			facts = append(facts, f)
 		}
 	}
-	return events
+	return facts
 }
