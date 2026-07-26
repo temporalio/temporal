@@ -98,9 +98,16 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 		}
 	}
 	for _, a := range plan {
-		for _, p := range a.Requires {
-			if err := awaitState(ctx, rc, oracle, poll, p.Ref, p.State); err != nil {
-				return fmt.Errorf("%s precondition %s@%s: %w", a.Name, p.Ref.Var, p.State, err)
+		// Only proactive actions wait on their preconditions: they fire an RPC at a point, so
+		// the entity must already be in the required (stable) state. A reactive action is
+		// installed up front and fires server-side when the entity passes through its
+		// precondition state — a transient the client can't reliably observe — so waiting on it
+		// would race; its effect is confirmed by the next proactive action's precondition.
+		if proactive(a.Kind) {
+			for _, p := range a.Requires {
+				if err := awaitState(ctx, rc, oracle, poll, p.Ref, p.State); err != nil {
+					return fmt.Errorf("%s precondition %s@%s: %w", a.Name, p.Ref.Var, p.State, err)
+				}
 			}
 		}
 		if err := a.Realize.Fire(ctx, rc, a); err != nil {
@@ -122,6 +129,17 @@ func Drive(ctx context.Context, rc RealizeContext, oracle StateOracle, resolver 
 		}
 	}
 	return nil
+}
+
+// proactive reports whether an action is fired at a point (and so must wait for its
+// preconditions) rather than installed to fire reactively / stand by.
+func proactive(k Kind) bool {
+	switch k {
+	case ClientRPC, WorkerCommand, CompletionCallback:
+		return true
+	default: // HandlerResponse, Timer, Fault
+		return false
+	}
 }
 
 // awaitState blocks until the entity bound to ref is observed in state, or ctx is done.

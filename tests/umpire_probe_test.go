@@ -10,16 +10,11 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testhooks"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
@@ -27,7 +22,6 @@ import (
 	"go.temporal.io/server/tests/umpire/action"
 	"go.temporal.io/server/tests/umpire/model"
 	"go.temporal.io/server/tests/umpire/planner"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TEMPORAL_OTEL_DEBUG enables the generic chasm.transition telemetry the umpire Monitor
@@ -129,79 +123,6 @@ func (s *UmpireTestSuite) nexusExecForceTimeoutBackingOff() probe.EnvFunc {
 	}
 }
 
-// nexusCapture holds the callback URL and token an async handler received on start, so
-// the test can later deliver a completion to that operation.
-type nexusCapture struct{ url, token string }
-
-// nexusExecComplete drives an async operation to STARTED and then delivers a completion
-// callback — success (opErr nil), failure, or cancellation — reaching started -->
-// {succeeded, failed, canceled}. The completion is sent only after DescribeWorkflowExecution
-// reports the pending operation STARTED, so the terminal transition fires from started (not
-// scheduled, which a completion racing the start ack would produce).
-func (s *UmpireTestSuite) nexusExecComplete(opErr *nexus.OperationError) probe.EnvFunc {
-	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
-		env := s.newNexusProbeEnv(t)
-		captured := make(chan nexusCapture, 1)
-		handler := nexustest.Handler{
-			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, opts nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				select {
-				case captured <- nexusCapture{opts.CallbackURL, opts.CallbackHeader.Get(commonnexus.CallbackTokenHeader)}:
-				default: // already captured (a retry); keep the first
-				}
-				return &nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-probe-complete-token"}, nil
-			},
-			OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
-		}
-		inner := s.nexusProbeDrive(t, env, handler, syncCaller)
-		return env.TestEnv, func(dctx context.Context, iter int) error {
-			go s.completeWhenStarted(dctx, env, fmt.Sprintf("umpire-probe-nexus-%d", iter), captured, opErr)
-			return inner(dctx, iter)
-		}
-	}
-}
-
-// completeWhenStarted waits for the operation's callback details, then for the operation to
-// be durably STARTED, then delivers the completion (success or the given operation error).
-func (s *UmpireTestSuite) completeWhenStarted(ctx context.Context, env *NexusTestEnv, wfID string, captured <-chan nexusCapture, opErr *nexus.OperationError) {
-	var cap nexusCapture
-	select {
-	case cap = <-captured:
-	case <-ctx.Done():
-		return
-	}
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	for !s.pendingOpInState(ctx, env, wfID, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED) {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{Serializer: commonnexus.PayloadSerializer})
-	opts := nexusrpc.CompleteOperationOptions{Header: nexus.Header{commonnexus.CallbackTokenHeader: cap.token}}
-	if opErr != nil {
-		opts.Error = opErr
-	} else {
-		opts.Result = payload.EncodeString("umpire-probe-result")
-	}
-	_ = c.CompleteOperation(ctx, cap.url, opts)
-}
-
-// pendingOpInState reports whether wfID has a pending Nexus operation in the given state.
-func (s *UmpireTestSuite) pendingOpInState(ctx context.Context, env *NexusTestEnv, wfID string, state enumspb.PendingNexusOperationState) bool {
-	resp, err := env.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
-	if err != nil {
-		return false
-	}
-	for _, op := range resp.GetPendingNexusOperations() {
-		if op.GetState() == state {
-			return true
-		}
-	}
-	return false
-}
-
 // newNexusStandaloneEnv is a probe env with standalone Nexus operations enabled (in
 // addition to workflow-based ones), for the Standalone-hosting driver.
 func (s *UmpireTestSuite) newNexusStandaloneEnv(t *testing.T) *NexusTestEnv {
@@ -213,75 +134,11 @@ func (s *UmpireTestSuite) newNexusStandaloneEnv(t *testing.T) *NexusTestEnv {
 	)
 }
 
-// nexusStandaloneExec is the Standalone-hosting driver: it creates a Nexus operation as its
-// own execution via the frontend Nexus API (no caller workflow), drives it into `state` via
-// the handler, then terminates it with its own TerminateNexusOperationExecution RPC —
-// reaching state --terminate--> terminated, an edge unreachable in the Embedded (workflow)
-// driver. It waits for the terminated transition to be observed so coverage records the edge.
-func (s *UmpireTestSuite) nexusStandaloneExec(handler nexustest.Handler, state string) probe.EnvFunc {
-	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
-		env := s.newNexusStandaloneEnv(t)
-		endpointName := env.createRandomExternalNexusServer(env.Context(), t, handler)
-		return env.TestEnv, func(dctx context.Context, iter int) error {
-			opID := fmt.Sprintf("umpire-probe-standalone-%d", iter)
-			start, err := env.FrontendClient().StartNexusOperationExecution(dctx, &workflowservice.StartNexusOperationExecutionRequest{
-				Namespace:              env.Namespace().String(),
-				OperationId:            opID,
-				Endpoint:               endpointName,
-				Service:                "service",
-				Operation:              "operation",
-				RequestId:              opID,
-				ScheduleToCloseTimeout: durationpb.New(5 * time.Minute),
-			})
-			if err != nil {
-				return err
-			}
-			if !s.awaitNexusOpState(dctx, env, state) {
-				return fmt.Errorf("standalone op did not reach %s", state)
-			}
-			if _, err := env.FrontendClient().TerminateNexusOperationExecution(dctx, &workflowservice.TerminateNexusOperationExecutionRequest{
-				Namespace:   env.Namespace().String(),
-				OperationId: opID,
-				RunId:       start.RunId,
-				Reason:      "umpire probe: reach terminated",
-			}); err != nil {
-				return err
-			}
-			if !s.awaitNexusOpState(dctx, env, model.NexusTerminated) {
-				return fmt.Errorf("standalone op did not reach terminated")
-			}
-			return nil
-		}
-	}
-}
-
-// awaitNexusOpState polls the Monitor's model until a NexusOperation in env's namespace is
-// currently in state — the fine-grained state (scheduled/backing_off/started) that the
-// frontend Describe API does not expose.
-func (s *UmpireTestSuite) awaitNexusOpState(dctx context.Context, env *NexusTestEnv, state string) bool {
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	nsRoot := umpire.NewEntityID(model.NamespaceType, env.NamespaceID().String())
-	for {
-		for _, e := range env.GetMonitor().ModelState().QueryEntities(model.NexusOperationType, 0, &nsRoot) {
-			if lc, ok := e.Entity.(umpire.Lifecycled); ok && lc.Lifecycle().Current() == state {
-				return true
-			}
-		}
-		select {
-		case <-dctx.Done():
-			return false
-		case <-ticker.C:
-		}
-	}
-}
-
-// nexusGenExec is the first actions-model driver (Phase 1, see PLAN.md): the standalone
-// completion path driven entirely by the generic umpire.Drive runtime from declared actions —
-// no bespoke drive logic. It exercises reactive install (the async handler rule + callback
-// capture), proactive fire (the start RPC and the completion delivery), and a precondition
-// wait (op@started), reaching unspecified→scheduled→started→succeeded.
-func (s *UmpireTestSuite) nexusGenExec() probe.EnvFunc {
+// nexusGenExecPlan is the single generated Standalone-hosting driver (actions-model): it runs
+// any declared plan through the generic umpire.Drive runtime — no bespoke drive logic — then
+// reconciles the declared effects against what was observed. The plan is the only thing that
+// varies across drives. Drive confirms the plan's endpoint state before returning.
+func (s *UmpireTestSuite) nexusGenExecPlan(plan []umpire.Action) probe.EnvFunc {
 	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
 		env := s.newNexusStandaloneEnv(t)
 		policy := action.NewResponsePolicy()
@@ -289,12 +146,10 @@ func (s *UmpireTestSuite) nexusGenExec() probe.EnvFunc {
 		return env.TestEnv, func(dctx context.Context, iter int) error {
 			rc := action.NewCtx(env.TestEnv, endpoint, policy, iter)
 			oracle := action.Oracle{Env: env.TestEnv}
-			// Drive confirms the plan's endpoint (op@succeeded) before returning.
-			if err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, action.StandaloneCompletion); err != nil {
+			if err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan); err != nil {
 				return err
 			}
-			// Reconcile grounds the declared actions against what was observed.
-			if drift := umpire.Reconcile(oracle, rc, action.StandaloneCompletion); len(drift) > 0 {
+			if drift := umpire.Reconcile(oracle, rc, plan); len(drift) > 0 {
 				return fmt.Errorf("actions model drift: %v", drift)
 			}
 			return nil
@@ -309,7 +164,7 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusGenExec()).
+		Execution(s.nexusGenExecPlan(action.StandaloneCompletion)).
 		Timeout(15 * time.Second).
 		Judge()
 
@@ -481,26 +336,21 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	// The same hook, valued for backing_off, times the op out during the backoff gap
 	// (backing_off --timeout--> timed_out).
 	exploreEnv(s.nexusExecForceTimeoutBackingOff(), 15*time.Second)
-	// An async start followed by a completion callback delivered once the op is durably
-	// STARTED reaches the started terminals: started --> {succeeded, failed, canceled}.
-	exploreEnv(s.nexusExecComplete(nil), 15*time.Second)
-	exploreEnv(s.nexusExecComplete(nexus.NewOperationFailedError("umpire probe: injected async failure")), 15*time.Second)
-	exploreEnv(s.nexusExecComplete(nexus.NewOperationCanceledError("umpire probe: injected async cancellation")), 15*time.Second)
+	// Embedded async completion, now generated from the actions model (see PLAN.md Phase 3):
+	// schedule the op inside a caller workflow, async-ack the start, then deliver a completion
+	// callback once it is STARTED — reaching started --> {succeeded, failed, canceled}.
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedSucceed()), 15*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedFail()), 15*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedCancel()), 15*time.Second)
 
-	// Standalone-hosting drives: create the operation as its own execution, drive it into a
-	// state, then terminate it via its own RPC — reaching {scheduled,backing_off,started}
-	// --terminate--> terminated. These edges are Standalone-only (a workflow-child op has no
-	// terminate RPC and workflow termination does not cascade to it).
-	blockingStart := nexustest.Handler{OnStartOperation: func(hctx context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		<-hctx.Done() // hold the attempt so the op stays scheduled until it is terminated
-		return nil, hctx.Err()
-	}}
-	retryStart := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
-	}}
-	exploreEnv(s.nexusStandaloneExec(blockingStart, model.NexusScheduled), 15*time.Second)
-	exploreEnv(s.nexusStandaloneExec(retryStart, model.NexusBackingOff), 15*time.Second)
-	exploreEnv(s.nexusStandaloneExec(asyncStart, model.NexusStarted), 15*time.Second)
+	// Standalone-hosting drives, now generated from the actions model (see PLAN.md Phase 3):
+	// each plan starts the operation as its own execution, drives it into a state, then
+	// terminates it — reaching {scheduled,backing_off,started} --terminate--> terminated. These
+	// edges are Standalone-only (a workflow-child op has no terminate RPC and workflow
+	// termination does not cascade to it).
+	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusScheduled)), 15*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusBackingOff)), 15*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.StandaloneTerminate(model.NexusStarted)), 15*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)
