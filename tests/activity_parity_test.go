@@ -52,9 +52,11 @@ const (
 	activityStartDelay = time.Hour
 )
 
-// A StartToClose or Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes
-// must fail the activity terminally (TimedOut) when it fires, rather than retrying.
-func (s *activityParityTestSuite) TestParityNonRetryableTimeout() {
+// The retry policy's NonRetryableErrorTypes Must be respected. In particular, a StartToClose or
+// Heartbeat timeout whose type is listed in the retry policy's NonRetryableErrorTypes using the
+// special TemporalTimeout: syntax must fail the activity terminally (TimedOut) when it fires,
+// rather than retrying.
+func (s *activityParityTestSuite) TestParityNonRetryableErrorTypes() {
 	env := newActivityParityEnv(s.T())
 
 	both := func(t *testing.T, cfg activityConfig, elapses model.Event, timeoutType enumspb.TimeoutType) {
