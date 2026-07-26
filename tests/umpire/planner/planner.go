@@ -44,6 +44,11 @@ type Constraints struct {
 	DenyEvents  []string // these events may never be used
 	DenyStates  []string // routes may never enter these states
 	MaxDepth    int      // max route length (0 = bounded by the graph size)
+	// Grants is the set of drive-capabilities the environment provides. When
+	// non-nil, an edge is traversable only if every capability it Needs (its
+	// EdgeRequires trait) is granted — so a route can never require power the
+	// environment lacks. nil disables capability filtering (any edge is allowed).
+	Grants []umpire.Capability
 }
 
 // Plan is produced before anything runs: a concrete, inspectable set of routes
@@ -124,6 +129,11 @@ func PlanTo(lc *umpire.Lifecycle, target string, mode RouteMode, c Constraints, 
 		return nil, fmt.Errorf("planner: unknown route mode %d", mode)
 	}
 	if len(routes) == 0 {
+		// Distinguish a capability shortfall from a plain constraint dead-end, so a
+		// missing environment capability is an explicit, named skip — never silent.
+		if miss := missingCapabilities(lc, c, target); len(miss) > 0 {
+			return nil, fmt.Errorf("planner: %q is unreachable: route needs drive-capability %v not granted by %v", target, miss, c.Grants)
+		}
 		return nil, fmt.Errorf("planner: %q is unreachable under the given constraints", target)
 	}
 	return &Plan{Target: target, Routes: routes}, nil
@@ -225,6 +235,7 @@ func advanceEdges(lc *umpire.Lifecycle, c Constraints) map[string][]edge {
 	allow := toSet(c.AllowEvents)
 	denyEv := toSet(c.DenyEvents)
 	denySt := toSet(c.DenyStates)
+	grants := capSet(c.Grants)
 	adj := map[string][]edge{}
 	for _, e := range lc.Edges() {
 		if e.To == e.From {
@@ -236,12 +247,83 @@ func advanceEdges(lc *umpire.Lifecycle, c Constraints) map[string][]edge {
 		if denyEv[e.Event] || denySt[e.To] {
 			continue
 		}
+		if !granted(lc, e.From, e.Event, grants) {
+			continue // needs a drive-capability this environment doesn't grant
+		}
 		adj[e.From] = append(adj[e.From], edge{event: e.Event, to: e.To})
 	}
 	for s := range adj {
 		sort.Slice(adj[s], func(i, j int) bool { return adj[s][i].event < adj[s][j].event })
 	}
 	return adj
+}
+
+// granted reports whether every drive-capability the from→event edge requires is in
+// the grant set. A nil grant set means capability filtering is off (any edge allowed);
+// an edge with no requirement is always allowed.
+func granted(lc *umpire.Lifecycle, from, event string, grants map[umpire.Capability]bool) bool {
+	if grants == nil {
+		return true
+	}
+	for _, need := range lc.EdgeRequires(from, event) {
+		if !grants[need] {
+			return false
+		}
+	}
+	return true
+}
+
+func capSet(caps []umpire.Capability) map[umpire.Capability]bool {
+	if caps == nil {
+		return nil
+	}
+	m := make(map[umpire.Capability]bool, len(caps))
+	for _, c := range caps {
+		m[c] = true
+	}
+	return m
+}
+
+// missingCapabilities returns the drive-capabilities that a route to target needs but
+// the constraints do not grant — nil when the failure is not capability-related (no
+// grant set in play, or the target is unreachable even with every capability).
+func missingCapabilities(lc *umpire.Lifecycle, c Constraints, target string) []umpire.Capability {
+	if c.Grants == nil {
+		return nil
+	}
+	full := c
+	full.Grants = nil // re-plan ignoring capabilities to isolate the shortfall
+	adj := advanceEdges(lc, full)
+	route, ok := shortestRoute(adj, lc.Initial(), target, c.MaxDepth)
+	if !ok {
+		return nil // unreachable even with full power: not a capability problem
+	}
+	grants := capSet(c.Grants)
+	dest := edgeTargets(adj)
+	var missing []umpire.Capability
+	seen := map[umpire.Capability]bool{}
+	state := lc.Initial()
+	for _, ev := range route {
+		for _, need := range lc.EdgeRequires(state, ev) {
+			if !grants[need] && !seen[need] {
+				seen[need] = true
+				missing = append(missing, need)
+			}
+		}
+		state = dest[state][ev]
+	}
+	return missing
+}
+
+func edgeTargets(adj map[string][]edge) map[string]map[string]string {
+	m := map[string]map[string]string{}
+	for from, es := range adj {
+		m[from] = map[string]string{}
+		for _, e := range es {
+			m[from][e.event] = e.to
+		}
+	}
+	return m
 }
 
 func shortestRoute(adj map[string][]edge, start, target string, maxDepth int) ([]string, bool) {

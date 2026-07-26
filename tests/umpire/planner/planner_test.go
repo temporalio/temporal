@@ -108,3 +108,40 @@ func flatten(routes [][]string) []string {
 	}
 	return out
 }
+
+func capLifecycle() *umpire.Lifecycle {
+	return umpire.NewLifecycle(umpire.LifecycleSpec{
+		Initial: "start",
+		States:  umpire.States{"start": {}, "done": {}, "expired": {}},
+		Transitions: []umpire.Transition{
+			{Event: "run", From: []string{"start"}, To: "done", Traits: umpire.Traits{umpire.Needs(umpire.RPCDrive)}},
+			{Event: "expire", From: []string{"start"}, To: "expired", Traits: umpire.Traits{umpire.Needs(umpire.Faults)}},
+		},
+	})
+}
+
+func TestPlanTo_CapabilityFiltering(t *testing.T) {
+	lc := capLifecycle()
+
+	// No grant set: capability filtering is off — every edge is available.
+	_, err := planner.PlanTo(lc, "expired", planner.Shortest, planner.Constraints{})
+	require.NoError(t, err)
+
+	// Granting only RPCDrive: "done" is reachable.
+	plan, err := planner.PlanTo(lc, "done", planner.Shortest,
+		planner.Constraints{Grants: []umpire.Capability{umpire.RPCDrive}})
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"run"}}, plan.Routes)
+
+	// "expired" needs Faults, so it fails fast with a named-capability error.
+	_, err = planner.PlanTo(lc, "expired", planner.Shortest,
+		planner.Constraints{Grants: []umpire.Capability{umpire.RPCDrive}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Faults")
+
+	// Granting Faults too makes it reachable.
+	plan, err = planner.PlanTo(lc, "expired", planner.Shortest,
+		planner.Constraints{Grants: []umpire.Capability{umpire.RPCDrive, umpire.Faults}})
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"expire"}}, plan.Routes)
+}

@@ -34,9 +34,11 @@ func NewNexusOperation() *NexusOperation {
 	op.FSM = umpire.NewLifecycle(umpire.LifecycleSpec{
 		Initial: NexusUnspecified,
 		// Each state carries its traits: the in-flight states MustProgress; the
-		// terminals carry their modeled outcome (Success is a clean completion, the
-		// rest are acceptable failure terminals — a fault reaching one is degradation,
-		// not a bug). Terminal-ness itself derives from the transition graph.
+		// terminals carry their modeled outcome. succeeded is a clean completion;
+		// failed and timed_out are acceptable failure terminals (a fault reaching one
+		// is degradation, not a bug). canceled is left untagged: it is a user-driven
+		// decision, not a success or a failure of the operation. Terminal-ness itself
+		// derives from the transition graph.
 		States: umpire.States{
 			NexusUnspecified: {},
 			NexusScheduled:   {umpire.MustProgress},
@@ -44,7 +46,7 @@ func NewNexusOperation() *NexusOperation {
 			NexusStarted:     {umpire.MustProgress},
 			NexusSucceeded:   {umpire.Success},
 			NexusFailed:      {umpire.Failure},
-			NexusCanceled:    {umpire.Failure},
+			NexusCanceled:    {}, // user-driven decision, not a failure
 			NexusTimedOut:    {umpire.Failure},
 		},
 		// Edge traits declare the drive-capability each edge needs: most are reachable
