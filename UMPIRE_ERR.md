@@ -71,7 +71,9 @@ the specifics. Three reusable pillars, none of which restates a field rule:
    - **(d)** **stably** — same mutation → same class as the last grounded run.
 
    Nothing in (a)–(d) names a field or a message. It is the same predicate for `OperationId=""` and
-   `ScheduleToCloseTimeout=-1`. That is the reuse: written zero times per field.
+   `ScheduleToCloseTimeout=-1`. That is the reuse: written zero times per field. Where the server
+   exposes a per-field validator registry, this contract sharpens into a *differential* oracle that
+   runs the server's own validators as the model — see §6.
 
 3. **Ground-then-pin for the specifics — metamorphic, not absolute.** The exact code + message is
    *observed on first run and pinned*, never authored. The oracle is **relational**: base accepted →
@@ -151,6 +153,7 @@ type Variant struct {
 // Outcome is exactly one of:
 type Outcome struct {
     Reject    *Reject    // synchronous RPC rejection; nil Reject = "reject per the contract" (the default)
+    Normalize *Normalize // accepted, but the server rewrites the field first (see §6)
     Alternate []Effect   // valid, but a different legal edge (incl. deferred failure)
     OneOf     []Outcome  // deliberate nondeterminism — any listed outcome is acceptable (see §4)
 }
@@ -162,12 +165,21 @@ type Reject struct {
     Code    codes.Code // gRPC / HTTP status  (nil Outcome.Reject ⇒ any client-error class)
     Message Matcher    // substring / regex on the error message (optional)
 }
+
+// Normalize: the server accepts the request after rewriting the field (e.g. empty RequestId → a
+// fresh UUID). Not a reject and not a plain accept — the observed entity carries the *rewritten*
+// value, which matters for RequestID-based identity routing. See §6.
+type Normalize struct {
+    Rule Matcher // predicate over the accepted value (e.g. "is a UUID"); usually derived, see §6
+}
 ```
 
 - **Reject** — invalid IDs, bad enums, out-of-range ints: the RPC fails and *no entity is
   created*. The default (`Reject == nil`) asserts only the **contract** — rejected cleanly, some
   client-error class, no effect, stable — with the specific code grounded, so nothing is authored
   per field.
+- **Normalize** — a field the server rewrites rather than rejects. Enumerated for free where a
+  validator registry exists (§6); otherwise grounded on first observation.
 - **Alternate** — a stale RunID the server *accepts* against the current run, or any
   valid-but-different value. Just a different `Effects` branch of the same action.
 - **Deferred failure** — accepted synchronously, entity created, then transitions to a terminal
@@ -267,6 +279,54 @@ Default to **ground-then-pin** for `Stale`; reserve **disjunction** for behavior
   the reject/alternate conformance oracle above; faults → liveness (recover to a `Success` terminal
   or an acceptable `Failure` terminal).
 
+## 6. The differential oracle: reuse the server's own validator registry
+
+§0 assumed the server declares validation nowhere machine-readable — true today, but a
+[validator-generator effort](https://github.com/temporalio/temporal/pull/10200) is changing it. It
+generates, per request proto, a `<Req>FieldValidators` struct with **one validator func per field**,
+a `ValidateAndNormalize(req)` that runs them in order, and a `ValidatorRegistry` keyed by request
+type — with a reflective test asserting *every* field has a validator wired (exhaustive). That is
+precisely the single, machine-enumerable, per-field source of truth §0 said was missing. Where it
+exists, it *upgrades* the pillars rather than replacing them:
+
+- **Enumerate params from the registry, not the descriptor** (sharpens pillar 1). The registry
+  distinguishes fields that carry a real rule (`operation_id: maxStringLength`) from pass-throughs
+  (`namespace: no-op`), so mutant generation targets only fields that can actually reject.
+- **The validator *is* the oracle** (sharpens pillar 2 from a generic contract to a *differential*
+  check). For a field with a registered validator, umpire runs the **same `ValidateAndNormalize`
+  in-process over the generated mutant** and cross-checks the server:
+
+  ```
+  validator(mutant) → error   ⇒ server MUST reject   (and the error is the expected error, for free)
+  validator(mutant) → nil     ⇒ server MUST accept
+  validator rewrites the field ⇒ Normalize outcome (§2), with Rule = "matches the rewritten value"
+  ```
+
+  Generator and oracle share one source of truth: umpire neither reads nor restates the rules, it
+  *runs* them as the model. No grounding needed for covered fields.
+- **Coverage composes.** The generator's suite guarantees every field *has* a validator; umpire's
+  variant coverage guarantees every validator's *reject branch is actually driven and satisfies the
+  contract*. Together: no unvalidated field, no undriven rejection.
+
+Scope and fallback — this narrows, but does not remove, §0:
+
+- **`InvalidArgument` / field-validation only.** `ValidateAndNormalize` is a thin *front* layer.
+  `NotFound` (unknown id), `FailedPrecondition` / `AlreadyExists` (state- and lookup-dependent) run
+  *deeper* and are not field validators — the generic contract, grounding, and the `IDRef` /
+  stale-RunID handling (§1, §4) remain their whole story.
+- **`local-*` capability.** Calling server code in-process is a grey/white-box realizer
+  (`internals` / `directDrive`). In `cicd` / `canary` the differential oracle is unavailable and
+  umpire falls back to the generic contract + grounding — the same capability-honest split
+  `UMPIRE_SPEC.md` already draws. The registry oracle is the *preferred* path where granted; the
+  contract is the *portable* one.
+- **Run on a copy.** `ValidateAndNormalize` mutates its argument (it *normalizes*); the in-process
+  oracle must validate a clone, and must expect the observed entity to carry the normalized value.
+- **Opt-in / partial.** The generator is WiP and covers only some RPCs; for anything unregistered,
+  every field still gets type-derived mutants (pillar 1) judged by contract + grounding.
+
+Rule of thumb: **prefer the registry oracle where the field is covered and the environment grants
+`internals`; fall back to contract + grounding everywhere else.**
+
 ## The one-line version
 
 > Don't restate the server's validation rules — there's nothing to reflect (no `protovalidate`) and
@@ -290,4 +350,8 @@ Default to **ground-then-pin** for `Stale`; reserve **disjunction** for behavior
   coverage.
 - **Faults** (`UMPIRE_SPEC.md` mutation-vs-fault split) — the same `{target, perturbation, Expect}`
   shape with a footprint target instead of a param target.
+- **Validator registry** ([temporalio/temporal#10200](https://github.com/temporalio/temporal/pull/10200))
+  — the server's own per-field `ValidateAndNormalize` becomes umpire's differential oracle and param
+  enumeration where granted (§6); the preferred path, with contract + grounding as the portable
+  fallback.
 ```
