@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // --- shared observable projections ---------------------------------------------------------
@@ -172,11 +173,11 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 // pending-activity projection, or the activity leaving the pending set. WFA has no long-poll Describe,
 // so this polls.
 func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
-	deadline := time.Now().Add(a.d.cfg.window(e) + activityDriverWallClockSettle)
 	if isDispatchDelayEvent(e.Type) {
-		a.awaitDispatchTimePassed(t, e, deadline)
+		a.awaitDispatchTimePassed(t, e)
 		return
 	}
+	deadline := time.Now().Add(a.d.cfg.window(e) + activityDriverWallClockSettle)
 	before, beforePending := a.pendingSnapshot(t)
 	changed := func() bool {
 		now, nowPending := a.pendingSnapshot(t)
@@ -192,9 +193,14 @@ func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 // pendingSnapshot is the activity's pending-activity projection, and whether it is currently pending. A
 // Describe error is reported rather than treated as absence.
 // awaitDispatchTimePassed polls the pending-activity projection until the pending dispatch time has
-// passed, and fails if it has not by the deadline. Absolute rather than change-based: the window may
-// already have closed before the first read, and then nothing further changes.
-func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event, deadline time.Time) {
+// passed, and fails if it has not. The deadline is the server's own NextAttemptScheduleTime; see
+// saaHandle.awaitDispatchTimePassed.
+func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+	next := a.nextAttemptScheduleTime(t)
+	if next == nil {
+		return // the dispatch time has already passed, or the activity is no longer pending
+	}
+	deadline := next.AsTime().Add(activityDriverWallClockSettle)
 	var p activityInfoProjection
 	dispatched := func() bool {
 		var pending bool
@@ -204,8 +210,20 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event, d
 	if activityDriverPollUntil(deadline, dispatched) {
 		return
 	}
-	t.Errorf("%s: a dispatch is still pending in the future %s after driving the event, so the "+
-		"window did not elapse. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, p)
+	t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for, so the "+
+		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
+}
+
+// nextAttemptScheduleTime is when the server will dispatch the pending attempt, nil if none is pending.
+func (a *wfaHandle) nextAttemptScheduleTime(t require.TestingT) *timestamppb.Timestamp {
+	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
+	require.NoError(t, err)
+	for _, pa := range resp.GetPendingActivities() {
+		if pa.GetActivityId() == a.activityID {
+			return pa.GetNextAttemptScheduleTime()
+		}
+	}
+	return nil
 }
 
 func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfoProjection, bool) {

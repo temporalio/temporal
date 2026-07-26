@@ -73,6 +73,8 @@ func (c activityConfig) window(e model.Event) time.Duration {
 	case model.StartDelayElapsesType:
 		return c.StartDelay
 	case model.BackoffElapsesType:
+		// The first backoff only: a later one is longer under a non-constant policy. Waiting for a
+		// dispatch uses the server's schedule time instead; see awaitDispatchTimePassed.
 		return cmp.Or(c.NextRetryDelay, c.retryInterval())
 	case model.StartToCloseElapsesType:
 		return c.startToClose()
@@ -180,12 +182,11 @@ func (a *saaHandle) driveEvent(t require.TestingT, e model.Event) {
 // poll; a dispatch-delay elapse advances no version, so it is detected by NextAttemptScheduleTime
 // clearing.
 func (a *saaHandle) awaitWallClock(t require.TestingT, e model.Event) {
-	deadline := time.Now().Add(a.d.cfg.window(e) + activityDriverWallClockSettle)
 	if isDispatchDelayEvent(e.Type) {
-		a.awaitDispatchTimePassed(t, e, deadline)
+		a.awaitDispatchTimePassed(t, e)
 		return
 	}
-	a.awaitStateTransition(t, e, deadline)
+	a.awaitStateTransition(t, e, time.Now().Add(a.d.cfg.window(e)+activityDriverWallClockSettle))
 }
 
 // awaitStateTransition long-polls DescribeActivityExecution until the transition-history version
@@ -217,14 +218,21 @@ func (a *saaHandle) awaitStateTransition(t require.TestingT, e model.Event, dead
 }
 
 // awaitDispatchTimePassed polls the public projection until the pending dispatch time has passed, and
-// fails if it has not by the deadline.
-func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event, deadline time.Time) {
+// fails if it has not. The deadline is the server's own NextAttemptScheduleTime, not the configured
+// window: under a non-constant backoff the two differ, and only the server knows which attempt is
+// waiting.
+func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
+	next := a.describe(t).GetInfo().GetNextAttemptScheduleTime()
+	if next == nil {
+		return // the dispatch time has already passed
+	}
+	deadline := next.AsTime().Add(activityDriverWallClockSettle)
 	var p activityInfoProjection
 	if activityDriverPollUntil(deadline, func() bool { p = a.projection(t); return !p.NextAttemptScheduleSet }) {
 		return
 	}
-	t.Errorf("%s: a dispatch is still pending in the future %s after driving the event, so the "+
-		"window did not elapse. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, p)
+	t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for, so the "+
+		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
 }
 
 // activityDriverPollUntil reports whether cond held before the deadline, reading every activityDriverPollInterval.
