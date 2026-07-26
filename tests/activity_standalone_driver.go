@@ -122,6 +122,9 @@ const activityDriverWallClockSettle = 2 * time.Second
 // activityDriverPollInterval is the gap between reads when polling for a wall-clock event's effect.
 const activityDriverPollInterval = 100 * time.Millisecond
 
+// activityDriverTerminalTimeout bounds the wait for an activity the trace has driven to a terminal status.
+const activityDriverTerminalTimeout = 10 * time.Second
+
 // saaHandle is a handle to one activity instance: the ids that address it, plus the token last
 // dispatched to it.
 type saaHandle struct {
@@ -196,7 +199,7 @@ func (a *saaHandle) awaitStateTransition(t require.TestingT, e model.Event, dead
 		}
 	}
 	t.Errorf("%s: the activity did not transition within %s of driving the event, so the event did not take "+
-		"effect. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, a.projection(t))
+		"effect. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, a.activityInfo(t))
 }
 
 // awaitDispatchTimePassed polls the public projection until the pending dispatch time has passed, and
@@ -211,7 +214,7 @@ func (a *saaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 	}
 	deadline := next.AsTime().Add(activityDriverWallClockSettle)
 	p := projectSAA(info)
-	if activityDriverPollUntil(deadline, func() bool { p = a.projection(t); return !p.NextAttemptScheduleSet }) {
+	if activityDriverPollUntil(deadline, func() bool { p = a.activityInfo(t); return !p.NextAttemptScheduleTimeSet }) {
 		return
 	}
 	t.Errorf("%s: a dispatch is still pending %s after the time the server scheduled it for, so the "+
@@ -290,22 +293,32 @@ func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivi
 	return resp
 }
 
-// projection is the activity's public info as an activityInfoProjection.
-func (a *saaHandle) projection(t require.TestingT) activityInfoProjection {
+// activityInfo is the activity's ActivityExecutionInfo, projected.
+func (a *saaHandle) activityInfo(t require.TestingT) activityInfoProjection {
 	return projectSAA(a.describe(t).GetInfo())
 }
 
-// terminalStatus is the activity's terminal status.
+// terminalStatus waits for the activity to reach a terminal status and reports it. RUNNING covers both
+// an executing attempt and a backing-off one, so any other status is terminal.
 func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
-	return a.describe(t).GetInfo().GetStatus()
+	status := enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+	terminal := func() bool {
+		status = a.describe(t).GetInfo().GetStatus()
+		return status != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+	}
+	if !activityDriverPollUntil(time.Now().Add(activityDriverTerminalTimeout), terminal) {
+		t.Errorf("the activity was still %s %s after the trace finished, so it never reached a terminal status",
+			status, activityDriverTerminalTimeout)
+	}
+	return status
 }
 
 func projectSAA(i *apiactivitypb.ActivityExecutionInfo) activityInfoProjection {
 	return activityInfoProjection{
-		State:                  i.GetRunState(),
-		Attempt:                i.GetAttempt(),
-		CurrentRetryInterval:   i.GetCurrentRetryInterval().AsDuration().Round(time.Second),
-		NextAttemptScheduleSet: i.GetNextAttemptScheduleTime() != nil,
+		RunState:                   i.GetRunState(),
+		Attempt:                    i.GetAttempt(),
+		CurrentRetryInterval:       i.GetCurrentRetryInterval().AsDuration().Round(time.Second),
+		NextAttemptScheduleTimeSet: i.GetNextAttemptScheduleTime() != nil,
 	}
 }
 

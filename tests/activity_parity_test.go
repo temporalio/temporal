@@ -93,10 +93,10 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	// both drives a trace through both surfaces, asserting each reports expected.
 	both := func(t *testing.T, cfg activityConfig, trace []model.Event, expected activityInfoProjection) {
 		t.Run("WorkflowActivity", func(t *testing.T) {
-			require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).projection(t))
+			require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).projection(t))
+			require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
 		})
 	}
 
@@ -115,8 +115,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("FirstAttemptRunning", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval}, []model.Event{model.Poll},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_STARTED,
-				Attempt: 1,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_STARTED,
+				Attempt:  1,
 			})
 	})
 
@@ -125,10 +125,10 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("BackingOff", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval}, []model.Event{model.Poll, model.FailRetryably},
 			activityInfoProjection{
-				State:                  enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-				Attempt:                2,
-				CurrentRetryInterval:   backingOffInterval,
-				NextAttemptScheduleSet: true,
+				RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+				Attempt:                    2,
+				CurrentRetryInterval:       backingOffInterval,
+				NextAttemptScheduleTimeSet: true,
 			})
 	})
 
@@ -138,10 +138,10 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval, NextRetryDelay: nextRetryDelayOverride},
 			[]model.Event{model.Poll, model.FailRetryably},
 			activityInfoProjection{
-				State:                  enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-				Attempt:                2,
-				CurrentRetryInterval:   nextRetryDelayOverride,
-				NextAttemptScheduleSet: true,
+				RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+				Attempt:                    2,
+				CurrentRetryInterval:       nextRetryDelayOverride,
+				NextAttemptScheduleTimeSet: true,
 			})
 	})
 
@@ -149,8 +149,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("RetryDispatched", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: dispatchInterval}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-				Attempt: 2,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+				Attempt:  2,
 			})
 	})
 
@@ -158,8 +158,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("RetryAttemptRunning", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: dispatchInterval}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_STARTED,
-				Attempt: 2,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_STARTED,
+				Attempt:  2,
 			})
 	})
 
@@ -167,8 +167,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("FinalAttemptRunning", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 2, RetryInterval: dispatchInterval}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Poll},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_STARTED,
-				Attempt: 2,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_STARTED,
+				Attempt:  2,
 			})
 	})
 
@@ -177,8 +177,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("PausedBeforeDispatch", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: backingOffInterval}, []model.Event{model.Poll, model.FailRetryably, model.Pause},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_PAUSED,
-				Attempt: 2,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED,
+				Attempt:  2,
 			})
 	})
 
@@ -189,8 +189,8 @@ func (s *activityParityTestSuite) TestParityCurrentRetryInterval() {
 	s.T().Run("PausedAfterDispatch", func(t *testing.T) {
 		both(t, activityConfig{MaxAttempts: 3, RetryInterval: dispatchInterval}, []model.Event{model.Poll, model.FailRetryably, model.BackoffElapses, model.Pause},
 			activityInfoProjection{
-				State:   enumspb.PENDING_ACTIVITY_STATE_PAUSED,
-				Attempt: 2,
+				RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED,
+				Attempt:  2,
 			})
 	})
 }

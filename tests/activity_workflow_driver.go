@@ -23,26 +23,32 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// --- shared observable projections ---------------------------------------------------------
+// --- the activity info both surfaces expose --------------------------------------------------
 
-// activityInfoProjection is the retry-scheduling contract both surfaces expose. See the two
-// projection() methods.
+// activityInfoProjection is the retry-scheduling contract both surfaces expose, projected out of the
+// two different messages that carry it: SAA's ActivityExecutionInfo and WFA's PendingActivityInfo.
+// Fields keep those messages' names, except that SAA calls the run state run_state and WFA calls it
+// state.
+//
+// Two fields are not the raw value. CurrentRetryInterval is rounded to the second, because WFA derives
+// it by subtracting two stored timestamps while SAA stores it exactly. NextAttemptScheduleTime is
+// reduced to whether it is set, because its absolute value differs run to run and so cannot be written
+// into an expected value; a test that needs the value itself reads it from Describe.
 type activityInfoProjection struct {
-	State                  enumspb.PendingActivityState
-	Attempt                int32
-	CurrentRetryInterval   time.Duration
-	NextAttemptScheduleSet bool
+	RunState                   enumspb.PendingActivityState
+	Attempt                    int32
+	CurrentRetryInterval       time.Duration
+	NextAttemptScheduleTimeSet bool
 }
 
 func projectWFA(p *workflowpb.PendingActivityInfo) activityInfoProjection {
 	return activityInfoProjection{
-		State:                  p.GetState(),
-		Attempt:                p.GetAttempt(),
-		CurrentRetryInterval:   p.GetCurrentRetryInterval().AsDuration().Round(time.Second),
-		NextAttemptScheduleSet: p.GetNextAttemptScheduleTime() != nil,
+		RunState:                   p.GetState(),
+		Attempt:                    p.GetAttempt(),
+		CurrentRetryInterval:       p.GetCurrentRetryInterval().AsDuration().Round(time.Second),
+		NextAttemptScheduleTimeSet: p.GetNextAttemptScheduleTime() != nil,
 	}
 }
 
@@ -178,13 +184,11 @@ func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 		"take effect. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, before)
 }
 
-// pendingSnapshot is the activity's pending-activity projection, and whether it is currently pending. A
-// Describe error is reported rather than treated as absence.
-// awaitDispatchTimePassed polls the pending-activity projection until the pending dispatch time has
-// passed, and fails if it has not. The deadline is the server's own NextAttemptScheduleTime; see
+// awaitDispatchTimePassed polls the pending activity until the pending dispatch time has passed, and
+// fails if it has not. The deadline is the server's own NextAttemptScheduleTime; see
 // saaHandle.awaitDispatchTimePassed.
 func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
-	next := a.nextAttemptScheduleTime(t)
+	next := a.pendingActivity(t).GetNextAttemptScheduleTime()
 	if next == nil {
 		return // the dispatch time has already passed, or the activity is no longer pending
 	}
@@ -193,7 +197,7 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 	dispatched := func() bool {
 		var pending bool
 		p, pending = a.pendingSnapshot(t)
-		return !pending || !p.NextAttemptScheduleSet
+		return !pending || !p.NextAttemptScheduleTimeSet
 	}
 	if activityDriverPollUntil(deadline, dispatched) {
 		return
@@ -202,27 +206,26 @@ func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event) {
 		"window did not elapse. Last observed: %+v", e, activityDriverWallClockSettle, p)
 }
 
-// nextAttemptScheduleTime is when the server will dispatch the pending attempt, nil if none is pending.
-func (a *wfaHandle) nextAttemptScheduleTime(t require.TestingT) *timestamppb.Timestamp {
+// pendingActivity is the activity's entry in the workflow's pending set, nil once it is no longer
+// pending. A Describe error is reported rather than treated as absence.
+func (a *wfaHandle) pendingActivity(t require.TestingT) *workflowpb.PendingActivityInfo {
 	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
 	require.NoError(t, err)
 	for _, pa := range resp.GetPendingActivities() {
 		if pa.GetActivityId() == a.activityID {
-			return pa.GetNextAttemptScheduleTime()
+			return pa
 		}
 	}
 	return nil
 }
 
+// pendingSnapshot is the activity's info, and whether it is currently pending.
 func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfoProjection, bool) {
-	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
-	require.NoError(t, err)
-	for _, pa := range resp.GetPendingActivities() {
-		if pa.GetActivityId() == a.activityID {
-			return projectWFA(pa), true
-		}
+	pa := a.pendingActivity(t)
+	if pa == nil {
+		return activityInfoProjection{}, false
 	}
-	return activityInfoProjection{}, false
+	return projectWFA(pa), true
 }
 
 func (d *wfaDriver) start(t *testing.T) *wfaHandle {
@@ -314,15 +317,9 @@ func (a *wfaHandle) rpc(e model.Event) error {
 	}
 }
 
-// projection is the activity's pending-activity info as an activityInfoProjection.
-func (a *wfaHandle) projection(t require.TestingT) activityInfoProjection {
-	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
-	require.NoError(t, err)
-	for _, pa := range resp.GetPendingActivities() {
-		if pa.GetActivityId() == a.activityID {
-			return projectWFA(pa)
-		}
-	}
-	require.FailNowf(t, "no pending activity", "activity %q not pending; workflow may have closed", a.activityID)
-	return activityInfoProjection{}
+// activityInfo is the activity's PendingActivityInfo, projected.
+func (a *wfaHandle) activityInfo(t require.TestingT) activityInfoProjection {
+	p, pending := a.pendingSnapshot(t)
+	require.Truef(t, pending, "activity %q not pending; workflow may have closed", a.activityID)
+	return p
 }
