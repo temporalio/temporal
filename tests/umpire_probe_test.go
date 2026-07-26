@@ -421,3 +421,50 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	require.Equal(t, rep.Total, rep.Covered,
 		"every modelled NexusOperation edge should be exercised across the workflow and standalone drivers")
 }
+
+// TestProbeNexusRandomized is the seeded fuzz loop over the actions model: each iteration draws a
+// random settling edge from a base seed, drives it in its own env, and — on that path's *learned*
+// footprint — faults each observed call in turn. It extends resilience checking from the single
+// sync-success path (TestProbeNexusResilience) to randomly-sampled outcomes, staying fully
+// reproducible: a failing iteration replays from its logged seed alone.
+//
+// Two oracles, of different strength. The fault-free baseline is fully determined, so it must
+// reconcile to its declared terminal (DriveErr nil) and be violation-free. Under an injected
+// fault the terminal may legitimately shift (recover, degrade, or never settle), so the outcome
+// is not asserted — but the rulebook is an invariant that must hold regardless of perturbation:
+// no fault may make the Monitor flag a violation. A flagged scenario is a real conformance bug.
+func (s *UmpireTestSuite) TestProbeNexusRandomized() {
+	t := s.T()
+	const baseSeed = 0x5eed // logged below so a red run reproduces from the exact seed
+	const iterations = 6
+	t.Logf("[randomized] base seed 0x%x, %d iterations", baseSeed, iterations)
+
+	cov := probe.NewCoverage()
+	for i := 0; i < iterations; i++ {
+		seed := int64(baseSeed) + int64(i)
+		plan, label := action.RandomPlan(seed)
+		require.NotEmpty(t, plan, "seed %d: generator produced an empty plan", seed)
+		t.Logf("[randomized] seed %d: %s", seed, label)
+
+		report := probe.Umpire(t).
+			WithCoverage(cov).
+			Reach("NexusOperation", "succeeded"). // plan validation only; the plan drives the real outcome
+			Execution(s.nexusGenExecPlan(plan)).
+			Timeout(20 * time.Second).
+			MaxFaults(4).
+			FaultEachObservedCall().
+			Judge()
+
+		require.NoError(t, report.Baseline.DriveErr, "seed %d (%s): fault-free baseline must reconcile", seed, label)
+		require.Empty(t, report.Baseline.Violations, "seed %d (%s): fault-free baseline conformance", seed, label)
+		for _, sc := range report.Scenarios {
+			require.Empty(t, sc.Violations, "seed %d (%s): dropping %q flagged a conformance violation", seed, label, sc.Method)
+		}
+		t.Logf("[randomized]   seed %d: %d observed call(s), %d fault scenario(s)", seed, len(report.Observed), len(report.Scenarios))
+	}
+
+	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
+	require.True(t, ok)
+	rep := cov.Report("NexusOperation", lc.Edges())
+	t.Logf("[randomized] NexusOperation transition coverage after %d random drives: %d/%d edges", iterations, rep.Covered, rep.Total)
+}
