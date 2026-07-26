@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/testhooks"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tests/umpire/model"
@@ -234,6 +235,48 @@ func (handlerRetryable) Install(rc umpire.RealizeContext, _ umpire.Action) error
 }
 func (handlerRetryable) Fire(context.Context, umpire.RealizeContext, umpire.Action) error { return nil }
 
+// handlerSyncOk returns a synchronous success from the handler — scheduled→succeeded. Reactive.
+type handlerSyncOk struct{}
+
+func (handlerSyncOk) Install(rc umpire.RealizeContext, _ umpire.Action) error {
+	rc.(*Ctx).Handler.setStart(&nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil)
+	return nil
+}
+func (handlerSyncOk) Fire(context.Context, umpire.RealizeContext, umpire.Action) error { return nil }
+
+// handlerOpFailed fails the operation from the handler — scheduled→failed. Reactive.
+type handlerOpFailed struct{}
+
+func (handlerOpFailed) Install(rc umpire.RealizeContext, _ umpire.Action) error {
+	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationFailedError("umpire action: injected operation failure"))
+	return nil
+}
+func (handlerOpFailed) Fire(context.Context, umpire.RealizeContext, umpire.Action) error { return nil }
+
+// handlerOpCanceled reports the operation canceled from the handler — scheduled→canceled.
+// Reactive.
+type handlerOpCanceled struct{}
+
+func (handlerOpCanceled) Install(rc umpire.RealizeContext, _ umpire.Action) error {
+	rc.(*Ctx).Handler.setStart(nil, nexus.NewOperationCanceledError("umpire action: injected cancellation"))
+	return nil
+}
+func (handlerOpCanceled) Fire(context.Context, umpire.RealizeContext, umpire.Action) error {
+	return nil
+}
+
+// timerForceTimeout installs the NexusOperationForceTimeout hook so the operation times out
+// from `from` (scheduled or backing_off) deterministically, no real timer wait. Reactive.
+type timerForceTimeout struct{ from string }
+
+func (t timerForceTimeout) Install(rc umpire.RealizeContext, _ umpire.Action) error {
+	rc.(*Ctx).Env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, t.from))
+	return nil
+}
+func (timerForceTimeout) Fire(context.Context, umpire.RealizeContext, umpire.Action) error {
+	return nil
+}
+
 // rpcTerminate realizes TerminateNexusOperationExecution on the bound standalone operation.
 type rpcTerminate struct{}
 
@@ -327,22 +370,76 @@ func CompleteWith(opErr *nexus.OperationError, event string) umpire.Action {
 
 // EmbeddedSucceed / EmbeddedFail / EmbeddedCancel are the embedded async-completion plans:
 // schedule the operation via a caller workflow, async-ack the start, then complete it —
-// started --> {succeeded, failed, canceled}.
+// started --> {succeeded, failed, canceled}. Computed by the planner.
 func EmbeddedSucceed() []umpire.Action {
-	return []umpire.Action{ScheduleEmbedded, HandlerAsyncAck, CompleteWith(nil, model.NexusSucceed)}
+	return mustPlan(model.NexusStarted, model.NexusSucceed, umpire.Embedded)
 }
-
 func EmbeddedFail() []umpire.Action {
-	return []umpire.Action{ScheduleEmbedded, HandlerAsyncAck, CompleteWith(nexus.NewOperationFailedError("umpire action: injected async failure"), model.NexusFail)}
+	return mustPlan(model.NexusStarted, model.NexusFail, umpire.Embedded)
+}
+func EmbeddedCancel() []umpire.Action {
+	return mustPlan(model.NexusStarted, model.NexusCancel, umpire.Embedded)
 }
 
-func EmbeddedCancel() []umpire.Action {
-	return []umpire.Action{ScheduleEmbedded, HandlerAsyncAck, CompleteWith(nexus.NewOperationCanceledError("umpire action: injected async cancellation"), model.NexusCancel)}
+// HandlerSyncOk / HandlerOpFailed settle the operation directly from the start attempt.
+var (
+	HandlerSyncOk = umpire.Action{
+		Name: "handler:SyncOk", Kind: umpire.HandlerResponse,
+		Requires: []umpire.Pre{{Ref: nexusOp("op", false), State: model.NexusScheduled}},
+		Effects:  []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusSucceed}},
+		Realize:  handlerSyncOk{},
+	}
+	HandlerOpFailed = umpire.Action{
+		Name: "handler:OpFailed", Kind: umpire.HandlerResponse,
+		Requires: []umpire.Pre{{Ref: nexusOp("op", false), State: model.NexusScheduled}},
+		Effects:  []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusFail}},
+		Realize:  handlerOpFailed{},
+	}
+	HandlerOpCanceled = umpire.Action{
+		Name: "handler:OpCanceled", Kind: umpire.HandlerResponse,
+		Requires: []umpire.Pre{{Ref: nexusOp("op", false), State: model.NexusScheduled}},
+		Effects:  []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusCancel}},
+		Realize:  handlerOpCanceled{},
+	}
+)
+
+// TimerForceTimeout fires the schedule-to-close timeout from `from` (a
+// testhooks.NexusForceTimeoutFrom* value: scheduled or backing_off) — timed_out.
+func TimerForceTimeout(from string) umpire.Action {
+	return umpire.Action{
+		Name: "timer:ForceTimeout(" + from + ")", Kind: umpire.Timer,
+		Effects: []umpire.Effect{{Ref: nexusOp("op", false), Event: model.NexusTimeout}},
+		Realize: timerForceTimeout{from: from},
+	}
+}
+
+// EmbeddedSyncSuccess / EmbeddedOpFailure / EmbeddedScheduledCancel settle the operation from
+// the start attempt: scheduled --> {succeeded, failed, canceled}. Computed by the planner.
+func EmbeddedSyncSuccess() []umpire.Action {
+	return mustPlan(model.NexusScheduled, model.NexusSucceed, umpire.Embedded)
+}
+func EmbeddedOpFailure() []umpire.Action {
+	return mustPlan(model.NexusScheduled, model.NexusFail, umpire.Embedded)
+}
+func EmbeddedScheduledCancel() []umpire.Action {
+	return mustPlan(model.NexusScheduled, model.NexusCancel, umpire.Embedded)
+}
+
+// EmbeddedTimeoutScheduled forces the timeout on the first attempt (scheduled --> timed_out);
+// EmbeddedTimeoutBackingOff first fails retryably into backoff, then times out from there
+// (backing_off --> timed_out). Computed by the planner.
+func EmbeddedTimeoutScheduled() []umpire.Action {
+	return mustPlan(model.NexusScheduled, model.NexusTimeout, umpire.Embedded)
+}
+func EmbeddedTimeoutBackingOff() []umpire.Action {
+	return mustPlan(model.NexusBackingOff, model.NexusTimeout, umpire.Embedded)
 }
 
 // StandaloneCompletion is the Phase-1 plan: create a standalone operation, acknowledge the
 // start asynchronously, then complete it — unspecified→scheduled→started→succeeded.
-var StandaloneCompletion = []umpire.Action{StartStandalone, HandlerAsyncAck, CallbackSucceed}
+func StandaloneCompletion() []umpire.Action {
+	return mustPlan(model.NexusStarted, model.NexusSucceed, umpire.Standalone)
+}
 
 // HandlerBlock holds the start attempt so the operation stays scheduled.
 var HandlerBlock = umpire.Action{
@@ -370,15 +467,13 @@ func TerminateFrom(state string) umpire.Action {
 	}
 }
 
-// StandaloneTerminate is the plan that reaches state --terminate--> terminated: start a
-// standalone operation, drive it into `state` (block/retry/async), then terminate it.
+// StandaloneTerminate is the plan that reaches state --terminate--> terminated. The route to
+// `state` needs a handler that holds the operation there; the planner's actionFor picks the
+// attempt outcome (async→started, retryable→backing_off), but "hold in scheduled" has no
+// outcome event, so that one case is completed with HandlerBlock here.
 func StandaloneTerminate(state string) []umpire.Action {
-	drive := HandlerBlock // scheduled: hold the attempt
-	switch state {
-	case model.NexusBackingOff:
-		drive = HandlerRetryable
-	case model.NexusStarted:
-		drive = HandlerAsyncAck
+	if state == model.NexusScheduled {
+		return []umpire.Action{StartStandalone, HandlerBlock, TerminateFrom(state)}
 	}
-	return []umpire.Action{StartStandalone, drive, TerminateFrom(state)}
+	return mustPlan(state, model.NexusTerminate, umpire.Standalone)
 }

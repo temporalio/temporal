@@ -15,7 +15,6 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/common/testing/testhooks"
 	umpire "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/tests/probe"
 	"go.temporal.io/server/tests/testcore"
@@ -93,36 +92,6 @@ func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler, build callerFor) 
 	}
 }
 
-// nexusExecForceTimeout builds an env whose Nexus invocation attempts resolve as a
-// schedule-to-close timeout (via the NexusOperationForceTimeout server test hook), so the
-// operation reaches the timed_out terminal deterministically — from scheduled, on the first
-// attempt, with no real timer wait. The handler is never called (the hook short-circuits it).
-func (s *UmpireTestSuite) nexusExecForceTimeout() probe.EnvFunc {
-	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
-		env := s.newNexusProbeEnv(t)
-		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, testhooks.NexusForceTimeoutFromScheduled))
-		unused := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
-		}}
-		return env.TestEnv, s.nexusProbeDrive(t, env, unused, syncCaller)
-	}
-}
-
-// nexusExecForceTimeoutBackingOff reaches timed_out from backing_off. A retryable handler
-// sends the first attempt into backoff (scheduled --> backing_off); the same
-// NexusOperationForceTimeout hook — with the backing_off value — makes the backoff retry
-// task time the operation out instead of rescheduling (backing_off --> timed_out).
-func (s *UmpireTestSuite) nexusExecForceTimeoutBackingOff() probe.EnvFunc {
-	return func(t *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
-		env := s.newNexusProbeEnv(t)
-		env.InjectHook(testhooks.NewHook(testhooks.NexusOperationForceTimeout, testhooks.NexusForceTimeoutFromBackingOff))
-		retry := nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
-		}}
-		return env.TestEnv, s.nexusProbeDrive(t, env, retry, syncCaller)
-	}
-}
-
 // newNexusStandaloneEnv is a probe env with standalone Nexus operations enabled (in
 // addition to workflow-based ones), for the Standalone-hosting driver.
 func (s *UmpireTestSuite) newNexusStandaloneEnv(t *testing.T) *NexusTestEnv {
@@ -164,7 +133,7 @@ func (s *UmpireTestSuite) TestProbeNexusGeneratedCompletion() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusGenExecPlan(action.StandaloneCompletion)).
+		Execution(s.nexusGenExecPlan(action.StandaloneCompletion())).
 		Timeout(15 * time.Second).
 		Judge()
 
@@ -204,13 +173,9 @@ func (s *UmpireTestSuite) TestProbeNexusDegraded() {
 	t := s.T()
 	report := probe.Umpire(t).
 		Reach("NexusOperation", "succeeded").
-		Execution(s.nexusExec(nexustest.Handler{
-			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
-			},
-		}, syncCaller)).
+		Execution(s.nexusGenExecPlan(action.EmbeddedOpFailure())). // generated from the actions model
 		Timeout(15 * time.Second).
-		Judge() // baseline only; no faults needed — the handler produces the outcome
+		Judge() // baseline only; the op-failed handler action produces the outcome
 
 	require.Equal(t, probe.Degraded, report.Baseline.Verdict, "a failed operation is a modeled Failure terminal")
 	require.Equal(t, "failed", report.Baseline.Terminal)
@@ -306,36 +271,28 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
 	}
 
-	// Sync success and op-failure each settle in a single observed transition (a
-	// forward jump), contributing no direct edges — but they exercise the drive path.
-	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
-	}}, syncCaller, 10*time.Second)
-	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
-	}}, syncCaller, 10*time.Second)
+	// Sync success, op-failure, and handler-reported cancel each settle directly from the
+	// start attempt (scheduled --> {succeeded, failed, canceled}), generated from the actions
+	// model. (The scheduled-cancel is a user-driven decision modeled as an untagged terminal;
+	// a workflow-side cancel request only advances the cancellation sub-machine the umpire
+	// model does not track.)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedSyncSuccess()), 10*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedOpFailure()), 10*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedScheduledCancel()), 10*time.Second)
 	// The retryable path cycles scheduled <-> backing_off, exercising those direct edges.
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
 	}}, syncCaller, 8*time.Second)
 	// An async start reaches STARTED (and then stays there), exercising the start edge.
 	explore(asyncStart, syncCaller, 8*time.Second)
-	// A handler reporting the operation canceled reaches the canceled terminal
-	// (scheduled --cancel--> canceled) — a user-driven decision modeled as an untagged
-	// terminal. (A workflow-side cancel request only advances the cancellation
-	// sub-machine, which the umpire model does not track, leaving the op STARTED.)
-	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		return nil, nexus.NewOperationCanceledError("umpire probe: injected cancellation")
-	}}, syncCaller, 10*time.Second)
 	// A short schedule-to-close timeout on a never-completing async operation reaches
 	// the timed_out terminal (started --timeout--> timed_out).
 	explore(asyncStart, timeoutCaller, 10*time.Second)
-	// A forced schedule-to-close timeout on the first attempt reaches timed_out from
-	// scheduled (scheduled --timeout--> timed_out), via the NexusOperationForceTimeout hook.
-	exploreEnv(s.nexusExecForceTimeout(), 10*time.Second)
-	// The same hook, valued for backing_off, times the op out during the backoff gap
-	// (backing_off --timeout--> timed_out).
-	exploreEnv(s.nexusExecForceTimeoutBackingOff(), 15*time.Second)
+	// Forced schedule-to-close timeout, generated from the actions model: from the first
+	// attempt (scheduled --timeout--> timed_out) and from the backoff gap after a retryable
+	// failure (backing_off --timeout--> timed_out).
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedTimeoutScheduled()), 10*time.Second)
+	exploreEnv(s.nexusGenExecPlan(action.EmbeddedTimeoutBackingOff()), 15*time.Second)
 	// Embedded async completion, now generated from the actions model (see PLAN.md Phase 3):
 	// schedule the op inside a caller workflow, async-ack the start, then deliver a completion
 	// callback once it is STARTED — reaching started --> {succeeded, failed, canceled}.
