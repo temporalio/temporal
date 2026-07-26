@@ -457,8 +457,8 @@ func validateTrace(t require.TestingT, trace []model.Event) {
 		}
 	}
 	require.LessOrEqualf(t, len(timeouts), 1,
-		"a trace can fire at most one timeout, because they run concurrently and the first to fire stops "+
-			"the rest; this one fires %v", timeouts)
+		"a trace can name at most one timeout: they run concurrently, so once the first fires the rest "+
+			"cannot occur. This one names %v", timeouts)
 }
 
 // isWallClockEvent reports whether an event fires on wall-clock time rather than synchronously.
