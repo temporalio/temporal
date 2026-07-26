@@ -88,9 +88,9 @@ func (wf *Workflow) Lifecycle() *umpire.Lifecycle {
 	return wf.FSM
 }
 
-func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
-	for ev := range events {
-		switch e := ev.(type) {
+func (wf *Workflow) OnFact(ctx context.Context, _ *umpire.EntityPath, facts iter.Seq[umpire.Fact]) error {
+	for f := range facts {
+		switch e := f.(type) {
 		case *fact.WorkflowStarted:
 			if wf.WorkflowID == "" {
 				wf.WorkflowID = e.Request.GetStartRequest().GetWorkflowId()
@@ -117,7 +117,7 @@ func (wf *Workflow) String() string {
 	return fmt.Sprintf("Workflow{workflowID=%s, state=%s}", wf.WorkflowID, wf.FSM.Current())
 }
 
-// Lifecycle states and events for Workflow. Aliased to string so they drop into the
+// Lifecycle states and facts for Workflow. Aliased to string so they drop into the
 // generic Lifecycle/planner APIs while giving named, typo-checked labels.
 type (
 	WorkflowState = string

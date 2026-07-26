@@ -36,9 +36,9 @@ func (tq *TaskQueue) Type() umpire.EntityType {
 	return TaskQueueType
 }
 
-func (tq *TaskQueue) OnFact(_ context.Context, _ *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
-	for ev := range events {
-		switch e := ev.(type) {
+func (tq *TaskQueue) OnFact(_ context.Context, _ *umpire.EntityPath, facts iter.Seq[umpire.Fact]) error {
+	for f := range facts {
+		switch e := f.(type) {
 		case *fact.WorkflowTaskPolled:
 			if tq.Name == "" {
 				tq.Name = e.Request.GetPollRequest().GetTaskQueue().GetName()

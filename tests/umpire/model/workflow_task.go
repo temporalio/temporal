@@ -88,14 +88,14 @@ func (wt *WorkflowTask) Lifecycle() *umpire.Lifecycle {
 	return wt.FSM
 }
 
-func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
+func (wt *WorkflowTask) OnFact(ctx context.Context, path *umpire.EntityPath, facts iter.Seq[umpire.Fact]) error {
 	if wt.NamespaceID == "" && path != nil {
 		if root := path.Root(); root.Type == NamespaceType {
 			wt.NamespaceID = root.ID
 		}
 	}
-	for ev := range events {
-		switch e := ev.(type) {
+	for f := range facts {
+		switch e := f.(type) {
 		case *fact.WorkflowTaskAdded:
 			if wt.TaskQueue == "" {
 				wt.TaskQueue = e.Request.GetTaskQueue().GetName()
@@ -145,7 +145,7 @@ func (wt *WorkflowTask) String() string {
 		wt.TaskQueue, wt.WorkflowID, wt.RunID, wt.FSM.Current())
 }
 
-// Lifecycle states and events for WorkflowTask (aliased to string; see Workflow).
+// Lifecycle states and facts for WorkflowTask (aliased to string; see Workflow).
 type (
 	TaskState = string
 	TaskEvent = string

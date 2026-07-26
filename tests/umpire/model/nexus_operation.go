@@ -126,15 +126,15 @@ func (op *NexusOperation) SettledAt() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, events iter.Seq[umpire.Fact]) error {
+func (op *NexusOperation) OnFact(ctx context.Context, ident *umpire.EntityPath, facts iter.Seq[umpire.Fact]) error {
 	if op.WorkflowID == "" && ident != nil {
 		if parent := ident.Parent(); parent != nil && parent.EntityID.Type == WorkflowType {
 			op.WorkflowID = parent.EntityID.ID
 		}
 	}
 
-	for ev := range events {
-		switch e := ev.(type) {
+	for f := range facts {
+		switch e := f.(type) {
 		case *fact.NexusOperationScheduled:
 			op.capture(e.ScheduledEventID, e.WorkflowID)
 			op.FSM.Fire(ctx, NexusSchedule)
@@ -220,7 +220,7 @@ func (op *NexusOperation) String() string {
 		op.WorkflowID, op.ScheduledEventID, op.FSM.Current())
 }
 
-// Lifecycle states and events for NexusOperation (aliased to string; see Workflow).
+// Lifecycle states and facts for NexusOperation (aliased to string; see Workflow).
 type (
 	NexusState = string
 	NexusEvent = string
