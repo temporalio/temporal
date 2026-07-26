@@ -172,8 +172,12 @@ func (a *wfaHandle) driveEvent(t require.TestingT, e model.Event) {
 // pending-activity projection, or the activity leaving the pending set. WFA has no long-poll Describe,
 // so this polls.
 func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
-	before, beforePending := a.pendingSnapshot(t)
 	deadline := time.Now().Add(a.d.cfg.window(e) + activityDriverWallClockSettle)
+	if isDispatchDelayEvent(e.Type) {
+		a.awaitDispatchTimePassed(t, e, deadline)
+		return
+	}
+	before, beforePending := a.pendingSnapshot(t)
 	changed := func() bool {
 		now, nowPending := a.pendingSnapshot(t)
 		return nowPending != beforePending || (nowPending && now != before)
@@ -187,6 +191,23 @@ func (a *wfaHandle) awaitWallClock(t require.TestingT, e model.Event) {
 
 // pendingSnapshot is the activity's pending-activity projection, and whether it is currently pending. A
 // Describe error is reported rather than treated as absence.
+// awaitDispatchTimePassed polls the pending-activity projection until the pending dispatch time has
+// passed, and fails if it has not by the deadline. Absolute rather than change-based: the window may
+// already have closed before the first read, and then nothing further changes.
+func (a *wfaHandle) awaitDispatchTimePassed(t require.TestingT, e model.Event, deadline time.Time) {
+	var p activityInfoProjection
+	dispatched := func() bool {
+		var pending bool
+		p, pending = a.pendingSnapshot(t)
+		return !pending || !p.NextAttemptScheduleSet
+	}
+	if activityDriverPollUntil(deadline, dispatched) {
+		return
+	}
+	t.Errorf("%s: a dispatch is still pending in the future %s after driving the event, so the "+
+		"window did not elapse. Last observed: %+v", e, a.d.cfg.window(e)+activityDriverWallClockSettle, p)
+}
+
 func (a *wfaHandle) pendingSnapshot(t require.TestingT) (activityInfoProjection, bool) {
 	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
 	require.NoError(t, err)
