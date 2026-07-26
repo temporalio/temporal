@@ -298,19 +298,33 @@ func (a *saaHandle) activityInfo(t require.TestingT) activityInfoProjection {
 	return projectSAA(a.describe(t).GetInfo())
 }
 
-// terminalStatus waits for the activity to reach a terminal status and reports it. RUNNING covers both
-// an executing attempt and a backing-off one, so any other status is terminal.
+// terminalStatus waits for the activity to reach a terminal status and reports it.
+// PollActivityExecution is SAA's counterpart to waiting on the workflow result: it resolves once the
+// activity is no longer running. An empty response means the server's long-poll window expired, so
+// resubmit. Each poll is bounded by the deadline.
 func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
-	status := enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
-	terminal := func() bool {
-		status = a.describe(t).GetInfo().GetStatus()
-		return status != enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING
+	deadline := time.Now().Add(activityDriverTerminalTimeout)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithDeadline(a.d.ctx, deadline)
+		resp, err := a.d.env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+		})
+		cancel()
+		if err != nil {
+			if time.Now().Before(deadline) {
+				require.NoError(t, err)
+			}
+			break // the deadline cancelled the long poll
+		}
+		if resp.GetRunId() != "" {
+			return a.describe(t).GetInfo().GetStatus()
+		}
 	}
-	if !activityDriverPollUntil(time.Now().Add(activityDriverTerminalTimeout), terminal) {
-		t.Errorf("the activity was still %s %s after the trace finished, so it never reached a terminal status",
-			status, activityDriverTerminalTimeout)
-	}
-	return status
+	t.Errorf("the activity did not reach a terminal status within %s of the trace finishing. Last observed: %+v",
+		activityDriverTerminalTimeout, a.activityInfo(t))
+	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
 }
 
 func projectSAA(i *apiactivitypb.ActivityExecutionInfo) activityInfoProjection {
