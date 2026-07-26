@@ -360,12 +360,21 @@ Built on top of the actions model (`UMPIRE_ACTIONS.md`). The Temporal concretion
   `SetNamespaceID`). A non-client-error failure produces no fact, so its absent transition surfaces
   as drift rather than a pass. `reject` is the 17th modelled edge and is covered by the exploration.
 
+- **E5 (partial) — non-string domains (done for Duration).** The descriptor reflection generalizes
+  past strings: `reflectStartParams` now also emits a `durationDomain` per `google.protobuf.Duration`
+  field, and `rpcStartMutated` sets fields by kind (string or Duration message) via `protoValue` /
+  `currentValue`. Exercised by `TestProbeNexusReflectedDurationVariant` (`schedule_to_start_timeout=
+  negative` → `InvalidArgument`). Enum / int / payload domains remain.
+
 ### What remains
 
-- **E4** — the differential oracle over the server's validator registry (§6): run the server's own
-  `ValidateAndNormalize` in-process as the oracle where the field is covered.
-- **E5** — variant coverage as a planning goal, and non-string domains (enum / int / duration /
-  payload) beyond E2's string reflection.
+- **E4 — blocked on the validator registry.** The differential oracle (§6) runs the server's own
+  generated `ValidateAndNormalize` in-process. That generator
+  ([temporalio/temporal#10200](https://github.com/temporalio/temporal/pull/10200)) is **not in this
+  tree** (no `common/validation`, no `validator_gen.go`), so E4 cannot be built against a real
+  registry yet. Until then the generic contract + grounding (E1–E3) is the oracle.
+- **E5 (remaining)** — enum / int / payload domains, and variant coverage as a planning goal (drive
+  every reflected variant, grounding each outcome) alongside edge coverage.
 - **Normalize outcomes** — §2's `Normalize` (e.g. empty `request_id` → UUID) is designed but not yet
   driven; today such a variant would read as an accepted request.
 - **Rejection classes as terminals** — E3 models all client-error rejections as one `rejected`

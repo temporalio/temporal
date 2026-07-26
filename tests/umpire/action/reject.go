@@ -85,8 +85,7 @@ func (c *Ctx) validStartBase() *workflowservice.StartNexusOperationExecutionRequ
 }
 
 // stringDomain is the reflected domain of a proto string field: its standard invalid neighbors are
-// an empty value and an over-long one, both client-error-class (UMPIRE_ERR.md §1). Enum / int /
-// duration / payload domains are follow-ups; E2 proves the mechanism on strings.
+// an empty value and an over-long one, both client-error-class (UMPIRE_ERR.md §1).
 type stringDomain struct{ overLen int }
 
 func (d stringDomain) Variants() []umpire.Variant {
@@ -96,24 +95,48 @@ func (d stringDomain) Variants() []umpire.Variant {
 	}
 }
 
-// reflectStringParams walks a request message's descriptor and returns a Param per scalar string
-// field, each carrying the stringDomain's standard mutants. This is the pillar-1 enumeration
-// (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not hand authoring.
-func reflectStringParams(msg protoreflect.ProtoMessage) []umpire.Param {
+// durationDomain is the reflected domain of a google.protobuf.Duration field: its standard invalid
+// neighbor is a negative value (OutOfRange), which the server rejects before the operation exists.
+// It ignores the base value (the mutant is absolute), proving the reflection generalizes past
+// strings to message-typed fields (UMPIRE_ERR.md §1, E5).
+type durationDomain struct{}
+
+func (durationDomain) Variants() []umpire.Variant {
+	return []umpire.Variant{
+		{Label: "negative", Class: umpire.OutOfRange, Mutate: func(any) any { return durationpb.New(-time.Second) }, Expect: &umpire.Reject{}},
+	}
+}
+
+// isDurationField reports whether fd is a scalar google.protobuf.Duration message field.
+func isDurationField(fd protoreflect.FieldDescriptor) bool {
+	return fd.Kind() == protoreflect.MessageKind && fd.Message().FullName() == "google.protobuf.Duration"
+}
+
+// reflectStartParams walks a request message's descriptor and returns a Param per scalar field the
+// reflection understands — string fields (stringDomain) and Duration fields (durationDomain). This
+// is the pillar-1 enumeration (UMPIRE_ERR.md §0): the variant set falls out of the descriptor, not
+// hand authoring. Enum / int / payload domains are further follow-ups.
+func reflectStartParams(msg protoreflect.ProtoMessage) []umpire.Param {
 	var params []umpire.Param
 	fields := msg.ProtoReflect().Descriptor().Fields()
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
-		if fd.Kind() == protoreflect.StringKind && !fd.IsList() && !fd.IsMap() {
+		if fd.IsList() || fd.IsMap() {
+			continue
+		}
+		switch {
+		case fd.Kind() == protoreflect.StringKind:
 			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: stringDomain{overLen: 4096}})
+		case isDurationField(fd):
+			params = append(params, umpire.Param{Path: string(fd.Name()), Domain: durationDomain{}})
 		}
 	}
 	return params
 }
 
 // rpcStartMutated issues a StartNexusOperationExecution built from the valid base with a single
-// string field (path) replaced per mutate. Reflection sets the field by its proto name, so the
-// same realizer serves every string param without a per-field realizer.
+// field (path) replaced per mutate. Reflection sets the field by its proto name and kind, so the
+// same realizer serves every reflected param (string or Duration) without a per-field realizer.
 type rpcStartMutated struct {
 	path   string
 	mutate func(valid any) any
@@ -126,10 +149,31 @@ func (r rpcStartMutated) Fire(ctx context.Context, rc umpire.RealizeContext, a u
 	req := c.validStartBase()
 	m := req.ProtoReflect()
 	fd := m.Descriptor().Fields().ByName(protoreflect.Name(r.path))
-	m.Set(fd, protoreflect.ValueOfString(r.mutate(m.Get(fd).String()).(string)))
+	m.Set(fd, protoValue(fd, r.mutate(currentValue(fd, m))))
 	bindFresh(rc, a, req.GetRequestId()) // the rejected op's identity == its (unmutated) request id
 	_, err := c.Env.FrontendClient().StartNexusOperationExecution(ctx, req)
 	return err
+}
+
+// currentValue extracts a field's current value as the Go type a Mutate expects (a string for
+// string fields; nil for Duration fields, whose mutants are absolute).
+func currentValue(fd protoreflect.FieldDescriptor, m protoreflect.Message) any {
+	if fd.Kind() == protoreflect.StringKind {
+		return m.Get(fd).String()
+	}
+	return nil
+}
+
+// protoValue converts a Mutate's result back to a protoreflect.Value for the field's kind.
+func protoValue(fd protoreflect.FieldDescriptor, v any) protoreflect.Value {
+	switch val := v.(type) {
+	case string:
+		return protoreflect.ValueOfString(val)
+	case *durationpb.Duration:
+		return protoreflect.ValueOfMessage(val.ProtoReflect())
+	default:
+		panic(fmt.Sprintf("umpire: unsupported mutated value %T for field %s", v, fd.Name()))
+	}
 }
 
 // StartFieldVariant builds the invalid action for one (string field, variant) pair: mutate that
@@ -147,13 +191,14 @@ func StartFieldVariant(path string, v umpire.Variant) umpire.Action {
 	}
 }
 
-// StartFieldVariants enumerates the invalid actions for every reflected string param × variant of
-// StartNexusOperationExecution — the negative-space action set derived from the descriptor. E3
-// (grounding) and E4 (the differential validator oracle) decide which of these actually reject vs.
-// are normalized/optional; E2 only proves the enumeration and that a driven variant round-trips.
+// StartFieldVariants enumerates the invalid actions for every reflected param × variant of
+// StartNexusOperationExecution — the negative-space action set derived from the descriptor (string
+// and Duration fields). E4 (the differential validator oracle) will decide which of these actually
+// reject vs. are normalized/optional; today the enumeration is proven and specific known-rejecting
+// variants round-trip.
 func StartFieldVariants() []umpire.Action {
 	var actions []umpire.Action
-	for _, p := range reflectStringParams(&workflowservice.StartNexusOperationExecutionRequest{}) {
+	for _, p := range reflectStartParams(&workflowservice.StartNexusOperationExecutionRequest{}) {
 		for _, v := range p.Domain.Variants() {
 			actions = append(actions, StartFieldVariant(p.Path, v))
 		}

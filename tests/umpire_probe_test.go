@@ -200,6 +200,40 @@ func (s *UmpireTestSuite) TestProbeNexusReflectedVariant() {
 	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
 }
 
+// TestProbeNexusReflectedDurationVariant is the E5 non-string round-trip (UMPIRE_ERR.md §1): the
+// descriptor reflection generalizes past strings to message-typed fields. It drives a reflected
+// Duration variant (schedule_to_start_timeout mutated negative on an otherwise-valid base), which
+// the server rejects (InvalidArgument) before the operation exists, and the E3 model observes it as
+// the op reaching the rejected terminal.
+func (s *UmpireTestSuite) TestProbeNexusReflectedDurationVariant() {
+	t := s.T()
+
+	var mutated umpire.Action
+	for _, a := range action.StartFieldVariants() {
+		if strings.Contains(a.Name, "schedule_to_start_timeout=negative") {
+			mutated = a
+			break
+		}
+	}
+	require.NotEmpty(t, mutated.Name, "the descriptor should yield a schedule_to_start_timeout Duration field")
+
+	env := s.newNexusStandaloneEnv(t)
+	policy := action.NewResponsePolicy()
+	endpoint := env.createRandomExternalNexusServer(env.Context(), t, policy.Handler())
+
+	plan := []umpire.Action{mutated}
+	dctx, cancel := context.WithTimeout(env.Context(), 15*time.Second)
+	defer cancel()
+	oracle := action.Oracle{Env: env.TestEnv}
+	rc := action.NewCtx(env.TestEnv, endpoint, policy, 0)
+	defer rc.Cleanup()
+
+	err := umpire.Drive(dctx, rc, oracle, action.Resolver{}, 50*time.Millisecond, plan)
+	require.NoError(t, err, "a reflected Duration variant is an expected rejection, not a drive failure")
+	require.Empty(t, umpire.Reconcile(oracle, rc, plan), "the Duration variant's rejection must be observed as the reject edge")
+	require.Equal(t, 1, action.CountEntities(env.TestEnv, model.NexusOperationType), "the rejection is modeled as exactly one rejected operation")
+}
+
 // TestProbeNexusFaultAction shows a fault as a first-class plan action (Phase 5): a Hold on the
 // outbound Nexus invocation is injected declaratively into a completion plan; the operation is
 // delayed but still settles at succeeded — resilience, driven by the actions model.
@@ -321,6 +355,9 @@ func (s *UmpireTestSuite) TestProbeNexusHTTPFaultSeam() {
 // "explore as fully as possible + summary" mode.
 func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	t := s.T()
+	// Gate: every WorkerCommand action must have a kitchensink mapping before any drive runs,
+	// so the exploration can't silently skip a worker-driven edge (see action.kitchensink).
+	require.NoError(t, action.ValidateKitchensinkMappings(), "kitchensink mappings must be exhaustive")
 	cov := probe.NewCoverage()
 
 	exploreEnv := func(exec probe.EnvFunc, timeout time.Duration) {
