@@ -161,6 +161,7 @@ func (s *Probe) recordAndRun() ([]string, Scenario) {
 	sc.DriveErr = drive(ctx, 0)
 	cleanup()
 	s.judge(env, nsID, &sc)
+	s.stopExecutions(env, nsID)
 	env.GetMonitor().PurgeNamespace(nsID)
 
 	mu.Lock()
@@ -209,9 +210,41 @@ func (s *Probe) run(iter int, method, label string) Scenario {
 	sc.DriveErr = drive(ctx, iter)
 	s.judge(env, nsID, &sc)
 	// Leave this execution's namespace clean so its env teardown check doesn't trip
-	// on an intentionally provoked violation.
+	// on an intentionally provoked violation. Stop the drivers first: an operation
+	// deliberately provoked never to settle keeps cycling server-side and would
+	// re-populate the namespace after the purge (all envs share one *testing.T, so
+	// their teardown checks run together at the end, long after this purge).
+	s.stopExecutions(env, nsID)
 	env.GetMonitor().PurgeNamespace(nsID)
 	return sc
+}
+
+// stopExecutions terminates every caller workflow the Monitor observed in this
+// namespace, so an operation deliberately provoked never to settle (e.g. a
+// retryable-forever Nexus handler) stops cycling server-side. Left running, the live
+// operation keeps emitting chasm.transition telemetry that re-populates the namespace
+// after PurgeNamespace, and the env's deferred teardown liveness check then re-finds it
+// stuck. The workflow ID is read from the entity key (a Workflow entity created only as
+// a parent placeholder for its operations never has its WorkflowID field populated by a
+// fact). Errors are ignored: a workflow that already closed needs no termination.
+func (s *Probe) stopExecutions(env *testcore.TestEnv, nsID string) {
+	nsRoot := umpire.NewEntityID(model.NamespaceType, nsID)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, e := range env.GetMonitor().ModelState().QueryEntities(model.WorkflowType, 0, &nsRoot) {
+		wfID := workflowIDFromKey(e.Key)
+		if wfID == "" {
+			continue
+		}
+		_ = env.SdkClient().TerminateWorkflow(ctx, wfID, "", "umpire probe cleanup")
+	}
+}
+
+// workflowIDFromKey extracts the workflow ID from a WorkflowType entity's registry key
+// ("Namespace:<ns>@Workflow:<wfID>"): the leaf segment's ID.
+func workflowIDFromKey(key string) string {
+	leaf := key[strings.LastIndex(key, "@")+1:]
+	return strings.TrimPrefix(leaf, string(model.WorkflowType)+":")
 }
 
 // judge fills a scenario's verdict from the Monitor: any rulebook violation is a

@@ -37,15 +37,53 @@ func (s *UmpireTestSuite) newNexusProbeEnv() *NexusTestEnv {
 	)
 }
 
-// nexusProbeDrive registers a caller workflow that invokes a Nexus operation against
-// a mock endpoint using the given start handler, and returns a probe DriveFunc.
-func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.Handler) probe.DriveFunc {
-	t := s.T()
-	endpointName := env.createRandomExternalNexusServer(env.Context(), t, onStart)
-	callerWorkflow := func(wctx workflow.Context) error {
-		c := workflow.NewNexusClient(endpointName, "service")
+// callerFor builds the caller workflow from a resolved mock-endpoint name; different
+// builders drive the operation to different outcomes (wait, cancel, time out).
+type callerFor func(endpoint string) any
+
+// syncCaller executes the operation and waits for it — the default drive. The outcome
+// (sync success, op failure, retry, async start) is determined by the mock handler.
+func syncCaller(endpoint string) any {
+	return func(wctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpoint, "service")
 		return c.ExecuteOperation(wctx, "operation", "input", workflow.NexusOperationOptions{}).Get(wctx, nil)
 	}
+}
+
+// cancelCaller starts the operation, waits for it to reach STARTED, then cancels it,
+// driving the operation to the canceled terminal — a user-driven decision.
+func cancelCaller(endpoint string) any {
+	return func(wctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpoint, "service")
+		ctx, cancel := workflow.WithCancel(wctx)
+		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+		var exec workflow.NexusOperationExecution
+		if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+			return err
+		}
+		cancel()
+		_ = fut.Get(wctx, nil) // resolves with a canceled error; the terminal is what we want
+		return nil
+	}
+}
+
+// timeoutCaller starts an async operation the handler never completes, bounded by a
+// short schedule-to-close timeout, driving the operation to the timed_out terminal.
+func timeoutCaller(endpoint string) any {
+	return func(wctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpoint, "service")
+		return c.ExecuteOperation(wctx, "operation", "input", workflow.NexusOperationOptions{
+			ScheduleToCloseTimeout: 2 * time.Second,
+		}).Get(wctx, nil) // resolves with a timed-out error
+	}
+}
+
+// nexusProbeDrive registers the given caller workflow (built from a fresh mock endpoint
+// using onStart) and returns a probe DriveFunc that runs it.
+func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.Handler, build callerFor) probe.DriveFunc {
+	t := s.T()
+	endpointName := env.createRandomExternalNexusServer(env.Context(), t, onStart)
+	callerWorkflow := build(endpointName)
 	env.SdkWorker().RegisterWorkflow(callerWorkflow)
 	return func(dctx context.Context, iter int) error {
 		run, err := env.SdkClient().ExecuteWorkflow(dctx, sdkclient.StartWorkflowOptions{
@@ -60,11 +98,11 @@ func (s *UmpireTestSuite) nexusProbeDrive(env *NexusTestEnv, onStart nexustest.H
 }
 
 // nexusExec is the probe EnvFunc: for each execution it builds a fresh, isolated env
-// (its own namespace) and the drive that runs the Nexus operation with onStart.
-func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler) probe.EnvFunc {
+// (its own namespace) and the drive that runs the caller workflow with onStart.
+func (s *UmpireTestSuite) nexusExec(onStart nexustest.Handler, build callerFor) probe.EnvFunc {
 	return func(_ *testing.T, _ int) (*testcore.TestEnv, probe.DriveFunc) {
 		env := s.newNexusProbeEnv()
-		return env.TestEnv, s.nexusProbeDrive(env, onStart)
+		return env.TestEnv, s.nexusProbeDrive(env, onStart, build)
 	}
 }
 
@@ -81,7 +119,7 @@ func (s *UmpireTestSuite) TestProbeNexusResilience() {
 			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
 			},
-		})).
+		}, syncCaller)).
 		Timeout(10 * time.Second).
 		MaxFaults(6).
 		FaultEachObservedCall().
@@ -104,7 +142,7 @@ func (s *UmpireTestSuite) TestProbeNexusDegraded() {
 			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
 			},
-		})).
+		}, syncCaller)).
 		Timeout(15 * time.Second).
 		Judge() // baseline only; no faults needed — the handler produces the outcome
 
@@ -123,7 +161,7 @@ func (s *UmpireTestSuite) TestProbeNexusFlagged() {
 			OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
 			},
-		})).
+		}, syncCaller)).
 		Timeout(8 * time.Second). // the op never settles; bound the stranded drive
 		Judge()
 
@@ -140,31 +178,43 @@ func (s *UmpireTestSuite) TestProbeNexusExploration() {
 	t := s.T()
 	cov := probe.NewCoverage()
 
-	explore := func(handler nexustest.Handler, timeout time.Duration) {
+	explore := func(handler nexustest.Handler, build callerFor, timeout time.Duration) {
 		probe.Umpire(t).
 			WithCoverage(cov).
-			Reach("NexusOperation", "succeeded"). // plan validation only; the handler drives the actual outcome
-			Execution(s.nexusExec(handler)).
+			Reach("NexusOperation", "succeeded"). // plan validation only; the handler+caller drive the actual outcome
+			Execution(s.nexusExec(handler, build)).
 			Timeout(timeout).
 			Judge()
+	}
+
+	// asyncStart is an async acknowledgement the handler never resolves — the operation
+	// reaches STARTED and stays there until the caller cancels it or it times out.
+	asyncStart := nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-probe-async-token"}, nil
+		},
+		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error { return nil },
 	}
 
 	// Sync success and op-failure each settle in a single observed transition (a
 	// forward jump), contributing no direct edges — but they exercise the drive path.
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: "ok"}, nil
-	}}, 10*time.Second)
+	}}, syncCaller, 10*time.Second)
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return nil, nexus.NewOperationFailedError("umpire probe: injected operation failure")
-	}}, 10*time.Second)
+	}}, syncCaller, 10*time.Second)
 	// The retryable path cycles scheduled <-> backing_off, exercising those direct edges.
 	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "umpire probe: injected retryable failure")
-	}}, 8*time.Second)
+	}}, syncCaller, 8*time.Second)
 	// An async start reaches STARTED (and then stays there), exercising the start edge.
-	explore(nexustest.Handler{OnStartOperation: func(_ context.Context, _, _ string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-		return &nexus.HandlerStartOperationResultAsync{OperationToken: "umpire-probe-async-token"}, nil
-	}}, 8*time.Second)
+	explore(asyncStart, syncCaller, 8*time.Second)
+	// Canceling a STARTED async operation reaches the canceled terminal (started --cancel--> canceled).
+	explore(asyncStart, cancelCaller, 10*time.Second)
+	// A short schedule-to-close timeout on a never-completing async operation reaches
+	// the timed_out terminal (started --timeout--> timed_out).
+	explore(asyncStart, timeoutCaller, 10*time.Second)
 
 	lc, ok := planner.DefaultModels().Lifecycle("NexusOperation")
 	require.True(t, ok)
