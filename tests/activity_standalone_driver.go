@@ -420,6 +420,24 @@ func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 	return resp
 }
 
+// timeoutType is the TimeoutType a timeout-elapse event reports when it fires,
+// TIMEOUT_TYPE_UNSPECIFIED for any other event. The model names no API types, so the correspondence
+// lives here.
+func timeoutType(e model.Event) enumspb.TimeoutType {
+	switch e.Type {
+	case model.ScheduleToStartElapsesType:
+		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
+	case model.ScheduleToCloseElapsesType:
+		return enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+	case model.StartToCloseElapsesType:
+		return enumspb.TIMEOUT_TYPE_START_TO_CLOSE
+	case model.HeartbeatElapsesType:
+		return enumspb.TIMEOUT_TYPE_HEARTBEAT
+	default:
+		return enumspb.TIMEOUT_TYPE_UNSPECIFIED
+	}
+}
+
 // isWallClockEvent reports whether an event fires on wall-clock time rather than synchronously.
 func isWallClockEvent(k model.EventType) bool {
 	switch k {
